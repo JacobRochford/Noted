@@ -1,0 +1,70 @@
+# =========================
+# Build outputs
+# =========================
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+
+# =========================
+# Visual Studio files
+# =========================
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# =========================
+# Rider / JetBrains
+# =========================
+.idea/
+*.sln.iml
+
+# =========================
+# Build / publish artifacts
+# =========================
+*.exe
+*.dll
+*.pdb
+*.cache
+*.log
+
+# =========================
+# NuGet
+# =========================
+packages/
+*.nupkg
+*.snupkg
+.nuget/
+
+# =========================
+# Test results
+# =========================
+TestResults/
+*.trx
+
+# =========================
+# OS / system files
+# =========================
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# =========================
+# PowerShell
+# =========================
+*.ps1xml
+
+# =========================
+# Secrets / configs
+# =========================
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+
+# =========================
+# ClickOnce
+# =========================
+*.publish.xml
