@@ -1,34 +1,43 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using MessageBox = System.Windows.Forms.MessageBox;
+using System.Windows.Media;
+using System.Windows.Threading;
+using MyNotes.Models;
+using MessageBox = System.Windows.MessageBox;
 
 namespace MyNotes;
 
-/// <summary>
-/// Interaction logic for MainWindow.xaml
-/// </summary>
-public partial class MainWindow : Window
-{
+public partial class MainWindow : Window {
     private readonly string NotesDirectory;
-    private System.Windows.Point? _dragStart = null;
-    private const double DragThreshold = 5.0;
-    private string _activeNotePath = null;
-    private Process _notepadProcess = null;
-    private Process _lastOpenedNotepad = null;
+    private readonly ObservableCollection<NoteItem> _notes = new();
+    private Process? _notepadProcess;
+    private string? _notepadFilePath;
+
+    // Drag state
+    private System.Windows.Point? _dragStart;
+    private bool _isDragging;
+    private double _buttonInitialLeft;
+    private double _buttonInitialTop;
+    private const double _dragThreshold = 5.0;
+
+
+
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")]
-    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    private static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
 
-    private double _buttonInitialLeft;
-    private double _buttonInitialTop;
+    private const int SW_HIDE = 0;
+    private const int SW_SHOW = 5;
 
     public MainWindow() {
         InitializeComponent();
@@ -37,134 +46,94 @@ public partial class MainWindow : Window
         OverlayButton.PreviewMouseMove += OverlayButton_PreviewMouseMove;
         OverlayButton.PreviewMouseLeftButtonUp += OverlayButton_PreviewMouseLeftButtonUp;
 
-        var appDir = AppDomain.CurrentDomain.BaseDirectory;
-        NotesDirectory = Path.Combine(appDir, "Notes");
+        NotesDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Notes");
         Directory.CreateDirectory(NotesDirectory);
 
+        FileList.ItemsSource = _notes;
         LoadFileList();
 
-        var mostRecentFile = Directory.GetFiles(NotesDirectory, "*.txt")
-            .OrderByDescending(f => new FileInfo(f).LastWriteTime)
-            .FirstOrDefault();
-
-        if (mostRecentFile != null) {
-            FileList.SelectedItem = Path.GetFileName(mostRecentFile);
-        }
-
-        Closing += MainWindow_Closing;
+        Closing += OnClosing;
     }
 
-    private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e) {
-        e.Cancel = true;
-        Hide();
-    }
 
-    private void OverlayButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
-        if (e.ChangedButton == MouseButton.Left) {
-            _dragStart = e.GetPosition(MainCanvas);
-            _buttonInitialLeft = Canvas.GetLeft(OverlayButton);
-            _buttonInitialTop = Canvas.GetTop(OverlayButton);
 
-            if (double.IsNaN(_buttonInitialLeft) && Canvas.GetRight(OverlayButton) > 0) {
-                _buttonInitialLeft = MainCanvas.ActualWidth - Canvas.GetRight(OverlayButton) - OverlayButton.ActualWidth;
-            }
-            if (double.IsNaN(_buttonInitialTop) && Canvas.GetBottom(OverlayButton) > 0) {
-                _buttonInitialTop = MainCanvas.ActualHeight - Canvas.GetBottom(OverlayButton) - OverlayButton.ActualHeight;
-            }
-
-            if (double.IsNaN(_buttonInitialLeft)) _buttonInitialLeft = 0;
-            if (double.IsNaN(_buttonInitialTop)) _buttonInitialTop = 0;
-
-            OverlayButton.CaptureMouse();
-            e.Handled = false;   // allow normal click if not dragging
-        }
-    }
-
-    private void OverlayButton_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e) {
-        if (!_dragStart.HasValue || e.LeftButton != MouseButtonState.Pressed)
-            return;
-
-        var currentPos = e.GetPosition(MainCanvas);
-        var delta = currentPos - _dragStart.Value;
-
-        if (delta.Length > DragThreshold) {
-            var newLeft = _buttonInitialLeft + delta.X;
-            var newTop = _buttonInitialTop + delta.Y;
-
-            Canvas.SetLeft(OverlayButton, newLeft);
-            Canvas.SetTop(OverlayButton, newTop);
-            Canvas.SetRight(OverlayButton, double.NaN);
-            Canvas.SetBottom(OverlayButton, double.NaN);
-
-            e.Handled = true;
-        }
-    }
-
-    private void OverlayButton_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
-        if (_dragStart.HasValue) {
-            var currentPos = e.GetPosition(MainCanvas);
-            var delta = currentPos - _dragStart.Value;
-
-            OverlayButton.ReleaseMouseCapture();
-            _dragStart = null;
-
-            if (delta.Length > DragThreshold) {
-                e.Handled = true; // swallow click if dragged
-            }
-        }
-    }
-
-    // Single click: show/hide list & open/minimize Notepad
     private void OverlayButton_Click(object sender, RoutedEventArgs e) {
-        if (FileList.Visibility == Visibility.Visible) {
-            FileList.Visibility = Visibility.Collapsed;
-
-            // TODO: minimize window
+        if (NotesPanel.Visibility == Visibility.Visible) {
+            NotesPanel.Visibility = Visibility.Collapsed;
+            MinimizeNotepad();
         } else {
-            FileList.Visibility = Visibility.Visible;
-
+            NotesPanel.Visibility = Visibility.Visible;
+            if (IsNotepadRunning()) {
+                RestoreNotepad();
+            } else if (_notes.Count > 0) {
+                FileList.SelectedItem = _notes[0];
+                OpenNoteInNotepad(Path.Combine(NotesDirectory, _notes[0].FileName));
+            }
         }
     }
 
-    // Double click: New Notepad instance
-    private void OverlayButton_DoubleClick(object sender, MouseButtonEventArgs e) {
-        var now = DateTime.Now;
-        var timestamp = now.ToString("yyyy-MM-dd HH:mm:ss");
 
-        var filename = $"Note_{now:yyyy-MM-dd_HH-mm-ss}.txt";
-        var fullPath = Path.Combine(NotesDirectory, filename);
+    private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e) {
+        if (FileList.SelectedItem is NoteItem note)
+            OpenNoteInNotepad(Path.Combine(NotesDirectory, note.FileName));
+    }
+
+    private bool IsNotepadRunning() =>
+        _notepadProcess is not null && !_notepadProcess.HasExited;
+
+    private void OpenNoteInNotepad(string filePath) {
+        // Don't open the same file again if it's already open
+        if (_notepadFilePath == filePath && IsNotepadRunning()) {
+            return;
+        }
+
+        if (IsNotepadRunning()) {
+            try { _notepadProcess!.CloseMainWindow(); } catch { }
+            _notepadProcess = null;
+        }
 
         try {
-            var content = $"Created: {timestamp}\r\n\r\n";
-            File.WriteAllText(fullPath, content);
-
-            LoadFileList();
-
-            FileList.SelectedItem = filename;
-
-            // Open new Notepad instance
-            var proc = Process.Start("notepad.exe", $"\"{fullPath}\"");
-            if (proc != null) {
-                _lastOpenedNotepad = proc;
+            var psi = new ProcessStartInfo("notepad.exe", $"\"{filePath}\"") {
+                UseShellExecute = false
+            };
+            var process = Process.Start(psi);
+            if (process is not null) {
+                _notepadProcess = process;
+                _notepadFilePath = filePath;
+                // Wait for input on background thread to avoid blocking UI
+                Task.Run(() => {
+                    try {
+                        process.WaitForInputIdle();
+                    } catch {
+                        // Process may have exited or other issue - ignore
+                    }
+                });
             }
         } catch (Exception ex) {
-            MessageBox.Show($"Failed to create new note:\n{ex.Message}");
+            MessageBox.Show($"Failed to open note:\n{ex.Message}",
+                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
-    // User picks file from list
-    private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e) {
-        if (FileList.SelectedItem is string fileName && !string.IsNullOrWhiteSpace(fileName)) {
-            var fullPath = Path.Combine(NotesDirectory, fileName);
-
-            try {
-                var process = Process.Start("notepad.exe", $"\"{fullPath}\"");
-                if (process != null) {
-                    _lastOpenedNotepad = process;
+    private void MinimizeNotepad() {
+        if (IsNotepadRunning()) {
+            Task.Run(() => {
+                try {
+                    // Find notepad window by class name instead of using MainWindowHandle
+                    IntPtr handle = IntPtr.Zero;
+                    for (int i = 0; i < 20; i++) {
+                        handle = FindWindow("Notepad", null);
+                        if (handle != IntPtr.Zero) break;
+                        System.Threading.Thread.Sleep(100);
+                    }
+                    
+                    if (handle != IntPtr.Zero) {
+                        ShowWindow(handle, SW_HIDE);
+                    }
+                } catch {
+                    // Ignore errors in window hiding
                 }
-            } catch (Exception ex) {
-                MessageBox.Show($"Failed to open note:\n{ex.Message}");
-            }
+            });
         }
     }
 
@@ -176,8 +145,78 @@ public partial class MainWindow : Window
 
         FileList.ItemsSource = files;
     }
+    
+    private void RestoreNotepad() {
+        if (IsNotepadRunning()) {
+            try {
+                var handle = FindWindow("Notepad", null);
+                if (handle != IntPtr.Zero) {
+                    ShowWindow(handle, SW_SHOW);
+                    SetForegroundWindow(handle);
+                }
+            } catch {
+                // Ignore errors in window restore
+            }
+        }
+    }
 
-    public void Cleanup() {
-        _notepadProcess = null;
+
+    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e) {
+        // Unsubscribe from events
+        OverlayButton.PreviewMouseLeftButtonDown -= OverlayButton_PreviewMouseLeftButtonDown;
+        OverlayButton.PreviewMouseMove -= OverlayButton_PreviewMouseMove;
+        OverlayButton.PreviewMouseLeftButtonUp -= OverlayButton_PreviewMouseLeftButtonUp;
+        
+        if (IsNotepadRunning()) {
+            try { _notepadProcess!.CloseMainWindow(); } catch { }
+            _notepadProcess?.Dispose();
+        }
+    }
+
+    private void OverlayButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+        if (e.ChangedButton != MouseButton.Left) return;
+
+        _dragStart = e.GetPosition(MainCanvas);
+        _buttonInitialLeft = Canvas.GetLeft(OverlayButton);
+        _buttonInitialTop = Canvas.GetTop(OverlayButton);
+
+        if (double.IsNaN(_buttonInitialLeft))
+            _buttonInitialLeft = Canvas.GetRight(OverlayButton) > 0
+                ? MainCanvas.ActualWidth - Canvas.GetRight(OverlayButton) - OverlayButton.ActualWidth
+                : 0;
+        if (double.IsNaN(_buttonInitialTop))
+            _buttonInitialTop = Canvas.GetBottom(OverlayButton) > 0
+                ? MainCanvas.ActualHeight - Canvas.GetBottom(OverlayButton) - OverlayButton.ActualHeight
+                : 0;
+    }
+
+    private void OverlayButton_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e) {
+        if (!_dragStart.HasValue || e.LeftButton != MouseButtonState.Pressed)
+            return;
+
+        var delta = e.GetPosition(MainCanvas) - _dragStart.Value;
+        if (delta.Length <= _dragThreshold) return;
+
+        if (!_isDragging) {
+            _isDragging = true;
+            OverlayButton.CaptureMouse();
+        }
+
+        Canvas.SetLeft(OverlayButton, _buttonInitialLeft + delta.X);
+        Canvas.SetTop(OverlayButton, _buttonInitialTop + delta.Y);
+        Canvas.SetRight(OverlayButton, double.NaN);
+        Canvas.SetBottom(OverlayButton, double.NaN);
+        e.Handled = true;
+    }
+
+    private void OverlayButton_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
+        if (!_dragStart.HasValue) return;
+        _dragStart = null;
+
+        if (_isDragging) {
+            _isDragging = false;
+            OverlayButton.ReleaseMouseCapture();
+            e.Handled = true;
+        }
     }
 }
