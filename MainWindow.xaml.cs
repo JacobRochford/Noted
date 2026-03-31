@@ -45,6 +45,7 @@ public partial class MainWindow : Window {
         OverlayButton.PreviewMouseLeftButtonDown += OverlayButton_PreviewMouseLeftButtonDown;
         OverlayButton.PreviewMouseMove += OverlayButton_PreviewMouseMove;
         OverlayButton.PreviewMouseLeftButtonUp += OverlayButton_PreviewMouseLeftButtonUp;
+        MainCanvas.MouseLeftButtonDown += MainCanvas_MouseLeftButtonDown;
 
         NotesDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Notes");
         Directory.CreateDirectory(NotesDirectory);
@@ -160,13 +161,22 @@ public partial class MainWindow : Window {
         }
     }
 
+    private void MainCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+        // Click on empty canvas area hides the panel
+        if (NotesPanel.Visibility == Visibility.Visible &&
+            !NotesPanel.IsMouseOver && !OverlayButton.IsMouseOver) {
+            NotesPanel.Visibility = Visibility.Collapsed;
+            MinimizeNotepad();
+        }
+    }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e) {
         // Unsubscribe from events
         OverlayButton.PreviewMouseLeftButtonDown -= OverlayButton_PreviewMouseLeftButtonDown;
         OverlayButton.PreviewMouseMove -= OverlayButton_PreviewMouseMove;
         OverlayButton.PreviewMouseLeftButtonUp -= OverlayButton_PreviewMouseLeftButtonUp;
-        
+        MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;
+ 
         if (IsNotepadRunning()) {
             try { _notepadProcess!.CloseMainWindow(); } catch { }
             _notepadProcess?.Dispose();
