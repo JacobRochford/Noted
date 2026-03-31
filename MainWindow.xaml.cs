@@ -18,6 +18,8 @@ public partial class MainWindow : Window {
     private readonly ObservableCollection<NoteItem> _notes = new();
     private Process? _notepadProcess;
     private string? _notepadFilePath;
+    private FileSystemWatcher? _watcher;
+    private DispatcherTimer? _debounceTimer;
 
     // Drag state
     private System.Windows.Point? _dragStart;
@@ -52,11 +54,51 @@ public partial class MainWindow : Window {
 
         FileList.ItemsSource = _notes;
         LoadFileList();
+        ListenForFileChanges();
 
         Closing += OnClosing;
     }
 
+    private static string FormatNoteName(string fileName) {
+        // Note_2026-03-28_11-44-06.txt → Mar 28, 2026  11:44 AM
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        if (stem.StartsWith("Note_") &&
+            DateTime.TryParseExact(stem[5..], "yyyy-MM-dd_HH-mm-ss",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)) {
+            return dt.ToString("MMM dd, yyyy  h:mm tt");
+        }
+        return fileName;
+    }
 
+    private void ListenForFileChanges() {
+        _watcher = new FileSystemWatcher(NotesDirectory, "*.txt") {
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
+            EnableRaisingEvents = true
+        };
+        _watcher.Created += OnNotesChanged;
+        _watcher.Deleted += OnNotesChanged;
+        _watcher.Renamed += (_, _) => Dispatcher.Invoke(DebounceRefresh);
+    }
+
+    private void OnNotesChanged(object sender, FileSystemEventArgs e) {
+        Dispatcher.Invoke(DebounceRefresh);
+    }
+
+    private void DebounceRefresh() {
+        // Reuse the timer if it exists
+        if (_debounceTimer == null) {
+            _debounceTimer = new DispatcherTimer {
+                Interval = TimeSpan.FromMilliseconds(200)
+            };
+            _debounceTimer.Tick += (_, _) => {
+                _debounceTimer.Stop();
+                LoadFileList();
+            };
+        }
+        
+        _debounceTimer.Stop();
+        _debounceTimer.Start();
+    }
 
     private void OverlayButton_Click(object sender, RoutedEventArgs e) {
         if (NotesPanel.Visibility == Visibility.Visible) {
@@ -73,6 +115,52 @@ public partial class MainWindow : Window {
         }
     }
 
+    private void NewNoteButton_Click(object sender, RoutedEventArgs e) {
+        var now = DateTime.Now;
+        var filename = $"Note_{now:yyyy-MM-dd_HH-mm-ss}.txt";
+        var fullPath = Path.Combine(NotesDirectory, filename);
+
+        try {
+            File.WriteAllText(fullPath, $"Created: {now:yyyy-MM-dd HH:mm:ss}\r\n\r\n");
+            // FileSystemWatcher will auto-refresh the list
+            // Select and open the new note after a brief delay for the watcher
+            Dispatcher.InvokeAsync(() => {
+                var item = _notes.FirstOrDefault(n => n.FileName == filename);
+                if (item is not null) {
+                    FileList.SelectedItem = item;
+                    OpenNoteInNotepad(fullPath);
+                }
+            }, DispatcherPriority.Background);
+        } catch (Exception ex) {
+            MessageBox.Show($"Failed to create note:\n{ex.Message}",
+                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void DeleteNoteButton_Click(object sender, RoutedEventArgs e) {
+        if (FileList.SelectedItem is not NoteItem note) return;
+
+        var result = MessageBox.Show(
+            $"Delete \"{note.DisplayName}\"?",
+            "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes) return;
+
+        var fullPath = Path.Combine(NotesDirectory, note.FileName);
+
+        // Close notepad if it has this file open
+        if (IsNotepadRunning()) {
+            try { _notepadProcess!.CloseMainWindow(); } catch { }
+            _notepadProcess = null;
+        }
+
+        try {
+            File.Delete(fullPath);
+            // FileSystemWatcher will auto-refresh the list
+        } catch (Exception ex) {
+            MessageBox.Show($"Failed to delete note:\n{ex.Message}",
+                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
 
     private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e) {
         if (FileList.SelectedItem is NoteItem note)
@@ -125,7 +213,7 @@ public partial class MainWindow : Window {
                     for (int i = 0; i < 20; i++) {
                         handle = FindWindow("Notepad", null);
                         if (handle != IntPtr.Zero) break;
-                        System.Threading.Thread.Sleep(100);
+                        Thread.Sleep(100);
                     }
                     
                     if (handle != IntPtr.Zero) {
@@ -139,12 +227,24 @@ public partial class MainWindow : Window {
     }
 
     private void LoadFileList() {
-        var files = Directory.GetFiles(NotesDirectory, "*.txt")
-            .OrderByDescending(f => new FileInfo(f).LastWriteTime)
-            .Select(Path.GetFileName)
-            .ToList();
+        var selected = (FileList.SelectedItem as NoteItem)?.FileName;
 
-        FileList.ItemsSource = files;
+        _notes.Clear();
+        foreach (var path in Directory.GetFiles(NotesDirectory, "*.txt")
+                     .OrderByDescending(f => new FileInfo(f).LastWriteTime)) {
+            var name = Path.GetFileName(path);
+            _notes.Add(new NoteItem {
+                FileName = name,
+                DisplayName = FormatNoteName(name)
+            });
+        }
+
+        if (selected is not null)
+            FileList.SelectedItem = _notes.FirstOrDefault(n => n.FileName == selected);
+
+        HeaderText.Text = _notes.Count > 0
+            ? $"My Notes ({_notes.Count})"
+            : "My Notes";
     }
     
     private void RestoreNotepad() {
@@ -176,7 +276,13 @@ public partial class MainWindow : Window {
         OverlayButton.PreviewMouseMove -= OverlayButton_PreviewMouseMove;
         OverlayButton.PreviewMouseLeftButtonUp -= OverlayButton_PreviewMouseLeftButtonUp;
         MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;
- 
+        
+        // Clean up resources
+        _watcher?.Dispose();
+        if (_debounceTimer != null) {
+            _debounceTimer.Stop();
+            _debounceTimer = null;
+        }
         if (IsNotepadRunning()) {
             try { _notepadProcess!.CloseMainWindow(); } catch { }
             _notepadProcess?.Dispose();
@@ -200,7 +306,7 @@ public partial class MainWindow : Window {
                 : 0;
     }
 
-    private void OverlayButton_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e) {
+    private void OverlayButton_PreviewMouseMove(object sender, MouseEventArgs e) {
         if (!_dragStart.HasValue || e.LeftButton != MouseButtonState.Pressed)
             return;
 
