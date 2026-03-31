@@ -22,7 +22,7 @@ public partial class MainWindow : Window {
     private DispatcherTimer? _debounceTimer;
 
     // Drag state
-    private System.Windows.Point? _dragStart;
+    private Point? _dragStart;
     private bool _isDragging;
     private double _buttonInitialLeft;
     private double _buttonInitialTop;
@@ -48,6 +48,7 @@ public partial class MainWindow : Window {
         OverlayButton.PreviewMouseMove += OverlayButton_PreviewMouseMove;
         OverlayButton.PreviewMouseLeftButtonUp += OverlayButton_PreviewMouseLeftButtonUp;
         MainCanvas.MouseLeftButtonDown += MainCanvas_MouseLeftButtonDown;
+        KeyDown += MainWindow_KeyDown;
 
         NotesDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Notes");
         Directory.CreateDirectory(NotesDirectory);
@@ -270,12 +271,153 @@ public partial class MainWindow : Window {
         }
     }
 
+    private void MainWindow_KeyDown(object sender, KeyEventArgs e) {
+        if (e.Key == Key.Escape && NotesPanel.Visibility == Visibility.Visible) {
+            NotesPanel.Visibility = Visibility.Collapsed;
+            MinimizeNotepad();
+            e.Handled = true;
+        }
+    }
+
+    // Rename note 
+    private void FileList_KeyDown(object sender, KeyEventArgs e) {
+        if (e.Key == Key.F2 && FileList.SelectedItem is NoteItem note) {
+            StartRenaming(note);
+            e.Handled = true;
+        }
+    }
+
+    // Rename note 
+    private void RenameNote_Click(object sender, RoutedEventArgs e) {
+        if (FileList.SelectedItem is NoteItem note) {
+            StartRenaming(note);
+        }
+    }
+    // Rename note 
+    private void ListBoxItem_DoubleClick(object sender, MouseButtonEventArgs e) {
+        if (sender is ListBoxItem item && item.DataContext is NoteItem note) {
+            StartRenaming(note);
+            e.Handled = true;
+        }
+    }
+
+    private void StartRenaming(NoteItem note) {
+        note.IsEditing = true;
+        // Focus the textbox after the UI updates
+        Dispatcher.InvokeAsync(() => {
+            var listBoxItem = FileList.ItemContainerGenerator.ContainerFromItem(note) as ListBoxItem;
+            if (listBoxItem != null) {
+                var textBox = FindVisualChild<TextBox>(listBoxItem);
+                textBox?.Focus();
+                textBox?.SelectAll();
+            }
+        });
+    }
+
+    private void RenameTextBox_KeyDown(object sender, KeyEventArgs e) {
+        var textBox = sender as TextBox;
+        var note = FileList.SelectedItem as NoteItem;
+        
+        if (note == null) return;
+
+        if (e.Key == Key.Return) {
+            // Commit the rename
+            var newName = textBox?.Text.Trim() ?? note.DisplayName;
+            if (!string.IsNullOrWhiteSpace(newName) && newName != note.DisplayName) {
+                CommitRename(note, newName);
+            }
+            note.IsEditing = false;
+            e.Handled = true;
+        } else if (e.Key == Key.Escape) {
+            // Cancel rename
+            note.IsEditing = false;
+            e.Handled = true;
+        }
+    }
+
+    private void RenameTextBox_LostFocus(object sender, RoutedEventArgs e) {
+        var textBox = sender as TextBox;
+        if (textBox == null) return;
+
+        // Get the item that owns this textbox (walk up the visual tree)
+        var listBoxItem = FindVisualParent<ListBoxItem>(textBox);
+        if (listBoxItem?.DataContext is not NoteItem note) return;
+        if (!note.IsEditing) return;
+
+        // Always save the new name when clicking outside
+        var newName = textBox.Text.Trim();
+        if (!string.IsNullOrWhiteSpace(newName)) {
+            CommitRename(note, newName);
+        }
+        
+        // Make sure to turn off editing on the correct note
+        note.IsEditing = false;
+    }
+
+    private static T? FindVisualParent<T>(DependencyObject child) where T : DependencyObject {
+        DependencyObject parentObject = VisualTreeHelper.GetParent(child);
+        if (parentObject == null) return null;
+        
+        if (parentObject is T parent) return parent;
+        return FindVisualParent<T>(parentObject);
+    }
+
+    private void CommitRename(NoteItem note, string newDisplayName) {
+        var oldFileName = note.FileName;
+        var oldPath = Path.Combine(NotesDirectory, oldFileName);
+        
+        // Create new filename from display name
+        var newFileName = Path.GetInvalidFileNameChars().Aggregate(
+            newDisplayName, 
+            (current, c) => current.Replace(c.ToString(), "")
+        ).Trim();
+        
+        if (string.IsNullOrWhiteSpace(newFileName)) return;
+        if (!newFileName.EndsWith(".txt")) newFileName += ".txt";
+        
+        if (newFileName == oldFileName) return; // No change
+
+        var newPath = Path.Combine(NotesDirectory, newFileName);
+
+        try {
+            if (File.Exists(oldPath) && !File.Exists(newPath)) {
+                File.Move(oldPath, newPath);
+                LoadFileList();
+            } else if (File.Exists(newPath)) {
+                MessageBox.Show("A file with that name already exists.",
+                    "Name Taken", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        } catch (Exception ex) {
+            MessageBox.Show($"Failed to rename note:\n{ex.Message}",
+                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject {
+        if (parent == null) return null;
+        
+        int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < childrenCount; i++) {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typedChild) {
+                return typedChild;
+            }
+
+            var foundChild = FindVisualChild<T>(child);
+            if (foundChild != null) {
+                return foundChild;
+            }
+        }
+        return null;
+    }
+
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e) {
         // Unsubscribe from events
         OverlayButton.PreviewMouseLeftButtonDown -= OverlayButton_PreviewMouseLeftButtonDown;
         OverlayButton.PreviewMouseMove -= OverlayButton_PreviewMouseMove;
         OverlayButton.PreviewMouseLeftButtonUp -= OverlayButton_PreviewMouseLeftButtonUp;
         MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;
+        KeyDown -= MainWindow_KeyDown;
         
         // Clean up resources
         _watcher?.Dispose();
