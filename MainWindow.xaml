@@ -1,32 +1,149 @@
 ﻿<Window x:Class="MyNotes.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:MyNotes"
         Title="Overlay Notepad App"
         WindowStyle="None"
         Topmost="True"
         AllowsTransparency="True"
         Background="Transparent"
         WindowState="Maximized">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    </Window.Resources>
 
     <Canvas x:Name="MainCanvas">
 
-        <Border Background="#F5F9FC"            
-            BorderBrush="#87CEEB"
+        <Border x:Name="NotesPanel"
+                Background="#F5F9FC"
+                BorderBrush="#87CEEB"
                 BorderThickness="1"
                 CornerRadius="8"
-                Padding="16"
+                Padding="12"
                 Width="320" Height="620"
-                Canvas.Right="40" Canvas.Top="60">
+                Canvas.Right="40" Canvas.Top="60"
+                Visibility="Collapsed">
 
-            <Grid>
+            <DockPanel>
+                <!-- Header bar -->
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                    <TextBlock x:Name="HeaderText"
+                               Text="My Notes"
+                               FontSize="16" FontWeight="SemiBold"
+                               Foreground="#2C6E91"
+                               VerticalAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal"
+                                HorizontalAlignment="Right">
+                        <Button x:Name="NewNoteButton"
+                                Content="+ New"
+                                Click="NewNoteButton_Click"
+                                FontSize="12" FontWeight="SemiBold"
+                                Foreground="White" Cursor="Hand"
+                                Padding="10,4" Margin="0,0,6,0">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="bg" Background="#5BA8C8"
+                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                        <Button x:Name="DeleteNoteButton"
+                                Content="Delete"
+                                Click="DeleteNoteButton_Click"
+                                FontSize="12" FontWeight="SemiBold"
+                                Foreground="White" Cursor="Hand"
+                                Padding="10,4">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="bg" Background="#D9534F"
+                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="bg" Property="Background" Value="#C9302C"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </StackPanel>
+                </DockPanel>
+
+                <!-- Separator -->
+                <Border DockPanel.Dock="Top"
+                        Height="1" Background="#D0E4EE" Margin="0,0,0,6"/>
+
+                <!-- File list -->
                 <ListBox x:Name="FileList"
-                         Visibility="Collapsed"
-                         Foreground="White"
-                         Background="Blue"
+                         Foreground="#333333"
+                         Background="Transparent"
                          BorderThickness="0"
-                         Padding="8"
-                         SelectionChanged="FileList_SelectionChanged"/>
-            </Grid>
+                         Padding="4"
+                         SelectionChanged="FileList_SelectionChanged"
+                         KeyDown="FileList_KeyDown">
+                    <ListBox.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Rename" Click="RenameNote_Click"/>
+                            <MenuItem Header="Delete Note" Click="DeleteNoteButton_Click"/>
+                        </ContextMenu>
+                    </ListBox.ContextMenu>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <TextBlock x:Name="DisplayTextBlock" 
+                                           Text="{Binding DisplayName}"/>
+                                <TextBox x:Name="EditTextBox" 
+                                         Text="{Binding DisplayName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
+                                         Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"
+                                         Padding="2"
+                                         Background="White"
+                                         BorderBrush="#5BA8C8"
+                                         BorderThickness="1"
+                                         KeyDown="RenameTextBox_KeyDown"
+                                         LostFocus="RenameTextBox_LostFocus"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="8,6"/>
+                            <Setter Property="Margin" Value="0,2"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <EventSetter Event="MouseDoubleClick" Handler="ListBoxItem_DoubleClick"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="ItemBorder"
+                                                Background="Transparent"
+                                                CornerRadius="6"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="ItemBorder" Property="Background" Value="#E0F0FA"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="ItemBorder" Property="Background" Value="#C4E2F2"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </DockPanel>
         </Border>
 
         <Button x:Name="OverlayButton"
@@ -35,8 +152,7 @@
                 Canvas.Right="20" Canvas.Bottom="20"
                 FontSize="16" FontWeight="SemiBold"
                 Foreground="White"
-                Click="OverlayButton_Click"
-                MouseDoubleClick="OverlayButton_DoubleClick">
+                Click="OverlayButton_Click">
 
             <Button.Background>
                 <SolidColorBrush Color="#87CEEB" Opacity="0.45"/>
