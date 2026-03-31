@@ -28,8 +28,6 @@ public partial class MainWindow : Window {
     private double _buttonInitialTop;
     private const double _dragThreshold = 5.0;
 
-
-
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
@@ -44,9 +42,9 @@ public partial class MainWindow : Window {
     public MainWindow() {
         InitializeComponent();
 
-        OverlayButton.PreviewMouseLeftButtonDown += OverlayButton_PreviewMouseLeftButtonDown;
-        OverlayButton.PreviewMouseMove += OverlayButton_PreviewMouseMove;
-        OverlayButton.PreviewMouseLeftButtonUp += OverlayButton_PreviewMouseLeftButtonUp;
+        OverlayButton.MouseLeftButtonDown += OverlayButton_MouseLeftButtonDown;
+        OverlayButton.MouseMove += OverlayButton_MouseMove;
+        OverlayButton.MouseLeftButtonUp += OverlayButton_MouseLeftButtonUp;
         MainCanvas.MouseLeftButtonDown += MainCanvas_MouseLeftButtonDown;
         KeyDown += MainWindow_KeyDown;
 
@@ -58,17 +56,6 @@ public partial class MainWindow : Window {
         ListenForFileChanges();
 
         Closing += OnClosing;
-    }
-
-    private static string FormatNoteName(string fileName) {
-        // Note_2026-03-28_11-44-06.txt → Mar 28, 2026  11:44 AM
-        var stem = Path.GetFileNameWithoutExtension(fileName);
-        if (stem.StartsWith("Note_") &&
-            DateTime.TryParseExact(stem[5..], "yyyy-MM-dd_HH-mm-ss",
-                CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)) {
-            return dt.ToString("MMM dd, yyyy  h:mm tt");
-        }
-        return fileName;
     }
 
     private void ListenForFileChanges() {
@@ -205,28 +192,6 @@ public partial class MainWindow : Window {
         }
     }
 
-    private void MinimizeNotepad() {
-        if (IsNotepadRunning()) {
-            Task.Run(() => {
-                try {
-                    // Find notepad window by class name instead of using MainWindowHandle
-                    IntPtr handle = IntPtr.Zero;
-                    for (int i = 0; i < 20; i++) {
-                        handle = FindWindow("Notepad", null);
-                        if (handle != IntPtr.Zero) break;
-                        Thread.Sleep(100);
-                    }
-                    
-                    if (handle != IntPtr.Zero) {
-                        ShowWindow(handle, SW_HIDE);
-                    }
-                } catch {
-                    // Ignore errors in window hiding
-                }
-            });
-        }
-    }
-
     private void LoadFileList() {
         var selected = (FileList.SelectedItem as NoteItem)?.FileName;
 
@@ -247,19 +212,16 @@ public partial class MainWindow : Window {
             ? $"My Notes ({_notes.Count})"
             : "My Notes";
     }
-    
-    private void RestoreNotepad() {
-        if (IsNotepadRunning()) {
-            try {
-                var handle = FindWindow("Notepad", null);
-                if (handle != IntPtr.Zero) {
-                    ShowWindow(handle, SW_SHOW);
-                    SetForegroundWindow(handle);
-                }
-            } catch {
-                // Ignore errors in window restore
-            }
+
+    private static string FormatNoteName(string fileName) {
+        // Note_2026-03-28_11-44-06.txt → Mar 28, 2026  11:44 AM
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        if (stem.StartsWith("Note_") &&
+            DateTime.TryParseExact(stem[5..], "yyyy-MM-dd_HH-mm-ss",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)) {
+            return dt.ToString("MMM dd, yyyy  h:mm tt");
         }
+        return fileName;
     }
 
     private void MainCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
@@ -278,24 +240,58 @@ public partial class MainWindow : Window {
             e.Handled = true;
         }
     }
+    private void MinimizeNotepad() {
+        if (IsNotepadRunning()) {
+            Task.Run(() => {
+                try {
+                    // Find notepad window by class name instead of using MainWindowHandle
+                    IntPtr handle = IntPtr.Zero;
+                    for (int i = 0; i < 20; i++) {
+                        handle = FindWindow("Notepad", null);
+                        if (handle != IntPtr.Zero) break;
+                        Thread.Sleep(100);
+                    }
 
-    // Rename note 
-    private void FileList_KeyDown(object sender, KeyEventArgs e) {
-        if (e.Key == Key.F2 && FileList.SelectedItem is NoteItem note) {
-            StartRenaming(note);
-            e.Handled = true;
+                    if (handle != IntPtr.Zero) {
+                        ShowWindow(handle, SW_HIDE);
+                    }
+                } catch {
+                    // Ignore errors in window hiding
+                }
+            });
         }
     }
 
-    // Rename note 
+    private void RestoreNotepad() {
+        if (IsNotepadRunning()) {
+            try {
+                var handle = FindWindow("Notepad", null);
+                if (handle != IntPtr.Zero) {
+                    ShowWindow(handle, SW_SHOW);
+                    SetForegroundWindow(handle);
+                }
+            } catch {
+                // Ignore errors in window restore
+            }
+        }
+    }
+
+
+    #region 
+    // Note Renaming Methods, Helpers, & Event Handlers
     private void RenameNote_Click(object sender, RoutedEventArgs e) {
         if (FileList.SelectedItem is NoteItem note) {
             StartRenaming(note);
         }
     }
-    // Rename note 
     private void ListBoxItem_DoubleClick(object sender, MouseButtonEventArgs e) {
         if (sender is ListBoxItem item && item.DataContext is NoteItem note) {
+            StartRenaming(note);
+            e.Handled = true;
+        }
+    }
+    private void FileList_KeyDown(object sender, KeyEventArgs e) {
+        if (e.Key == Key.F2 && FileList.SelectedItem is NoteItem note) {
             StartRenaming(note);
             e.Handled = true;
         }
@@ -317,7 +313,7 @@ public partial class MainWindow : Window {
     private void RenameTextBox_KeyDown(object sender, KeyEventArgs e) {
         var textBox = sender as TextBox;
         var note = FileList.SelectedItem as NoteItem;
-        
+
         if (note == null) return;
 
         if (e.Key == Key.Return) {
@@ -349,32 +345,24 @@ public partial class MainWindow : Window {
         if (!string.IsNullOrWhiteSpace(newName)) {
             CommitRename(note, newName);
         }
-        
+
         // Make sure to turn off editing on the correct note
         note.IsEditing = false;
-    }
-
-    private static T? FindVisualParent<T>(DependencyObject child) where T : DependencyObject {
-        DependencyObject parentObject = VisualTreeHelper.GetParent(child);
-        if (parentObject == null) return null;
-        
-        if (parentObject is T parent) return parent;
-        return FindVisualParent<T>(parentObject);
     }
 
     private void CommitRename(NoteItem note, string newDisplayName) {
         var oldFileName = note.FileName;
         var oldPath = Path.Combine(NotesDirectory, oldFileName);
-        
+
         // Create new filename from display name
         var newFileName = Path.GetInvalidFileNameChars().Aggregate(
-            newDisplayName, 
+            newDisplayName,
             (current, c) => current.Replace(c.ToString(), "")
         ).Trim();
-        
+
         if (string.IsNullOrWhiteSpace(newFileName)) return;
         if (!newFileName.EndsWith(".txt")) newFileName += ".txt";
-        
+
         if (newFileName == oldFileName) return; // No change
 
         var newPath = Path.Combine(NotesDirectory, newFileName);
@@ -395,7 +383,7 @@ public partial class MainWindow : Window {
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject {
         if (parent == null) return null;
-        
+
         int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
         for (int i = 0; i < childrenCount; i++) {
             var child = VisualTreeHelper.GetChild(parent, i);
@@ -411,27 +399,19 @@ public partial class MainWindow : Window {
         return null;
     }
 
-    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e) {
-        // Unsubscribe from events
-        OverlayButton.PreviewMouseLeftButtonDown -= OverlayButton_PreviewMouseLeftButtonDown;
-        OverlayButton.PreviewMouseMove -= OverlayButton_PreviewMouseMove;
-        OverlayButton.PreviewMouseLeftButtonUp -= OverlayButton_PreviewMouseLeftButtonUp;
-        MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;
-        KeyDown -= MainWindow_KeyDown;
-        
-        // Clean up resources
-        _watcher?.Dispose();
-        if (_debounceTimer != null) {
-            _debounceTimer.Stop();
-            _debounceTimer = null;
-        }
-        if (IsNotepadRunning()) {
-            try { _notepadProcess!.CloseMainWindow(); } catch { }
-            _notepadProcess?.Dispose();
-        }
+    private static T? FindVisualParent<T>(DependencyObject child) where T : DependencyObject {
+        DependencyObject parentObject = VisualTreeHelper.GetParent(child);
+        if (parentObject == null) return null;
+
+        if (parentObject is T parent) return parent;
+        return FindVisualParent<T>(parentObject);
     }
 
-    private void OverlayButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+    #endregion
+
+    #region
+    // Overlay Event Handlers
+    private void OverlayButton_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
         if (e.ChangedButton != MouseButton.Left) return;
 
         _dragStart = e.GetPosition(MainCanvas);
@@ -448,7 +428,7 @@ public partial class MainWindow : Window {
                 : 0;
     }
 
-    private void OverlayButton_PreviewMouseMove(object sender, MouseEventArgs e) {
+    private void OverlayButton_MouseMove(object sender, MouseEventArgs e) {
         if (!_dragStart.HasValue || e.LeftButton != MouseButtonState.Pressed)
             return;
 
@@ -467,7 +447,7 @@ public partial class MainWindow : Window {
         e.Handled = true;
     }
 
-    private void OverlayButton_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
+    private void OverlayButton_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
         if (!_dragStart.HasValue) return;
         _dragStart = null;
 
@@ -475,6 +455,27 @@ public partial class MainWindow : Window {
             _isDragging = false;
             OverlayButton.ReleaseMouseCapture();
             e.Handled = true;
+        }
+    }
+    #endregion
+
+    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e) {
+        // Unsubscribe from events
+        OverlayButton.MouseLeftButtonDown -= OverlayButton_MouseLeftButtonDown;
+        OverlayButton.MouseMove -= OverlayButton_MouseMove;
+        OverlayButton.MouseLeftButtonUp -= OverlayButton_MouseLeftButtonUp;
+        MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;
+        KeyDown -= MainWindow_KeyDown;
+
+        // Clean up resources
+        _watcher?.Dispose();
+        if (_debounceTimer != null) {
+            _debounceTimer.Stop();
+            _debounceTimer = null;
+        }
+        if (IsNotepadRunning()) {
+            try { _notepadProcess!.CloseMainWindow(); } catch { }
+            _notepadProcess?.Dispose();
         }
     }
 }
