@@ -100,11 +100,20 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Grid>
-                                <TextBlock x:Name="DisplayTextBlock" 
-                                           Text="{Binding DisplayName}"/>
+                                <StackPanel x:Name="DisplayPanel">
+                                    <TextBlock x:Name="DisplayTextBlock"
+                                               Text="{Binding DisplayName}"
+                                               FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Subtitle}"
+                                               Margin="0,2,0,0"
+                                               FontSize="11"
+                                               Foreground="#5F7480"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
                                 <TextBox x:Name="EditTextBox" 
-                                         Text="{Binding EditableName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
-                                         Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"
+                                         Text="{Binding EditableName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Visibility="Collapsed"
                                          Padding="2"
                                          Background="White"
                                          BorderBrush="#5BA8C8"
@@ -112,6 +121,12 @@
                                          KeyDown="RenameTextBox_KeyDown"
                                          LostFocus="RenameTextBox_LostFocus"/>
                             </Grid>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                    <Setter TargetName="DisplayPanel" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="EditTextBox" Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                     <ListBox.ItemContainerStyle>

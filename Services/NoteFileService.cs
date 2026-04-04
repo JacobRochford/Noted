@@ -29,7 +29,7 @@ public sealed class NoteFileService : IDisposable {
                 var name = info.Name;
                 return new NoteItem {
                     FileName = name,
-                    DisplayName = name,
+                    DisplayName = FormatNoteName(name),
                     EditableName = Path.GetFileNameWithoutExtension(name),
                     Subtitle = BuildSubtitle(name, info.LastWriteTime)
                 };
@@ -63,18 +63,24 @@ public sealed class NoteFileService : IDisposable {
         var newPath = Path.Combine(NotesDirectory, newFileName);
 
         try {
-        if (!File.Exists(oldPath))
-            return (false, null, "Original file not found.");
-        if (File.Exists(newPath))
-            return (false, null, "A file with that name already exists.");
+            if (!File.Exists(oldPath))
+                return (false, null, "Original file not found.");
+            if (File.Exists(newPath))
+                return (false, null, "A file with that name already exists.");
 
-        File.Move(oldPath, newPath);
-        return (true, newFileName, null);
+            File.Move(oldPath, newPath);
+            return (true, newFileName, null);
         } catch (Exception ex) {
             return (false, null, ex.Message);
         }
     }
 
+    public static string FormatNoteName(string fileName) {
+        var name = Path.GetFileNameWithoutExtension(fileName);
+        if (TryParseGeneratedNoteDate(name, out var dt)) {
+            return dt.ToString("MMM dd, yyyy  h:mm:ss tt");
+        }
+        return fileName;
     }
 
     private static string BuildSubtitle(string fileName, DateTime lastWriteTime) {
