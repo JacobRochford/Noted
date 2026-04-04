@@ -62,6 +62,7 @@ public sealed class NoteFileService : IDisposable {
 
         var newPath = Path.Combine(NotesDirectory, newFileName);
 
+        try {
         if (!File.Exists(oldPath))
             return (false, null, "Original file not found.");
         if (File.Exists(newPath))
@@ -69,6 +70,11 @@ public sealed class NoteFileService : IDisposable {
 
         File.Move(oldPath, newPath);
         return (true, newFileName, null);
+        } catch (Exception ex) {
+            return (false, null, ex.Message);
+        }
+    }
+
     }
 
     private static string BuildSubtitle(string fileName, DateTime lastWriteTime) {
