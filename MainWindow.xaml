@@ -103,7 +103,7 @@
                                 <TextBlock x:Name="DisplayTextBlock" 
                                            Text="{Binding DisplayName}"/>
                                 <TextBox x:Name="EditTextBox" 
-                                         Text="{Binding DisplayName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
+                                         Text="{Binding EditableName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
                                          Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"
                                          Padding="2"
                                          Background="White"

@@ -141,6 +141,7 @@ public partial class MainWindow : Window {
     }
 
     private void StartRenaming(NoteItem note) {
+        note.EditableName = Path.GetFileNameWithoutExtension(note.FileName);
         note.IsEditing = true;
         // Focus the textbox after the UI updates
         Dispatcher.InvokeAsync(() => {
@@ -158,17 +159,16 @@ public partial class MainWindow : Window {
         var note = FileList.SelectedItem as NoteItem;
 
         if (note == null) return;
+        var originalName = Path.GetFileNameWithoutExtension(note.FileName);
 
         if (e.Key == Key.Return) {
-            // Commit the rename
-            var newName = textBox?.Text.Trim() ?? note.DisplayName;
-            if (!string.IsNullOrWhiteSpace(newName) && newName != note.DisplayName) {
+            var newName = textBox?.Text.Trim() ?? note.EditableName;
+            if (!string.IsNullOrWhiteSpace(newName) && newName != originalName)
                 CommitRename(note, newName);
-            }
             note.IsEditing = false;
             e.Handled = true;
         } else if (e.Key == Key.Escape) {
-            // Cancel rename
+            note.EditableName = originalName;
             note.IsEditing = false;
             e.Handled = true;
         }
@@ -178,50 +178,28 @@ public partial class MainWindow : Window {
         var textBox = sender as TextBox;
         if (textBox == null) return;
 
-        // Get the item that owns this textbox (walk up the visual tree)
         var listBoxItem = FindVisualParent<ListBoxItem>(textBox);
         if (listBoxItem?.DataContext is not NoteItem note) return;
         if (!note.IsEditing) return;
+        var originalName = Path.GetFileNameWithoutExtension(note.FileName);
 
-        // Always save the new name when clicking outside
         var newName = textBox.Text.Trim();
-        if (!string.IsNullOrWhiteSpace(newName)) {
+        if (!string.IsNullOrWhiteSpace(newName) && newName != originalName)
             CommitRename(note, newName);
-        }
+        else
+            note.EditableName = originalName;
 
-        // Make sure to turn off editing on the correct note
         note.IsEditing = false;
     }
 
     private void CommitRename(NoteItem note, string newDisplayName) {
-        var oldFileName = note.FileName;
-        var oldPath = Path.Combine(NotesDirectory, oldFileName);
-
-        // Create new filename from display name
-        var newFileName = Path.GetInvalidFileNameChars().Aggregate(
-            newDisplayName,
-            (current, c) => current.Replace(c.ToString(), "")
-        ).Trim();
-
-        if (string.IsNullOrWhiteSpace(newFileName)) return;
-        if (!newFileName.EndsWith(".txt")) newFileName += ".txt";
-
-        if (newFileName == oldFileName) return; // No change
-
-        var newPath = Path.Combine(NotesDirectory, newFileName);
-
-        try {
-            if (File.Exists(oldPath) && !File.Exists(newPath)) {
-                File.Move(oldPath, newPath);
-                LoadFileList();
-            } else if (File.Exists(newPath)) {
-                MessageBox.Show("A file with that name already exists.",
-                    "Name Taken", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        } catch (Exception ex) {
-            MessageBox.Show($"Failed to rename note:\n{ex.Message}",
-                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        var (success, newFileName, error) = _fileService.RenameNote(note.FileName, newDisplayName);
+        if (!success) {
+            if (error is not null)
+                MessageBox.Show(error, "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
         }
+        _viewModel.LoadNotes(newFileName ?? note.FileName);
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject {
@@ -230,14 +208,10 @@ public partial class MainWindow : Window {
         int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
         for (int i = 0; i < childrenCount; i++) {
             var child = VisualTreeHelper.GetChild(parent, i);
-            if (child is T typedChild) {
-                return typedChild;
-            }
+            if (child is T typedChild) return typedChild;
 
             var foundChild = FindVisualChild<T>(child);
-            if (foundChild != null) {
-                return foundChild;
-            }
+            if (foundChild != null) return foundChild;
         }
         return null;
     }
@@ -252,8 +226,7 @@ public partial class MainWindow : Window {
 
     #endregion
 
-    #region
-    // Overlay Event Handlers
+    #region Overlay Button Drag
     private void OverlayButton_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
         if (e.ChangedButton != MouseButton.Left) return;
 

@@ -5,6 +5,7 @@ namespace MyNotes.Models;
 
 public sealed class NoteItem : INotifyPropertyChanged {
     private string _displayName = "";
+    private string _editableName = "";
     private bool _isEditing;
 
     public string FileName { get; init; } = "";
@@ -14,6 +15,16 @@ public sealed class NoteItem : INotifyPropertyChanged {
         set {
             if (_displayName != value) {
                 _displayName = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string EditableName {
+        get => _editableName;
+        set {
+            if (_editableName != value) {
+                _editableName = value;
                 OnPropertyChanged();
             }
         }
