@@ -38,6 +38,7 @@ public partial class MainWindow : Window {
         FileList.ItemsSource = _viewModel.Notes;
         _viewModel.NotesLoaded += OnNotesLoaded;
         _viewModel.LoadNotes();
+        UpdateNotesDirectoryDisplay();
 
         Closing += OnClosing;
     }
@@ -45,24 +46,41 @@ public partial class MainWindow : Window {
     // Sync HeaderText and restore the tracked selection after every reload of notes. 
     // This ensures the UI updates immediately after changes instead of waiting for the next FileSystemWatcher event.
     private void OnNotesLoaded(object? sender, EventArgs e) {
-        HeaderText.Text = _viewModel.HeaderText;
+        UpdateNotesDirectoryDisplay();
         if (_viewModel.SelectedFileName is not null)
             FileList.SelectedItem = _viewModel.FindNote(_viewModel.SelectedFileName);
     }
 
+    private void UpdateNotesDirectoryDisplay() {
+        SettingsNotesDirectoryText.Text = _fileService.NotesDirectory;
+        SettingsButton.ToolTip = SettingsView.Visibility == Visibility.Visible
+            ? "Return to notes"
+            : "Open settings";
+    }
+
+    private void UpdateHeaderText() {
+        HeaderText.Text = SettingsView.Visibility == Visibility.Visible
+            ? "Settings"
+            : _viewModel.HeaderText;
+    }
+    private void HideNotesPanelAndMinimizeNotepad() {
+        NotesPanel.Visibility = Visibility.Collapsed;
+        _notepadService.Minimize();
+    }
+
     private void OverlayButton_Click(object sender, RoutedEventArgs e) {
         if (NotesPanel.Visibility == Visibility.Visible) {
-            NotesPanel.Visibility = Visibility.Collapsed;
-            _notepadService.Minimize();
+            HideNotesPanelAndMinimizeNotepad();
         } else {
             NotesPanel.Visibility = Visibility.Visible;
-            if (_notepadService.IsRunning) {
+            if (_notepadService.IsRunning)
                 _notepadService.Restore();
-            } else if (_viewModel.Notes.Count > 0) {
-                FileList.SelectedItem = _viewModel.Notes[0];
-                _notepadService.Open(Path.Combine(_fileService.NotesDirectory, _viewModel.Notes[0].FileName));
-            }
         }
+    }
+
+    private void MinimizeNotesButton_Click(object sender, RoutedEventArgs e) {
+        HideNotesPanelAndMinimizeNotepad();
+    }
     }
 
     private void NewNoteButton_Click(object sender, RoutedEventArgs e) {
@@ -107,15 +125,13 @@ public partial class MainWindow : Window {
     private void MainCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
         if (NotesPanel.Visibility == Visibility.Visible &&
             !NotesPanel.IsMouseOver && !OverlayButton.IsMouseOver) {
-            NotesPanel.Visibility = Visibility.Collapsed;
-            _notepadService.Minimize();
+            HideNotesPanelAndMinimizeNotepad();
         }
     }
 
     private void MainWindow_KeyDown(object sender, KeyEventArgs e) {
         if (e.Key == Key.Escape && NotesPanel.Visibility == Visibility.Visible) {
-            NotesPanel.Visibility = Visibility.Collapsed;
-            _notepadService.Minimize();
+            HideNotesPanelAndMinimizeNotepad();
             e.Handled = true;
         }
     }
