@@ -29,9 +29,9 @@ public partial class MainWindow : Window {
         _notepadService = new NotepadProcessService();
         _viewModel = new MainWindowViewModel(_fileService);
 
-        OverlayButton.MouseLeftButtonDown += OverlayButton_MouseLeftButtonDown;
-        OverlayButton.MouseMove += OverlayButton_MouseMove;
-        OverlayButton.MouseLeftButtonUp += OverlayButton_MouseLeftButtonUp;
+        NotesPanel.PreviewMouseLeftButtonDown += NotesPanel_PreviewMouseLeftButtonDown;
+        NotesPanel.PreviewMouseMove += NotesPanel_PreviewMouseMove;
+        NotesPanel.PreviewMouseLeftButtonUp += NotesPanel_PreviewMouseLeftButtonUp;
         MainCanvas.MouseLeftButtonDown += MainCanvas_MouseLeftButtonDown;
         KeyDown += MainWindow_KeyDown;
 
@@ -261,40 +261,139 @@ public partial class MainWindow : Window {
     }
 
     private void OverlayButton_MouseMove(object sender, MouseEventArgs e) {
-        if (!_dragStart.HasValue || e.LeftButton != MouseButtonState.Pressed)
-            return;
-
-        var delta = e.GetPosition(MainCanvas) - _dragStart.Value;
-        if (delta.Length <= _dragThreshold) return;
-
-        if (!_isDragging) {
-            _isDragging = true;
-            OverlayButton.CaptureMouse();
-        }
-
-        Canvas.SetLeft(OverlayButton, _buttonInitialLeft + delta.X);
-        Canvas.SetTop(OverlayButton, _buttonInitialTop + delta.Y);
-        Canvas.SetRight(OverlayButton, double.NaN);
-        Canvas.SetBottom(OverlayButton, double.NaN);
-        e.Handled = true;
+        UpdateDrag(OverlayButton, e);
     }
 
     private void OverlayButton_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
-        if (!_dragStart.HasValue) return;
+        var wasDragging = _isDragging;
+        EndDrag(OverlayButton, e);
+
+        if (!wasDragging && e.ChangedButton == MouseButton.Left) {
+            OverlayButton_Click(OverlayButton, new RoutedEventArgs());
+            e.Handled = true;
+        }
+    }
+
+    private void NotesPanel_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+        if (!CanStartNotesPanelDrag(e.OriginalSource as DependencyObject))
+            return;
+
+        BeginDrag(NotesPanel, e);
+    }
+
+    private void NotesPanel_PreviewMouseMove(object sender, MouseEventArgs e) {
+        UpdateDrag(NotesPanel, e);
+    }
+
+    private void NotesPanel_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
+        EndDrag(NotesPanel, e);
+    }
+
+    private void BeginDrag(FrameworkElement element, MouseButtonEventArgs e) {
+        if (e.ChangedButton != MouseButton.Left)
+            return;
+
+        _dragElement = element;
+        _isDragging = false;
+        _dragStart = e.GetPosition(MainCanvas);
+        _dragInitialLeft = GetCanvasLeft(element);
+        _dragInitialTop = GetCanvasTop(element);
+    }
+
+    private void UpdateDrag(FrameworkElement element, MouseEventArgs e) {
+        if (_dragElement != element || !_dragStart.HasValue || e.LeftButton != MouseButtonState.Pressed)
+            return;
+
+        var delta = e.GetPosition(MainCanvas) - _dragStart.Value;
+        if (delta.Length <= _dragThreshold)
+            return;
+
+        if (!_isDragging) {
+            _isDragging = true;
+            element.CaptureMouse();
+        }
+
+        Canvas.SetLeft(element, _dragInitialLeft + delta.X);
+        Canvas.SetTop(element, _dragInitialTop + delta.Y);
+        Canvas.SetRight(element, double.NaN);
+        Canvas.SetBottom(element, double.NaN);
+        e.Handled = true;
+    }
+
+    private void EndDrag(FrameworkElement element, MouseButtonEventArgs e) {
+        if (_dragElement != element)
+            return;
+
+        _dragElement = null;
         _dragStart = null;
+        if (element.IsMouseCaptured)
+            element.ReleaseMouseCapture();
 
         if (_isDragging) {
             _isDragging = false;
-            OverlayButton.ReleaseMouseCapture();
             e.Handled = true;
         }
+    }
+
+    private static bool CanStartNotesPanelDrag(DependencyObject? source) {
+        return !IsWithinInteractiveControl(source);
+    }
+
+    private static bool IsWithinNoteRowActionControl(DependencyObject? source) {
+        var current = source;
+        while (current is not null) {
+            if (current is ButtonBase or TextBox or ScrollBar or Thumb)
+                return true;
+
+            current = GetParent(current);
+        }
+
+        return false;
+    }
+
+    private static bool IsWithinInteractiveControl(DependencyObject? source) {
+        var current = source;
+        while (current is not null) {
+            if (current is ButtonBase or TextBox or ListBox or ListBoxItem or ScrollBar or Thumb)
+                return true;
+
+            current = GetParent(current);
+        }
+
+        return false;
+    }
+
+    private static DependencyObject? GetParent(DependencyObject child) {
+        return child switch {
+            Visual or Visual3D => VisualTreeHelper.GetParent(child),
+            FrameworkContentElement contentElement => contentElement.Parent,
+            _ => null
+        };
+    }
+
+    private double GetCanvasLeft(FrameworkElement element) {
+        var left = Canvas.GetLeft(element);
+        if (!double.IsNaN(left))
+            return left;
+
+        var right = Canvas.GetRight(element);
+        return right > 0 ? MainCanvas.ActualWidth - right - element.ActualWidth : 0;
+    }
+
+    private double GetCanvasTop(FrameworkElement element) {
+        var top = Canvas.GetTop(element);
+        if (!double.IsNaN(top))
+            return top;
+
+        var bottom = Canvas.GetBottom(element);
+        return bottom > 0 ? MainCanvas.ActualHeight - bottom - element.ActualHeight : 0;
     }
     #endregion
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e) {
-        OverlayButton.MouseLeftButtonDown -= OverlayButton_MouseLeftButtonDown;
-        OverlayButton.MouseMove -= OverlayButton_MouseMove;
-        OverlayButton.MouseLeftButtonUp -= OverlayButton_MouseLeftButtonUp;
+        NotesPanel.PreviewMouseLeftButtonDown -= NotesPanel_PreviewMouseLeftButtonDown;
+        NotesPanel.PreviewMouseMove -= NotesPanel_PreviewMouseMove;
+        NotesPanel.PreviewMouseLeftButtonUp -= NotesPanel_PreviewMouseLeftButtonUp;
         MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;
         KeyDown -= MainWindow_KeyDown;
 
