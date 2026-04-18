@@ -5,6 +5,7 @@ using MyNotes.Models;
 namespace MyNotes.Services;
 
 public sealed class NoteFileService : IDisposable {
+    private readonly AppSettingsService _settingsService;
     private FileSystemWatcher? _watcher;
     private static readonly TimeSpan DeletedNoteRetention = TimeSpan.FromDays(7);
     private static readonly HashSet<string> ReservedFileNames = new(StringComparer.OrdinalIgnoreCase) {
@@ -13,12 +14,18 @@ public sealed class NoteFileService : IDisposable {
         "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
     };
 
-    public string NotesDirectory { get; }
+    public string NotesDirectory { get; private set; }
+    public string DeletedNotesDirectory { get; }
 
     public event EventHandler? FilesChanged;
 
+    public NoteFileService(AppSettingsService settingsService) {
+        _settingsService = settingsService;
         DeletedNotesDirectory = Path.Combine(_settingsService.StorageDirectory, "DeletedNotes");
+        NotesDirectory = ResolveInitialNotesDirectory();
         Directory.CreateDirectory(NotesDirectory);
+        Directory.CreateDirectory(DeletedNotesDirectory);
+        PurgeExpiredDeletedNotes();
     }
 
     public IReadOnlyList<NoteItem> GetNotes() {
@@ -37,13 +44,16 @@ public sealed class NoteFileService : IDisposable {
             .ToList();
     }
 
-    public string CreateNote() {
+    public string CreateNote(string? requestedName = null) {
         var now = DateTime.Now;
-        var filename = BuildUniqueGeneratedFileName(now);
+        var filename = string.IsNullOrWhiteSpace(requestedName)
+            ? BuildUniqueFileName(now)
+            : BuildRequestedFileName(requestedName);
         var fullPath = Path.Combine(NotesDirectory, filename);
-        File.WriteAllText(fullPath, $"Created: {now:yyyy-MM-dd HH:mm:ss}\r\n\r\n");
+        File.WriteAllText(fullPath, BuildNewNoteContent(now, _settingsService.LoadTimestampPlacement()));
         return filename;
     }
+
     public bool ChangeNotesDirectory(string newDirectory) {
         var normalizedPath = Path.GetFullPath(newDirectory);
         if (string.Equals(NotesDirectory, normalizedPath, StringComparison.OrdinalIgnoreCase))
@@ -113,6 +123,16 @@ public sealed class NoteFileService : IDisposable {
             : $"Modified {lastWriteTime:MMM dd, yyyy  h:mm tt}";
     }
 
+    private static string BuildNewNoteContent(DateTime timestamp, NoteTimestampPlacement timestampPlacement) {
+        var timestampText = timestamp.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+
+        return timestampPlacement switch {
+            NoteTimestampPlacement.Top => timestampText + Environment.NewLine + Environment.NewLine,
+            NoteTimestampPlacement.Bottom => string.Join(Environment.NewLine, Enumerable.Repeat(string.Empty, 40)) + Environment.NewLine + timestampText,
+            _ => string.Empty
+        };
+    }
+
     private string BuildDeletedNotePath(string fileName) {
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss_fff", CultureInfo.InvariantCulture);
         var candidate = Path.Combine(DeletedNotesDirectory, $"{timestamp}__{fileName}");
@@ -143,6 +163,9 @@ public sealed class NoteFileService : IDisposable {
             }
         }
     }
+
+    private string BuildUniqueFileName(DateTime timestamp) {
+        var baseName = $"{timestamp:yyyy-MM-dd_HH-mm-ss}";
         var candidate = baseName + ".txt";
         if (!File.Exists(Path.Combine(NotesDirectory, candidate)))
             return candidate;
@@ -154,6 +177,18 @@ public sealed class NoteFileService : IDisposable {
         }
 
         return $"{baseName}_{Guid.NewGuid():N}.txt";
+    }
+
+    private string BuildRequestedFileName(string requestedName) {
+        var validatedFileName = ValidateAndSanitizeFileName(requestedName);
+        if (string.IsNullOrWhiteSpace(validatedFileName))
+            throw new InvalidOperationException("Invalid or reserved file name.");
+
+        var candidate = validatedFileName + ".txt";
+        if (File.Exists(Path.Combine(NotesDirectory, candidate)))
+            throw new InvalidOperationException("A file with that name already exists.");
+
+        return candidate;
     }
 
     private static string? ValidateAndSanitizeFileName(string value) {
@@ -180,10 +215,10 @@ public sealed class NoteFileService : IDisposable {
 
     private static bool TryParseGeneratedNoteDate(string fileName, out DateTime timestamp) {
         timestamp = default;
-        if (!fileName.StartsWith("Note_", StringComparison.Ordinal))
-            return false;
+        var timestampText = fileName.StartsWith("Note_", StringComparison.Ordinal)
+            ? fileName[5..]
+            : fileName;
 
-        var timestampText = fileName[5..];
         var underscoreIndex = timestampText.LastIndexOf('_');
         if (underscoreIndex > 0) {
             var suffix = timestampText[(underscoreIndex + 1)..];
@@ -196,6 +231,7 @@ public sealed class NoteFileService : IDisposable {
     }
 
     public void StartWatching() {
+        StopWatching();
         _watcher = new FileSystemWatcher(NotesDirectory, "*.txt") {
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
             EnableRaisingEvents = true
@@ -216,6 +252,18 @@ public sealed class NoteFileService : IDisposable {
 
         return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Notes");
     }
+
+    private void StopWatching() {
+        if (_watcher == null)
+            return;
+
+        _watcher.Created -= OnFileSystemChanged;
+        _watcher.Deleted -= OnFileSystemChanged;
+        _watcher.Dispose();
         _watcher = null;
+    }
+
+    public void Dispose() {
+        StopWatching();
     }
 }
