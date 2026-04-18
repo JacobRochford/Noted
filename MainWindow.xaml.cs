@@ -1,8 +1,12 @@
 ﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
+using System.Windows.Threading;
+using Microsoft.Win32;
 using MyNotes.Models;
 using MyNotes.Services;
 using MyNotes.ViewModels;
@@ -11,22 +15,26 @@ using MessageBox = System.Windows.MessageBox;
 namespace MyNotes;
 
 public partial class MainWindow : Window {
+    private readonly AppSettingsService _settingsService;
     private readonly NoteFileService _fileService;
     private readonly NotepadProcessService _notepadService;
     private readonly MainWindowViewModel _viewModel;
+    private readonly DispatcherTimer _renameBannerTimer;
+    private bool _isUpdatingSettingsView;
 
     // Drag state
     private Point? _dragStart;
     private FrameworkElement? _dragElement;
     private bool _isDragging;
-    private double _buttonInitialLeft;
-    private double _buttonInitialTop;
+    private double _dragInitialLeft;
+    private double _dragInitialTop;
     private const double _dragThreshold = 5.0;
 
     public MainWindow() {
         InitializeComponent();
 
-        _fileService = new NoteFileService();
+        _settingsService = new AppSettingsService();
+        _fileService = new NoteFileService(_settingsService);
         _notepadService = new NotepadProcessService();
         _viewModel = new MainWindowViewModel(_fileService);
         _renameBannerTimer = new DispatcherTimer {
@@ -47,6 +55,8 @@ public partial class MainWindow : Window {
         _viewModel.NotesLoaded += OnNotesLoaded;
         _viewModel.LoadNotes();
         UpdateNotesDirectoryDisplay();
+        UpdateSettingsView();
+        SetSettingsViewVisible(false);
 
         Closing += OnClosing;
     }
@@ -54,6 +64,7 @@ public partial class MainWindow : Window {
     // Sync HeaderText and restore the tracked selection after every reload of notes. 
     // This ensures the UI updates immediately after changes instead of waiting for the next FileSystemWatcher event.
     private void OnNotesLoaded(object? sender, EventArgs e) {
+        UpdateHeaderText();
         UpdateNotesDirectoryDisplay();
         if (_viewModel.SelectedFileName is not null)
             FileList.SelectedItem = _viewModel.FindNote(_viewModel.SelectedFileName);
@@ -71,6 +82,29 @@ public partial class MainWindow : Window {
             ? "Settings"
             : _viewModel.HeaderText;
     }
+
+    private void SetSettingsViewVisible(bool isVisible) {
+        NotesListView.Visibility = isVisible ? Visibility.Collapsed : Visibility.Visible;
+        SettingsView.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
+        SettingsButton.Content = isVisible ? "Notes" : "Settings";
+        UpdateHeaderText();
+        UpdateNotesDirectoryDisplay();
+    }
+
+    private void UpdateSettingsView() {
+        _isUpdatingSettingsView = true;
+        try {
+            PromptForNoteNameOption.IsChecked = _settingsService.LoadPromptForNoteName();
+            var timestampPlacement = _settingsService.LoadTimestampPlacement();
+            TimestampNoneOption.IsChecked = timestampPlacement == NoteTimestampPlacement.None;
+            TimestampTopOption.IsChecked = timestampPlacement == NoteTimestampPlacement.Top;
+            TimestampBottomOption.IsChecked = timestampPlacement == NoteTimestampPlacement.Bottom;
+            SettingsNotesDirectoryText.Text = _fileService.NotesDirectory;
+        } finally {
+            _isUpdatingSettingsView = false;
+        }
+    }
+
     private void HideNotesPanelAndMinimizeNotepad() {
         NotesPanel.Visibility = Visibility.Collapsed;
         _notepadService.Minimize();
@@ -89,6 +123,17 @@ public partial class MainWindow : Window {
     private void MinimizeNotesButton_Click(object sender, RoutedEventArgs e) {
         HideNotesPanelAndMinimizeNotepad();
     }
+
+    private void SettingsButton_Click(object sender, RoutedEventArgs e) {
+        var showSettings = SettingsView.Visibility != Visibility.Visible;
+        if (showSettings)
+            UpdateSettingsView();
+
+        SetSettingsViewVisible(showSettings);
+    }
+
+    private void BackToNotesButton_Click(object sender, RoutedEventArgs e) {
+        SetSettingsViewVisible(false);
     }
 
     private void NewNoteButton_Click(object sender, RoutedEventArgs e) {
@@ -150,15 +195,16 @@ public partial class MainWindow : Window {
     }
 
     private void DeleteNoteButton_Click(object sender, RoutedEventArgs e) {
-        if (FileList.SelectedItem is not NoteItem note) return;
+        NoteItem? note = null;
 
-        var result = MessageBox.Show(
-            $"Delete \"{note.DisplayName}\"?",
-            "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (result != MessageBoxResult.Yes) return;
+        if (sender is FrameworkElement element && element.DataContext is NoteItem itemNote) {
+            note = itemNote;
+            FileList.SelectedItem = itemNote;
+        } else {
+            note = FileList.SelectedItem as NoteItem;
+        }
 
-        if (_notepadService.IsRunning)
-            _notepadService.Close();
+        if (note is null) return;
 
         try {
             _fileService.DeleteNote(note.FileName);
@@ -170,8 +216,9 @@ public partial class MainWindow : Window {
     }
 
     private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e) {
-        if (FileList.SelectedItem is NoteItem note) {
+        if (FileList.SelectedItem is NoteItem note)
             _viewModel.SelectedFileName = note.FileName;
+    }
 
     private void OpenSelectedNote() {
         if (FileList.SelectedItem is not NoteItem note) return;
@@ -235,8 +282,14 @@ public partial class MainWindow : Window {
 
     #region Note Renaming
     private void RenameNote_Click(object sender, RoutedEventArgs e) {
-        if (FileList.SelectedItem is NoteItem note)
-            StartRenaming(note);
+        if (sender is FrameworkElement element && element.DataContext is NoteItem itemNote) {
+            FileList.SelectedItem = itemNote;
+            StartRenaming(itemNote);
+            return;
+        }
+
+        if (FileList.SelectedItem is NoteItem selectedNote)
+            StartRenaming(selectedNote);
     }
 
     private void ListBoxItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
@@ -313,6 +366,9 @@ public partial class MainWindow : Window {
     }
 
     private void CommitRename(NoteItem note, string newDisplayName) {
+        var oldFileName = note.FileName;
+        var oldFilePath = Path.Combine(_fileService.NotesDirectory, oldFileName);
+        var wasNoteOpen = _notepadService.IsFileOpen(oldFilePath);
         var (success, newFileName, error) = _fileService.RenameNote(note.FileName, newDisplayName);
         if (!success) {
             if (error is not null)
@@ -320,6 +376,63 @@ public partial class MainWindow : Window {
             return;
         }
         _viewModel.LoadNotes(newFileName ?? note.FileName);
+        if (!wasNoteOpen || newFileName is null)
+            return;
+
+        ShowRenameNotice(_viewModel.FindNote(newFileName), oldFileName);
+        if (_notepadService.Open(Path.Combine(_fileService.NotesDirectory, newFileName))) {
+            // _notepadService.Restore();
+        }
+    }
+
+    private void ShowRenameNotice(NoteItem? renamedNote, string oldFileName) {
+        RenameNoticeText.Text =
+            $"For any unsaved changes, look for the unclosed tab with the old file name: {oldFileName}.";
+        _renameBannerTimer.Stop();
+
+        Dispatcher.InvokeAsync(() => {
+            FileList.UpdateLayout();
+
+            var targetElement = renamedNote is not null
+                ? FileList.ItemContainerGenerator.ContainerFromItem(renamedNote) as FrameworkElement
+                : null;
+
+            PositionRenameNotice(targetElement ?? NotesPanel);
+            RenameNoticePopup.IsOpen = true;
+            _renameBannerTimer.Start();
+        }, DispatcherPriority.Loaded);
+    }
+
+    private void RenameBannerTimer_Tick(object? sender, EventArgs e) {
+        _renameBannerTimer.Stop();
+        RenameNoticePopup.IsOpen = false;
+    }
+
+    private void PositionRenameNotice(FrameworkElement targetElement) {
+        RenameNoticePopup.PlacementTarget = targetElement;
+
+        if (ReferenceEquals(targetElement, NotesPanel)) {
+            RenameNoticePopup.HorizontalOffset = Math.Max(16, (NotesPanel.ActualWidth - 220) / 2);
+            RenameNoticePopup.VerticalOffset = 68;
+            return;
+        }
+
+        var targetWidth = Math.Max(targetElement.ActualWidth, 220);
+        var targetHeight = Math.Max(targetElement.ActualHeight, 36);
+        RenameNoticePopup.HorizontalOffset = Math.Max(8, targetWidth - 228);
+        RenameNoticePopup.VerticalOffset = Math.Max(0, (targetHeight - 52) / 2);
+    }
+
+    private bool EnsureCurrentNoteCanClose(string actionDescription) {
+        if (_notepadService.TryCloseCurrentNote())
+            return true;
+
+        MessageBox.Show(
+            $"Please save, close, or finish with the open note before trying to {actionDescription}.",
+            "Note Still Open",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+        return false;
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject {
@@ -493,6 +606,9 @@ public partial class MainWindow : Window {
     #endregion
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e) {
+        _renameBannerTimer.Tick -= RenameBannerTimer_Tick;
+        _renameBannerTimer.Stop();
+        RenameNoticePopup.IsOpen = false;
         OverlayButton.PreviewMouseLeftButtonDown -= OverlayButton_MouseLeftButtonDown;
         OverlayButton.PreviewMouseMove -= OverlayButton_MouseMove;
         OverlayButton.PreviewMouseLeftButtonUp -= OverlayButton_MouseLeftButtonUp;
