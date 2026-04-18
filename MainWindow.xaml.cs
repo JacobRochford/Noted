@@ -29,6 +29,10 @@ public partial class MainWindow : Window {
         _fileService = new NoteFileService();
         _notepadService = new NotepadProcessService();
         _viewModel = new MainWindowViewModel(_fileService);
+        _renameBannerTimer = new DispatcherTimer {
+            Interval = TimeSpan.FromSeconds(10)
+        };
+        _renameBannerTimer.Tick += RenameBannerTimer_Tick;
 
         OverlayButton.PreviewMouseLeftButtonDown += OverlayButton_MouseLeftButtonDown;
         OverlayButton.PreviewMouseMove += OverlayButton_MouseMove;
@@ -89,7 +93,10 @@ public partial class MainWindow : Window {
 
     private void NewNoteButton_Click(object sender, RoutedEventArgs e) {
         try {
-            var filename = _fileService.CreateNote();
+            var filename = CreateNewNoteFromCurrentSettings();
+            if (filename is null)
+                return;
+
             _viewModel.LoadNotes(filename);
             // OnNotesLoaded fires synchronously above, so selection is already set.
             _notepadService.Open(Path.Combine(_fileService.NotesDirectory, filename));
@@ -97,6 +104,49 @@ public partial class MainWindow : Window {
             MessageBox.Show($"Failed to create note:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private string? CreateNewNoteFromCurrentSettings() {
+        if (!_settingsService.LoadPromptForNoteName())
+            return _fileService.CreateNote();
+
+        var attemptedName = string.Empty;
+        while (true) {
+            var dialog = new NewNoteNameDialog(attemptedName) {
+                Owner = this
+            };
+
+            if (dialog.ShowDialog() != true)
+                return null;
+
+            try {
+                return _fileService.CreateNote(dialog.NoteName);
+            } catch (InvalidOperationException ex) {
+                attemptedName = dialog.NoteName;
+                MessageBox.Show(ex.Message,
+                    "New Note Name", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+    }
+
+    private void PromptForNoteNameOption_Changed(object sender, RoutedEventArgs e) {
+        if (_isUpdatingSettingsView)
+            return;
+
+        _settingsService.SavePromptForNoteName(PromptForNoteNameOption.IsChecked == true);
+    }
+
+    private void TimestampPlacementOption_Checked(object sender, RoutedEventArgs e) {
+        if (_isUpdatingSettingsView)
+            return;
+
+        var timestampPlacement = sender switch {
+            RadioButton { Name: nameof(TimestampTopOption) } => NoteTimestampPlacement.Top,
+            RadioButton { Name: nameof(TimestampBottomOption) } => NoteTimestampPlacement.Bottom,
+            _ => NoteTimestampPlacement.None
+        };
+
+        _settingsService.SaveTimestampPlacement(timestampPlacement);
     }
 
     private void DeleteNoteButton_Click(object sender, RoutedEventArgs e) {
@@ -122,7 +172,50 @@ public partial class MainWindow : Window {
     private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e) {
         if (FileList.SelectedItem is NoteItem note) {
             _viewModel.SelectedFileName = note.FileName;
-            _notepadService.Open(Path.Combine(_fileService.NotesDirectory, note.FileName));
+
+    private void OpenSelectedNote() {
+        if (FileList.SelectedItem is not NoteItem note) return;
+
+        var filePath = Path.Combine(_fileService.NotesDirectory, note.FileName);
+        _viewModel.SelectedFileName = note.FileName;
+
+        if (_notepadService.Open(filePath)) {
+            _notepadService.Restore();
+            return;
+        }
+
+        if (_notepadService.IsRunning)
+            _notepadService.Restore();
+    }
+
+    private void OpenSelectedNote_Click(object sender, RoutedEventArgs e) {
+        OpenSelectedNote();
+    }
+
+    private void ChangeFolderButton_Click(object sender, RoutedEventArgs e) {
+        var dialog = new OpenFolderDialog {
+            Title = "Choose Notes Folder",
+            InitialDirectory = _fileService.NotesDirectory,
+            Multiselect = false
+        };
+
+        if (dialog.ShowDialog() != true)
+            return;
+
+        try {
+            if (!EnsureCurrentNoteCanClose("finish with the currently open note before changing folders"))
+                return;
+
+            var changed = _fileService.ChangeNotesDirectory(dialog.FolderName);
+            _viewModel.SelectedFileName = null;
+            if (changed)
+                _viewModel.LoadNotes();
+
+            UpdateNotesDirectoryDisplay();
+            UpdateSettingsView();
+        } catch (Exception ex) {
+            MessageBox.Show($"Failed to change notes folder:\n{ex.Message}",
+                "Folder Change Failed", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
