@@ -17,22 +17,39 @@
         <Border x:Name="NotesPanel"
                 Background="#F5F9FC"
                 BorderBrush="#87CEEB"
+                Opacity="0.88"
                 BorderThickness="1"
                 CornerRadius="8"
                 Padding="12"
-                Width="320" Height="620"
+                MinWidth="320"
+                MinHeight="420"
+                Width="360" Height="620"
                 Canvas.Right="40" Canvas.Top="60"
-                Visibility="Collapsed">
+                Visibility="Visible">
 
-            <DockPanel>
+            <Grid>
+                <DockPanel Margin="0,0,10,10">
                 <!-- Header bar -->
-                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-                    <TextBlock x:Name="HeaderText"
-                               Text="My Notes"
-                               FontSize="16" FontWeight="SemiBold"
-                               Foreground="#2C6E91"
-                               VerticalAlignment="Center"/>
-                    <StackPanel Orientation="Horizontal"
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border x:Name="NotesPanelDragHandle"
+                            Grid.Column="0"
+                            Background="Transparent"
+                            Cursor="SizeAll"
+                            Padding="0,4,8,4">
+                        <TextBlock x:Name="HeaderText"
+                                   Text="My Notes"
+                                   FontSize="16" FontWeight="SemiBold"
+                                   Foreground="#2C6E91"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
                                 HorizontalAlignment="Right">
                         <Button x:Name="NewNoteButton"
                                 Content="+ New"
@@ -55,44 +72,84 @@
                                 </ControlTemplate>
                             </Button.Template>
                         </Button>
-                        <Button x:Name="DeleteNoteButton"
-                                Content="Delete"
-                                Click="DeleteNoteButton_Click"
+                        <Button x:Name="SettingsButton"
+                            Content="Settings"
+                            Click="SettingsButton_Click"
                                 FontSize="12" FontWeight="SemiBold"
                                 Foreground="White" Cursor="Hand"
-                                Padding="10,4">
+                                Padding="10,4" Margin="0,0,6,0">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
-                                    <Border x:Name="bg" Background="#D9534F"
+                                    <Border x:Name="bg" Background="#617A8A"
                                             CornerRadius="5" Padding="{TemplateBinding Padding}">
                                         <ContentPresenter HorizontalAlignment="Center"
                                                           VerticalAlignment="Center"/>
                                     </Border>
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="bg" Property="Background" Value="#C9302C"/>
+                                            <Setter TargetName="bg" Property="Background" Value="#516774"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                        <Button x:Name="MinimizeNotesButton"
+                                Content="Hide"
+                                Click="MinimizeNotesButton_Click"
+                                FontSize="10" FontWeight="SemiBold"
+                                Foreground="White" Cursor="Hand"
+                                Padding="10,4"
+                                Margin="0,0,6,0">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="bg" Background="#6C86A0"
+                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="bg" Property="Background" Value="#5B748D"/>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </Button.Template>
                         </Button>
                     </StackPanel>
-                </DockPanel>
+                </Grid>
 
                 <!-- Separator -->
                 <Border DockPanel.Dock="Top"
-                        Height="1" Background="#D0E4EE" Margin="0,0,0,6"/>
+                    Height="1" Background="#D0E4EE" Margin="0,0,0,2"/>
 
-                <!-- File list -->
-                <ListBox x:Name="FileList"
-                         Foreground="#333333"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         Padding="4"
-                         SelectionChanged="FileList_SelectionChanged"
-                         KeyDown="FileList_KeyDown">
+                <Grid>
+                    <Border x:Name="NotesContentBackground"
+                        Background="#D9F5F9FC"
+                        BorderBrush="#D8E9F1"
+                        BorderThickness="1"
+                        CornerRadius="8"/>
+
+                    <DockPanel x:Name="NotesListView"
+                           Margin="8"
+                           Opacity="0.95">
+                        <TextBlock x:Name="NotesDirectoryText"
+                                   DockPanel.Dock="Top"
+                           Margin="0,0,0,2"
+                                   FontSize="11"
+                                   Foreground="#5F7480"
+                                   TextTrimming="CharacterEllipsis"/>
+
+                        <!-- File list -->
+                        <ListBox x:Name="FileList"
+                                 Foreground="#333333"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Padding="0"
+                                 SelectionChanged="FileList_SelectionChanged"
+                                 KeyDown="FileList_KeyDown">
                     <ListBox.ContextMenu>
                         <ContextMenu>
+                            <MenuItem Header="Open" Click="OpenSelectedNote_Click"/>
                             <MenuItem Header="Rename" Click="RenameNote_Click"/>
                             <MenuItem Header="Delete Note" Click="DeleteNoteButton_Click"/>
                         </ContextMenu>
@@ -100,31 +157,113 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Grid>
-                                <StackPanel x:Name="DisplayPanel">
-                                    <TextBlock x:Name="DisplayTextBlock"
-                                               Text="{Binding DisplayName}"
-                                               FontWeight="SemiBold"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{Binding Subtitle}"
-                                               Margin="0,2,0,0"
-                                               FontSize="11"
-                                               Foreground="#5F7480"
-                                               TextTrimming="CharacterEllipsis"/>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Grid Grid.Column="0">
+                                    <StackPanel x:Name="DisplayPanel">
+                                        <TextBlock x:Name="DisplayTextBlock"
+                                                   Text="{Binding DisplayName}"
+                                                   FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Subtitle}"
+                                                   Margin="0,2,0,0"
+                                                   FontSize="11"
+                                                   Foreground="#5F7480"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <TextBox x:Name="EditTextBox" 
+                                             Text="{Binding EditableName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             Visibility="Collapsed"
+                                             Padding="2"
+                                             Background="White"
+                                             BorderBrush="#5BA8C8"
+                                             BorderThickness="1"
+                                             KeyDown="RenameTextBox_KeyDown"
+                                             LostFocus="RenameTextBox_LostFocus"/>
+                                </Grid>
+
+                                <StackPanel Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            VerticalAlignment="Center"
+                                            Margin="10,0,0,0">
+                                    <Button x:Name="RenameItemButton"
+                                            Content="Rename"
+                                            Click="RenameNote_Click"
+                                            Padding="8,3"
+                                            FontSize="11"
+                                            FontWeight="SemiBold"
+                                            Foreground="#2C6E91"
+                                            Cursor="Hand"
+                                            VerticalAlignment="Center"
+                                            Background="Transparent"
+                                            BorderBrush="#9EC7DB"
+                                            BorderThickness="1">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="bg"
+                                                        Background="#EFF7FB"
+                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                        CornerRadius="6"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="bg" Property="Background" Value="#DCEEF8"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+
+                                    <Button x:Name="DeleteItemButton"
+                                            Click="DeleteNoteButton_Click"
+                                            Width="28"
+                                            Height="28"
+                                            Margin="6,0,0,0"
+                                            Padding="0"
+                                            FontFamily="Segoe MDL2 Assets"
+                                            FontSize="12"
+                                            Content="&#xE74D;"
+                                            ToolTip="Delete note"
+                                            Foreground="#C9302C"
+                                            Cursor="Hand"
+                                            VerticalAlignment="Center"
+                                            Background="Transparent"
+                                            BorderBrush="#E8B2AF"
+                                            BorderThickness="1">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="bg"
+                                                        Background="#FFF4F3"
+                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                        CornerRadius="6"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="bg" Property="Background" Value="#FCE2E0"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
                                 </StackPanel>
-                                <TextBox x:Name="EditTextBox" 
-                                         Text="{Binding EditableName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                         Visibility="Collapsed"
-                                         Padding="2"
-                                         Background="White"
-                                         BorderBrush="#5BA8C8"
-                                         BorderThickness="1"
-                                         KeyDown="RenameTextBox_KeyDown"
-                                         LostFocus="RenameTextBox_LostFocus"/>
                             </Grid>
                             <DataTemplate.Triggers>
                                 <DataTrigger Binding="{Binding IsEditing}" Value="True">
                                     <Setter TargetName="DisplayPanel" Property="Visibility" Value="Collapsed"/>
                                     <Setter TargetName="EditTextBox" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="RenameItemButton" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="DeleteItemButton" Property="Visibility" Value="Collapsed"/>
                                 </DataTrigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>
@@ -134,7 +273,7 @@
                             <Setter Property="Padding" Value="8,6"/>
                             <Setter Property="Margin" Value="0,2"/>
                             <Setter Property="Cursor" Value="Hand"/>
-                            <EventSetter Event="MouseDoubleClick" Handler="ListBoxItem_DoubleClick"/>
+                            <EventSetter Event="PreviewMouseLeftButtonUp" Handler="ListBoxItem_MouseLeftButtonUp"/>
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListBoxItem">
@@ -156,18 +295,233 @@
                                 </Setter.Value>
                             </Setter>
                         </Style>
-                    </ListBox.ItemContainerStyle>
-                </ListBox>
-            </DockPanel>
+                        </ListBox.ItemContainerStyle>
+                        </ListBox>
+                    </DockPanel>
+
+                    <ScrollViewer x:Name="SettingsView"
+                                  Margin="8"
+                                  Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,4,0,0">
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Text="User Settings"
+                                           Grid.Column="0"
+                                           FontSize="15"
+                                           FontWeight="SemiBold"
+                                           Foreground="#2C6E91"
+                                           VerticalAlignment="Center"/>
+
+                                <Button x:Name="BackToNotesButton"
+                                        Grid.Column="1"
+                                        Content="Back"
+                                        Click="BackToNotesButton_Click"
+                                        FontSize="11"
+                                        FontWeight="SemiBold"
+                                        Foreground="White"
+                                        Cursor="Hand"
+                                        Padding="12,4"
+                                        Background="Transparent"
+                                        BorderThickness="0">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="bg"
+                                                    Background="#7392A9"
+                                                    CornerRadius="14"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <StackPanel Orientation="Horizontal"
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock Text="&#xE72B;"
+                                                               FontFamily="Segoe MDL2 Assets"
+                                                               FontSize="10"
+                                                               Margin="0,0,6,0"
+                                                               VerticalAlignment="Center"/>
+                                                    <ContentPresenter VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="bg" Property="Background" Value="#62839A"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="bg" Property="Background" Value="#56748A"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </Grid>
+
+                            <Border Background="#EFF7FB"
+                                    BorderBrush="#C9DFEC"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="12"
+                                    Margin="0,0,0,10">
+                                <StackPanel>
+                                    <TextBlock Text="Note Naming"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="#355A6E"
+                                               Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="PromptForNoteNameOption"
+                                              Content="Ask for note name when creating a new note"
+                                              Foreground="#355A6E"
+                                              FontWeight="SemiBold"
+                                              Checked="PromptForNoteNameOption_Changed"
+                                              Unchecked="PromptForNoteNameOption_Changed"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#EFF7FB"
+                                    BorderBrush="#C9DFEC"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="12"
+                                    Margin="0,0,0,10">
+                                <StackPanel>
+                                    <TextBlock Text="New Note Timestamp"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                              Foreground="#355A6E"
+                                               Margin="0,0,0,8"/>
+                                    <RadioButton x:Name="TimestampNoneOption"
+                                                 GroupName="TimestampPlacement"
+                                                 Content="No timestamp"
+                                                 Margin="0,0,0,6"
+                                                 Checked="TimestampPlacementOption_Checked"/>
+                                    <RadioButton x:Name="TimestampTopOption"
+                                                 GroupName="TimestampPlacement"
+                                                 Content="Add timestamp to top of page"
+                                                 Margin="0,0,0,6"
+                                                 Checked="TimestampPlacementOption_Checked"/>
+                                    <RadioButton x:Name="TimestampBottomOption"
+                                                 GroupName="TimestampPlacement"
+                                                 Content="Add timestamp to bottom of page"
+                                                 Checked="TimestampPlacementOption_Checked"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#EFF7FB"
+                                    BorderBrush="#C9DFEC"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="12">
+                                <StackPanel>
+                                    <TextBlock Text="Notes Folder"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="#355A6E"
+                                               Margin="0,0,0,8"/>
+                                    <TextBlock x:Name="SettingsNotesDirectoryText"
+                                               FontSize="11"
+                                               Foreground="#5F7480"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,10"/>
+                                    <Button x:Name="ChangeFolderButton"
+                                            Content="Change Folder"
+                                            Click="ChangeFolderButton_Click"
+                                            FontSize="11"
+                                            FontWeight="SemiBold"
+                                            Foreground="#2C6E91"
+                                            Cursor="Hand"
+                                            Padding="8,3"
+                                            HorizontalAlignment="Left"
+                                            Background="Transparent"
+                                            BorderBrush="#9EC7DB"
+                                            BorderThickness="1">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="bg"
+                                                        Background="#EFF7FB"
+                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                        CornerRadius="6"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="bg" Property="Background" Value="#DCEEF8"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+                </DockPanel>
+
+                <Thumb x:Name="NotesPanelResizeThumb"
+                       Width="18"
+                       Height="18"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Bottom"
+                       Margin="0,0,1,1"
+                       Cursor="SizeNWSE"
+                       DragDelta="NotesPanelResizeThumb_DragDelta">
+                    <Thumb.Template>
+                        <ControlTemplate TargetType="Thumb">
+                            <Border Background="Transparent">
+                                <Grid HorizontalAlignment="Right"
+                                      VerticalAlignment="Bottom"
+                                      Margin="0,0,2,2">
+                                    <Path Data="M 0 10 L 10 0 M 4 10 L 10 4 M 8 10 L 10 8"
+                                          Stroke="#6E90A5"
+                                          StrokeThickness="1.2"
+                                          SnapsToDevicePixels="True"/>
+                                </Grid>
+                            </Border>
+                        </ControlTemplate>
+                    </Thumb.Template>
+                </Thumb>
+            </Grid>
         </Border>
+
+        <Popup x:Name="RenameNoticePopup"
+               AllowsTransparency="True"
+               Focusable="False"
+               IsHitTestVisible="False"
+               Placement="Relative"
+               PlacementTarget="{Binding ElementName=NotesPanel}"
+               StaysOpen="True">
+            <Border Width="220"
+                    Padding="12,10"
+                    Background="#FFF5D9"
+                    BorderBrush="#E5C97A"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    SnapsToDevicePixels="True">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="14"
+                                      Direction="270"
+                                      Opacity="0.18"
+                                      ShadowDepth="4"
+                                      Color="#000000"/>
+                </Border.Effect>
+                <TextBlock x:Name="RenameNoticeText"
+                           FontSize="11"
+                           Foreground="#7B5A12"
+                           TextWrapping="Wrap"/>
+            </Border>
+        </Popup>
 
         <Button x:Name="OverlayButton"
                 Content="Notes"
-                Width="80" Height="40"
+            Width="96" Height="48"
                 Canvas.Right="20" Canvas.Bottom="20"
                 FontSize="16" FontWeight="SemiBold"
-                Foreground="White"
-                Click="OverlayButton_Click">
+            Foreground="White">
 
             <Button.Background>
                 <SolidColorBrush Color="#87CEEB" Opacity="0.45"/>
