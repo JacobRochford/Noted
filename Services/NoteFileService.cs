@@ -44,6 +44,23 @@ public sealed class NoteFileService : IDisposable {
         File.WriteAllText(fullPath, $"Created: {now:yyyy-MM-dd HH:mm:ss}\r\n\r\n");
         return filename;
     }
+    public bool ChangeNotesDirectory(string newDirectory) {
+        var normalizedPath = Path.GetFullPath(newDirectory);
+        if (string.Equals(NotesDirectory, normalizedPath, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var wasWatching = _watcher is not null;
+        StopWatching();
+
+        NotesDirectory = normalizedPath;
+        _settingsService.SaveNotesDirectory(NotesDirectory);
+
+        if (wasWatching)
+            StartWatching();
+
+        FilesChanged?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
 
     public void DeleteNote(string fileName) {
         var fullPath = Path.Combine(NotesDirectory, fileName);
