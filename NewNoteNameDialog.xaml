@@ -1,0 +1,49 @@
+<Window x:Class="MyNotes.NewNoteNameDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="New Note Name"
+        Width="360"
+        Height="180"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="SingleBorderWindow"
+        Background="#F5F9FC">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Text="Name the new note"
+                   FontSize="16"
+                   FontWeight="SemiBold"
+                   Foreground="#2C6E91"
+                   Margin="0,0,0,12"/>
+
+        <TextBox x:Name="NoteNameTextBox"
+                 Grid.Row="1"
+                 MinWidth="260"
+                 Padding="8,6"
+                 Background="White"
+                 BorderBrush="#9EC7DB"
+                 BorderThickness="1"
+                 KeyDown="NoteNameTextBox_KeyDown"/>
+
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,14,0,0">
+            <Button Content="Cancel"
+                    Click="CancelButton_Click"
+                    Padding="12,5"
+                    Margin="0,0,8,0"
+                    MinWidth="78"/>
+            <Button Content="Create"
+                    Click="CreateButton_Click"
+                    Padding="12,5"
+                    MinWidth="78"/>
+        </StackPanel>
+    </Grid>
+</Window>
