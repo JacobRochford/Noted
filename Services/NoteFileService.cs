@@ -6,6 +6,7 @@ namespace MyNotes.Services;
 
 public sealed class NoteFileService : IDisposable {
     private FileSystemWatcher? _watcher;
+    private static readonly TimeSpan DeletedNoteRetention = TimeSpan.FromDays(7);
     private static readonly HashSet<string> ReservedFileNames = new(StringComparer.OrdinalIgnoreCase) {
         "CON", "PRN", "AUX", "NUL",
         "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
@@ -16,8 +17,7 @@ public sealed class NoteFileService : IDisposable {
 
     public event EventHandler? FilesChanged;
 
-    public NoteFileService() {
-        NotesDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Notes");
+        DeletedNotesDirectory = Path.Combine(_settingsService.StorageDirectory, "DeletedNotes");
         Directory.CreateDirectory(NotesDirectory);
     }
 
@@ -47,7 +47,14 @@ public sealed class NoteFileService : IDisposable {
 
     public void DeleteNote(string fileName) {
         var fullPath = Path.Combine(NotesDirectory, fileName);
-        File.Delete(fullPath);
+        if (!File.Exists(fullPath))
+            return;
+
+        Directory.CreateDirectory(DeletedNotesDirectory);
+        PurgeExpiredDeletedNotes();
+
+        var deletedPath = BuildDeletedNotePath(fileName);
+        File.Move(fullPath, deletedPath);
     }
 
     public (bool Success, string? NewFileName, string? Error) RenameNote(string oldFileName, string newDisplayName) {
@@ -89,8 +96,36 @@ public sealed class NoteFileService : IDisposable {
             : $"Modified {lastWriteTime:MMM dd, yyyy  h:mm tt}";
     }
 
-    private string BuildUniqueGeneratedFileName(DateTime timestamp) {
-        var baseName = $"Note_{timestamp:yyyy-MM-dd_HH-mm-ss}";
+    private string BuildDeletedNotePath(string fileName) {
+        var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss_fff", CultureInfo.InvariantCulture);
+        var candidate = Path.Combine(DeletedNotesDirectory, $"{timestamp}__{fileName}");
+        if (!File.Exists(candidate))
+            return candidate;
+
+        for (int suffix = 1; suffix <= 99; suffix++) {
+            candidate = Path.Combine(DeletedNotesDirectory, $"{timestamp}_{suffix:00}__{fileName}");
+            if (!File.Exists(candidate))
+                return candidate;
+        }
+
+        return Path.Combine(DeletedNotesDirectory, $"{timestamp}_{Guid.NewGuid():N}__{fileName}");
+    }
+
+    private void PurgeExpiredDeletedNotes() {
+        if (!Directory.Exists(DeletedNotesDirectory))
+            return;
+
+        var cutoff = DateTime.Now - DeletedNoteRetention;
+        foreach (var path in Directory.GetFiles(DeletedNotesDirectory, "*.txt")) {
+            try {
+                var info = new FileInfo(path);
+                if (info.LastWriteTime < cutoff)
+                    info.Delete();
+            } catch {
+                // Best-effort cleanup; ignore files that cannot be deleted.
+            }
+        }
+    }
         var candidate = baseName + ".txt";
         if (!File.Exists(Path.Combine(NotesDirectory, candidate)))
             return candidate;
@@ -157,8 +192,13 @@ public sealed class NoteFileService : IDisposable {
         FilesChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void Dispose() {
-        _watcher?.Dispose();
+    private string ResolveInitialNotesDirectory() {
+        var savedDirectory = _settingsService.LoadNotesDirectory();
+        if (!string.IsNullOrWhiteSpace(savedDirectory))
+            return Path.GetFullPath(savedDirectory);
+
+        return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Notes");
+    }
         _watcher = null;
     }
 }
