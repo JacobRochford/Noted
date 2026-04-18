@@ -68,3 +68,5 @@ secrets.json
 # ClickOnce
 # =========================
 *.publish.xml
+
+*.zip
