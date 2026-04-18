@@ -17,6 +17,7 @@ public partial class MainWindow : Window {
 
     // Drag state
     private Point? _dragStart;
+    private FrameworkElement? _dragElement;
     private bool _isDragging;
     private double _buttonInitialLeft;
     private double _buttonInitialTop;
@@ -29,6 +30,9 @@ public partial class MainWindow : Window {
         _notepadService = new NotepadProcessService();
         _viewModel = new MainWindowViewModel(_fileService);
 
+        OverlayButton.PreviewMouseLeftButtonDown += OverlayButton_MouseLeftButtonDown;
+        OverlayButton.PreviewMouseMove += OverlayButton_MouseMove;
+        OverlayButton.PreviewMouseLeftButtonUp += OverlayButton_MouseLeftButtonUp;
         NotesPanel.PreviewMouseLeftButtonDown += NotesPanel_PreviewMouseLeftButtonDown;
         NotesPanel.PreviewMouseMove += NotesPanel_PreviewMouseMove;
         NotesPanel.PreviewMouseLeftButtonUp += NotesPanel_PreviewMouseLeftButtonUp;
@@ -142,15 +146,22 @@ public partial class MainWindow : Window {
             StartRenaming(note);
     }
 
-    private void ListBoxItem_DoubleClick(object sender, MouseButtonEventArgs e) {
+    private void ListBoxItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
+        if (IsWithinNoteRowActionControl(e.OriginalSource as DependencyObject))
+            return;
+
         if (sender is ListBoxItem item && item.DataContext is NoteItem note) {
-            StartRenaming(note);
+            FileList.SelectedItem = note;
+            OpenSelectedNote();
             e.Handled = true;
         }
     }
 
     private void FileList_KeyDown(object sender, KeyEventArgs e) {
-        if (e.Key == Key.F2 && FileList.SelectedItem is NoteItem note) {
+        if (e.Key == Key.Enter && FileList.SelectedItem is NoteItem) {
+            OpenSelectedNote();
+            e.Handled = true;
+        } else if (e.Key == Key.F2 && FileList.SelectedItem is NoteItem note) {
             StartRenaming(note);
             e.Handled = true;
         }
@@ -244,20 +255,7 @@ public partial class MainWindow : Window {
 
     #region Overlay Button Drag
     private void OverlayButton_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
-        if (e.ChangedButton != MouseButton.Left) return;
-
-        _dragStart = e.GetPosition(MainCanvas);
-        _buttonInitialLeft = Canvas.GetLeft(OverlayButton);
-        _buttonInitialTop = Canvas.GetTop(OverlayButton);
-
-        if (double.IsNaN(_buttonInitialLeft))
-            _buttonInitialLeft = Canvas.GetRight(OverlayButton) > 0
-                ? MainCanvas.ActualWidth - Canvas.GetRight(OverlayButton) - OverlayButton.ActualWidth
-                : 0;
-        if (double.IsNaN(_buttonInitialTop))
-            _buttonInitialTop = Canvas.GetBottom(OverlayButton) > 0
-                ? MainCanvas.ActualHeight - Canvas.GetBottom(OverlayButton) - OverlayButton.ActualHeight
-                : 0;
+        BeginDrag(OverlayButton, e);
     }
 
     private void OverlayButton_MouseMove(object sender, MouseEventArgs e) {
@@ -388,9 +386,23 @@ public partial class MainWindow : Window {
         var bottom = Canvas.GetBottom(element);
         return bottom > 0 ? MainCanvas.ActualHeight - bottom - element.ActualHeight : 0;
     }
+
+    private void NotesPanelResizeThumb_DragDelta(object sender, DragDeltaEventArgs e) {
+        var currentLeft = GetCanvasLeft(NotesPanel);
+        var currentTop = GetCanvasTop(NotesPanel);
+        var maxWidth = Math.Max(NotesPanel.MinWidth, MainCanvas.ActualWidth - currentLeft - 8);
+        var maxHeight = Math.Max(NotesPanel.MinHeight, MainCanvas.ActualHeight - currentTop - 8);
+
+        NotesPanel.Width = Math.Clamp(NotesPanel.Width + e.HorizontalChange, NotesPanel.MinWidth, maxWidth);
+        NotesPanel.Height = Math.Clamp(NotesPanel.Height + e.VerticalChange, NotesPanel.MinHeight, maxHeight);
+        e.Handled = true;
+    }
     #endregion
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e) {
+        OverlayButton.PreviewMouseLeftButtonDown -= OverlayButton_MouseLeftButtonDown;
+        OverlayButton.PreviewMouseMove -= OverlayButton_MouseMove;
+        OverlayButton.PreviewMouseLeftButtonUp -= OverlayButton_MouseLeftButtonUp;
         NotesPanel.PreviewMouseLeftButtonDown -= NotesPanel_PreviewMouseLeftButtonDown;
         NotesPanel.PreviewMouseMove -= NotesPanel_PreviewMouseMove;
         NotesPanel.PreviewMouseLeftButtonUp -= NotesPanel_PreviewMouseLeftButtonUp;
