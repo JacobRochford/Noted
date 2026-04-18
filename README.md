@@ -1,31 +1,34 @@
 # MyNotes
 
-MyNotes is a lightweight WPF overlay for managing plain-text notes on Windows. It keeps a small floating "Notes" button on screen, opens a note list on demand, and uses Windows Notepad as the editor for each note.
+MyNotes is a small Windows note utility built with WPF. It stays out of the way as a floating button, opens a simple note list when you need it, and hands editing off to plain old Notepad.
 
-## What It Does
+The app is meant to be quick: open a note, jot something down, hide it again.
 
-- Shows a draggable overlay button that stays on top of other windows
-- Opens a notes panel with the current `.txt` files in the local `Notes` folder
-- Creates new notes with timestamp-based filenames
-- Opens the selected note in Notepad
-- Renames notes inline with `F2`, double-click, or the context menu
-- Deletes the selected note from the panel
-- Auto-refreshes the list when note files change on disk
-- Hides the notes panel and Notepad when you click outside the panel or press `Esc`
+## What it does
 
-## Tech Stack
+- Keeps a floating button on screen so your notes are always one click away
+- Shows your notes from a folder of plain `.txt` files
+- Opens the selected note in Windows Notepad
+- Creates notes with either a timestamp-based name or a custom name
+- Lets you rename notes inline with `F2`, the Rename button, or the context menu
+- Moves deleted notes into a local recycle-style folder instead of removing them immediately
+- Refreshes the note list automatically when files change on disk
+- Hides the panel and the Notepad window when you click away or press `Esc`
 
-- .NET 9
-- WPF
-- Windows Notepad
-- Win32 interop for basic Notepad window show/hide behavior
+## Settings
+
+The settings view lets you:
+
+- choose a different notes folder
+- decide whether new notes should prompt for a name
+- add a timestamp to new notes at the top, bottom, or not at all
 
 ## Requirements
 
 - Windows
 - .NET 9 SDK
 
-## Run The App
+## Running The App
 
 From the project root:
 
@@ -34,51 +37,43 @@ dotnet build
 dotnet run
 ```
 
-You can also open `MyNotes.sln` in Visual Studio or VS Code and run the WPF project from there.
+You can also open `MyNotes.sln` in Visual Studio or VS Code and run it there.
 
-## How Notes Are Stored
+## How storage works
 
-- Notes are stored as plain `.txt` files
-- The app creates a `Notes` directory next to the built application if it does not already exist
-- New notes are created with names like `Note_2026-04-04_13-45-00.txt`
-- The UI formats timestamp-based filenames into a friendlier display name in the list
+- Notes are regular `.txt` files
+- By default, the app creates a `Notes` folder next to the built app
+- You can switch the notes folder in Settings
+- App settings are stored under `%LocalAppData%\MyNotes\settings.json`
+- Deleted notes are moved to `%LocalAppData%\MyNotes\DeletedNotes`
+- Deleted note files older than 7 days are cleaned up automatically
 
-## Usage
+If a note name matches the built-in timestamp format, the app shows a friendlier date in the list while keeping the real filename on disk.
 
-1. Launch the app.
-2. Click the floating `Notes` button to open the notes panel.
-3. Click `+ New` to create a new note.
-4. Select a note to open it in Notepad.
-5. Rename a note with `F2`, double-click, or right-click and choose `Rename`.
-6. Delete a note with the `Delete` button or the context menu.
-7. Press `Esc` or click outside the panel to hide it.
+## Basic use
 
-## Project Structure
+1. Start the app.
+2. Click the floating button to show the notes panel.
+3. Click `+ New` to create a note.
+4. Click a note or press `Enter` to open it in Notepad.
+5. Use `F2` or the row actions to rename or delete a note.
+6. Press `Esc` or click outside the panel to hide everything.
 
-- `MainWindow.xaml`: overlay UI layout
-- `MainWindow.xaml.cs`: overlay behavior, file management, Notepad integration, drag handling, and cleanup
-- `Models/NoteItem.cs`: bindable note model used by the list UI
-- `App.xaml` and `App.xaml.cs`: WPF app startup
+## Project layout
+
+- `MainWindow.xaml` and `MainWindow.xaml.cs` handle the overlay UI, interaction, and note workflow
+- `ViewModels/MainWindowViewModel.cs` manages the note list and refresh logic
+- `Services/NoteFileService.cs` handles file creation, rename, delete, and folder watching
+- `Services/AppSettingsService.cs` stores user settings
+- `Services/NotepadProcessService.cs` manages launching and hiding Notepad
+- `Models/NoteItem.cs` represents items shown in the note list
 
 ## Notes
 
-- This app does not include a custom text editor. It delegates editing to Windows Notepad.
-- Notepad window restore/minimize behavior depends on standard Windows window lookup and is intended for local desktop use.
-- The app watches the notes directory and refreshes the file list automatically when note files are created, deleted, or renamed.
-
-## Development
-
-Useful commands:
-
-```powershell
-dotnet build
-dotnet run
-```
-
-Current target framework:
-
-- `net9.0-windows`
+- This project uses Notepad as the editor. It does not include a custom text editor.
+- The app is Windows-only because it depends on WPF and basic Win32 window handling.
+- When you change note folders, the app may ask you to finish with the currently open note first.
 
 ## License
 
-This project is licensed under the MIT License. See the `LICENSE` file for details.
+MIT. See `LICENSE`.
