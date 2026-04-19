@@ -7,7 +7,7 @@
         Topmost="True"
         AllowsTransparency="True"
         Background="Transparent"
-        WindowState="Maximized">
+        Loaded="MainWindow_Loaded">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
     </Window.Resources>

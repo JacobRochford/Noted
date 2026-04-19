@@ -61,6 +61,14 @@ public partial class MainWindow : Window {
         Closing += OnClosing;
     }
 
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e) {
+        // Span the overlay across the full virtual desktop so elements can be dragged to any monitor.
+        Left = SystemParameters.VirtualScreenLeft;
+        Top = SystemParameters.VirtualScreenTop;
+        Width = SystemParameters.VirtualScreenWidth;
+        Height = SystemParameters.VirtualScreenHeight;
+    }
+
     // Sync HeaderText and restore the tracked selection after every reload of notes. 
     // This ensures the UI updates immediately after changes instead of waiting for the next FileSystemWatcher event.
     private void OnNotesLoaded(object? sender, EventArgs e) {
