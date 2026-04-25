@@ -7,6 +7,20 @@ using MyNotes.Services;
 namespace MyNotes.ViewModels;
 
 public sealed class MainWindowViewModel : IDisposable {
+        public void TogglePin(NoteItem note)
+        {
+            if (note == null) return;
+            note.IsPinned = !note.IsPinned;
+            // Move pinned notes to top
+            ResortNotes();
+        }
+
+        private void ResortNotes()
+        {
+            var sorted = Notes.OrderByDescending(n => n.IsPinned).ThenBy(n => n.DisplayName).ToList();
+            Notes.Clear();
+            foreach (var n in sorted) Notes.Add(n);
+        }
     private readonly NoteFileService _fileService;
     private DispatcherTimer? _debounceTimer;
 

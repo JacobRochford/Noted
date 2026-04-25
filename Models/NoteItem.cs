@@ -4,12 +4,22 @@ using System.Runtime.CompilerServices;
 namespace MyNotes.Models;
 
 public sealed class NoteItem : INotifyPropertyChanged {
+        private bool _isPinned;
     private string _displayName = "";
     private string _editableName = "";
     private string _subtitle = "";
     private bool _isEditing;
 
     public string FileName { get; init; } = "";
+    public bool IsPinned {
+        get => _isPinned;
+        set {
+            if (_isPinned != value) {
+                _isPinned = value;
+                OnPropertyChanged();
+            }
+        }
+    }
     
     public string DisplayName {
         get => _displayName;
