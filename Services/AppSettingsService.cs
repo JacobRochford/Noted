@@ -1,6 +1,5 @@
 using System.IO;
 using System.Text.Json;
-
 namespace MyNotes.Services;
 
 public enum NoteTimestampPlacement {
@@ -20,6 +19,17 @@ public sealed class AppSettingsService {
             "MyNotes");
         Directory.CreateDirectory(StorageDirectory);
         _settingsFilePath = Path.Combine(StorageDirectory, "settings.json");
+    }
+
+    public bool LoadShowModifiedSubtitle() {
+        return LoadSettings().ShowModifiedSubtitle;
+    }
+
+    public void SaveShowModifiedSubtitle(bool showModifiedSubtitle) {
+        var settings = LoadSettings() with {
+            ShowModifiedSubtitle = showModifiedSubtitle
+        };
+        SaveSettings(settings);
     }
 
     public string? LoadNotesDirectory() {
@@ -81,5 +91,6 @@ public sealed class AppSettingsService {
         public string? NotesDirectory { get; init; }
         public NoteTimestampPlacement TimestampPlacement { get; init; } = NoteTimestampPlacement.None;
         public bool PromptForNoteName { get; init; }
+        public bool ShowModifiedSubtitle { get; init; } = true;
     }
 }
