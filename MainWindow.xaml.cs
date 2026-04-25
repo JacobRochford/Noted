@@ -13,8 +13,26 @@ using MyNotes.ViewModels;
 using MessageBox = System.Windows.MessageBox;
 
 namespace MyNotes;
+    
 
 public partial class MainWindow : Window {
+                private bool _isHeaderEditing = false;
+                public bool IsHeaderEditing
+                {
+                    get => _isHeaderEditing;
+                    set
+                    {
+                        _isHeaderEditing = value;
+                        HeaderText.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+                        HeaderTextEdit.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+                        if (value)
+                        {
+                            HeaderTextEdit.Text = _viewModel.HeaderText;
+                            HeaderTextEdit.Focus();
+                            HeaderTextEdit.SelectAll();
+                        }
+                    }
+                }
             public bool ShowNotesDirectory
             {
                 get => _showNotesDirectory;
@@ -41,7 +59,15 @@ public partial class MainWindow : Window {
                 }
             }
         }
-        private bool _showModifiedSubtitle;
+    // Pin note button click handler
+    private void PinNoteButton_Click(object sender, RoutedEventArgs e) {
+        if (sender is FrameworkElement element && element.DataContext is NoteItem note) {
+            _viewModel.TogglePin(note);
+            FileList.ItemsSource = null;
+            FileList.ItemsSource = _viewModel.Notes;
+        }
+    }
+    private bool _showModifiedSubtitle;
     private readonly AppSettingsService _settingsService;
     private readonly NoteFileService _fileService;
     private readonly NotepadProcessService _notepadService;
@@ -66,6 +92,13 @@ public partial class MainWindow : Window {
         _fileService = new NoteFileService(_settingsService);
         _notepadService = new NotepadProcessService();
         _viewModel = new MainWindowViewModel(_fileService);
+        // Load header from settings
+        // Load header from settings, fallback to default if not set
+        var savedHeader = _settingsService.LoadCustomHeader();
+        if (!string.IsNullOrWhiteSpace(savedHeader))
+            HeaderText.Text = savedHeader;
+        else
+            HeaderText.Text = "My Notes";
         _renameBannerTimer = new DispatcherTimer {
             Interval = TimeSpan.FromSeconds(10)
         };
@@ -88,6 +121,76 @@ public partial class MainWindow : Window {
         SetSettingsViewVisible(false);
 
         Closing += OnClosing;
+        HeaderText.MouseLeftButtonDown += HeaderText_MouseLeftButtonDown;
+        HeaderTextEdit.LostFocus += HeaderEditBox_LostFocus;
+        HeaderTextEdit.KeyDown += HeaderEditBox_KeyDown;
+    }
+    private void HeaderEditBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        EndHeaderEdit(true);
+        HeaderText.Visibility = Visibility.Visible;
+        HeaderTextEdit.Visibility = Visibility.Collapsed;
+    }
+    //private void TitleTextBox_LostFocus(object sender, RoutedEventArgs e) {
+    //    // save the name
+    //    TitleTextBlock.Text = TitleTextBox.Text;
+
+    //    TitleTextBox.Visibility = Visibility.Collapsed;
+    //    TitleTextBlock.Visibility = Visibility.Visible;
+    //}
+    private void HeaderEditBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            EndHeaderEdit(true);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            EndHeaderEdit(false);
+            e.Handled = true;
+        }
+    }
+    // Handles MouseLeftButtonDownPreview event for header edit box
+    private void HeaderText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+        // Optionally, place logic here if you want to handle mouse down before focus
+        // For example, select all text if not already focused
+        if (e.ClickCount == 2) {
+        HeaderText.Visibility = Visibility.Collapsed;
+        HeaderTextEdit.Visibility = Visibility.Visible;
+        HeaderTextEdit.Focus();
+        HeaderTextEdit.SelectAll();
+            //e.Handled = true;
+        }
+        //if (e.ClickCount == 2) {
+        //    // switch to edit mode
+        //    TitleTextBlock.Visibility = Visibility.Collapsed;
+        //    TitleTextBox.Visibility = Visibility.Visible;
+        //    TitleTextBox.Focus();
+        //    TitleTextBox.SelectAll();
+        //}
+    }
+
+    private void EndHeaderEdit(bool save)
+    {
+        if (!IsHeaderEditing) return;
+        IsHeaderEditing = false;
+        if (save)
+        {
+            var newHeader = HeaderTextEdit.Text.Trim();
+            if (string.IsNullOrWhiteSpace(newHeader))
+            {
+                newHeader = "My Notes";
+                _settingsService.SaveCustomHeader(""); // Clear custom header in settings
+            }
+            else
+            {
+                _settingsService.SaveCustomHeader(newHeader);
+            }
+            HeaderText.Text = newHeader;
+        }
+        // Update UI
+        //HeaderText.Text = _viewModel.HeaderText;
     }
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e) {
@@ -734,8 +837,10 @@ public partial class MainWindow : Window {
         NotesPanel.PreviewMouseMove -= NotesPanel_PreviewMouseMove;
         NotesPanel.PreviewMouseLeftButtonUp -= NotesPanel_PreviewMouseLeftButtonUp;
         MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;
+        HeaderText.MouseLeftButtonDown -= HeaderText_MouseLeftButtonDown;
         KeyDown -= MainWindow_KeyDown;
-
+        HeaderTextEdit.LostFocus -= HeaderEditBox_LostFocus;
+        HeaderTextEdit.KeyDown -= HeaderEditBox_KeyDown;
         _viewModel.Dispose();
         _notepadService.Dispose();
         _fileService.Dispose();
