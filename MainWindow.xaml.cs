@@ -15,6 +15,33 @@ using MessageBox = System.Windows.MessageBox;
 namespace MyNotes;
 
 public partial class MainWindow : Window {
+            public bool ShowNotesDirectory
+            {
+                get => _showNotesDirectory;
+                set
+                {
+                    if (_showNotesDirectory != value)
+                    {
+                        _showNotesDirectory = value;
+                        OnPropertyChanged(nameof(ShowNotesDirectory));
+                        UpdateShowHideNotesDirectoryButton();
+                    }
+                }
+            }
+            private bool _showNotesDirectory = false;
+        public bool ShowModifiedSubtitle
+        {
+            get => _showModifiedSubtitle;
+            set
+            {
+                if (_showModifiedSubtitle != value)
+                {
+                    _showModifiedSubtitle = value;
+                    OnPropertyChanged(nameof(ShowModifiedSubtitle));
+                }
+            }
+        }
+        private bool _showModifiedSubtitle;
     private readonly AppSettingsService _settingsService;
     private readonly NoteFileService _fileService;
     private readonly NotepadProcessService _notepadService;
@@ -32,6 +59,8 @@ public partial class MainWindow : Window {
 
     public MainWindow() {
         InitializeComponent();
+
+        DataContext = this;
 
         _settingsService = new AppSettingsService();
         _fileService = new NoteFileService(_settingsService);
@@ -67,6 +96,14 @@ public partial class MainWindow : Window {
         Top = SystemParameters.VirtualScreenTop;
         Width = SystemParameters.VirtualScreenWidth;
         Height = SystemParameters.VirtualScreenHeight;
+
+        // Move the Notes button just above the clock (system tray) on startup
+        // Typical Windows taskbar is 40px high at 100% scaling, but can be higher. We'll use 60px for safety.
+        double taskbarHeight = 60;
+        double buttonHeight = OverlayButton.ActualHeight > 0 ? OverlayButton.ActualHeight : 48;
+        double marginFromTaskbar = 8;
+        double bottom = taskbarHeight + marginFromTaskbar;
+        Canvas.SetBottom(OverlayButton, bottom);
     }
 
     // Sync HeaderText and restore the tracked selection after every reload of notes. 
@@ -78,17 +115,37 @@ public partial class MainWindow : Window {
             FileList.SelectedItem = _viewModel.FindNote(_viewModel.SelectedFileName);
     }
 
+
     private void UpdateNotesDirectoryDisplay() {
         SettingsNotesDirectoryText.Text = _fileService.NotesDirectory;
         SettingsButton.ToolTip = SettingsView.Visibility == Visibility.Visible
             ? "Return to notes"
             : "Open settings";
+        UpdateShowHideNotesDirectoryButton();
+        // No need to set visibility directly; binding handles it
+    }
+
+    private void UpdateShowHideNotesDirectoryButton()
+    {
+        if (ShowHideNotesDirectoryButton != null)
+            ShowHideNotesDirectoryButton.Content = ShowNotesDirectory ? "Hide Folder" : "Show Folder";
+        if (SettingsNotesDirectoryText != null)
+            SettingsNotesDirectoryText.Visibility = ShowNotesDirectory ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ShowHideNotesDirectoryButton_Click(object sender, RoutedEventArgs e)
+    {
+        ShowNotesDirectory = !ShowNotesDirectory;
     }
 
     private void UpdateHeaderText() {
-        HeaderText.Text = SettingsView.Visibility == Visibility.Visible
-            ? "Settings"
-            : _viewModel.HeaderText;
+        // Only update if HeaderText is visible (panel is wide enough)
+        if (HeaderText.Visibility == Visibility.Visible)
+        {
+            HeaderText.Text = SettingsView.Visibility == Visibility.Visible
+                ? "Settings"
+                : _viewModel.HeaderText;
+        }
     }
 
     private void SetSettingsViewVisible(bool isVisible) {
@@ -108,11 +165,27 @@ public partial class MainWindow : Window {
             TimestampTopOption.IsChecked = timestampPlacement == NoteTimestampPlacement.Top;
             TimestampBottomOption.IsChecked = timestampPlacement == NoteTimestampPlacement.Bottom;
             SettingsNotesDirectoryText.Text = _fileService.NotesDirectory;
+            var showModified = _settingsService.LoadShowModifiedSubtitle();
+            ShowModifiedSubtitleOption.IsChecked = showModified;
+            ShowModifiedSubtitle = showModified;
         } finally {
             _isUpdatingSettingsView = false;
         }
     }
+    private void ShowModifiedSubtitleOption_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingSettingsView) return;
+        var isChecked = ShowModifiedSubtitleOption.IsChecked ?? true;
+        _settingsService.SaveShowModifiedSubtitle(isChecked);
+        ShowModifiedSubtitle = isChecked;
+    }
 
+    // INotifyPropertyChanged implementation for binding
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+    protected virtual void OnPropertyChanged(string propertyName)
+    {
+        PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(propertyName));
+    }
     private void HideNotesPanelAndMinimizeNotepad() {
         NotesPanel.Visibility = Visibility.Collapsed;
         _notepadService.Minimize();
@@ -135,15 +208,52 @@ public partial class MainWindow : Window {
     private void SettingsButton_Click(object sender, RoutedEventArgs e) {
         var showSettings = SettingsView.Visibility != Visibility.Visible;
         if (showSettings)
+        {
             UpdateSettingsView();
-
+        }
+        else
+        {
+            // If Show Modified Subtitle was changed, refresh notes list
+            var showModified = _settingsService.LoadShowModifiedSubtitle();
+            if (ShowModifiedSubtitle != showModified)
+            {
+                ShowModifiedSubtitle = showModified;
+                _viewModel.LoadNotes();
+            }
+        }
         SetSettingsViewVisible(showSettings);
     }
 
     private void BackToNotesButton_Click(object sender, RoutedEventArgs e) {
+        // Refresh notes list to reflect any settings changes (e.g., Show Modified Subtitle)
+        _viewModel.LoadNotes();
         SetSettingsViewVisible(false);
     }
 
+    // Copies the selected note's name to the clipboard
+    private void CopyNoteName_Click(object sender, RoutedEventArgs e)
+    {
+        NoteItem? note = null;
+        if (sender is FrameworkElement element && element.DataContext is NoteItem itemNote)
+        {
+            note = itemNote;
+            FileList.SelectedItem = itemNote;
+        }
+        else
+        {
+            note = FileList.SelectedItem as NoteItem;
+        }
+        if (note is null) return;
+        try
+        {
+            Clipboard.SetText(note.DisplayName);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to copy note name:\n{ex.Message}",
+                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
     private void NewNoteButton_Click(object sender, RoutedEventArgs e) {
         try {
             var filename = CreateNewNoteFromCurrentSettings();
