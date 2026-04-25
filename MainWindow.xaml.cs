@@ -16,23 +16,23 @@ namespace MyNotes;
     
 
 public partial class MainWindow : Window {
-                private bool _isHeaderEditing = false;
-                public bool IsHeaderEditing
-                {
-                    get => _isHeaderEditing;
-                    set
-                    {
-                        _isHeaderEditing = value;
-                        HeaderText.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
-                        HeaderTextEdit.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
-                        if (value)
-                        {
-                            HeaderTextEdit.Text = _viewModel.HeaderText;
-                            HeaderTextEdit.Focus();
-                            HeaderTextEdit.SelectAll();
-                        }
-                    }
-                }
+    private bool _isHeaderEditing = false;
+    public bool IsHeaderEditing
+    {
+        get => _isHeaderEditing;
+        set
+        {
+            _isHeaderEditing = value;
+            HeaderText.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+            HeaderTextEdit.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+            if (value)
+            {
+                HeaderTextEdit.Text = HeaderText.Text;
+                HeaderTextEdit.Focus();
+                HeaderTextEdit.SelectAll();
+            }
+        }
+    }
             public bool ShowNotesDirectory
             {
                 get => _showNotesDirectory;
@@ -99,6 +99,7 @@ public partial class MainWindow : Window {
             HeaderText.Text = savedHeader;
         else
             HeaderText.Text = "My Notes";
+        // Keep HeaderText in sync with settings
         _renameBannerTimer = new DispatcherTimer {
             Interval = TimeSpan.FromSeconds(10)
         };
@@ -153,14 +154,10 @@ public partial class MainWindow : Window {
     }
     // Handles MouseLeftButtonDownPreview event for header edit box
     private void HeaderText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
-        // Optionally, place logic here if you want to handle mouse down before focus
-        // For example, select all text if not already focused
-        if (e.ClickCount == 2) {
-        HeaderText.Visibility = Visibility.Collapsed;
-        HeaderTextEdit.Visibility = Visibility.Visible;
-        HeaderTextEdit.Focus();
-        HeaderTextEdit.SelectAll();
-            //e.Handled = true;
+        if (e.ClickCount == 2)
+        {
+            IsHeaderEditing = true;
+            e.Handled = true;
         }
         //if (e.ClickCount == 2) {
         //    // switch to edit mode
@@ -181,7 +178,7 @@ public partial class MainWindow : Window {
             if (string.IsNullOrWhiteSpace(newHeader))
             {
                 newHeader = "My Notes";
-                _settingsService.SaveCustomHeader(""); // Clear custom header in settings
+                _settingsService.SaveCustomHeader("");
             }
             else
             {
@@ -245,9 +242,16 @@ public partial class MainWindow : Window {
         // Only update if HeaderText is visible (panel is wide enough)
         if (HeaderText.Visibility == Visibility.Visible)
         {
-            HeaderText.Text = SettingsView.Visibility == Visibility.Visible
-                ? "Settings"
-                : _viewModel.HeaderText;
+            if (SettingsView.Visibility == Visibility.Visible)
+            {
+                HeaderText.Text = "Settings";
+            }
+            else
+            {
+                // Always restore the custom header from settings
+                var savedHeader = _settingsService.LoadCustomHeader();
+                HeaderText.Text = !string.IsNullOrWhiteSpace(savedHeader) ? savedHeader : "My Notes";
+            }
         }
     }
 
@@ -316,13 +320,10 @@ public partial class MainWindow : Window {
         }
         else
         {
-            // If Show Modified Subtitle was changed, refresh notes list
+            // Always refresh notes list when returning from settings
             var showModified = _settingsService.LoadShowModifiedSubtitle();
-            if (ShowModifiedSubtitle != showModified)
-            {
-                ShowModifiedSubtitle = showModified;
-                _viewModel.LoadNotes();
-            }
+            ShowModifiedSubtitle = showModified;
+            _viewModel.LoadNotes();
         }
         SetSettingsViewVisible(showSettings);
     }
