@@ -91,7 +91,7 @@ public partial class MainWindow : Window {
         _settingsService = new AppSettingsService();
         _fileService = new NoteFileService(_settingsService);
         _notepadService = new NotepadProcessService();
-        _viewModel = new MainWindowViewModel(_fileService);
+        _viewModel = new MainWindowViewModel(_fileService, _settingsService);
         // Load header from settings
         // Load header from settings, fallback to default if not set
         var savedHeader = _settingsService.LoadCustomHeader();
