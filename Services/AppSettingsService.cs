@@ -21,17 +21,6 @@ public sealed class AppSettingsService {
         _settingsFilePath = Path.Combine(StorageDirectory, "settings.json");
     }
 
-    public bool LoadShowModifiedSubtitle() {
-        return LoadSettings().ShowModifiedSubtitle;
-    }
-
-    public void SaveShowModifiedSubtitle(bool showModifiedSubtitle) {
-        var settings = LoadSettings() with {
-            ShowModifiedSubtitle = showModifiedSubtitle
-        };
-        SaveSettings(settings);
-    }
-
     public string? LoadNotesDirectory() {
         var settings = LoadSettings();
         return string.IsNullOrWhiteSpace(settings.NotesDirectory)
@@ -45,6 +34,33 @@ public sealed class AppSettingsService {
         };
         SaveSettings(settings);
     }
+
+    public IReadOnlyList<string> LoadPinnedNotes()
+    {
+        var settings = LoadSettings();
+        return settings.PinnedNotes ?? new List<string>();
+    }
+
+    public void SavePinnedNotes(IEnumerable<string> pinnedNotes)
+    {
+        var settings = LoadSettings() with
+        {
+            PinnedNotes = pinnedNotes?.ToList() ?? new List<string>()
+        };
+        SaveSettings(settings);
+    }
+
+    public bool LoadShowModifiedSubtitle() {
+        return LoadSettings().ShowModifiedSubtitle;
+    }
+
+    public void SaveShowModifiedSubtitle(bool showModifiedSubtitle) {
+        var settings = LoadSettings() with {
+            ShowModifiedSubtitle = showModifiedSubtitle
+        };
+        SaveSettings(settings);
+    }
+
 
     public NoteTimestampPlacement LoadTimestampPlacement() {
         return LoadSettings().TimestampPlacement;
@@ -108,5 +124,6 @@ public sealed class AppSettingsService {
         public bool PromptForNoteName { get; init; }
         public bool ShowModifiedSubtitle { get; init; } = true;
         public string? CustomHeader { get; init; }
+        public List<string>? PinnedNotes { get; init; }
     }
 }
