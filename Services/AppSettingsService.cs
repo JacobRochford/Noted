@@ -87,10 +87,26 @@ public sealed class AppSettingsService {
         File.WriteAllText(_settingsFilePath, json);
     }
 
-    private sealed record AppSettings {
+    public string? LoadCustomHeader()
+    {
+        return LoadSettings().CustomHeader;
+    }
+
+    public void SaveCustomHeader(string? customHeader)
+    {
+        var settings = LoadSettings() with
+        {
+            CustomHeader = customHeader
+        };
+        SaveSettings(settings);
+    }
+
+    private sealed record AppSettings
+    {
         public string? NotesDirectory { get; init; }
         public NoteTimestampPlacement TimestampPlacement { get; init; } = NoteTimestampPlacement.None;
         public bool PromptForNoteName { get; init; }
         public bool ShowModifiedSubtitle { get; init; } = true;
+        public string? CustomHeader { get; init; }
     }
 }
