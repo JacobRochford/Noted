@@ -88,17 +88,18 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-
-                        <Border x:Name="NotesPanelDragHandle"
-                            Grid.Column="0"
-                            Background="Transparent"
-                            Cursor="SizeAll"
-                            Padding="0,4,8,4">
+                    <Border x:Name="NotesPanelDragHandle"
+                        Grid.Column="0"
+                        Background="Transparent"
+                        Cursor="SizeAll"
+                        Padding="0,4,8,4">
+                        <Grid>
                             <TextBlock x:Name="HeaderText"
-                                       Text="MyNotes"
+                                       Text="{Binding HeaderText, Mode=OneWay}"
                                        FontSize="16" FontWeight="SemiBold"
                                        Foreground="#2C6E91"
-                                       VerticalAlignment="Center">
+                                       VerticalAlignment="Center"
+                                       MouseLeftButtonDown="HeaderText_MouseLeftButtonDown">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Visible"/>
@@ -109,11 +110,24 @@
                                             <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth}" Value="220">
                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                             </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsHeaderEditing, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </TextBlock.Style>
-                            </TextBlock>
-                        </Border>
+                                </TextBlock>
+                                <TextBox x:Name="HeaderTextEdit"
+                                     Text="{Binding HeaderText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     FontSize="16" FontWeight="SemiBold"
+                                     Foreground="#2C6E91"
+                                     VerticalAlignment="Center"
+                                     Visibility="Collapsed"
+                                     LostFocus="HeaderEditBox_LostFocus"
+                                     KeyDown="HeaderEditBox_KeyDown"
+                                     MinWidth="80"/>
+                        </Grid>
+                    </Border>
 
                     <StackPanel Grid.Column="1"
                                 Orientation="Horizontal"
@@ -294,10 +308,41 @@
                                     <DataTemplate>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="16"/> <!-- Pin icon space -->
                                                 <ColumnDefinition Width="*" MinWidth="50"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <Grid Grid.Column="0" Margin="0,0,8,0">
+                                            <!-- Pin icon column -->
+                                            <Grid Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Center">
+                                                <Button Width="16" Height="16" Padding="1" Margin="-7,0,0,0"
+                                                        FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                                        Content="&#xE718;"
+                                                        ToolTip="Pin note"
+                                                        Foreground="#C9302C"
+                                                        Cursor="Hand"
+                                                        Background="Transparent"
+                                                        BorderBrush="Transparent"
+                                                        BorderThickness="1"
+                                                        Click="PinNoteButton_Click">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsPinned}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                    <Setter Property="Opacity" Value="1"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                    <Setter Property="Opacity" Value="0.8"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                            </Grid>
+                                            <!-- Note display column -->
+                                            <Grid Grid.Column="1" Margin="0,0,8,0">
                                                 <StackPanel x:Name="DisplayPanel">
                                                     <TextBlock x:Name="DisplayTextBlock"
                                                                Text="{Binding DisplayName}"
@@ -322,7 +367,8 @@
                                                          KeyDown="RenameTextBox_KeyDown"
                                                          LostFocus="RenameTextBox_LostFocus"/>
                                             </Grid>
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal">
+                                            <!-- Action buttons column -->
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal">
                                                 <Button Content="Rename"
                                                         Click="RenameNote_Click"
                                                         Padding="8,2"
