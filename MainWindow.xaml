@@ -11,6 +11,7 @@
     <Window.Resources>
         <local:WidthToOrientationConverter x:Key="WidthToOrientationConverter"/>
         <local:WidthToActionButtonVisibilityConverter x:Key="WidthToActionButtonVisibilityConverter"/>
+        <local:WidthToHeaderVisibilityConverter x:Key="WidthToHeaderVisibilityConverter"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         
         <!-- Scrollbar thumb style -->
@@ -99,25 +100,10 @@
                                        FontSize="16" FontWeight="SemiBold"
                                        Foreground="#2C6E91"
                                        VerticalAlignment="Center"
-                                       MouseLeftButtonDown="HeaderText_MouseLeftButtonDown">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth}" Value="340">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth}" Value="220">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding IsHeaderEditing, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                                </TextBlock>
-                                <TextBox x:Name="HeaderTextEdit"
+                                       MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"
+                                       ToolTip="Double-click to set a custom header for your app"
+                                       Visibility="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthToHeaderVisibilityConverter}}"/>
+                            <TextBox x:Name="HeaderTextEdit"
                                      Text="{Binding HeaderText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      FontSize="16" FontWeight="SemiBold"
                                      Foreground="#2C6E91"
@@ -125,7 +111,8 @@
                                      Visibility="Collapsed"
                                      LostFocus="HeaderEditBox_LostFocus"
                                      KeyDown="HeaderEditBox_KeyDown"
-                                     MinWidth="80"/>
+                                     MinWidth="80"
+                                     ToolTip="Enter a custom header and press Enter to save"/>
                         </Grid>
                     </Border>
 
@@ -308,7 +295,7 @@
                                     <DataTemplate>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="16"/> <!-- Pin icon space -->
+                                                <ColumnDefinition Width="16"/> <!-- Pin icon space, moved slightly more left -->
                                                 <ColumnDefinition Width="*" MinWidth="50"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
