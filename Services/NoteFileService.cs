@@ -120,7 +120,7 @@ public sealed class NoteFileService : IDisposable {
     private static string BuildSubtitle(string fileName, DateTime lastWriteTime) {
         return IsGeneratedNoteFileName(fileName)
             ? fileName
-            : $"Modified {lastWriteTime:MMM dd, yyyy  h:mm tt}";
+            : $"Modified: {lastWriteTime:MMM dd, yyyy  h:mm tt}";
     }
 
     private static string BuildNewNoteContent(DateTime timestamp, NoteTimestampPlacement timestampPlacement) {
