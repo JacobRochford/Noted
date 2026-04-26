@@ -16,7 +16,28 @@ namespace MyNotes;
     
 
 public partial class MainWindow : Window {
-    private bool _isHeaderEditing = false;
+    // Services
+    private readonly AppSettingsService _settingsService;
+    private readonly NoteFileService _fileService;
+    private readonly NotepadProcessService _notepadService;
+    private readonly MainWindowViewModel _viewModel;
+    private readonly DispatcherTimer _renameBannerTimer;
+
+    // UI State
+    private bool _isHeaderEditing;
+    private bool _isUpdatingSettingsView;
+    private bool _showNotesDirectory;
+    private bool _showModifiedSubtitle;
+
+    // Drag state
+    private Point? _dragStart;
+    private FrameworkElement? _dragElement;
+    private bool _isDragging;
+    private double _dragInitialLeft;
+    private double _dragInitialTop;
+    private const double _dragThreshold = 5.0;
+
+    // Properties
     public bool IsHeaderEditing
     {
         get => _isHeaderEditing;
@@ -33,55 +54,33 @@ public partial class MainWindow : Window {
             }
         }
     }
-            public bool ShowNotesDirectory
-            {
-                get => _showNotesDirectory;
-                set
-                {
-                    if (_showNotesDirectory != value)
-                    {
-                        _showNotesDirectory = value;
-                        OnPropertyChanged(nameof(ShowNotesDirectory));
-                        UpdateShowHideNotesDirectoryButton();
-                    }
-                }
-            }
-            private bool _showNotesDirectory = false;
-        public bool ShowModifiedSubtitle
+
+    public bool ShowNotesDirectory
+    {
+        get => _showNotesDirectory;
+        set
         {
-            get => _showModifiedSubtitle;
-            set
+            if (_showNotesDirectory != value)
             {
-                if (_showModifiedSubtitle != value)
-                {
-                    _showModifiedSubtitle = value;
-                    OnPropertyChanged(nameof(ShowModifiedSubtitle));
-                }
+                _showNotesDirectory = value;
+                OnPropertyChanged(nameof(ShowNotesDirectory));
+                UpdateShowHideNotesDirectoryButton();
             }
-        }
-    // Pin note button click handler
-    private void PinNoteButton_Click(object sender, RoutedEventArgs e) {
-        if (sender is FrameworkElement element && element.DataContext is NoteItem note) {
-            _viewModel.TogglePin(note);
-            FileList.ItemsSource = null;
-            FileList.ItemsSource = _viewModel.Notes;
         }
     }
-    private bool _showModifiedSubtitle;
-    private readonly AppSettingsService _settingsService;
-    private readonly NoteFileService _fileService;
-    private readonly NotepadProcessService _notepadService;
-    private readonly MainWindowViewModel _viewModel;
-    private readonly DispatcherTimer _renameBannerTimer;
-    private bool _isUpdatingSettingsView;
 
-    // Drag state
-    private Point? _dragStart;
-    private FrameworkElement? _dragElement;
-    private bool _isDragging;
-    private double _dragInitialLeft;
-    private double _dragInitialTop;
-    private const double _dragThreshold = 5.0;
+    public bool ShowModifiedSubtitle
+    {
+        get => _showModifiedSubtitle;
+        set
+        {
+            if (_showModifiedSubtitle != value)
+            {
+                _showModifiedSubtitle = value;
+                OnPropertyChanged(nameof(ShowModifiedSubtitle));
+            }
+        }
+    }
 
     public MainWindow() {
         InitializeComponent();
@@ -92,14 +91,13 @@ public partial class MainWindow : Window {
         _fileService = new NoteFileService(_settingsService);
         _notepadService = new NotepadProcessService();
         _viewModel = new MainWindowViewModel(_fileService, _settingsService);
-        // Load header from settings
         // Load header from settings, fallback to default if not set
         var savedHeader = _settingsService.LoadCustomHeader();
         if (!string.IsNullOrWhiteSpace(savedHeader))
             HeaderText.Text = savedHeader;
         else
             HeaderText.Text = "My Notes";
-        // Keep HeaderText in sync with settings
+
         _renameBannerTimer = new DispatcherTimer {
             Interval = TimeSpan.FromSeconds(10)
         };
@@ -151,13 +149,6 @@ public partial class MainWindow : Window {
             IsHeaderEditing = true;
             e.Handled = true;
         }
-        //if (e.ClickCount == 2) {
-        //    // switch to edit mode
-        //    TitleTextBlock.Visibility = Visibility.Collapsed;
-        //    TitleTextBox.Visibility = Visibility.Visible;
-        //    TitleTextBox.Focus();
-        //    TitleTextBox.SelectAll();
-        //}
     }
 
     private void EndHeaderEdit(bool save)
@@ -178,8 +169,6 @@ public partial class MainWindow : Window {
             }
             HeaderText.Text = newHeader;
         }
-        // Update UI
-        //HeaderText.Text = _viewModel.HeaderText;
     }
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e) {
@@ -190,12 +179,9 @@ public partial class MainWindow : Window {
         Height = SystemParameters.VirtualScreenHeight;
 
         // Move the Notes button just above the clock (system tray) on startup
-        // Typical Windows taskbar is 40px high at 100% scaling, but can be higher. We'll use 60px for safety.
-        double taskbarHeight = 60;
-        double buttonHeight = OverlayButton.ActualHeight > 0 ? OverlayButton.ActualHeight : 48;
-        double marginFromTaskbar = 8;
-        double bottom = taskbarHeight + marginFromTaskbar;
-        Canvas.SetBottom(OverlayButton, bottom);
+        const double taskbarHeight = 60;
+        const double marginFromTaskbar = 8;
+        Canvas.SetBottom(OverlayButton, taskbarHeight + marginFromTaskbar);
     }
 
     // Sync HeaderText and restore the tracked selection after every reload of notes. 
@@ -244,6 +230,15 @@ public partial class MainWindow : Window {
                 var savedHeader = _settingsService.LoadCustomHeader();
                 HeaderText.Text = !string.IsNullOrWhiteSpace(savedHeader) ? savedHeader : "My Notes";
             }
+        }
+    }
+
+    // Pin note button click handler
+    private void PinNoteButton_Click(object sender, RoutedEventArgs e) {
+        if (sender is FrameworkElement element && element.DataContext is NoteItem note) {
+            _viewModel.TogglePin(note);
+            FileList.ItemsSource = null;
+            FileList.ItemsSource = _viewModel.Notes;
         }
     }
 
@@ -830,17 +825,23 @@ public partial class MainWindow : Window {
         _renameBannerTimer.Tick -= RenameBannerTimer_Tick;
         _renameBannerTimer.Stop();
         RenameNoticePopup.IsOpen = false;
+        
         OverlayButton.PreviewMouseLeftButtonDown -= OverlayButton_MouseLeftButtonDown;
         OverlayButton.PreviewMouseMove -= OverlayButton_MouseMove;
         OverlayButton.PreviewMouseLeftButtonUp -= OverlayButton_MouseLeftButtonUp;
+        
         NotesPanel.PreviewMouseLeftButtonDown -= NotesPanel_PreviewMouseLeftButtonDown;
         NotesPanel.PreviewMouseMove -= NotesPanel_PreviewMouseMove;
         NotesPanel.PreviewMouseLeftButtonUp -= NotesPanel_PreviewMouseLeftButtonUp;
+        
         MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;
-        HeaderText.MouseLeftButtonDown -= HeaderText_MouseLeftButtonDown;
         KeyDown -= MainWindow_KeyDown;
+        
+        HeaderText.MouseLeftButtonDown -= HeaderText_MouseLeftButtonDown;
         HeaderTextEdit.LostFocus -= HeaderEditBox_LostFocus;
         HeaderTextEdit.KeyDown -= HeaderEditBox_KeyDown;
+        
+        _viewModel.NotesLoaded -= OnNotesLoaded;
         _viewModel.Dispose();
         _notepadService.Dispose();
         _fileService.Dispose();
