@@ -9,7 +9,6 @@
         Background="Transparent"
         Loaded="MainWindow_Loaded">
     <Window.Resources>
-        <local:WidthToOrientationConverter x:Key="WidthToOrientationConverter"/>
         <local:WidthToActionButtonVisibilityConverter x:Key="WidthToActionButtonVisibilityConverter"/>
         <local:WidthToHeaderVisibilityConverter x:Key="WidthToHeaderVisibilityConverter"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
