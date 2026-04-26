@@ -66,7 +66,9 @@
         <Style TargetType="ScrollBar" BasedOn="{StaticResource ModernScrollBar}"/>
     </Window.Resources>
 
-    <Canvas x:Name="MainCanvas">
+        <Canvas x:Name="MainCanvas"
+            Background="Transparent"
+            Focusable="True">
 
         <Border x:Name="NotesPanel"
             Background="#F5F9FC"
@@ -75,6 +77,7 @@
             BorderThickness="1"
             CornerRadius="8"
             Padding="12"
+            Focusable="True"
             MinWidth="220"
             MinHeight="180"
             Width="360" Height="620"
@@ -82,7 +85,7 @@
             Visibility="Visible">
 
             <Grid>
-                <DockPanel Margin="0,0,0,0">
+                <DockPanel>
                 <!-- Header bar -->
                 <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
@@ -92,6 +95,7 @@
                     <Border x:Name="NotesPanelDragHandle"
                         Grid.Column="0"
                         Background="Transparent"
+                        Focusable="True"
                         Cursor="SizeAll"
                         Padding="0,4,8,4">
                         <Grid>
@@ -100,17 +104,13 @@
                                        FontSize="16" FontWeight="SemiBold"
                                        Foreground="#2C6E91"
                                        VerticalAlignment="Center"
-                                       MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"
                                        ToolTip="Double-click to set a custom header for your app"
                                        Visibility="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthToHeaderVisibilityConverter}}"/>
                             <TextBox x:Name="HeaderTextEdit"
-                                     Text="{Binding HeaderText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      FontSize="16" FontWeight="SemiBold"
                                      Foreground="#2C6E91"
                                      VerticalAlignment="Center"
                                      Visibility="Collapsed"
-                                     LostFocus="HeaderEditBox_LostFocus"
-                                     KeyDown="HeaderEditBox_KeyDown"
                                      MinWidth="80"
                                      ToolTip="Enter a custom header and press Enter to save"/>
                         </Grid>
