@@ -701,6 +701,13 @@ public partial class MainWindow : Window {
     }
 
     private void NotesPanel_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+        // If the header textbox is in edit mode and has focus, transfer focus to trigger LostFocus event
+        // This must happen BEFORE the drag starts and captures the mouse
+        if (HeaderTextEdit.IsVisible && HeaderTextEdit.IsFocused) {
+            MainCanvas.Focus();
+            return;
+        }
+
         if (!CanStartNotesPanelDrag(e.OriginalSource as DependencyObject))
             return;
 
