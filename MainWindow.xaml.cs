@@ -129,16 +129,8 @@ public partial class MainWindow : Window {
     private void HeaderEditBox_LostFocus(object sender, RoutedEventArgs e)
     {
         EndHeaderEdit(true);
-        HeaderText.Visibility = Visibility.Visible;
-        HeaderTextEdit.Visibility = Visibility.Collapsed;
     }
-    //private void TitleTextBox_LostFocus(object sender, RoutedEventArgs e) {
-    //    // save the name
-    //    TitleTextBlock.Text = TitleTextBox.Text;
 
-    //    TitleTextBox.Visibility = Visibility.Collapsed;
-    //    TitleTextBlock.Visibility = Visibility.Visible;
-    //}
     private void HeaderEditBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter)
