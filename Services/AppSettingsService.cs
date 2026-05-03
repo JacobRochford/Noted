@@ -88,6 +88,11 @@ public sealed class AppSettingsService {
         SaveSetting(s => s with { HotkeyModifiers = modifiers, HotkeyKey = key });
     }
 
+    public bool LoadGhostModeEnabled() => LoadSetting(s => s.GhostModeEnabled);
+    public void SaveGhostModeEnabled(bool enabled) => SaveSetting(s => s with { GhostModeEnabled = enabled });
+    public double LoadGhostModeOpacity() => LoadSetting(s => s.GhostModeOpacity);
+    public void SaveGhostModeOpacity(double opacity) => SaveSetting(s => s with { GhostModeOpacity = opacity });
+
     private T LoadSetting<T>(Func<AppSettings, T> selector) {
         return selector(LoadSettings());
     }
@@ -125,5 +130,7 @@ public sealed class AppSettingsService {
         public List<string>? PinnedNotes { get; init; }
         public string HotkeyModifiers { get; init; } = "Ctrl+Shift";
         public string HotkeyKey { get; init; } = "Space";
+        public bool GhostModeEnabled { get; init; } = false;
+        public double GhostModeOpacity { get; init; } = 0.25;
     }
 }

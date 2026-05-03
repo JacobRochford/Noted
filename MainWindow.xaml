@@ -65,16 +65,76 @@
         <!-- Apply modern scrollbar style globally -->
         <Style TargetType="ScrollBar" BasedOn="{StaticResource ModernScrollBar}"/>
 
+        <!-- Tray context menu styles -->
+        <Style x:Key="TrayContextMenuStyle" TargetType="ContextMenu">
+            <Setter Property="Background" Value="#F5F9FC"/>
+            <Setter Property="BorderBrush" Value="#A8CDE0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.18" Color="#000000"/>
+                            </Border.Effect>
+                            <StackPanel IsItemsHost="True"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="TrayMenuItemStyle" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="#2C6E91"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="bg" Background="Transparent" CornerRadius="6" Margin="2,1">
+                            <ContentPresenter ContentSource="Header"
+                                              Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#DFF0FA"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#C4E2F2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="TrayMenuSeparatorStyle" TargetType="Separator">
+            <Setter Property="Background" Value="#C8DFEC"/>
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Margin" Value="10,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Border Background="{TemplateBinding Background}" Height="1" Margin="{TemplateBinding Margin}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- System Tray Icon -->
         <tb:TaskbarIcon x:Key="TrayIcon"
                         IconSource="/Resources/notes.ico"
                         ToolTipText="My Notes">
             <tb:TaskbarIcon.ContextMenu>
-                <ContextMenu>
-                    <MenuItem Header="Show/Hide Notes" Click="TrayShowHideNotes_Click"/>
-                    <MenuItem Header="Settings" Click="TraySettings_Click"/>
-                    <Separator/>
-                    <MenuItem Header="Exit" Click="TrayExit_Click"/>
+                <ContextMenu Style="{StaticResource TrayContextMenuStyle}">
+                    <MenuItem Header="Show/Hide Notes" Click="TrayShowHideNotes_Click" Style="{StaticResource TrayMenuItemStyle}"/>
+                    <MenuItem Header="Settings" Click="TraySettings_Click" Style="{StaticResource TrayMenuItemStyle}"/>
+                    <Separator Style="{StaticResource TrayMenuSeparatorStyle}"/>
+                    <MenuItem Header="Exit" Click="TrayExit_Click" Style="{StaticResource TrayMenuItemStyle}"/>
                 </ContextMenu>
             </tb:TaskbarIcon.ContextMenu>
         </tb:TaskbarIcon>
@@ -567,6 +627,60 @@
                                                TextWrapping="Wrap"
                                                VerticalAlignment="Center"/>
                                     </CheckBox>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#EFF7FB"
+                                    BorderBrush="#C9DFEC"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="12"
+                                    Margin="0,0,0,10">
+                                <StackPanel>
+                                    <TextBlock Text="Ghost Mode"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="#355A6E"
+                                               Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="GhostModeOption"
+                                            Foreground="#355A6E"
+                                            FontWeight="SemiBold"
+                                            Checked="GhostModeOption_Changed"
+                                            Unchecked="GhostModeOption_Changed"
+                                            Margin="0,0,0,10"
+                                            HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Semi-transparent when not hovered"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </CheckBox>
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Ghost opacity"
+                                                   Grid.Column="0"
+                                                   FontSize="11"
+                                                   Foreground="#5F7480"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="GhostModeOpacityLabel"
+                                                   Grid.Column="1"
+                                                   Text="25%"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#2C6E91"
+                                                   VerticalAlignment="Center"
+                                                   MinWidth="32"
+                                                   TextAlignment="Right"/>
+                                    </Grid>
+                                    <Slider x:Name="GhostModeOpacitySlider"
+                                            Minimum="15"
+                                            Maximum="100"
+                                            Value="25"
+                                            SmallChange="5"
+                                            LargeChange="10"
+                                            TickFrequency="5"
+                                            IsSnapToTickEnabled="True"/>
                                 </StackPanel>
                             </Border>
 

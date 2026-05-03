@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Media3D;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -32,6 +33,11 @@ public partial class MainWindow : Window {
     private bool _isUpdatingSettingsView;
     private bool _showNotesDirectory;
     private bool _showModifiedSubtitle;
+
+    // Ghost mode state
+    private bool _ghostModeEnabled;
+    private double _ghostModeOpacity;
+    private const double _normalPanelOpacity = 0.88;
 
     // Drag state
     private Point? _dragStart;
@@ -98,6 +104,8 @@ public partial class MainWindow : Window {
         _fileService = new NoteFileService(_settingsService);
         _notepadService = new NotepadProcessService();
         _viewModel = new MainWindowViewModel(_fileService, _settingsService);
+        _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
+        _ghostModeOpacity = _settingsService.LoadGhostModeOpacity();
         // Load header from settings, fallback to default if not set
         var savedHeader = _settingsService.LoadCustomHeader();
         if (!string.IsNullOrWhiteSpace(savedHeader))
@@ -118,6 +126,9 @@ public partial class MainWindow : Window {
         NotesPanel.PreviewMouseLeftButtonUp += NotesPanel_PreviewMouseLeftButtonUp;
         MainCanvas.MouseLeftButtonDown += MainCanvas_MouseLeftButtonDown;
         KeyDown += MainWindow_KeyDown;
+        NotesPanel.MouseEnter += NotesPanel_MouseEnter;
+        NotesPanel.MouseLeave += NotesPanel_MouseLeave;
+        GhostModeOpacitySlider.ValueChanged += GhostModeOpacitySlider_ValueChanged;
 
         FileList.ItemsSource = _viewModel.Notes;
         _viewModel.NotesLoaded += OnNotesLoaded;
@@ -215,6 +226,8 @@ public partial class MainWindow : Window {
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
+        if (_ghostModeEnabled && NotesPanel.Visibility == Visibility.Visible)
+            AnimatePanelOpacity(_ghostModeOpacity);
     }
 
     private void OnGlobalHotkeyPressed()
@@ -226,6 +239,8 @@ public partial class MainWindow : Window {
         else
         {
             NotesPanel.Visibility = Visibility.Visible;
+            if (_ghostModeEnabled)
+                AnimatePanelOpacity(_ghostModeOpacity);
             if (_notepadService.IsRunning)
                 _notepadService.Restore();
         }
@@ -295,6 +310,9 @@ public partial class MainWindow : Window {
         SettingsButton.Content = isVisible ? "Notes" : "Settings";
         UpdateHeaderText();
         UpdateNotesDirectoryDisplay();
+        // Restore correct opacity when closing settings (slider may have previewed a value)
+        if (!isVisible)
+            AnimatePanelOpacity(_ghostModeEnabled ? _ghostModeOpacity : _normalPanelOpacity);
     }
 
     private void UpdateSettingsView() {
@@ -315,6 +333,11 @@ public partial class MainWindow : Window {
             HotkeyModifiersCombo.SelectedItem = modifiers;
             HotkeyKeyCombo.SelectedItem = key;
             UpdateCurrentHotkeyDisplay(modifiers, key);
+            _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
+            _ghostModeOpacity = _settingsService.LoadGhostModeOpacity();
+            GhostModeOption.IsChecked = _ghostModeEnabled;
+            GhostModeOpacitySlider.Value = _ghostModeOpacity * 100;
+            UpdateGhostModeOpacityLabel();
         } finally {
             _isUpdatingSettingsView = false;
         }
@@ -372,6 +395,44 @@ public partial class MainWindow : Window {
         ShowModifiedSubtitle = isChecked;
     }
 
+    private void GhostModeOption_Changed(object sender, RoutedEventArgs e) {
+        if (_isUpdatingSettingsView) return;
+        _ghostModeEnabled = GhostModeOption.IsChecked ?? false;
+        _settingsService.SaveGhostModeEnabled(_ghostModeEnabled);
+        if (!_ghostModeEnabled)
+            AnimatePanelOpacity(_normalPanelOpacity);
+        else if (NotesPanel.Visibility == Visibility.Visible && !NotesPanel.IsMouseOver)
+            AnimatePanelOpacity(_ghostModeOpacity);
+    }
+
+    private void GhostModeOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) {
+        if (_isUpdatingSettingsView) return;
+        _ghostModeOpacity = GhostModeOpacitySlider.Value / 100.0;
+        _settingsService.SaveGhostModeOpacity(_ghostModeOpacity);
+        UpdateGhostModeOpacityLabel();
+        if (NotesPanel.Visibility == Visibility.Visible)
+            AnimatePanelOpacity(_ghostModeOpacity);
+    }
+
+    private void UpdateGhostModeOpacityLabel() {
+        GhostModeOpacityLabel.Text = $"{(int)GhostModeOpacitySlider.Value}%";
+    }
+
+    private void NotesPanel_MouseEnter(object sender, MouseEventArgs e) {
+        if (_ghostModeEnabled)
+            AnimatePanelOpacity(_normalPanelOpacity);
+    }
+
+    private void NotesPanel_MouseLeave(object sender, MouseEventArgs e) {
+        if (_ghostModeEnabled)
+            AnimatePanelOpacity(_ghostModeOpacity);
+    }
+
+    private void AnimatePanelOpacity(double targetOpacity) {
+        var anim = new DoubleAnimation(NotesPanel.Opacity, targetOpacity, new Duration(TimeSpan.FromMilliseconds(200)));
+        NotesPanel.BeginAnimation(UIElement.OpacityProperty, anim);
+    }
+
     // INotifyPropertyChanged implementation for binding
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     protected virtual void OnPropertyChanged(string propertyName)
@@ -388,6 +449,8 @@ public partial class MainWindow : Window {
             HideNotesPanelAndMinimizeNotepad();
         } else {
             NotesPanel.Visibility = Visibility.Visible;
+            if (_ghostModeEnabled)
+                AnimatePanelOpacity(_ghostModeOpacity);
             if (_notepadService.IsRunning)
                 _notepadService.Restore();
         }
@@ -963,6 +1026,9 @@ public partial class MainWindow : Window {
         NotesPanel.PreviewMouseLeftButtonDown -= NotesPanel_PreviewMouseLeftButtonDown;
         NotesPanel.PreviewMouseMove -= NotesPanel_PreviewMouseMove;
         NotesPanel.PreviewMouseLeftButtonUp -= NotesPanel_PreviewMouseLeftButtonUp;
+        NotesPanel.MouseEnter -= NotesPanel_MouseEnter;
+        NotesPanel.MouseLeave -= NotesPanel_MouseLeave;
+        GhostModeOpacitySlider.ValueChanged -= GhostModeOpacitySlider_ValueChanged;
         
         MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;
         KeyDown -= MainWindow_KeyDown;
