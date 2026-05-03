@@ -52,7 +52,7 @@ public sealed class MainWindowViewModel : IDisposable {
             return;
         note.IsPinned = !note.IsPinned;
         // Save pin state persistently
-        _settingsService.SavePinnedNotes(Notes.Where(n => n.IsPinned).Select(n => n.FileName));
+        _settingsService.SavePinnedNotes(Notes.Where(n => n.IsPinned).Select(n => n.FileName).ToList());
         ResortNotes();
     }
 
