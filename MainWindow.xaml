@@ -125,19 +125,18 @@
             </Setter>
         </Style>
 
+        <!-- Tray context menu (opened manually to ensure proper foreground activation) -->
+        <ContextMenu x:Key="TrayContextMenu" Style="{StaticResource TrayContextMenuStyle}">
+            <MenuItem Header="Show/Hide Notes" Click="TrayShowHideNotes_Click" Style="{StaticResource TrayMenuItemStyle}"/>
+            <MenuItem Header="Settings" Click="TraySettings_Click" Style="{StaticResource TrayMenuItemStyle}"/>
+            <Separator Style="{StaticResource TrayMenuSeparatorStyle}"/>
+            <MenuItem Header="Exit" Click="TrayExit_Click" Style="{StaticResource TrayMenuItemStyle}"/>
+        </ContextMenu>
+
         <!-- System Tray Icon -->
         <tb:TaskbarIcon x:Key="TrayIcon"
                         IconSource="/Resources/notes.ico"
-                        ToolTipText="My Notes">
-            <tb:TaskbarIcon.ContextMenu>
-                <ContextMenu Style="{StaticResource TrayContextMenuStyle}">
-                    <MenuItem Header="Show/Hide Notes" Click="TrayShowHideNotes_Click" Style="{StaticResource TrayMenuItemStyle}"/>
-                    <MenuItem Header="Settings" Click="TraySettings_Click" Style="{StaticResource TrayMenuItemStyle}"/>
-                    <Separator Style="{StaticResource TrayMenuSeparatorStyle}"/>
-                    <MenuItem Header="Exit" Click="TrayExit_Click" Style="{StaticResource TrayMenuItemStyle}"/>
-                </ContextMenu>
-            </tb:TaskbarIcon.ContextMenu>
-        </tb:TaskbarIcon>
+                        ToolTipText="My Notes"/>
     </Window.Resources>
 
         <Canvas x:Name="MainCanvas"
