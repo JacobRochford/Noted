@@ -22,6 +22,7 @@ public partial class MainWindow : Window {
     private readonly NotepadProcessService _notepadService;
     private readonly MainWindowViewModel _viewModel;
     private readonly DispatcherTimer _renameBannerTimer;
+    private GlobalHotkeysService? _globalHotkeysService;
 
     // UI State
     private bool _isHeaderEditing;
@@ -182,6 +183,32 @@ public partial class MainWindow : Window {
         const double taskbarHeight = 60;
         const double marginFromTaskbar = 8;
         Canvas.SetBottom(OverlayButton, taskbarHeight + marginFromTaskbar);
+
+        // Register global hotkey
+        _globalHotkeysService = new GlobalHotkeysService(this);
+        var (modifiers, key) = _settingsService.LoadGlobalHotkey();
+        if (!_globalHotkeysService.Register(modifiers, key, OnGlobalHotkeyPressed))
+        {
+            MessageBox.Show(
+                $"Failed to register global hotkey: {modifiers}+{key}\nThe hotkey may be in use by another application.",
+                "Hotkey Registration Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private void OnGlobalHotkeyPressed()
+    {
+        if (NotesPanel.Visibility == Visibility.Visible)
+        {
+            HideNotesPanelAndMinimizeNotepad();
+        }
+        else
+        {
+            NotesPanel.Visibility = Visibility.Visible;
+            if (_notepadService.IsRunning)
+                _notepadService.Restore();
+        }
     }
 
     // Sync HeaderText and restore the tracked selection after every reload of notes. 
@@ -262,8 +289,59 @@ public partial class MainWindow : Window {
             var showModified = _settingsService.LoadShowModifiedSubtitle();
             ShowModifiedSubtitleOption.IsChecked = showModified;
             ShowModifiedSubtitle = showModified;
+
+            // Load hotkey settings
+            var (modifiers, key) = _settingsService.LoadGlobalHotkey();
+            HotkeyModifiersCombo.SelectedItem = modifiers;
+            HotkeyKeyCombo.SelectedItem = key;
+            UpdateCurrentHotkeyDisplay(modifiers, key);
         } finally {
             _isUpdatingSettingsView = false;
+        }
+    }
+
+    private void UpdateCurrentHotkeyDisplay(string modifiers, string key)
+    {
+        CurrentHotkeyDisplay.Text = $"{modifiers} + {key}";
+    }
+
+    private void ApplyHotkeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        var modifiers = HotkeyModifiersCombo.SelectedItem as string;
+        var key = HotkeyKeyCombo.SelectedItem as string;
+
+        if (string.IsNullOrEmpty(modifiers) || string.IsNullOrEmpty(key))
+        {
+            MessageBox.Show(
+                "Please select both modifiers and a key.",
+                "Invalid Hotkey",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        // Save to settings
+        _settingsService.SaveGlobalHotkey(modifiers, key);
+
+        // Re-register the hotkey
+        _globalHotkeysService?.Unregister();
+        _globalHotkeysService = new GlobalHotkeysService(this);
+        if (_globalHotkeysService.Register(modifiers, key, OnGlobalHotkeyPressed))
+        {
+            UpdateCurrentHotkeyDisplay(modifiers, key);
+            MessageBox.Show(
+                $"Global hotkey updated to: {modifiers} + {key}",
+                "Hotkey Updated",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        else
+        {
+            MessageBox.Show(
+                $"Failed to register hotkey: {modifiers}+{key}\nThe hotkey may be in use by another application.",
+                "Hotkey Registration Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
         }
     }
     private void ShowModifiedSubtitleOption_Changed(object sender, RoutedEventArgs e)
@@ -822,6 +900,9 @@ public partial class MainWindow : Window {
     #endregion
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e) {
+        // Cleanup global hotkey
+        _globalHotkeysService?.Dispose();
+
         _renameBannerTimer.Tick -= RenameBannerTimer_Tick;
         _renameBannerTimer.Stop();
         RenameNoticePopup.IsOpen = false;
