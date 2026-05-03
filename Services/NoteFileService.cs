@@ -73,7 +73,9 @@ public sealed class NoteFileService : IDisposable {
     }
 
     public void DeleteNote(string fileName) {
-        var fullPath = Path.Combine(NotesDirectory, fileName);
+        var fullPath = Path.GetFullPath(Path.Combine(NotesDirectory, fileName));
+        if (!fullPath.StartsWith(Path.GetFullPath(NotesDirectory) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            return;
         if (!File.Exists(fullPath))
             return;
 
@@ -238,7 +240,7 @@ public sealed class NoteFileService : IDisposable {
         };
         _watcher.Created += OnFileSystemChanged;
         _watcher.Deleted += OnFileSystemChanged;
-        _watcher.Renamed += (_, _) => FilesChanged?.Invoke(this, EventArgs.Empty);
+        _watcher.Renamed += OnFileSystemChanged;
     }
 
     private void OnFileSystemChanged(object sender, FileSystemEventArgs e) {
@@ -259,6 +261,7 @@ public sealed class NoteFileService : IDisposable {
 
         _watcher.Created -= OnFileSystemChanged;
         _watcher.Deleted -= OnFileSystemChanged;
+        _watcher.Renamed -= OnFileSystemChanged;
         _watcher.Dispose();
         _watcher = null;
     }
