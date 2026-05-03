@@ -16,13 +16,11 @@
         
         <!-- Scrollbar thumb style -->
         <Style x:Key="ScrollBarThumbStyle" TargetType="Thumb">
-            <Setter Property="Width" Value="4"/>
-            <Setter Property="MinWidth" Value="4"/>
-            <Setter Property="MaxWidth" Value="4"/>
+            <Setter Property="MinHeight" Value="20"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
-                        <Border Background="#B3D8EA" CornerRadius="6" Margin="2,2,2,2" Width="4" MinWidth="4" MaxWidth="4"/>
+                        <Border Background="#B3D8EA" CornerRadius="3" Margin="1,2"/>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -32,31 +30,25 @@
         <Style x:Key="ModernScrollBar" TargetType="ScrollBar">
             <Setter Property="Width" Value="6"/>
             <Setter Property="MinWidth" Value="6"/>
-            <Setter Property="MaxWidth" Value="6"/>
             <Setter Property="Background" Value="#E6F2F8"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Width="6" MinWidth="6" MaxWidth="6">
-                            <Grid>
-                                <Track x:Name="PART_Track" IsDirectionReversed="True" Width="6" MinWidth="6" MaxWidth="6">
-                                    <Track.DecreaseRepeatButton>
-                                        <RepeatButton Command="ScrollBar.LineUpCommand" Background="Transparent" BorderThickness="0" Foreground="Transparent" Width="6" MinWidth="6" MaxWidth="6"/>
-                                    </Track.DecreaseRepeatButton>
-                                    <Track.Thumb>
-                                        <Thumb Style="{StaticResource ScrollBarThumbStyle}"/>
-                                    </Track.Thumb>
-                                    <Track.IncreaseRepeatButton>
-                                        <RepeatButton Command="ScrollBar.LineDownCommand" Background="Transparent" BorderThickness="0" Foreground="Transparent" Width="6" MinWidth="6" MaxWidth="6"/>
-                                    </Track.IncreaseRepeatButton>
-                                </Track>
-                            </Grid>
+                        <Border Background="{TemplateBinding Background}" CornerRadius="3">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageUpCommand"
+                                                  Background="Transparent" BorderThickness="0" Opacity="0"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource ScrollBarThumbStyle}"/>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageDownCommand"
+                                                  Background="Transparent" BorderThickness="0" Opacity="0"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
                         </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#D0EAF7"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -536,8 +528,8 @@
                             </ListBox>
                     </DockPanel>
 
-                        <StackPanel x:Name="SettingsView" Margin="0,4,0,0">
-                            <Grid Margin="0,0,0,12">
+                        <DockPanel x:Name="SettingsView" Margin="0,4,0,0">
+                            <Grid DockPanel.Dock="Top" Margin="0,0,0,12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
@@ -591,6 +583,10 @@
                                     </Button.Template>
                                 </Button>
                             </Grid>
+
+                            <ScrollViewer DockPanel.Dock="Bottom"
+                                          VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
 
                             <Border Background="#EFF7FB"
                                     BorderBrush="#C9DFEC"
@@ -945,7 +941,10 @@
                                     </Button>
                                 </StackPanel>
                             </Border>
-                        </StackPanel>
+
+                            </StackPanel>
+                            </ScrollViewer>
+                        </DockPanel>
                 </Grid>
                 </DockPanel>
 
