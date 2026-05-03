@@ -1,12 +1,13 @@
 ﻿using System.IO;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Media3D;
 using System.Windows.Threading;
 using Microsoft.Win32;
+using MyNotes.Helpers;
 using MyNotes.Models;
 using MyNotes.Services;
 using MyNotes.ViewModels;
@@ -125,6 +126,7 @@ public partial class MainWindow : Window {
         SetSettingsViewVisible(false);
 
         Closing += OnClosing;
+        SourceInitialized += MainWindow_SourceInitialized;
         HeaderText.MouseLeftButtonDown += HeaderText_MouseLeftButtonDown;
         HeaderTextEdit.LostFocus += HeaderEditBox_LostFocus;
         HeaderTextEdit.KeyDown += HeaderEditBox_KeyDown;
@@ -174,6 +176,19 @@ public partial class MainWindow : Window {
             }
             HeaderText.Text = newHeader;
         }
+    }
+
+    private void MainWindow_SourceInitialized(object? sender, EventArgs e) {
+        // Set HWND properties before the window is shown so Windows never classifies
+        // this overlay as a fullscreen foreground app (which would trigger Do Not Disturb).
+        var hwnd = new WindowInteropHelper(this).Handle;
+        int exStyle = WindowInterop.GetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE);
+        WindowInterop.SetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE,
+            exStyle | WindowInterop.WS_EX_TOOLWINDOW | WindowInterop.WS_EX_NOACTIVATE);
+        WindowInterop.SetWindowPos(hwnd, WindowInterop.HWND_TOPMOST, 0, 0, 0, 0,
+            WindowInterop.SWP_NOMOVE | WindowInterop.SWP_NOSIZE | WindowInterop.SWP_NOACTIVATE);
+        // NonRudeHWND tells Windows explicitly this is not a rude fullscreen app.
+        WindowInterop.SetProp(hwnd, "NonRudeHWND", new IntPtr(1));
     }
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e) {
