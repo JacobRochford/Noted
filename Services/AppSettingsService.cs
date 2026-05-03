@@ -22,65 +22,55 @@ public sealed class AppSettingsService {
     }
 
     public string? LoadNotesDirectory() {
-        var settings = LoadSettings();
-        return string.IsNullOrWhiteSpace(settings.NotesDirectory)
-            ? null
-            : settings.NotesDirectory;
+        var dir = LoadSetting(s => s.NotesDirectory);
+        return string.IsNullOrWhiteSpace(dir) ? null : dir;
     }
-
     public void SaveNotesDirectory(string notesDirectory) {
-        var settings = LoadSettings() with {
-            NotesDirectory = notesDirectory
-        };
-        SaveSettings(settings);
+        SaveSetting(s => s with { NotesDirectory = notesDirectory });
     }
-
-    public IReadOnlyList<string> LoadPinnedNotes()
-    {
-        var settings = LoadSettings();
-        return settings.PinnedNotes ?? new List<string>();
+    public IReadOnlyList<string> LoadPinnedNotes() {
+        return LoadSetting(s => s.PinnedNotes ?? new List<string>());
     }
-
-    public void SavePinnedNotes(IEnumerable<string> pinnedNotes)
-    {
-        var settings = LoadSettings() with
-        {
-            PinnedNotes = pinnedNotes?.ToList() ?? new List<string>()
-        };
-        SaveSettings(settings);
+    public void SavePinnedNotes(IReadOnlyList<string> pinnedNotes) {
+        SaveSetting(s => s with { PinnedNotes = pinnedNotes?.ToList() ?? new List<string>() });
     }
-
     public bool LoadShowModifiedSubtitle() {
-        return LoadSettings().ShowModifiedSubtitle;
+        return LoadSetting(s => s.ShowModifiedSubtitle);
     }
 
     public void SaveShowModifiedSubtitle(bool showModifiedSubtitle) {
-        var settings = LoadSettings() with {
-            ShowModifiedSubtitle = showModifiedSubtitle
-        };
-        SaveSettings(settings);
+        SaveSetting(s => s with { ShowModifiedSubtitle = showModifiedSubtitle });
     }
 
 
     public NoteTimestampPlacement LoadTimestampPlacement() {
-        return LoadSettings().TimestampPlacement;
+        return LoadSetting(s => s.TimestampPlacement);
     }
 
     public void SaveTimestampPlacement(NoteTimestampPlacement timestampPlacement) {
-        var settings = LoadSettings() with {
-            TimestampPlacement = timestampPlacement
-        };
-        SaveSettings(settings);
+        SaveSetting(s => s with { TimestampPlacement = timestampPlacement });
     }
 
     public bool LoadPromptForNoteName() {
-        return LoadSettings().PromptForNoteName;
+        return LoadSetting(s => s.PromptForNoteName);
     }
 
     public void SavePromptForNoteName(bool promptForNoteName) {
-        var settings = LoadSettings() with {
-            PromptForNoteName = promptForNoteName
-        };
+        SaveSetting(s => s with { PromptForNoteName = promptForNoteName });
+    }
+    public string? LoadCustomHeader() {
+        return LoadSetting(s => s.CustomHeader);
+    }
+    public void SaveCustomHeader(string? customHeader) {
+        SaveSetting(s => s with { CustomHeader = customHeader });
+    }
+
+    private T LoadSetting<T>(Func<AppSettings, T> selector) {
+        return selector(LoadSettings());
+    }
+
+    private void SaveSetting(Func<AppSettings, AppSettings> updater) {
+        var settings = updater(LoadSettings());
         SaveSettings(settings);
     }
 
@@ -97,28 +87,12 @@ public sealed class AppSettingsService {
     }
 
     private void SaveSettings(AppSettings settings) {
-        var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions {
-            WriteIndented = true
-        });
+        var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(_settingsFilePath, json);
     }
 
-    public string? LoadCustomHeader()
-    {
-        return LoadSettings().CustomHeader;
-    }
-
-    public void SaveCustomHeader(string? customHeader)
-    {
-        var settings = LoadSettings() with
-        {
-            CustomHeader = customHeader
-        };
-        SaveSettings(settings);
-    }
-
-    private sealed record AppSettings
-    {
+    /// <summary>Represents the application settings stored in JSON.</summary>
+    private sealed record AppSettings {
         public string? NotesDirectory { get; init; }
         public NoteTimestampPlacement TimestampPlacement { get; init; } = NoteTimestampPlacement.None;
         public bool PromptForNoteName { get; init; }
