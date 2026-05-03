@@ -12,4 +12,12 @@
     <InformationalVersion>1.0.0</InformationalVersion>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources/notes.ico" />
+  </ItemGroup>
+
 </Project>
