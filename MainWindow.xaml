@@ -641,6 +641,39 @@
                                                FontWeight="SemiBold"
                                                Foreground="#355A6E"
                                                Margin="0,0,0,8"/>
+
+                                    <!-- Default opacity (always active) -->
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Default opacity"
+                                                   Grid.Column="0"
+                                                   FontSize="11"
+                                                   Foreground="#5F7480"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="DefaultOpacityLabel"
+                                                   Grid.Column="1"
+                                                   Text="88%"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#2C6E91"
+                                                   VerticalAlignment="Center"
+                                                   MinWidth="32"
+                                                   TextAlignment="Right"/>
+                                    </Grid>
+                                    <Slider x:Name="DefaultOpacitySlider"
+                                            Minimum="20"
+                                            Maximum="100"
+                                            Value="88"
+                                            SmallChange="5"
+                                            LargeChange="10"
+                                            TickFrequency="5"
+                                            IsSnapToTickEnabled="True"
+                                            Margin="0,0,0,14"/>
+
+                                    <!-- Ghost mode toggle -->
                                     <CheckBox x:Name="GhostModeOption"
                                             Foreground="#355A6E"
                                             FontWeight="SemiBold"
@@ -652,6 +685,8 @@
                                                    TextWrapping="Wrap"
                                                    VerticalAlignment="Center"/>
                                     </CheckBox>
+
+                                    <!-- Ghost opacity (disabled when ghost mode is off) -->
                                     <Grid Margin="0,0,0,4">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -673,13 +708,14 @@
                                                    TextAlignment="Right"/>
                                     </Grid>
                                     <Slider x:Name="GhostModeOpacitySlider"
-                                            Minimum="15"
-                                            Maximum="100"
+                                            Minimum="5"
+                                            Maximum="95"
                                             Value="25"
                                             SmallChange="5"
                                             LargeChange="10"
                                             TickFrequency="5"
-                                            IsSnapToTickEnabled="True"/>
+                                            IsSnapToTickEnabled="True"
+                                            IsEnabled="{Binding ElementName=GhostModeOption, Path=IsChecked}"/>
                                 </StackPanel>
                             </Border>
 

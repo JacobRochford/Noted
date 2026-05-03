@@ -92,6 +92,8 @@ public sealed class AppSettingsService {
     public void SaveGhostModeEnabled(bool enabled) => SaveSetting(s => s with { GhostModeEnabled = enabled });
     public double LoadGhostModeOpacity() => LoadSetting(s => s.GhostModeOpacity);
     public void SaveGhostModeOpacity(double opacity) => SaveSetting(s => s with { GhostModeOpacity = opacity });
+    public double LoadDefaultOpacity() => LoadSetting(s => s.DefaultOpacity);
+    public void SaveDefaultOpacity(double opacity) => SaveSetting(s => s with { DefaultOpacity = opacity });
 
     private T LoadSetting<T>(Func<AppSettings, T> selector) {
         return selector(LoadSettings());
@@ -132,5 +134,6 @@ public sealed class AppSettingsService {
         public string HotkeyKey { get; init; } = "Space";
         public bool GhostModeEnabled { get; init; } = false;
         public double GhostModeOpacity { get; init; } = 0.25;
+        public double DefaultOpacity { get; init; } = 0.88;
     }
 }

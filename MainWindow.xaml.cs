@@ -37,7 +37,7 @@ public partial class MainWindow : Window {
     // Ghost mode state
     private bool _ghostModeEnabled;
     private double _ghostModeOpacity;
-    private const double _normalPanelOpacity = 0.88;
+    private double _defaultOpacity;
 
     // Drag state
     private Point? _dragStart;
@@ -106,12 +106,13 @@ public partial class MainWindow : Window {
         _viewModel = new MainWindowViewModel(_fileService, _settingsService);
         _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
         _ghostModeOpacity = _settingsService.LoadGhostModeOpacity();
+        _defaultOpacity = _settingsService.LoadDefaultOpacity();
         // Load header from settings, fallback to default if not set
         var savedHeader = _settingsService.LoadCustomHeader();
         if (!string.IsNullOrWhiteSpace(savedHeader))
             HeaderText.Text = savedHeader;
         else
-            HeaderText.Text = "My Notes";
+            HeaderText.Text = "Double-Click Me";
 
         _renameBannerTimer = new DispatcherTimer {
             Interval = TimeSpan.FromSeconds(10)
@@ -129,6 +130,7 @@ public partial class MainWindow : Window {
         NotesPanel.MouseEnter += NotesPanel_MouseEnter;
         NotesPanel.MouseLeave += NotesPanel_MouseLeave;
         GhostModeOpacitySlider.ValueChanged += GhostModeOpacitySlider_ValueChanged;
+        DefaultOpacitySlider.ValueChanged += DefaultOpacitySlider_ValueChanged;
         _trayIcon.TrayRightMouseUp += TrayIcon_TrayRightMouseUp;
 
         FileList.ItemsSource = _viewModel.Notes;
@@ -229,6 +231,8 @@ public partial class MainWindow : Window {
         }
         if (_ghostModeEnabled && NotesPanel.Visibility == Visibility.Visible)
             AnimatePanelOpacity(_ghostModeOpacity);
+        else
+            AnimatePanelOpacity(_defaultOpacity);
     }
 
     private void OnGlobalHotkeyPressed()
@@ -242,6 +246,8 @@ public partial class MainWindow : Window {
             NotesPanel.Visibility = Visibility.Visible;
             if (_ghostModeEnabled)
                 AnimatePanelOpacity(_ghostModeOpacity);
+            else
+                AnimatePanelOpacity(_defaultOpacity);
             if (_notepadService.IsRunning)
                 _notepadService.Restore();
         }
@@ -313,7 +319,7 @@ public partial class MainWindow : Window {
         UpdateNotesDirectoryDisplay();
         // Restore correct opacity when closing settings (slider may have previewed a value)
         if (!isVisible)
-            AnimatePanelOpacity(_ghostModeEnabled ? _ghostModeOpacity : _normalPanelOpacity);
+            AnimatePanelOpacity(_ghostModeEnabled ? _ghostModeOpacity : _defaultOpacity);
     }
 
     private void UpdateSettingsView() {
@@ -336,9 +342,12 @@ public partial class MainWindow : Window {
             UpdateCurrentHotkeyDisplay(modifiers, key);
             _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
             _ghostModeOpacity = _settingsService.LoadGhostModeOpacity();
+            _defaultOpacity = _settingsService.LoadDefaultOpacity();
             GhostModeOption.IsChecked = _ghostModeEnabled;
             GhostModeOpacitySlider.Value = _ghostModeOpacity * 100;
             UpdateGhostModeOpacityLabel();
+            DefaultOpacitySlider.Value = _defaultOpacity * 100;
+            UpdateDefaultOpacityLabel();
         } finally {
             _isUpdatingSettingsView = false;
         }
@@ -401,7 +410,7 @@ public partial class MainWindow : Window {
         _ghostModeEnabled = GhostModeOption.IsChecked ?? false;
         _settingsService.SaveGhostModeEnabled(_ghostModeEnabled);
         if (!_ghostModeEnabled)
-            AnimatePanelOpacity(_normalPanelOpacity);
+            AnimatePanelOpacity(_defaultOpacity);
         else if (NotesPanel.Visibility == Visibility.Visible && !NotesPanel.IsMouseOver)
             AnimatePanelOpacity(_ghostModeOpacity);
     }
@@ -419,9 +428,22 @@ public partial class MainWindow : Window {
         GhostModeOpacityLabel.Text = $"{(int)GhostModeOpacitySlider.Value}%";
     }
 
+    private void DefaultOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) {
+        if (_isUpdatingSettingsView) return;
+        _defaultOpacity = DefaultOpacitySlider.Value / 100.0;
+        _settingsService.SaveDefaultOpacity(_defaultOpacity);
+        UpdateDefaultOpacityLabel();
+        if (NotesPanel.Visibility == Visibility.Visible && (!_ghostModeEnabled || NotesPanel.IsMouseOver))
+            AnimatePanelOpacity(_defaultOpacity);
+    }
+
+    private void UpdateDefaultOpacityLabel() {
+        DefaultOpacityLabel.Text = $"{(int)DefaultOpacitySlider.Value}%";
+    }
+
     private void NotesPanel_MouseEnter(object sender, MouseEventArgs e) {
         if (_ghostModeEnabled)
-            AnimatePanelOpacity(_normalPanelOpacity);
+            AnimatePanelOpacity(_defaultOpacity);
     }
 
     private void NotesPanel_MouseLeave(object sender, MouseEventArgs e) {
@@ -452,6 +474,8 @@ public partial class MainWindow : Window {
             NotesPanel.Visibility = Visibility.Visible;
             if (_ghostModeEnabled)
                 AnimatePanelOpacity(_ghostModeOpacity);
+            else
+                AnimatePanelOpacity(_defaultOpacity);
             if (_notepadService.IsRunning)
                 _notepadService.Restore();
         }
@@ -1009,6 +1033,10 @@ public partial class MainWindow : Window {
         else
         {
             NotesPanel.Visibility = Visibility.Visible;
+            if (_ghostModeEnabled)
+                AnimatePanelOpacity(_ghostModeOpacity);
+            else
+                AnimatePanelOpacity(_defaultOpacity);
             if (_notepadService.IsRunning)
                 _notepadService.Restore();
         }
@@ -1048,6 +1076,7 @@ public partial class MainWindow : Window {
         NotesPanel.MouseLeave -= NotesPanel_MouseLeave;
 
         GhostModeOpacitySlider.ValueChanged -= GhostModeOpacitySlider_ValueChanged;
+        DefaultOpacitySlider.ValueChanged -= DefaultOpacitySlider_ValueChanged;
 
         MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;
         KeyDown -= MainWindow_KeyDown;
