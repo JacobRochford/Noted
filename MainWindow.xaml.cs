@@ -129,6 +129,7 @@ public partial class MainWindow : Window {
         NotesPanel.MouseEnter += NotesPanel_MouseEnter;
         NotesPanel.MouseLeave += NotesPanel_MouseLeave;
         GhostModeOpacitySlider.ValueChanged += GhostModeOpacitySlider_ValueChanged;
+        _trayIcon.TrayRightMouseUp += TrayIcon_TrayRightMouseUp;
 
         FileList.ItemsSource = _viewModel.Notes;
         _viewModel.NotesLoaded += OnNotesLoaded;
@@ -983,6 +984,22 @@ public partial class MainWindow : Window {
     #endregion
 
     #region System Tray Icon
+    private void TrayIcon_TrayRightMouseUp(object sender, RoutedEventArgs e) {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        // Temporarily remove WS_EX_NOACTIVATE so SetForegroundWindow works, then restore on close
+        int exStyle = WindowInterop.GetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE);
+        WindowInterop.SetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE, exStyle & ~WindowInterop.WS_EX_NOACTIVATE);
+        WindowInterop.SetForegroundWindow(hwnd);
+        var cm = (ContextMenu)Resources["TrayContextMenu"];
+        cm.Placement = PlacementMode.MousePoint;
+        cm.IsOpen = true;
+        void OnMenuClosed(object? cs, RoutedEventArgs ce) {
+            cm.Closed -= OnMenuClosed;
+            WindowInterop.SetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE, exStyle);
+        }
+        cm.Closed += OnMenuClosed;
+    }
+
     private void TrayShowHideNotes_Click(object sender, RoutedEventArgs e)
     {
         if (NotesPanel.Visibility == Visibility.Visible)
@@ -1013,6 +1030,7 @@ public partial class MainWindow : Window {
         _globalHotkeysService?.Dispose();
 
         // Cleanup tray icon
+        _trayIcon.TrayRightMouseUp -= TrayIcon_TrayRightMouseUp;
         _trayIcon?.Dispose();
 
         _renameBannerTimer.Tick -= RenameBannerTimer_Tick;
@@ -1028,8 +1046,9 @@ public partial class MainWindow : Window {
         NotesPanel.PreviewMouseLeftButtonUp -= NotesPanel_PreviewMouseLeftButtonUp;
         NotesPanel.MouseEnter -= NotesPanel_MouseEnter;
         NotesPanel.MouseLeave -= NotesPanel_MouseLeave;
+
         GhostModeOpacitySlider.ValueChanged -= GhostModeOpacitySlider_ValueChanged;
-        
+
         MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;
         KeyDown -= MainWindow_KeyDown;
         
