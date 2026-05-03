@@ -23,6 +23,7 @@ public partial class MainWindow : Window {
     private readonly MainWindowViewModel _viewModel;
     private readonly DispatcherTimer _renameBannerTimer;
     private GlobalHotkeysService? _globalHotkeysService;
+    private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
 
     // UI State
     private bool _isHeaderEditing;
@@ -87,6 +88,9 @@ public partial class MainWindow : Window {
         InitializeComponent();
 
         DataContext = this;
+
+        // Instantiate tray icon from resources
+        _trayIcon = (Hardcodet.Wpf.TaskbarNotification.TaskbarIcon)Resources["TrayIcon"];
 
         _settingsService = new AppSettingsService();
         _fileService = new NoteFileService(_settingsService);
@@ -899,9 +903,38 @@ public partial class MainWindow : Window {
     }
     #endregion
 
+    #region System Tray Icon
+    private void TrayShowHideNotes_Click(object sender, RoutedEventArgs e)
+    {
+        if (NotesPanel.Visibility == Visibility.Visible)
+        {
+            HideNotesPanelAndMinimizeNotepad();
+        }
+        else
+        {
+            NotesPanel.Visibility = Visibility.Visible;
+            if (_notepadService.IsRunning)
+                _notepadService.Restore();
+        }
+    }
+
+    private void TraySettings_Click(object sender, RoutedEventArgs e)
+    {
+        SettingsButton_Click(sender, e);
+    }
+
+    private void TrayExit_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+    #endregion
+
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e) {
         // Cleanup global hotkey
         _globalHotkeysService?.Dispose();
+
+        // Cleanup tray icon
+        _trayIcon?.Dispose();
 
         _renameBannerTimer.Tick -= RenameBannerTimer_Tick;
         _renameBannerTimer.Stop();
