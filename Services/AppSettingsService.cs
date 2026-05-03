@@ -77,6 +77,17 @@ public sealed class AppSettingsService {
         SaveSetting(s => s with { CustomHeader = customHeader });
     }
 
+    public (string modifiers, string key) LoadGlobalHotkey()
+    {
+        var setting = LoadSettings();
+        return (setting.HotkeyModifiers ?? "Ctrl+Shift", setting.HotkeyKey ?? "Space");
+    }
+
+    public void SaveGlobalHotkey(string modifiers, string key)
+    {
+        SaveSetting(s => s with { HotkeyModifiers = modifiers, HotkeyKey = key });
+    }
+
     private T LoadSetting<T>(Func<AppSettings, T> selector) {
         return selector(LoadSettings());
     }
@@ -112,5 +123,7 @@ public sealed class AppSettingsService {
         public bool ShowModifiedSubtitle { get; init; } = true;
         public string? CustomHeader { get; init; }
         public List<string>? PinnedNotes { get; init; }
+        public string HotkeyModifiers { get; init; } = "Ctrl+Shift";
+        public string HotkeyKey { get; init; } = "Space";
     }
 }
