@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Get version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $v = $tag.TrimStart('v')
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          # Mark as pre-release if tag contains a pre-release identifier (e.g. -beta.1, -alpha, -rc.1)
+          $isPrerelease = $tag -match '-'
+          "PRERELEASE=$($isPrerelease.ToString().ToLower())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          dotnet publish MyNotes.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version=${{ steps.version.outputs.VERSION }} `
+            -p:AssemblyVersion=${{ steps.version.outputs.VERSION }}.0 `
+            -p:FileVersion=${{ steps.version.outputs.VERSION }}.0 `
+            -o publish
+
+      - name: Zip artifact
+        shell: pwsh
+        run: Compress-Archive -Path publish\* -DestinationPath "MyNotes-${{ steps.version.outputs.VERSION }}-win-x64.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MyNotes-${{ steps.version.outputs.VERSION }}-win-x64.zip
+          prerelease: ${{ steps.version.outputs.PRERELEASE }}
+          generate_release_notes: true
