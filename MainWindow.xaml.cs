@@ -1058,8 +1058,11 @@ public partial class MainWindow : Window {
         _globalHotkeysService?.Dispose();
 
         // Cleanup tray icon
-        _trayIcon.TrayRightMouseUp -= TrayIcon_TrayRightMouseUp;
-        _trayIcon?.Dispose();
+        if (_trayIcon is not null) {
+            _trayIcon.TrayRightMouseUp -= TrayIcon_TrayRightMouseUp;
+            _trayIcon.Dispose();
+            _trayIcon = null;
+        }
 
         _renameBannerTimer.Tick -= RenameBannerTimer_Tick;
         _renameBannerTimer.Stop();
