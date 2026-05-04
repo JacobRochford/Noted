@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Windows;
+using MyNotes.Services;
 
 namespace MyNotes;
 
@@ -9,6 +10,7 @@ public partial class App : Application
     {
         base.OnStartup(e);
         TryCreateDesktopShortcut();
+        _ = UpdateService.CheckForUpdatesAsync();
     }
 
     private static void TryCreateDesktopShortcut()
