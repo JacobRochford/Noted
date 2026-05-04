@@ -662,11 +662,11 @@
                                     <Slider x:Name="DefaultOpacitySlider"
                                             Minimum="20"
                                             Maximum="100"
-                                            Value="88"
-                                            SmallChange="5"
+                                            Value="95"
+                                            SmallChange="1"
                                             LargeChange="10"
-                                            TickFrequency="5"
-                                            IsSnapToTickEnabled="True"
+                                            TickFrequency="1"
+                                            IsSnapToTickEnabled="False"
                                             Margin="0,0,0,14"/>
 
                                     <!-- Ghost mode toggle -->
@@ -706,11 +706,11 @@
                                     <Slider x:Name="GhostModeOpacitySlider"
                                             Minimum="5"
                                             Maximum="95"
-                                            Value="25"
-                                            SmallChange="5"
+                                            Value="75"
+                                            SmallChange="1"
                                             LargeChange="10"
-                                            TickFrequency="5"
-                                            IsSnapToTickEnabled="True"
+                                            TickFrequency="1"
+                                            IsSnapToTickEnabled="False"
                                             IsEnabled="{Binding ElementName=GhostModeOption, Path=IsChecked}"/>
                                 </StackPanel>
                             </Border>
