@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.IO;
-using MyNotes.Models;
+using Noted.Models;
 
-namespace MyNotes.Services;
+namespace Noted.Services;
 
 public sealed class NoteFileService : IDisposable {
     private readonly AppSettingsService _settingsService;

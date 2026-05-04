@@ -1,6 +1,6 @@
 using System.IO;
 using System.Text.Json;
-namespace MyNotes.Services;
+namespace Noted.Services;
 
 /// Specifies where a timestamp should be placed in newly created notes.
 public enum NoteTimestampPlacement {
@@ -19,7 +19,7 @@ public sealed class AppSettingsService {
     public AppSettingsService() {
         StorageDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "MyNotes");
+            "Noted");
         Directory.CreateDirectory(StorageDirectory);
         _settingsFilePath = Path.Combine(StorageDirectory, "settings.json");
     }

@@ -1,8 +1,8 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
-using MyNotes.Services;
+using Noted.Services;
 
-namespace MyNotes;
+namespace Noted;
 
 public partial class App : Application
 {
@@ -19,7 +19,7 @@ public partial class App : Application
         {
             var shortcutPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                "MyNotes.lnk");
+                "Noted.lnk");
 
             if (File.Exists(shortcutPath))
                 return;
@@ -31,7 +31,7 @@ public partial class App : Application
             dynamic shell = Activator.CreateInstance(shellType)!;
             dynamic shortcut = shell.CreateShortcut(shortcutPath);
             shortcut.TargetPath = Environment.ProcessPath
-                ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MyNotes.exe");
+                ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Noted.exe");
             shortcut.WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory;
             shortcut.Save();
         }

@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
-using MyNotes.Helpers;
+using Noted.Helpers;
 using MessageBox = System.Windows.MessageBox;
 
-namespace MyNotes.Services;
+namespace Noted.Services;
 
 public sealed class NotepadProcessService : IDisposable {
     private Process? _notepadProcess;

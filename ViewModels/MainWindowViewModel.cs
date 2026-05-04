@@ -1,10 +1,10 @@
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Threading;
-using MyNotes.Models;
-using MyNotes.Services;
+using Noted.Models;
+using Noted.Services;
 
-namespace MyNotes.ViewModels;
+namespace Noted.ViewModels;
 
 
 public sealed class MainWindowViewModel : IDisposable {
@@ -13,7 +13,7 @@ public sealed class MainWindowViewModel : IDisposable {
     private DispatcherTimer? _debounceTimer;
 
     public ObservableCollection<NoteItem> Notes { get; } = new();
-    public string HeaderText { get; private set; } = "My Notes";
+    public string HeaderText { get; private set; } = "Noted.";
     public string? SelectedFileName { get; set; }
     public event EventHandler? NotesLoaded;
 
@@ -39,7 +39,7 @@ public sealed class MainWindowViewModel : IDisposable {
             Notes.Add(item);
         }
 
-        HeaderText = Notes.Count > 0 ? $"My Notes ({Notes.Count})" : "My Notes";
+        HeaderText = Notes.Count > 0 ? $"Noted. ({Notes.Count})" : "Noted.";
         ResortNotes();
         NotesLoaded?.Invoke(this, EventArgs.Empty);
     }

@@ -4,12 +4,12 @@ using System.Reflection;
 using System.Text.Json.Serialization;
 using System.Windows;
 
-namespace MyNotes.Services;
+namespace Noted.Services;
 
 public static class UpdateService
 {
-    private const string LatestReleaseApiUrl = "https://api.github.com/repos/JacobRochford/MyNotes/releases/latest";
-    private const string ReleasesPageUrl = "https://github.com/JacobRochford/MyNotes/releases/latest";
+    private const string LatestReleaseApiUrl = "https://api.github.com/repos/JacobRochford/Noted./releases/latest";
+    private const string ReleasesPageUrl = "https://github.com/JacobRochford/Noted./releases/latest";
 
     private static readonly HttpClient _httpClient = new()
     {
@@ -18,7 +18,7 @@ public static class UpdateService
 
     static UpdateService()
     {
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("MyNotes-UpdateChecker/1.0");
+        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Noted-UpdateChecker/1.0");
     }
 
     public static async Task CheckForUpdatesAsync()
@@ -48,7 +48,7 @@ public static class UpdateService
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 var result = MessageBox.Show(
-                    $"MyNotes {release.TagName} is available.\n\nYou are running v{currentVersion}. Would you like to download the update?",
+                    $"Noted. {release.TagName} is available.\n\nYou are running v{currentVersion}. Would you like to download the update?",
                     "Update Available",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Information);

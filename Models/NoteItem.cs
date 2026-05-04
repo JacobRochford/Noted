@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace MyNotes.Models;
+namespace Noted.Models;
 
 public sealed class NoteItem : INotifyPropertyChanged {
         private bool _isPinned;

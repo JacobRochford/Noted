@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 
-namespace MyNotes.Services;
+namespace Noted.Services;
 
 /// <summary>Manages global system-wide hotkeys for the application.</summary>
 public sealed class GlobalHotkeysService : IDisposable {

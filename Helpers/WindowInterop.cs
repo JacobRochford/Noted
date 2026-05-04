@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace MyNotes.Helpers;
+namespace Noted.Helpers;
 
 internal static class WindowInterop {
     internal const int SW_HIDE = 0;

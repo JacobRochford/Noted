@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Controls;
@@ -9,13 +9,13 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Media3D;
 using System.Windows.Threading;
 using Microsoft.Win32;
-using MyNotes.Helpers;
-using MyNotes.Models;
-using MyNotes.Services;
-using MyNotes.ViewModels;
+using Noted.Helpers;
+using Noted.Models;
+using Noted.Services;
+using Noted.ViewModels;
 using MessageBox = System.Windows.MessageBox;
 
-namespace MyNotes;
+namespace Noted;
     
 
 public partial class MainWindow : Window {
@@ -182,7 +182,7 @@ public partial class MainWindow : Window {
             var newHeader = HeaderTextEdit.Text.Trim();
             if (string.IsNullOrWhiteSpace(newHeader))
             {
-                newHeader = "My Notes";
+                newHeader = "Noted.";
                 _settingsService.SaveCustomHeader("");
             }
             else
@@ -297,7 +297,7 @@ public partial class MainWindow : Window {
             {
                 // Always restore the custom header from settings
                 var savedHeader = _settingsService.LoadCustomHeader();
-                HeaderText.Text = !string.IsNullOrWhiteSpace(savedHeader) ? savedHeader : "My Notes";
+                HeaderText.Text = !string.IsNullOrWhiteSpace(savedHeader) ? savedHeader : "Noted.";
             }
         }
     }

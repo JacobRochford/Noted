@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 
-namespace MyNotes;
+namespace Noted;
 
 public partial class NewNoteNameDialog : Window {
     public string NoteName => NoteNameTextBox.Text.Trim();

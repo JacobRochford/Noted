@@ -34,7 +34,7 @@ jobs:
       - name: Publish
         shell: pwsh
         run: |
-          dotnet publish MyNotes.csproj `
+          dotnet publish Noted.csproj `
             -c Release `
             -r win-x64 `
             --self-contained `
@@ -47,11 +47,11 @@ jobs:
 
       - name: Zip artifact
         shell: pwsh
-        run: Compress-Archive -Path publish\* -DestinationPath "MyNotes-${{ steps.version.outputs.VERSION }}-win-x64.zip"
+        run: Compress-Archive -Path publish\* -DestinationPath "Noted-${{ steps.version.outputs.VERSION }}-win-x64.zip"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: MyNotes-${{ steps.version.outputs.VERSION }}-win-x64.zip
+          files: Noted-${{ steps.version.outputs.VERSION }}-win-x64.zip
           prerelease: ${{ steps.version.outputs.PRERELEASE }}
           generate_release_notes: true

@@ -1,6 +1,6 @@
-# MyNotes
+# Noted.
 
-MyNotes is a small Windows note utility built with WPF. It stays out of the way as a floating button, opens a simple note list when you need it, and hands editing off to plain old Notepad.
+Noted. is a small Windows note utility built with WPF. It stays out of the way as a floating button, opens a simple note list when you need it, and hands editing off to plain old Notepad.
 
 The app is meant to be quick: open a note, jot something down, hide it again.
 
@@ -19,16 +19,16 @@ The app is meant to be quick: open a note, jot something down, hide it again.
 
 ## Download / Running
 
-Grab the latest `MyNotes-*-win-x64.zip` from the [Releases](../../releases) page, unzip the folder, and run `MyNotes.exe` inside it. No installer or .NET runtime needed — all dependencies are included in the zip.
+Grab the latest `Noted-*-win-x64.zip` from the [Releases](../../releases) page, unzip the folder, and run `Noted.exe` inside it. No installer or .NET runtime needed — all dependencies are included in the zip.
 
 > **Windows SmartScreen warning** — because the app is not code-signed, Windows may show a "Windows protected your PC" dialog the first time you run it. Click **More info** → **Run anyway** to proceed. This is expected for unsigned apps from independent developers.
 
 <p align="center">
-  <img width="90%" alt="MyNotes-1" src="https://github.com/user-attachments/assets/13fe8fcd-ed7a-4082-a697-b748c3a832b5" />  
+  <img width="90%" alt="Noted-1" src="https://github.com/user-attachments/assets/13fe8fcd-ed7a-4082-a697-b748c3a832b5" />  
 </p>
 
 <p align="center">
-  <img width="90%" alt="MyNotes-2" src="https://github.com/user-attachments/assets/f4c65a5c-5712-49b3-87f4-d6fc2e2c8cf3" />
+  <img width="90%" alt="Noted-2" src="https://github.com/user-attachments/assets/f4c65a5c-5712-49b3-87f4-d6fc2e2c8cf3" />
 </p>
 
 
@@ -43,7 +43,7 @@ The settings view lets you:
 
 
 <p align="center">
-  <img width="90%" alt="MyNotes-3" src="https://github.com/user-attachments/assets/42e60faa-7767-4cab-a32a-077dd2e7af30" />
+  <img width="90%" alt="Noted-3" src="https://github.com/user-attachments/assets/42e60faa-7767-4cab-a32a-077dd2e7af30" />
 </p>
 
 ## Requirements
@@ -62,7 +62,7 @@ dotnet build
 dotnet run
 ```
 
-You can also open `MyNotes.sln` in Visual Studio or VS Code and run it there.
+You can also open `Noted.sln` in Visual Studio or VS Code and run it there.
 
 
 ## How storage works
@@ -70,8 +70,8 @@ You can also open `MyNotes.sln` in Visual Studio or VS Code and run it there.
 - Notes are regular `.txt` files
 - By default, the app creates a `Notes` folder next to the built app
 - You can switch the notes folder in Settings
-- App settings are stored under `%LocalAppData%\MyNotes\settings.json`
-- Deleted notes are moved to `%LocalAppData%\MyNotes\DeletedNotes`
+- App settings are stored under `%LocalAppData%\Noted\settings.json`
+- Deleted notes are moved to `%LocalAppData%\Noted\DeletedNotes`
 - Deleted note files older than 7 days are cleaned up automatically
 
 If a note name matches the built-in timestamp format, the app shows a friendlier date in the list while keeping the real filename on disk.

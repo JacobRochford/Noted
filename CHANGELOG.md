@@ -35,5 +35,5 @@ All notable changes to this project will be documented in this file.
 - Custom notes folder support (default is a `Notes` folder next to the app)
 - Toggle for prompting note naming on creation
 - Control over timestamp placement (top, bottom, or none)
-- Settings persisted to `%LocalAppData%\MyNotes\settings.json`
-- Deleted notes stored under `%LocalAppData%\MyNotes\DeletedNotes`
+- Settings persisted to `%LocalAppData%\Noted\settings.json`
+- Deleted notes stored under `%LocalAppData%\Noted\DeletedNotes`
