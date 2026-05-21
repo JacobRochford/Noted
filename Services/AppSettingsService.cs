@@ -127,7 +127,11 @@ public sealed class AppSettingsService {
 
     private void SaveSettings(AppSettings settings) {
         var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(_settingsFilePath, json);
+        // Write to .tmp then rename; File.Move on the same drive is atomic,
+        // so a crash mid-write can't leave settings.json half-baked or missing.
+        var tmpPath = _settingsFilePath + ".tmp";
+        File.WriteAllText(tmpPath, json);
+        File.Move(tmpPath, _settingsFilePath, overwrite: true);
         _cachedSettings = settings;
     }
 
