@@ -29,10 +29,7 @@ public partial class MainWindow : Window {
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
 
     // UI State
-    private bool _isHeaderEditing;
     private bool _isUpdatingSettingsView;
-    private bool _showNotesDirectory;
-    private bool _showModifiedSubtitle;
 
     // Ghost mode state
     private bool _ghostModeEnabled;
@@ -50,31 +47,33 @@ public partial class MainWindow : Window {
     // Properties
     public bool IsHeaderEditing
     {
-        get => _isHeaderEditing;
+        get => _viewModel.IsHeaderEditing;
         set
         {
-            _isHeaderEditing = value;
-            HeaderText.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
-            HeaderTextEdit.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
-            if (value)
+            if (_viewModel.IsHeaderEditing != value)
             {
-                OnPropertyChanged(nameof(IsHeaderEditing));
-                HeaderTextEdit.Text = HeaderText.Text;
-                HeaderTextEdit.Focus();
-                HeaderTextEdit.SelectAll();
+                _viewModel.IsHeaderEditing = value;
+                HeaderText.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+                HeaderTextEdit.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+                if (value)
+                {
+                    _viewModel.HeaderTextEdit = HeaderText.Text;
+                    HeaderTextEdit.Text = HeaderText.Text;
+                    HeaderTextEdit.Focus();
+                    HeaderTextEdit.SelectAll();
+                }
             }
         }
     }
 
     public bool ShowNotesDirectory
     {
-        get => _showNotesDirectory;
+        get => _viewModel.ShowNotesDirectory;
         set
         {
-            if (_showNotesDirectory != value)
+            if (_viewModel.ShowNotesDirectory != value)
             {
-                _showNotesDirectory = value;
-                OnPropertyChanged(nameof(ShowNotesDirectory));
+                _viewModel.ShowNotesDirectory = value;
                 UpdateShowHideNotesDirectoryButton();
             }
         }
@@ -82,13 +81,12 @@ public partial class MainWindow : Window {
 
     public bool ShowModifiedSubtitle
     {
-        get => _showModifiedSubtitle;
+        get => _viewModel.ShowModifiedSubtitle;
         set
         {
-            if (_showModifiedSubtitle != value)
+            if (_viewModel.ShowModifiedSubtitle != value)
             {
-                _showModifiedSubtitle = value;
-                OnPropertyChanged(nameof(ShowModifiedSubtitle));
+                _viewModel.ShowModifiedSubtitle = value;
             }
         }
     }
@@ -542,12 +540,6 @@ public partial class MainWindow : Window {
         NotesPanel.BeginAnimation(UIElement.OpacityProperty, anim);
     }
 
-    // INotifyPropertyChanged implementation for binding
-    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
-    protected virtual void OnPropertyChanged(string propertyName)
-    {
-        PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(propertyName));
-    }
     private void HideNotesPanelAndMinimizeNotepad() {
         NotesPanel.Visibility = Visibility.Collapsed;
         _notepadService.Minimize();
