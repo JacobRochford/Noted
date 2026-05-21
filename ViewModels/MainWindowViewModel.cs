@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Threading;
 using Noted.Models;
@@ -7,15 +9,71 @@ using Noted.Services;
 namespace Noted.ViewModels;
 
 
-public sealed class MainWindowViewModel : IDisposable {
+public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
     private readonly NoteFileService _fileService;
     private readonly AppSettingsService _settingsService;
     private DispatcherTimer? _debounceTimer;
+    private string _headerTextEdit = "";
+    private bool _isHeaderEditing;
+    private bool _showNotesDirectory;
+    private bool _showModifiedSubtitle;
+    private string _headerText = "Noted.";
 
     public ObservableCollection<NoteItem> Notes { get; } = new();
-    public string HeaderText { get; private set; } = "Noted.";
+    
+    public string HeaderText {
+        get => _headerText;
+        private set {
+            if (_headerText != value) {
+                _headerText = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public string HeaderTextEdit {
+        get => _headerTextEdit;
+        set {
+            if (_headerTextEdit != value) {
+                _headerTextEdit = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool IsHeaderEditing {
+        get => _isHeaderEditing;
+        set {
+            if (_isHeaderEditing != value) {
+                _isHeaderEditing = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool ShowNotesDirectory {
+        get => _showNotesDirectory;
+        set {
+            if (_showNotesDirectory != value) {
+                _showNotesDirectory = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool ShowModifiedSubtitle {
+        get => _showModifiedSubtitle;
+        set {
+            if (_showModifiedSubtitle != value) {
+                _showModifiedSubtitle = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     public string? SelectedFileName { get; set; }
     public event EventHandler? NotesLoaded;
+    public event PropertyChangedEventHandler? PropertyChanged;
 
     public MainWindowViewModel(NoteFileService fileService, AppSettingsService settingsService) {
         _fileService = fileService;
@@ -86,5 +144,9 @@ public sealed class MainWindowViewModel : IDisposable {
         _debounceTimer?.Stop();
         _debounceTimer = null;
         _fileService.FilesChanged -= OnFilesChanged;
+    }
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null) {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
