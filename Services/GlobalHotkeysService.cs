@@ -27,6 +27,12 @@ public sealed class GlobalHotkeysService : IDisposable {
     /// <summary>Registers a global hotkey. Hotkey format: "Ctrl+Shift" + "Space" etc.</summary>
     public bool Register(string modifiersString, string keyString, Action onHotkeyPressed) {
         try {
+            // Ensure any previous registration is cleaned up
+            if (_isRegistered)
+            {
+                Unregister();
+            }
+
             _onHotkeyPressed = onHotkeyPressed;
 
             // Parse modifier keys

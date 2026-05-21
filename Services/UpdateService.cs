@@ -8,8 +8,8 @@ namespace Noted.Services;
 
 public static class UpdateService
 {
-    private const string LatestReleaseApiUrl = "https://api.github.com/repos/JacobRochford/Noted./releases/latest";
-    private const string ReleasesPageUrl = "https://github.com/JacobRochford/Noted./releases/latest";
+    private const string LatestReleaseApiUrl = "https://api.github.com/repos/JacobRochford/Noted/releases/latest";
+    private const string ReleasesPageUrl = "https://github.com/JacobRochford/Noted/releases/latest";
 
     private static readonly HttpClient _httpClient = new()
     {
