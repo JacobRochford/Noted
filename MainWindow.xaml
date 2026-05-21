@@ -312,6 +312,117 @@
                               Margin="8"
                               Opacity="0.95">
 
+                        <!-- Search / filter bar -->
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                            <Border BorderThickness="1" CornerRadius="6" Padding="6,0">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="White"/>
+                                        <Setter Property="BorderBrush" Value="#C9DFEC"/>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                <Setter Property="BorderBrush" Value="#5BA8C8"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Search icon -->
+                                    <TextBlock Grid.Column="0"
+                                               Text="&#xE721;"
+                                               FontFamily="Segoe MDL2 Assets"
+                                               FontSize="13"
+                                               Foreground="#7AAEC5"
+                                               VerticalAlignment="Center"
+                                               Margin="2,0,6,0"
+                                               IsHitTestVisible="False"/>
+
+                                    <!-- Placeholder rendered BEHIND the TextBox (same column, earlier in XML order) -->
+                                    <TextBlock Grid.Column="1"
+                                               Text="Search notes..."
+                                               FontSize="12"
+                                               Foreground="#A0B8C8"
+                                               VerticalAlignment="Center"
+                                               Padding="0,7"
+                                               IsHitTestVisible="False">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+
+                                    <!-- Search TextBox (rendered on top of placeholder) -->
+                                    <TextBox x:Name="SearchBox"
+                                             Grid.Column="1"
+                                             FontSize="12"
+                                             Foreground="#333333"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             Padding="0,7"
+                                             VerticalAlignment="Center"
+                                             KeyDown="SearchBox_KeyDown"/>
+
+                                    <!-- Clear button (visible only when FilterText is non-empty) -->
+                                    <Button Grid.Column="2"
+                                            x:Name="ClearSearchButton"
+                                            Content="&#xE711;"
+                                            FontFamily="Segoe MDL2 Assets"
+                                            FontSize="11"
+                                            Foreground="#7AAEC5"
+                                            Cursor="Hand"
+                                            Padding="6,6"
+                                            Click="ClearSearchButton_Click">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="bg" Background="Transparent" CornerRadius="4"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="bg" Property="Background" Value="#E0F0FA"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <!-- No-results message (shown when filter matches nothing) -->
+                        <TextBlock DockPanel.Dock="Top"
+                                   Text="No notes match your search."
+                                   HorizontalAlignment="Center"
+                                   Margin="0,16,0,0"
+                                   Foreground="#A0B8C8"
+                                   FontStyle="Italic"
+                                   FontSize="12"
+                                   Visibility="{Binding HasNoFilterResults, Converter={StaticResource BoolToVisibility}}"/>
+
                         <!-- File list -->
                         <ListBox x:Name="FileList"
                                  Foreground="#333333"
