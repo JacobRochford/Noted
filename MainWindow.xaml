@@ -413,7 +413,7 @@
                                                                Foreground="#5F7480"
                                                                TextTrimming="CharacterEllipsis"
                                                                ToolTip="{Binding Subtitle}"
-                                                               Visibility="{Binding DataContext.ShowModifiedSubtitle, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}"/>
+                                                               Visibility="{Binding DataContext.ShowModifiedSubtitle, Converter={StaticResource BoolToVisibility}}"/>
                                                 </StackPanel>
                                                 <TextBox x:Name="EditTextBox" 
                                                          Text="{Binding EditableName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -666,11 +666,11 @@
                                                    TextAlignment="Right"/>
                                     </Grid>
                                     <Slider x:Name="DefaultOpacitySlider"
-                                            Minimum="20"
+                                            Minimum="0"
                                             Maximum="100"
                                             Value="95"
                                             SmallChange="1"
-                                            LargeChange="10"
+                                            LargeChange="1"
                                             TickFrequency="1"
                                             IsSnapToTickEnabled="False"
                                             Margin="0,0,0,14"/>
@@ -710,11 +710,11 @@
                                                    TextAlignment="Right"/>
                                     </Grid>
                                     <Slider x:Name="GhostModeOpacitySlider"
-                                            Minimum="5"
-                                            Maximum="95"
+                                            Minimum="0"
+                                            Maximum="100"
                                             Value="75"
                                             SmallChange="1"
-                                            LargeChange="10"
+                                            LargeChange="1"
                                             TickFrequency="1"
                                             IsSnapToTickEnabled="False"
                                             IsEnabled="{Binding ElementName=GhostModeOption, Path=IsChecked}"/>
@@ -792,7 +792,7 @@
                                                Foreground="#5F7480"
                                                TextWrapping="Wrap"
                                                Margin="0,6,0,10"
-                                               Visibility="{Binding ShowNotesDirectory, Converter={StaticResource BoolToVisibility}, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                               Visibility="{Binding ShowNotesDirectory, Converter={StaticResource BoolToVisibility}}"/>
                                     <Button x:Name="ChangeFolderButton"
                                             Content="Change Folder"
                                             Click="ChangeFolderButton_Click"
