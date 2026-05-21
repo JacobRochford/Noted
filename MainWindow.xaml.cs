@@ -152,6 +152,10 @@ public partial class MainWindow : Window {
         HeaderText.MouseLeftButtonDown += HeaderText_MouseLeftButtonDown;
         HeaderTextEdit.LostFocus += HeaderEditBox_LostFocus;
         HeaderTextEdit.KeyDown += HeaderEditBox_KeyDown;
+        SearchBox.TextChanged += SearchBox_TextChanged;
+        SearchBox.GotFocus += SearchBox_GotFocus;
+        SearchBox.LostFocus += SearchBox_LostFocus;
+        _viewModel.PropertyChanged += OnViewModelFilterTextChanged;
     }
     private void HeaderEditBox_LostFocus(object sender, RoutedEventArgs e)
     {
@@ -361,8 +365,6 @@ public partial class MainWindow : Window {
     private void PinNoteButton_Click(object sender, RoutedEventArgs e) {
         if (sender is FrameworkElement element && element.DataContext is NoteItem note) {
             _viewModel.TogglePin(note);
-            FileList.ItemsSource = null;
-            FileList.ItemsSource = _viewModel.Notes;
         }
     }
 
@@ -728,8 +730,10 @@ public partial class MainWindow : Window {
 
             var changed = _fileService.ChangeNotesDirectory(dialog.FolderName);
             _viewModel.SelectedFileName = null;
-            if (changed)
+            if (changed) {
+                _viewModel.ClearFilter();
                 _viewModel.LoadNotes();
+            }
 
             UpdateNotesDirectoryDisplay();
             UpdateSettingsView();
@@ -928,6 +932,42 @@ public partial class MainWindow : Window {
 
         if (parentObject is T parent) return parent;
         return FindVisualParent<T>(parentObject);
+    }
+
+    private void SearchBox_GotFocus(object sender, RoutedEventArgs e) {
+        // WS_EX_NOACTIVATE blocks all keyboard input. Strip it while the search
+        // box is focused (same pattern as the header edit TextBox).
+        var hwnd = new WindowInteropHelper(this).Handle;
+        int exStyle = WindowInterop.GetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE);
+        WindowInterop.SetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE, exStyle & ~WindowInterop.WS_EX_NOACTIVATE);
+        WindowInterop.SetForegroundWindow(hwnd);
+    }
+
+    private void SearchBox_LostFocus(object sender, RoutedEventArgs e) {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        int exStyle = WindowInterop.GetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE);
+        WindowInterop.SetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE, exStyle | WindowInterop.WS_EX_NOACTIVATE);
+    }
+
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) {
+        _viewModel.FilterText = SearchBox.Text;
+    }
+
+    private void OnViewModelFilterTextChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) {
+        if (e.PropertyName == nameof(MainWindowViewModel.FilterText) && SearchBox.Text != _viewModel.FilterText)
+            SearchBox.Text = _viewModel.FilterText;
+    }
+
+    private void SearchBox_KeyDown(object sender, KeyEventArgs e) {
+        if (e.Key == Key.Escape && !string.IsNullOrEmpty(_viewModel.FilterText)) {
+            _viewModel.ClearFilter(); // triggers OnViewModelFilterTextChanged → SearchBox.Text = ""
+            e.Handled = true; // keep the panel open; don't bubble to the window-level Escape handler
+        }
+    }
+
+    private void ClearSearchButton_Click(object sender, RoutedEventArgs e) {
+        _viewModel.ClearFilter(); // triggers OnViewModelFilterTextChanged → SearchBox.Text = ""
+        SearchBox.Focus();
     }
 
     #endregion
@@ -1165,7 +1205,11 @@ public partial class MainWindow : Window {
         HeaderText.MouseLeftButtonDown -= HeaderText_MouseLeftButtonDown;
         HeaderTextEdit.LostFocus -= HeaderEditBox_LostFocus;
         HeaderTextEdit.KeyDown -= HeaderEditBox_KeyDown;
-        
+        SearchBox.TextChanged -= SearchBox_TextChanged;
+        SearchBox.GotFocus -= SearchBox_GotFocus;
+        SearchBox.LostFocus -= SearchBox_LostFocus;
+        _viewModel.PropertyChanged -= OnViewModelFilterTextChanged;
+
         _viewModel.NotesLoaded -= OnNotesLoaded;
         _viewModel.Dispose();
         _notepadService.Dispose();
