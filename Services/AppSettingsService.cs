@@ -12,6 +12,7 @@ public enum NoteTimestampPlacement {
 /// Manages application settings stored in JSON format in the local app data folder.
 public sealed class AppSettingsService {
     private readonly string _settingsFilePath;
+    private AppSettings? _cachedSettings;
 
     /// Gets the directory where settings are stored.
     public string StorageDirectory { get; }
@@ -105,14 +106,21 @@ public sealed class AppSettingsService {
     }
 
     private AppSettings LoadSettings() {
-        if (!File.Exists(_settingsFilePath))
-            return new AppSettings();
+        if (_cachedSettings is not null)
+            return _cachedSettings;
+
+        if (!File.Exists(_settingsFilePath)) {
+            _cachedSettings = new AppSettings();
+            return _cachedSettings;
+        }
 
         try {
             var json = File.ReadAllText(_settingsFilePath);
-            return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            _cachedSettings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            return _cachedSettings;
         } catch (JsonException) {
-            // Settings file is corrupted; return defaults
+            // Settings file is corrupted; return defaults without caching so
+            // a subsequent save can overwrite the bad file cleanly.
             return new AppSettings();
         }
     }
@@ -120,6 +128,7 @@ public sealed class AppSettingsService {
     private void SaveSettings(AppSettings settings) {
         var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(_settingsFilePath, json);
+        _cachedSettings = settings;
     }
 
     /// Represents the application settings stored in JSON.
