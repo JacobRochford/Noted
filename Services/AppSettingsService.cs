@@ -9,8 +9,14 @@ public enum NoteTimestampPlacement {
     Bottom
 }
 
+/// Controls how clicking a folder item navigates.
+public enum FolderNavigationMode {
+    DrillDown,  // replace list with folder's contents (default)
+    Expand      // expand/collapse inline within the root list
+}
+
 /// Manages application settings stored in JSON format in the local app data folder.
-public sealed class AppSettingsService {
+public sealed class AppSettingsService : IAppSettingsService {
     private readonly string _settingsFilePath;
     private AppSettings? _cachedSettings;
 
@@ -96,6 +102,9 @@ public sealed class AppSettingsService {
     public double LoadDefaultOpacity() => LoadSetting(s => s.DefaultOpacity);
     public void SaveDefaultOpacity(double opacity) => SaveSetting(s => s with { DefaultOpacity = opacity });
 
+    public FolderNavigationMode LoadFolderNavigationMode() => LoadSetting(s => s.FolderNavigationMode);
+    public void SaveFolderNavigationMode(FolderNavigationMode mode) => SaveSetting(s => s with { FolderNavigationMode = mode });
+
     private T LoadSetting<T>(Func<AppSettings, T> selector) {
         return selector(LoadSettings());
     }
@@ -148,5 +157,6 @@ public sealed class AppSettingsService {
         public bool GhostModeEnabled { get; init; } = false;
         public double GhostModeOpacity { get; init; } = 0.25;
         public double DefaultOpacity { get; init; } = 0.88;
+        public FolderNavigationMode FolderNavigationMode { get; init; } = FolderNavigationMode.DrillDown;
     }
 }
