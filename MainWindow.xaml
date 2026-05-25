@@ -306,7 +306,7 @@
 
                 <!-- Separator -->
                 <Border DockPanel.Dock="Top"
-                    Height="1" Background="#D0E4EE" Margin="0,0,0,2"/>
+                    Height="1" Background="#D0E4EE" Margin="0,2,0,6"/>
 
                 <Grid>
                     <Border x:Name="NotesContentBackground"
@@ -319,9 +319,72 @@
                               Margin="8"
                               Opacity="0.95">
 
+                        <!-- Navigation breadcrumb bar – visible when inside a subfolder -->
+                        <Border DockPanel.Dock="Top"
+                                Margin="0,0,0,6"
+                                Background="#E8F4FA"
+                                BorderBrush="#C9DFEC"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="6,5">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CanNavigateUp}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0"
+                                        x:Name="NavigateUpButton"
+                                        Content="&#xE72B;"
+                                        FontFamily="Segoe MDL2 Assets"
+                                        FontSize="12"
+                                        Foreground="#2C6E91"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Padding="4,2"
+                                        Cursor="Hand"
+                                        ToolTip="Back to parent folder"
+                                        AutomationProperties.Name="Navigate up"
+                                        Click="NavigateUpButton_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="bg"
+                                                    Background="Transparent"
+                                                    CornerRadius="4"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="bg" Property="Background" Value="#DCEEF8"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding CurrentFolderName}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Foreground="#2C6E91"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Margin="4,0,0,0"/>
+                            </Grid>
+                        </Border>
+
                         <!-- Search / filter bar -->
                         <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
-                            <Border BorderThickness="1" CornerRadius="6" Padding="6,0">
+                            <Border BorderThickness="1" CornerRadius="6" Padding="8,0">
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Setter Property="Background" Value="White"/>
@@ -438,6 +501,7 @@
                                  Padding="0"
                                  SelectionChanged="FileList_SelectionChanged"
                                  KeyDown="FileList_KeyDown"
+                                 ContextMenuOpening="FileList_ContextMenuOpening"
                                  MinHeight="60"
                                  VerticalAlignment="Stretch"
                                  DockPanel.Dock="Bottom"
@@ -445,55 +509,79 @@
                                  Margin="0,0,4,0">
                                 <ListBox.ContextMenu>
                                     <ContextMenu>
-                                        <MenuItem Header="Open"
+                                        <MenuItem x:Name="OpenNoteMenuItem"
+                                                  Header="Open"
                                                   Click="OpenSelectedNote_Click"
                                                   InputGestureText="Enter"
                                                   ToolTip="Open this note (Enter)">
                                             <MenuItem.Icon>
-                                                <Image Width="16" Height="16" Source="pack://application:,,,/Resources/open.png"/>
+                                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8E5;" FontSize="14" Foreground="#2C6E91"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
-                                        <MenuItem Header="Rename"
+                                        <MenuItem x:Name="OpenFolderMenuItem"
+                                                  Header="Open Folder"
+                                                  Click="OpenFolderMenuItem_Click"
+                                                  InputGestureText="Enter"
+                                                  ToolTip="Navigate into this folder (Enter)">
+                                            <MenuItem.Icon>
+                                                <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="#2C6E91"/>
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <MenuItem x:Name="RenameMenuItem"
+                                                  Header="Rename"
                                                   Click="RenameNote_Click"
                                                   InputGestureText="F2"
-                                                  ToolTip="Rename this note (F2)">
+                                                  ToolTip="Rename (F2)">
                                             <MenuItem.Icon>
-                                                <Image Width="16" Height="16" Source="pack://application:,,,/Resources/rename.png"/>
+                                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8AC;" FontSize="14" Foreground="#2C6E91"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
-                                        <MenuItem Header="Copy Note Name"
+                                        <MenuItem x:Name="CopyNameMenuItem"
+                                                  Header="Copy Name"
                                                   Click="CopyNoteName_Click"
                                                   InputGestureText="Ctrl+C"
-                                                  ToolTip="Copy note name to clipboard">
+                                                  ToolTip="Copy name to clipboard">
                                             <MenuItem.Icon>
-                                                <Image Width="16" Height="16" Source="pack://application:,,,/Resources/copy.png"/>
+                                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8C8;" FontSize="14" Foreground="#2C6E91"/>
+                                            </MenuItem.Icon>
+                                        </MenuItem>
+                                        <Separator x:Name="DeleteSeparator"/>
+                                        <MenuItem x:Name="DeleteMenuItem"
+                                                  Header="Delete"
+                                                  Click="DeleteNoteButton_Click"
+                                                  InputGestureText="Del"
+                                                  ToolTip="Delete (Del)">
+                                            <MenuItem.Icon>
+                                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE74D;" FontSize="14" Foreground="#2C6E91"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                         <Separator/>
-                                        <MenuItem Header="Delete Note"
-                                                  Click="DeleteNoteButton_Click"
-                                                  InputGestureText="Del"
-                                                  ToolTip="Delete this note (Del)">
+                                        <MenuItem x:Name="NewFolderMenuItem"
+                                                  Header="New Folder"
+                                                  Click="NewFolderMenuItem_Click"
+                                                  ToolTip="Create a new subfolder here">
                                             <MenuItem.Icon>
-                                                <Image Width="16" Height="16" Source="pack://application:,,,/Resources/delete.png"/>
+                                                <TextBlock Text="&#xE8F4;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="#2C6E91"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                     </ContextMenu>
                                 </ListBox.ContextMenu>
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid>
+                                        <Grid MinHeight="32" Margin="{Binding IndentLevel, Converter={StaticResource IndentLevelToMarginConverter}}">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="16"/> <!-- Pin icon space, moved slightly more left -->
+                                                <ColumnDefinition Width="18"/>
                                                 <ColumnDefinition Width="*" MinWidth="50"/>
                                                 <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <!-- Pin icon column -->
+                                            <!-- Pin / folder-icon column -->
                                             <Grid Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                                <Button Width="16" Height="16" Padding="1" Margin="-7,0,0,0"
+                                                <!-- Pin button – hidden for folder rows via last DataTrigger -->
+                                                <Button Width="16" Height="16" Padding="1" Margin="-6,0,0,0"
                                                         FontFamily="Segoe MDL2 Assets" FontSize="12"
                                                         Content="&#xE718;"
                                                         ToolTip="Pin note"
+                                                        AutomationProperties.Name="Pin note"
                                                         Foreground="#C9302C"
                                                         Cursor="Hand"
                                                         Background="Transparent"
@@ -512,26 +600,57 @@
                                                                     <Setter Property="Visibility" Value="Visible"/>
                                                                     <Setter Property="Opacity" Value="0.8"/>
                                                                 </DataTrigger>
+                                                                <!-- Must be last – overrides hover/pin triggers for folder items -->
+                                                                <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                                <!-- Child notes in expanded folders cannot be pinned -->
+                                                                <DataTrigger Binding="{Binding IndentLevel}" Value="1">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
                                                     </Button.Style>
                                                 </Button>
+                                                <!-- Folder icon – visible only for folder rows; icon changes when expanded -->
+                                                <TextBlock FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="14"
+                                                           Foreground="#5BA8C8"
+                                                           VerticalAlignment="Center"
+                                                           HorizontalAlignment="Left"
+                                                           Margin="-6,0,0,0">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="&#xE8B7;"/>
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsFolder}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                                    <Setter Property="Text" Value="&#xE8DA;"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
                                             </Grid>
                                             <!-- Note display column -->
                                             <Grid Grid.Column="1" Margin="0,0,8,0">
                                                 <StackPanel x:Name="DisplayPanel">
                                                     <TextBlock x:Name="DisplayTextBlock"
                                                                Text="{Binding DisplayName}"
+                                                               FontSize="13"
                                                                FontWeight="SemiBold"
                                                                TextTrimming="CharacterEllipsis"
                                                                ToolTip="{Binding DisplayName}"/>
                                                     <TextBlock Text="{Binding Subtitle}"
                                                                Margin="0,2,0,0"
                                                                FontSize="11"
-                                                               Foreground="#5F7480"
+                                                               Foreground="#7A93A0"
                                                                TextTrimming="CharacterEllipsis"
                                                                ToolTip="{Binding Subtitle}"
-                                                               Visibility="{Binding DataContext.ShowModifiedSubtitle, Converter={StaticResource BoolToVisibility}}"/>
+                                                               Visibility="{Binding DataContext.ShowModifiedSubtitle, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}"/>
                                                 </StackPanel>
                                                 <TextBox x:Name="EditTextBox" 
                                                          Text="{Binding EditableName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -545,10 +664,27 @@
                                             </Grid>
                                             <!-- Action buttons column -->
                                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal">
+                                                <StackPanel.Style>
+                                                    <Style TargetType="StackPanel">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                            <!-- Child notes (in expanded folders) are read-only; suppress all action buttons -->
+                                                            <DataTrigger Binding="{Binding IndentLevel}" Value="1">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </StackPanel.Style>
                                                 <Button Content="Rename"
                                                         Click="RenameNote_Click"
-                                                        Padding="8,2"
-                                                        FontSize="10"
+                                                        Padding="8,4"
+                                                        FontSize="11"
                                                         FontWeight="SemiBold"
                                                         Foreground="#2C6E91"
                                                         Cursor="Hand"
@@ -577,14 +713,15 @@
                                                     </Button.Template>
                                                 </Button>
                                                 <Button Click="DeleteNoteButton_Click"
-                                                        Width="20"
-                                                        Height="20"
+                                                        Width="24"
+                                                        Height="24"
                                                         Margin="6,0,0,0"
                                                         Padding="0"
                                                         FontFamily="Segoe MDL2 Assets"
-                                                        FontSize="12"
+                                                        FontSize="13"
                                                         Content="&#xE74D;"
                                                         ToolTip="Delete note"
+                                                        AutomationProperties.Name="Delete"
                                                         Foreground="#C9302C"
                                                         Cursor="Hand"
                                                         Background="Transparent"
@@ -623,15 +760,18 @@
                                 </ListBox.ItemTemplate>
                                 <ListBox.ItemContainerStyle>
                                     <Style TargetType="ListBoxItem">
-                                        <Setter Property="Padding" Value="8,6"/>
+                                        <Setter Property="Padding" Value="10,7"/>
                                         <Setter Property="Margin" Value="0,2"/>
                                         <Setter Property="Cursor" Value="Hand"/>
+                                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                                         <EventSetter Event="PreviewMouseLeftButtonUp" Handler="ListBoxItem_MouseLeftButtonUp"/>
                                         <Setter Property="Template">
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="ListBoxItem">
                                                     <Border x:Name="ItemBorder"
                                                             Background="Transparent"
+                                                            BorderBrush="Transparent"
+                                                            BorderThickness="1"
                                                             CornerRadius="6"
                                                             Padding="{TemplateBinding Padding}">
                                                         <ContentPresenter/>
