@@ -37,4 +37,16 @@ internal static class WindowInterop {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetProp(IntPtr hWnd, string lpString, IntPtr hData);
+
+    internal static void StripNoActivate(IntPtr hwnd)
+    {
+        int style = GetWindowLong(hwnd, GWL_EXSTYLE);
+        SetWindowLong(hwnd, GWL_EXSTYLE, style & ~WS_EX_NOACTIVATE);
+    }
+
+    internal static void RestoreNoActivate(IntPtr hwnd)
+    {
+        int style = GetWindowLong(hwnd, GWL_EXSTYLE);
+        SetWindowLong(hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE);
+    }
 }
