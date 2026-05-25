@@ -3,32 +3,28 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace Noted.Helpers
-{
-    public class WidthToActionButtonVisibilityConverter : IValueConverter
-    {
-        // param: "delete" or "rename"
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            if (value is double width && parameter is string which)
-            {
-                if (which == "delete")
-                {
-                    // Hide delete button if width < 270
-                    return width < 270 ? Visibility.Collapsed : Visibility.Visible;
-                }
-                if (which == "rename")
-                {
-                    // Hide rename button if width < 250
-                    return width < 250 ? Visibility.Collapsed : Visibility.Visible;
-                }
-            }
-            return Visibility.Visible;
-        }
+namespace Noted.Helpers;
 
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+public class WidthToActionButtonVisibilityConverter : IValueConverter
+{
+    private const double DeleteButtonHideWidth = 270;
+    private const double RenameButtonHideWidth = 250;
+
+    // param: "delete" or "rename"
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is double width && parameter is string which)
         {
-            throw new NotImplementedException();
+            if (which == "delete")
+                return width < DeleteButtonHideWidth ? Visibility.Collapsed : Visibility.Visible;
+            if (which == "rename")
+                return width < RenameButtonHideWidth ? Visibility.Collapsed : Visibility.Visible;
         }
+        return Visibility.Visible;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
     }
 }
