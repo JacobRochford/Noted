@@ -1,14 +1,12 @@
 namespace Noted.Helpers;
 
-using System.Text.RegularExpressions;
-
 public static class HotkeyConstants
 {
     // Valid modifier names
-    public static readonly List<string> ValidModifiers = new() { "Ctrl", "Alt", "Shift", "Win" };
+    public static readonly IReadOnlyList<string> ValidModifiers = new List<string> { "Ctrl", "Alt", "Shift", "Win" };
 
     // Valid key options (no special characters - alphanumeric and function keys only)
-    public static readonly List<string> ValidKeys = new()
+    public static readonly IReadOnlyList<string> ValidKeys = new List<string>
     {
         "Space", "Tab", "Enter", "Escape",
         "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",

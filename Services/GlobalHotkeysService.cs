@@ -4,7 +4,6 @@ using System.Windows.Interop;
 
 namespace Noted.Services;
 
-/// <summary>Manages global system-wide hotkeys for the application.</summary>
 public sealed class GlobalHotkeysService : IDisposable {
     private const int WM_HOTKEY = 0x0312;
     private const int HOTKEY_ID = 9001;
@@ -17,17 +16,16 @@ public sealed class GlobalHotkeysService : IDisposable {
 
     private readonly Window _window;
     private HwndSource? _hwndSource;
-    private bool _isRegistered = false;
+    private bool _isRegistered;
     private Action? _onHotkeyPressed;
 
     public GlobalHotkeysService(Window window) {
         _window = window;
     }
 
-    /// <summary>Registers a global hotkey. Hotkey format: "Ctrl+Shift" + "Space" etc.</summary>
+    // format: "Ctrl+Shift", "N"
     public bool Register(string modifiersString, string keyString, Action onHotkeyPressed) {
         try {
-            // Ensure any previous registration is cleaned up
             if (_isRegistered)
             {
                 Unregister();
@@ -35,45 +33,33 @@ public sealed class GlobalHotkeysService : IDisposable {
 
             _onHotkeyPressed = onHotkeyPressed;
 
-            // Parse modifier keys
             uint modifiers = ParseModifiers(modifiersString);
-
-            // Parse the virtual key
             uint virtualKey = ParseVirtualKey(keyString);
 
             if (virtualKey == 0) {
-                System.Diagnostics.Debug.WriteLine($"Failed to parse virtual key: {keyString}");
                 return false;
             }
 
-            // Get window handle
             IntPtr hwnd = new WindowInteropHelper(_window).Handle;
             if (hwnd == IntPtr.Zero) {
-                System.Diagnostics.Debug.WriteLine("Window handle not available yet");
                 return false;
             }
 
-            // Register with Windows
             if (!RegisterHotKey(hwnd, HOTKEY_ID, modifiers, virtualKey)) {
                 int error = Marshal.GetLastWin32Error();
-                System.Diagnostics.Debug.WriteLine($"RegisterHotKey failed with error: {error}");
                 return false;
             }
 
-            // Hook into window messages
             _hwndSource = HwndSource.FromHwnd(hwnd);
             _hwndSource?.AddHook(HwndHook);
 
             _isRegistered = true;
-            System.Diagnostics.Debug.WriteLine($"Global hotkey registered: {modifiersString}+{keyString}");
             return true;
         } catch (Exception ex) {
-            System.Diagnostics.Debug.WriteLine($"Error registering hotkey: {ex.Message}");
             return false;
         }
     }
 
-    /// <summary>Unregisters the global hotkey.</summary>
     public void Unregister() {
         if (!_isRegistered)
             return;
@@ -87,9 +73,7 @@ public sealed class GlobalHotkeysService : IDisposable {
             _hwndSource?.RemoveHook(HwndHook);
             _hwndSource = null;
             _isRegistered = false;
-            System.Diagnostics.Debug.WriteLine("Global hotkey unregistered");
         } catch (Exception ex) {
-            System.Diagnostics.Debug.WriteLine($"Error unregistering hotkey: {ex.Message}");
         }
     }
 
@@ -124,13 +108,11 @@ public sealed class GlobalHotkeysService : IDisposable {
     private uint ParseVirtualKey(string keyString) {
         string key = keyString.Trim().ToUpper();
 
-        // Common keys
         return key switch {
             "SPACE" => 0x20,
             "ENTER" or "RETURN" => 0x0D,
             "TAB" => 0x09,
             "ESC" or "ESCAPE" => 0x1B,
-            "BACKSPACE" => 0x08,
             "DELETE" or "DEL" => 0x2E,
             "INSERT" or "INS" => 0x2D,
             "HOME" => 0x24,
@@ -167,16 +149,16 @@ public sealed class GlobalHotkeysService : IDisposable {
             "X" => 0x58,
             "Y" => 0x59,
             "Z" => 0x5A,
-            "0" or "ZERO" => 0x30,
-            "1" or "ONE" => 0x31,
-            "2" or "TWO" => 0x32,
-            "3" or "THREE" => 0x33,
-            "4" or "FOUR" => 0x34,
-            "5" or "FIVE" => 0x35,
-            "6" or "SIX" => 0x36,
-            "7" or "SEVEN" => 0x37,
-            "8" or "EIGHT" => 0x38,
-            "9" or "NINE" => 0x39,
+            "0" => 0x30,
+            "1" => 0x31,
+            "2" => 0x32,
+            "3" => 0x33,
+            "4" => 0x34,
+            "5" => 0x35,
+            "6" => 0x36,
+            "7" => 0x37,
+            "8" => 0x38,
+            "9" => 0x39,
             "F1" => 0x70,
             "F2" => 0x71,
             "F3" => 0x72,
