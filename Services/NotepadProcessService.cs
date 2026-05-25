@@ -6,7 +6,7 @@ using MessageBox = System.Windows.MessageBox;
 
 namespace Noted.Services;
 
-public sealed class NotepadProcessService : IDisposable {
+public sealed class NotepadProcessService : INotepadProcessService {
     private Process? _notepadProcess;
     private string? _openFilePath;
 
