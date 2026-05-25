@@ -4,9 +4,10 @@ using Noted.Models;
 
 namespace Noted.Services;
 
-public sealed class NoteFileService : IDisposable {
-    private readonly AppSettingsService _settingsService;
+public sealed class NoteFileService : INoteFileService {
+    private readonly IAppSettingsService _settingsService;
     private FileSystemWatcher? _watcher;
+    private FileSystemWatcher? _directoryWatcher;
     private static readonly TimeSpan DeletedNoteRetention = TimeSpan.FromDays(7);
     private static readonly HashSet<string> ReservedFileNames = new(StringComparer.OrdinalIgnoreCase) {
         "CON", "PRN", "AUX", "NUL",
@@ -15,21 +16,36 @@ public sealed class NoteFileService : IDisposable {
     };
 
     public string NotesDirectory { get; private set; }
+    public string CurrentDirectory { get; private set; } = "";
+    public string CurrentFolderName {
+        get {
+            if (string.Equals(CurrentDirectory, NotesDirectory, StringComparison.OrdinalIgnoreCase))
+                return "";
+            var relative = Path.GetRelativePath(
+                Path.GetFullPath(NotesDirectory),
+                Path.GetFullPath(CurrentDirectory));
+            return relative.Replace(Path.DirectorySeparatorChar, '/').Replace("/", " / ");
+        }
+    }
+    public bool CanNavigateUp =>
+        !string.Equals(CurrentDirectory, NotesDirectory, StringComparison.OrdinalIgnoreCase);
     public string DeletedNotesDirectory { get; }
 
     public event EventHandler? FilesChanged;
 
-    public NoteFileService(AppSettingsService settingsService) {
+    public NoteFileService(IAppSettingsService settingsService) {
         _settingsService = settingsService;
         DeletedNotesDirectory = Path.Combine(_settingsService.StorageDirectory, "DeletedNotes");
         NotesDirectory = ResolveInitialNotesDirectory();
+        CurrentDirectory = NotesDirectory;
         Directory.CreateDirectory(NotesDirectory);
         Directory.CreateDirectory(DeletedNotesDirectory);
         PurgeExpiredDeletedNotes();
     }
 
     public IReadOnlyList<NoteItem> GetNotes() {
-        return Directory.GetFiles(NotesDirectory, "*.txt")
+        if (!Directory.Exists(CurrentDirectory)) CurrentDirectory = NotesDirectory;
+        return Directory.GetFiles(CurrentDirectory, "*.txt")
             .Select(path => new FileInfo(path))
             .OrderByDescending(info => info.LastWriteTime)
             .Select(info => {
@@ -49,7 +65,7 @@ public sealed class NoteFileService : IDisposable {
         var filename = string.IsNullOrWhiteSpace(requestedName)
             ? BuildUniqueFileName(now)
             : BuildRequestedFileName(requestedName);
-        var fullPath = Path.Combine(NotesDirectory, filename);
+        var fullPath = Path.Combine(CurrentDirectory, filename);
         File.WriteAllText(fullPath, BuildNewNoteContent(now, _settingsService.LoadTimestampPlacement()));
         return filename;
     }
@@ -63,6 +79,7 @@ public sealed class NoteFileService : IDisposable {
         StopWatching();
 
         NotesDirectory = normalizedPath;
+        CurrentDirectory = normalizedPath;
         _settingsService.SaveNotesDirectory(NotesDirectory);
 
         if (wasWatching)
@@ -73,21 +90,20 @@ public sealed class NoteFileService : IDisposable {
     }
 
     public void DeleteNote(string fileName) {
-        var fullPath = Path.GetFullPath(Path.Combine(NotesDirectory, fileName));
+        var fullPath = Path.GetFullPath(Path.Combine(CurrentDirectory, fileName));
         if (!fullPath.StartsWith(Path.GetFullPath(NotesDirectory) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             return;
         if (!File.Exists(fullPath))
             return;
 
         Directory.CreateDirectory(DeletedNotesDirectory);
-        PurgeExpiredDeletedNotes();
 
         var deletedPath = BuildDeletedNotePath(fileName);
         File.Move(fullPath, deletedPath);
     }
 
     public (bool Success, string? NewFileName, string? Error) RenameNote(string oldFileName, string newDisplayName) {
-        var oldPath = Path.Combine(NotesDirectory, oldFileName);
+        var oldPath = Path.Combine(CurrentDirectory, oldFileName);
 
         var validatedFileName = ValidateAndSanitizeFileName(newDisplayName);
         if (string.IsNullOrWhiteSpace(validatedFileName))
@@ -96,7 +112,7 @@ public sealed class NoteFileService : IDisposable {
         var newFileName = validatedFileName + ".txt";
         if (newFileName == oldFileName) return (true, oldFileName, null);
 
-        var newPath = Path.Combine(NotesDirectory, newFileName);
+        var newPath = Path.Combine(CurrentDirectory, newFileName);
 
         try {
             if (!File.Exists(oldPath))
@@ -169,12 +185,12 @@ public sealed class NoteFileService : IDisposable {
     private string BuildUniqueFileName(DateTime timestamp) {
         var baseName = $"{timestamp:yyyy-MM-dd_HH-mm-ss}";
         var candidate = baseName + ".txt";
-        if (!File.Exists(Path.Combine(NotesDirectory, candidate)))
+        if (!File.Exists(Path.Combine(CurrentDirectory, candidate)))
             return candidate;
 
         for (int suffix = 1; suffix <= 99; suffix++) {
             candidate = $"{baseName}_{suffix:00}.txt";
-            if (!File.Exists(Path.Combine(NotesDirectory, candidate)))
+            if (!File.Exists(Path.Combine(CurrentDirectory, candidate)))
                 return candidate;
         }
 
@@ -187,7 +203,7 @@ public sealed class NoteFileService : IDisposable {
             throw new InvalidOperationException("Invalid or reserved file name.");
 
         var candidate = validatedFileName + ".txt";
-        if (File.Exists(Path.Combine(NotesDirectory, candidate)))
+        if (File.Exists(Path.Combine(CurrentDirectory, candidate)))
             throw new InvalidOperationException("A file with that name already exists.");
 
         return candidate;
