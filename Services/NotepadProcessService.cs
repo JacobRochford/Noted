@@ -20,9 +20,6 @@ public sealed class NotepadProcessService : IDisposable {
         if (_openFilePath == filePath && IsRunning)
             return true;
 
-
-        bool alreadyRunning = _notepadProcess != null && !_notepadProcess.HasExited;
-
         try {
             var processStartInfo = new ProcessStartInfo {
                 FileName = "notepad.exe",
@@ -36,10 +33,6 @@ public sealed class NotepadProcessService : IDisposable {
                 }
                 _notepadProcess = process;
                 _openFilePath = filePath;
-                Task.Run(() =>
-                {
-                    try { process.WaitForInputIdle(); } catch { }
-                });
             }
             return process is not null;
         } catch (Exception ex) {
@@ -58,12 +51,14 @@ public sealed class NotepadProcessService : IDisposable {
     public void Minimize() {
         if (!IsRunning)
             return;
+        var process = _notepadProcess!;
         Task.Run(() =>
         {
             try {
                 IntPtr handle = IntPtr.Zero;
                 for (int i = 0; i < 20; i++) {
-                    handle = WindowInterop.FindWindow("Notepad", null);
+                    process.Refresh();
+                    handle = process.MainWindowHandle;
                     if (handle != IntPtr.Zero)
                         break;
                     Thread.Sleep(100);
@@ -78,7 +73,8 @@ public sealed class NotepadProcessService : IDisposable {
         if (!IsRunning)
             return;
         try {
-            var handle = WindowInterop.FindWindow("Notepad", null);
+            _notepadProcess!.Refresh();
+            var handle = _notepadProcess.MainWindowHandle;
             if (handle != IntPtr.Zero) {
                 WindowInterop.ShowWindow(handle, WindowInterop.SW_SHOW);
                 WindowInterop.SetForegroundWindow(handle);
