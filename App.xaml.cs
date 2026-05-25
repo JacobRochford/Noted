@@ -56,6 +56,12 @@ public partial class App : Application
         base.OnStartup(e);
         TryCreateDesktopShortcut();
         _ = UpdateService.CheckForUpdatesAsync();
+
+        var settings = new AppSettingsService();
+        var fileService = new NoteFileService(settings);
+        var mainWindow = new MainWindow(settings, fileService, new NotepadProcessService(), new StartupService());
+        MainWindow = mainWindow;
+        mainWindow.Show();
     }
 
     protected override void OnExit(ExitEventArgs e)
