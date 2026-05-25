@@ -252,15 +252,161 @@ public sealed class NoteFileService : INoteFileService {
         StopWatching();
         _watcher = new FileSystemWatcher(NotesDirectory, "*.txt") {
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
+            IncludeSubdirectories = true,
             EnableRaisingEvents = true
         };
         _watcher.Created += OnFileSystemChanged;
         _watcher.Deleted += OnFileSystemChanged;
         _watcher.Renamed += OnFileSystemChanged;
+        // Separate watcher for directory events – Filter="*.txt" doesn't match directory names
+        _directoryWatcher = new FileSystemWatcher(NotesDirectory) {
+            NotifyFilter = NotifyFilters.DirectoryName,
+            IncludeSubdirectories = true,
+            EnableRaisingEvents = true
+        };
+        _directoryWatcher.Created += OnFileSystemChanged;
+        _directoryWatcher.Deleted += OnFileSystemChanged;
+        _directoryWatcher.Renamed += OnFileSystemChanged;
     }
 
     private void OnFileSystemChanged(object sender, FileSystemEventArgs e) {
         FilesChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public IReadOnlyList<NoteItem> GetFolders() {
+        if (!Directory.Exists(CurrentDirectory)) CurrentDirectory = NotesDirectory;
+        return Directory.GetDirectories(CurrentDirectory)
+            .Select(path => new DirectoryInfo(path))
+            .OrderBy(info => info.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(info => new NoteItem {
+                FileName = info.Name,
+                DisplayName = info.Name,
+                EditableName = info.Name,
+                Subtitle = "",
+                IsFolder = true
+            })
+            .ToList();
+    }
+
+    /// Returns .txt notes inside a direct subfolder of NotesDirectory without
+    /// changing CurrentDirectory, so Expand mode can populate inline children.
+    public IReadOnlyList<NoteItem> GetNotesInSubfolder(string subfolderName) {
+        var subfolderPath = Path.GetFullPath(Path.Combine(NotesDirectory, subfolderName));
+        var root = Path.GetFullPath(NotesDirectory);
+        // Security: subfolder must remain within the notes root
+        if (!subfolderPath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            return Array.Empty<NoteItem>();
+        if (!Directory.Exists(subfolderPath))
+            return Array.Empty<NoteItem>();
+        return Directory.GetFiles(subfolderPath, "*.txt")
+            .Select(path => new FileInfo(path))
+            .OrderByDescending(info => info.LastWriteTime)
+            .Select(info => {
+                var name = info.Name;
+                return new NoteItem {
+                    FileName = name,
+                    DisplayName = FormatNoteName(name),
+                    EditableName = Path.GetFileNameWithoutExtension(name),
+                    Subtitle = BuildSubtitle(name, info.LastWriteTime),
+                    FullPath = info.FullName
+                };
+            })
+            .ToList();
+    }
+
+    public void NavigateTo(string folderName) {
+        var target = Path.GetFullPath(Path.Combine(CurrentDirectory, folderName));
+        var root = Path.GetFullPath(NotesDirectory);
+        // Security: must remain within the notes root
+        if (!target.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(target, root, StringComparison.OrdinalIgnoreCase))
+            return;
+        if (Directory.Exists(target))
+            CurrentDirectory = target;
+    }
+
+    public void NavigateUp() {
+        if (!CanNavigateUp) return;
+        var parent = Path.GetDirectoryName(CurrentDirectory);
+        var root = Path.GetFullPath(NotesDirectory);
+        if (parent is null || !parent.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            CurrentDirectory = NotesDirectory;
+        else
+            CurrentDirectory = parent;
+    }
+
+    public (bool Success, string? Error) CreateFolder(string folderName) {
+        var sanitized = ValidateAndSanitizeFolderName(folderName);
+        if (string.IsNullOrWhiteSpace(sanitized))
+            return (false, "Invalid or reserved folder name.");
+
+        var target = Path.GetFullPath(Path.Combine(CurrentDirectory, sanitized));
+        if (!target.StartsWith(Path.GetFullPath(NotesDirectory), StringComparison.OrdinalIgnoreCase))
+            return (false, "Access denied.");
+        if (Directory.Exists(target))
+            return (false, "A folder with that name already exists.");
+
+        try {
+            Directory.CreateDirectory(target);
+            return (true, null);
+        } catch (Exception ex) {
+            return (false, ex.Message);
+        }
+    }
+
+    public (bool Success, string? Error) RenameFolder(string oldName, string newName) {
+        var sanitized = ValidateAndSanitizeFolderName(newName);
+        if (string.IsNullOrWhiteSpace(sanitized))
+            return (false, "Invalid or reserved folder name.");
+        if (string.Equals(sanitized, oldName, StringComparison.OrdinalIgnoreCase))
+            return (true, null);
+
+        var root = Path.GetFullPath(NotesDirectory) + Path.DirectorySeparatorChar;
+        var oldPath = Path.GetFullPath(Path.Combine(CurrentDirectory, oldName));
+        var newPath = Path.GetFullPath(Path.Combine(CurrentDirectory, sanitized));
+
+        if (!oldPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            return (false, "Access denied.");
+        if (!Directory.Exists(oldPath))
+            return (false, "Folder not found.");
+        if (Directory.Exists(newPath))
+            return (false, "A folder with that name already exists.");
+
+        try {
+            Directory.Move(oldPath, newPath);
+            return (true, null);
+        } catch (Exception ex) {
+            return (false, ex.Message);
+        }
+    }
+
+    public (bool Success, string? Error) DeleteFolder(string folderName) {
+        var target = Path.GetFullPath(Path.Combine(CurrentDirectory, folderName));
+        var root = Path.GetFullPath(NotesDirectory) + Path.DirectorySeparatorChar;
+
+        if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            return (false, "Access denied.");
+        if (!Directory.Exists(target))
+            return (false, "Folder not found.");
+
+        try {
+            Directory.Delete(target, recursive: true);
+            return (true, null);
+        } catch (Exception ex) {
+            return (false, ex.Message);
+        }
+    }
+
+    private static string? ValidateAndSanitizeFolderName(string value) {
+        var sanitized = Path.GetInvalidFileNameChars().Aggregate(
+            value,
+            (current, c) => current.Replace(c.ToString(), "")
+        ).Trim().TrimEnd('.');
+
+        if (string.IsNullOrWhiteSpace(sanitized) || ReservedFileNames.Contains(sanitized))
+            return null;
+
+        return sanitized;
     }
 
     private string ResolveInitialNotesDirectory() {
@@ -272,14 +418,20 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     private void StopWatching() {
-        if (_watcher == null)
-            return;
-
-        _watcher.Created -= OnFileSystemChanged;
-        _watcher.Deleted -= OnFileSystemChanged;
-        _watcher.Renamed -= OnFileSystemChanged;
-        _watcher.Dispose();
-        _watcher = null;
+        if (_watcher != null) {
+            _watcher.Created -= OnFileSystemChanged;
+            _watcher.Deleted -= OnFileSystemChanged;
+            _watcher.Renamed -= OnFileSystemChanged;
+            _watcher.Dispose();
+            _watcher = null;
+        }
+        if (_directoryWatcher != null) {
+            _directoryWatcher.Created -= OnFileSystemChanged;
+            _directoryWatcher.Deleted -= OnFileSystemChanged;
+            _directoryWatcher.Renamed -= OnFileSystemChanged;
+            _directoryWatcher.Dispose();
+            _directoryWatcher = null;
+        }
     }
 
     public void Dispose() {
