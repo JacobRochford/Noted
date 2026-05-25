@@ -12,6 +12,7 @@
     <Window.Resources>
         <local:WidthToActionButtonVisibilityConverter x:Key="WidthToActionButtonVisibilityConverter"/>
         <local:WidthToHeaderVisibilityConverter x:Key="WidthToHeaderVisibilityConverter"/>
+        <local:WidthBelowThresholdConverter x:Key="WidthBelow320" Threshold="320"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         
         <!-- Scrollbar thumb style -->
@@ -201,10 +202,12 @@
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth}" Value="320">
-                                            <Setter Property="Content" Value="&#xE710;"/>
-                                            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-                                            <Setter Property="FontSize" Value="18"/>
+                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE710;" FontSize="18"/>
+                                                </Setter.Value>
+                                            </Setter>
                                             <Setter Property="Padding" Value="10,4"/>
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -235,10 +238,12 @@
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth}" Value="320">
-                                            <Setter Property="Content" Value="&#xE713;"/>
-                                            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-                                            <Setter Property="FontSize" Value="18"/>
+                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE713;" FontSize="18"/>
+                                                </Setter.Value>
+                                            </Setter>
                                             <Setter Property="Padding" Value="10,4"/>
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -270,10 +275,12 @@
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth}" Value="320">
-                                            <Setter Property="Content" Value="&#xE711;"/>
-                                            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-                                            <Setter Property="FontSize" Value="18"/>
+                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE711;" FontSize="18"/>
+                                                </Setter.Value>
+                                            </Setter>
                                             <Setter Property="Padding" Value="10,4"/>
                                         </DataTrigger>
                                     </Style.Triggers>
