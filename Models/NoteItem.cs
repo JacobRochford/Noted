@@ -9,6 +9,8 @@ public sealed class NoteItem : INotifyPropertyChanged {
     private string _editableName = "";
     private string _subtitle = "";
     private bool _isEditing;
+    private bool _isExpanded;
+    private int _indentLevel;
 
     public string FileName { get; init; } = "";
     public bool IsPinned {
@@ -60,6 +62,32 @@ public sealed class NoteItem : INotifyPropertyChanged {
             }
         }
     }
+
+    public bool IsFolder { get; set; }
+
+    // only for folders, tracks expand/collapse in tree
+    public bool IsExpanded {
+        get => _isExpanded;
+        set {
+            if (_isExpanded != value) {
+                _isExpanded = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public int IndentLevel {
+        get => _indentLevel;
+        set {
+            if (_indentLevel != value) {
+                _indentLevel = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    // used for actions on child notes in expand mode
+    public string? FullPath { get; set; }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
