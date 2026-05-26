@@ -22,7 +22,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
-                        <Border Background="#B3D8EA" CornerRadius="3" Margin="1,2"/>
+                        <Border Background="#91C5DE" CornerRadius="3" Margin="1,2"/>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -30,8 +30,8 @@
         
         <!-- Modern scrollbar styling -->
         <Style x:Key="ModernScrollBar" TargetType="ScrollBar">
-            <Setter Property="Width" Value="6"/>
-            <Setter Property="MinWidth" Value="6"/>
+            <Setter Property="Width" Value="7"/>
+            <Setter Property="MinWidth" Value="7"/>
             <Setter Property="Background" Value="#E6F2F8"/>
             <Setter Property="Template">
                 <Setter.Value>
