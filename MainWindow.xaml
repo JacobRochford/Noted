@@ -173,6 +173,7 @@
                                        Foreground="#2C6E91"
                                        VerticalAlignment="Center"
                                        Cursor="Hand"
+                                       FocusVisualStyle="{x:Null}"
                                        ToolTip="Double-click to set a custom header for your app"
                                        Visibility="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthToHeaderVisibilityConverter}}"
                                        MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"/>
@@ -183,6 +184,7 @@
                                      VerticalAlignment="Center"
                                      Visibility="Collapsed"
                                      MinWidth="80"
+                                     FocusVisualStyle="{x:Null}"
                                      ToolTip="Enter a custom header and press Enter to save"
                                      LostFocus="HeaderEditBox_LostFocus"
                                      KeyDown="HeaderEditBox_KeyDown"/>
@@ -268,7 +270,7 @@
                         <Button x:Name="MinimizeNotesButton"
                                 Content="Hide"
                                 Click="MinimizeNotesButton_Click"
-                                FontSize="10" FontWeight="SemiBold"
+                                FontSize="12" FontWeight="SemiBold"
                                 Foreground="White" Cursor="Hand"
                                 Padding="10,4"
                                 Margin="0,0,0,0"
@@ -418,6 +420,7 @@
                                     <TextBlock Grid.Column="1"
                                                Text="Search notes..."
                                                FontSize="12"
+                                               FontStyle="Italic"
                                                Foreground="#A0B8C8"
                                                VerticalAlignment="Center"
                                                Padding="0,7"
@@ -454,6 +457,7 @@
                                             Foreground="#7AAEC5"
                                             Cursor="Hand"
                                             Padding="6,6"
+                                            AutomationProperties.Name="Clear search"
                                             Click="ClearSearchButton_Click">
                                         <Button.Style>
                                             <Style TargetType="Button">
@@ -805,7 +809,9 @@
                                            FontSize="15"
                                            FontWeight="SemiBold"
                                            Foreground="#2C6E91"
-                                           VerticalAlignment="Center"/>
+                                           VerticalAlignment="Center"
+                                           Margin="4,0,0,0"
+                                           />
 
                                 <Button x:Name="BackToNotesButton"
                                         Grid.Column="1"
@@ -1025,7 +1031,8 @@
                                     BorderBrush="#C9DFEC"
                                     BorderThickness="1"
                                     CornerRadius="8"
-                                    Padding="12">
+                                    Padding="12"
+                                    Margin="0,0,0,10">
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <TextBlock Text="Notes Folder"
