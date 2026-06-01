@@ -4,12 +4,14 @@ using Noted.Models;
 
 namespace Noted.Services;
 
+// handles all note/folder file ops, nav, and watcher
 public sealed class NoteFileService : INoteFileService {
     private readonly IAppSettingsService _settingsService;
     private FileSystemWatcher? _watcher;
     private FileSystemWatcher? _directoryWatcher;
-    private static readonly TimeSpan DeletedNoteRetention = TimeSpan.FromDays(7);
+    private static readonly TimeSpan DeletedNoteRetention = TimeSpan.FromDays(14); // how long to keep deleted notes
     private static readonly HashSet<string> ReservedFileNames = new(StringComparer.OrdinalIgnoreCase) {
+        // windows reserved names
         "CON", "PRN", "AUX", "NUL",
         "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
         "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
@@ -19,6 +21,7 @@ public sealed class NoteFileService : INoteFileService {
     public string CurrentDirectory { get; private set; } = "";
     public string CurrentFolderName {
         get {
+            // show pretty folder path, or blank if at root
             if (string.Equals(CurrentDirectory, NotesDirectory, StringComparison.OrdinalIgnoreCase))
                 return "";
             var relative = Path.GetRelativePath(
@@ -28,7 +31,7 @@ public sealed class NoteFileService : INoteFileService {
         }
     }
     public bool CanNavigateUp =>
-        !string.Equals(CurrentDirectory, NotesDirectory, StringComparison.OrdinalIgnoreCase);
+        !string.Equals(CurrentDirectory, NotesDirectory, StringComparison.OrdinalIgnoreCase); // at root?
     public string DeletedNotesDirectory { get; }
 
     public event EventHandler? FilesChanged;
@@ -40,11 +43,13 @@ public sealed class NoteFileService : INoteFileService {
         CurrentDirectory = NotesDirectory;
         Directory.CreateDirectory(NotesDirectory);
         Directory.CreateDirectory(DeletedNotesDirectory);
-        PurgeExpiredDeletedNotes();
+        PurgeExpiredDeletedNotes(); // clean up old deleted notes
     }
 
     public IReadOnlyList<NoteItem> GetNotes() {
+        // get all .txt notes in current dir
         if (!Directory.Exists(CurrentDirectory)) CurrentDirectory = NotesDirectory;
+        // Notes are always sorted by last modified (descending)
         return Directory.GetFiles(CurrentDirectory, "*.txt")
             .Select(path => new FileInfo(path))
             .OrderByDescending(info => info.LastWriteTime)
@@ -54,13 +59,15 @@ public sealed class NoteFileService : INoteFileService {
                     FileName = name,
                     DisplayName = FormatNoteName(name),
                     EditableName = Path.GetFileNameWithoutExtension(name),
-                    Subtitle = BuildSubtitle(name, info.LastWriteTime)
+                    Subtitle = BuildSubtitle(name, info.LastWriteTime),
+                    LastModified = info.LastWriteTime
                 };
             })
             .ToList();
     }
 
     public string CreateNote(string? requestedName = null) {
+        // create new note, optionally with user-supplied name
         var now = DateTime.Now;
         var filename = string.IsNullOrWhiteSpace(requestedName)
             ? BuildUniqueFileName(now)
@@ -71,6 +78,7 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     public bool ChangeNotesDirectory(string newDirectory) {
+        // switch to a new notes dir
         var normalizedPath = Path.GetFullPath(newDirectory);
         if (string.Equals(NotesDirectory, normalizedPath, StringComparison.OrdinalIgnoreCase))
             return false;
@@ -90,6 +98,7 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     public void DeleteNote(string fileName) {
+        // move note to DeletedNotes (soft delete)
         var fullPath = Path.GetFullPath(Path.Combine(CurrentDirectory, fileName));
         if (!fullPath.StartsWith(Path.GetFullPath(NotesDirectory) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             return;
@@ -103,6 +112,7 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     public (bool Success, string? NewFileName, string? Error) RenameNote(string oldFileName, string newDisplayName) {
+        // rename note file (validates name)
         var oldPath = Path.Combine(CurrentDirectory, oldFileName);
 
         var validatedFileName = ValidateAndSanitizeFileName(newDisplayName);
@@ -127,6 +137,7 @@ public sealed class NoteFileService : INoteFileService {
         }
     }
 
+    // pretty print note name if it's a generated timestamp
     public static string FormatNoteName(string fileName) {
         var name = Path.GetFileNameWithoutExtension(fileName);
         if (TryParseGeneratedNoteDate(name, out var dt)) {
@@ -135,22 +146,25 @@ public sealed class NoteFileService : INoteFileService {
         return fileName;
     }
 
+    // show file name for generated notes, otherwise show last modified
     private static string BuildSubtitle(string fileName, DateTime lastWriteTime) {
         return IsGeneratedNoteFileName(fileName)
             ? fileName
             : $"Modified: {lastWriteTime:MMM dd, yyyy  h:mm tt}";
     }
 
+    // build note content with timestamp (top/bottom/none)
     private static string BuildNewNoteContent(DateTime timestamp, NoteTimestampPlacement timestampPlacement) {
         var timestampText = timestamp.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
         return timestampPlacement switch {
             NoteTimestampPlacement.Top => timestampText + Environment.NewLine + Environment.NewLine,
-            NoteTimestampPlacement.Bottom => string.Join(Environment.NewLine, Enumerable.Repeat(string.Empty, 40)) + Environment.NewLine + timestampText,
+            NoteTimestampPlacement.Bottom => string.Join(Environment.NewLine, Enumerable.Repeat(string.Empty, 30)) + Environment.NewLine + timestampText,
             _ => string.Empty
         };
     }
 
+    // build unique deleted note path (timestamped, avoids collisions)
     private string BuildDeletedNotePath(string fileName) {
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss_fff", CultureInfo.InvariantCulture);
         var candidate = Path.Combine(DeletedNotesDirectory, $"{timestamp}__{fileName}");
@@ -166,6 +180,7 @@ public sealed class NoteFileService : INoteFileService {
         return Path.Combine(DeletedNotesDirectory, $"{timestamp}_{Guid.NewGuid():N}__{fileName}");
     }
 
+    // delete old files from DeletedNotes
     private void PurgeExpiredDeletedNotes() {
         if (!Directory.Exists(DeletedNotesDirectory))
             return;
@@ -177,11 +192,12 @@ public sealed class NoteFileService : INoteFileService {
                 if (info.LastWriteTime < cutoff)
                     info.Delete();
             } catch {
-                // Best-effort cleanup; ignore files that cannot be deleted.
+                // ignore locked/in-use files
             }
         }
     }
 
+    // build unique note file name (timestamped, avoids collisions)
     private string BuildUniqueFileName(DateTime timestamp) {
         var baseName = $"{timestamp:yyyy-MM-dd_HH-mm-ss}";
         var candidate = baseName + ".txt";
@@ -197,6 +213,7 @@ public sealed class NoteFileService : INoteFileService {
         return $"{baseName}_{Guid.NewGuid():N}.txt";
     }
 
+    // build note file name from user input (throws if invalid or taken)
     private string BuildRequestedFileName(string requestedName) {
         var validatedFileName = ValidateAndSanitizeFileName(requestedName);
         if (string.IsNullOrWhiteSpace(validatedFileName))
@@ -209,6 +226,7 @@ public sealed class NoteFileService : INoteFileService {
         return candidate;
     }
 
+    // remove invalid chars, reserved names, .txt extension
     private static string? ValidateAndSanitizeFileName(string value) {
         var sanitized = Path.GetInvalidFileNameChars().Aggregate(
             value,
@@ -227,10 +245,12 @@ public sealed class NoteFileService : INoteFileService {
         return sanitized;
     }
 
+    // is this a generated note file name (timestamped)?
     private static bool IsGeneratedNoteFileName(string fileName) {
         return TryParseGeneratedNoteDate(Path.GetFileNameWithoutExtension(fileName), out _);
     }
 
+    // try to parse a generated note file name as a timestamp
     private static bool TryParseGeneratedNoteDate(string fileName, out DateTime timestamp) {
         timestamp = default;
         var timestampText = fileName.StartsWith("Note_", StringComparison.Ordinal)
@@ -248,6 +268,7 @@ public sealed class NoteFileService : INoteFileService {
             CultureInfo.InvariantCulture, DateTimeStyles.None, out timestamp);
     }
 
+    // start watching for file/folder changes
     public void StartWatching() {
         StopWatching();
         _watcher = new FileSystemWatcher(NotesDirectory, "*.txt") {
@@ -258,7 +279,7 @@ public sealed class NoteFileService : INoteFileService {
         _watcher.Created += OnFileSystemChanged;
         _watcher.Deleted += OnFileSystemChanged;
         _watcher.Renamed += OnFileSystemChanged;
-        // Separate watcher for directory events – Filter="*.txt" doesn't match directory names
+        // separate watcher for folder create/rename/delete ("*.txt" filter misses dirs)
         _directoryWatcher = new FileSystemWatcher(NotesDirectory) {
             NotifyFilter = NotifyFilters.DirectoryName,
             IncludeSubdirectories = true,
@@ -269,10 +290,12 @@ public sealed class NoteFileService : INoteFileService {
         _directoryWatcher.Renamed += OnFileSystemChanged;
     }
 
+    // notify listeners on file/folder change
     private void OnFileSystemChanged(object sender, FileSystemEventArgs e) {
         FilesChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    // get all folders in current dir
     public IReadOnlyList<NoteItem> GetFolders() {
         if (!Directory.Exists(CurrentDirectory)) CurrentDirectory = NotesDirectory;
         return Directory.GetDirectories(CurrentDirectory)
@@ -288,12 +311,11 @@ public sealed class NoteFileService : INoteFileService {
             .ToList();
     }
 
-    /// Returns .txt notes inside a direct subfolder of NotesDirectory without
-    /// changing CurrentDirectory, so Expand mode can populate inline children.
+    // get .txt notes in a subfolder, don't change nav state (Expand mode)
     public IReadOnlyList<NoteItem> GetNotesInSubfolder(string subfolderName) {
         var subfolderPath = Path.GetFullPath(Path.Combine(NotesDirectory, subfolderName));
         var root = Path.GetFullPath(NotesDirectory);
-        // Security: subfolder must remain within the notes root
+        // block path traversal, don't let user escape root
         if (!subfolderPath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             return Array.Empty<NoteItem>();
         if (!Directory.Exists(subfolderPath))
@@ -308,16 +330,18 @@ public sealed class NoteFileService : INoteFileService {
                     DisplayName = FormatNoteName(name),
                     EditableName = Path.GetFileNameWithoutExtension(name),
                     Subtitle = BuildSubtitle(name, info.LastWriteTime),
-                    FullPath = info.FullName
+                    FullPath = info.FullName,
+                    LastModified = info.LastWriteTime
                 };
             })
             .ToList();
     }
 
+    // go into a folder (blocks path traversal)
     public void NavigateTo(string folderName) {
         var target = Path.GetFullPath(Path.Combine(CurrentDirectory, folderName));
         var root = Path.GetFullPath(NotesDirectory);
-        // Security: must remain within the notes root
+        // block path traversal, don't let user escape root
         if (!target.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(target, root, StringComparison.OrdinalIgnoreCase))
             return;
@@ -325,6 +349,7 @@ public sealed class NoteFileService : INoteFileService {
             CurrentDirectory = target;
     }
 
+    // go up one folder (blocks escape)
     public void NavigateUp() {
         if (!CanNavigateUp) return;
         var parent = Path.GetDirectoryName(CurrentDirectory);
@@ -335,6 +360,7 @@ public sealed class NoteFileService : INoteFileService {
             CurrentDirectory = parent;
     }
 
+    // create a new folder (sanitizes name, blocks traversal)
     public (bool Success, string? Error) CreateFolder(string folderName) {
         var sanitized = ValidateAndSanitizeFolderName(folderName);
         if (string.IsNullOrWhiteSpace(sanitized))
@@ -354,6 +380,7 @@ public sealed class NoteFileService : INoteFileService {
         }
     }
 
+    // rename a folder (sanitizes name, blocks traversal)
     public (bool Success, string? Error) RenameFolder(string oldName, string newName) {
         var sanitized = ValidateAndSanitizeFolderName(newName);
         if (string.IsNullOrWhiteSpace(sanitized))
@@ -380,6 +407,7 @@ public sealed class NoteFileService : INoteFileService {
         }
     }
 
+    // delete a folder (blocks traversal)
     public (bool Success, string? Error) DeleteFolder(string folderName) {
         var target = Path.GetFullPath(Path.Combine(CurrentDirectory, folderName));
         var root = Path.GetFullPath(NotesDirectory) + Path.DirectorySeparatorChar;
@@ -397,6 +425,7 @@ public sealed class NoteFileService : INoteFileService {
         }
     }
 
+    // remove invalid chars, reserved names
     private static string? ValidateAndSanitizeFolderName(string value) {
         var sanitized = Path.GetInvalidFileNameChars().Aggregate(
             value,
@@ -409,6 +438,7 @@ public sealed class NoteFileService : INoteFileService {
         return sanitized;
     }
 
+    // get initial notes dir (from settings or default)
     private string ResolveInitialNotesDirectory() {
         var savedDirectory = _settingsService.LoadNotesDirectory();
         if (!string.IsNullOrWhiteSpace(savedDirectory))
