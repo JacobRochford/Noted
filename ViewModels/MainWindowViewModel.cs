@@ -50,7 +50,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
         }
     }
 
-    public string DisplayHeaderText => IsSettingsVisible ? "Settings" : HeaderText;
+    public string DisplayHeaderText => IsSettingsVisible ? "⚙" : HeaderText;
 
     public string EditableHeaderText => _customHeaderText;
 
