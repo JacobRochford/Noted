@@ -213,12 +213,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
             }
         }
 
-        // Root notes: pinned first, then alphabetical
-        foreach (var note in rootNotes
-                     .OrderByDescending(n => n.IsPinned)
-                     .ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase)) {
+        // Root notes: pinned files (last modified desc), then other files (last modified desc)
+        var pinnedFiles = rootNotes.Where(n => n.IsPinned && !n.IsFolder)
+                                  .OrderByDescending(n => n.LastModified);
+        var otherFiles = rootNotes.Where(n => !n.IsPinned && !n.IsFolder)
+                                  .OrderByDescending(n => n.LastModified);
+        foreach (var note in pinnedFiles)
             Notes.Add(note);
-        }
+        foreach (var note in otherFiles)
+            Notes.Add(note);
 
         int total = rootNotes.Count + childCount;
         HeaderText = BuildHeaderText(total);
@@ -246,9 +249,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
     // Resort notes in-place: folders, then pinned, then alpha
     private void ResortNotes() {
         var sorted = Notes
-            .OrderBy(n => n.IsFolder ? 0 : 1)
-            .ThenByDescending(n => n.IsPinned)
-            .ThenBy(n => n.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(n => n.IsPinned && !n.IsFolder) // pinned files first
+            .ThenBy(n => n.IsFolder ? 0 : 1) // folders next
+            .ThenBy(n => n.IsFolder ? n.DisplayName : null, StringComparer.OrdinalIgnoreCase) // folders alpha
+            .ThenByDescending(n => !n.IsFolder && !n.IsPinned ? n.LastModified : DateTime.MinValue) // files by last modified desc
             .ToList();
         for (int i = 0; i < sorted.Count; i++) {
             int current = Notes.IndexOf(sorted[i]);
