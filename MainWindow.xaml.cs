@@ -1115,29 +1115,21 @@ public partial class MainWindow : Window {
         cm.Closed += OnMenuClosed;
     }
 
+
+    // toggle notes panel
     private void TrayShowHideNotes_Click(object sender, RoutedEventArgs e)
     {
-        if (NotesPanel.Visibility == Visibility.Visible)
-        {
-            HideNotesPanelAndMinimizeNotepad();
+        WindowManager.ToggleAll();
         }
-        else
-        {
-            NotesPanel.Visibility = Visibility.Visible;
-            if (_ghostModeEnabled)
-                AnimatePanelOpacity(_ghostModeOpacity);
-            else
-                AnimatePanelOpacity(_defaultOpacity);
-            if (_notepadService.IsRunning)
-                _notepadService.Restore();
-        }
-    }
 
+
+    // open settings
     private void TraySettings_Click(object sender, RoutedEventArgs e)
     {
         SettingsButton_Click(sender, e);
     }
 
+    // exit app
     private void TrayExit_Click(object sender, RoutedEventArgs e)
     {
         Close();
@@ -1145,16 +1137,17 @@ public partial class MainWindow : Window {
     #endregion
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e) {
-        // Cleanup global hotkey
+        // cleanup global hotkey
         _globalHotkeysService?.Dispose();
 
-        // Cleanup tray icon
+        // cleanup tray icon
         if (_trayIcon is not null) {
             _trayIcon.TrayRightMouseUp -= TrayIcon_TrayRightMouseUp;
             _trayIcon?.Dispose();
             _trayIcon = null;
         }
 
+        // timers, popups, event handlers
         _renameBannerTimer.Tick -= RenameBannerTimer_Tick;
         _renameBannerTimer.Stop();
         RenameNoticePopup.IsOpen = false;
