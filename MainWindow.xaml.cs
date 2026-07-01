@@ -44,63 +44,36 @@ public partial class MainWindow : Window {
     private double _dragInitialTop;
     private const double _dragThreshold = 5.0;
 
-    // Properties
-    public bool IsHeaderEditing
-    {
-        get => _viewModel.IsHeaderEditing;
-        set
-        {
-            if (_viewModel.IsHeaderEditing != value)
-            {
-                _viewModel.IsHeaderEditing = value;
-                HeaderText.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
-                HeaderTextEdit.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
-                if (value)
-                {
-                    _viewModel.HeaderTextEdit = HeaderText.Text;
-                    HeaderTextEdit.Text = HeaderText.Text;
-                    HeaderTextEdit.Focus();
-                    HeaderTextEdit.SelectAll();
-                }
-            }
-        }
-    }
 
-    public bool ShowNotesDirectory
+    public MainWindow(
+            IAppSettingsService settingsService,
+            INoteFileService fileService,
+            INotepadProcessService notepadService,
+            IStartupService startupService
+        )
     {
-        get => _viewModel.ShowNotesDirectory;
-        set
-        {
-            if (_viewModel.ShowNotesDirectory != value)
-            {
-                _viewModel.ShowNotesDirectory = value;
-                UpdateShowHideNotesDirectoryButton();
-            }
-        }
-    }
-
-    public bool ShowModifiedSubtitle
-    {
-        get => _viewModel.ShowModifiedSubtitle;
-        set
-        {
-            if (_viewModel.ShowModifiedSubtitle != value)
-            {
-                _viewModel.ShowModifiedSubtitle = value;
-            }
-        }
-    }
-
-    public MainWindow() {
         InitializeComponent();
 
-        _settingsService = new AppSettingsService();
-        _fileService = new NoteFileService(_settingsService);
-        _notepadService = new NotepadProcessService();
-        _viewModel = new MainWindowViewModel(_fileService, _settingsService);
+        _settingsService = settingsService;
+        _fileService = fileService;
+        _notepadService = notepadService;
+        _startupService = startupService;
+
+        _viewModel = new MainWindowViewModel(_fileService, _settingsService, action => Dispatcher.Invoke(action));
         DataContext = _viewModel;
 
-        // Instantiate tray icon from resources
+        InitializeTrayIcon();
+        InitializeSettings();
+
+        _renameBannerTimer = new DispatcherTimer {
+            Interval = TimeSpan.FromSeconds(10)
+        };
+        _renameBannerTimer.Tick += RenameBannerTimer_Tick;
+
+        InitializeEventHandlers();
+        InitializeNotesView();
+        InitializeHotkeyUI();
+    }
         _trayIcon = (Hardcodet.Wpf.TaskbarNotification.TaskbarIcon)Resources["TrayIcon"];
 
         _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
