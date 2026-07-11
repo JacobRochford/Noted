@@ -22,4 +22,9 @@
     <Resource Include="Resources/notes.ico" />
   </ItemGroup>
 
+
+  <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
+    <Exec Command="taskkill /F /IM &quot;Noted.exe&quot; 2&gt;nul" />
+  </Target>
+
 </Project>
