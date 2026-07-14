@@ -904,6 +904,31 @@
                                     Padding="12"
                                     Margin="0,0,0,10">
                                 <StackPanel>
+                                    <TextBlock Text="Startup"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="#355A6E"
+                                               Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="RunOnStartupOption"
+                                            Foreground="#355A6E"
+                                            FontWeight="SemiBold"
+                                            Checked="RunOnStartupOption_Changed"
+                                            Unchecked="RunOnStartupOption_Changed"
+                                            HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Launch Noted automatically when Windows starts"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center"/>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#EFF7FB"
+                                    BorderBrush="#C9DFEC"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="12"
+                                    Margin="0,0,0,10">
+                                <StackPanel>
                                     <TextBlock Text="Ghost Mode"
                                                FontSize="12"
                                                FontWeight="SemiBold"

@@ -31,6 +31,7 @@ public partial class MainWindow : Window {
 
     // UI State
     private bool _isUpdatingSettingsView;
+    private bool _runOnStartupDisplayedState;
 
     // Ghost mode state
     private bool _ghostModeEnabled;
@@ -382,6 +383,8 @@ public partial class MainWindow : Window {
             UpdateGhostModeOpacityLabel();
             DefaultOpacitySlider.Value = _defaultOpacity * 100;
             UpdateDefaultOpacityLabel();
+            _runOnStartupDisplayedState = _startupService.IsRunOnStartupEnabled;
+            RunOnStartupOption.IsChecked = _runOnStartupDisplayedState;
         } finally {
             _isUpdatingSettingsView = false;
         }
@@ -459,6 +462,31 @@ public partial class MainWindow : Window {
         var isChecked = ShowModifiedSubtitleOption.IsChecked ?? true;
         _settingsService.SaveShowModifiedSubtitle(isChecked);
         _viewModel.ShowModifiedSubtitle = isChecked;
+    }
+
+    private void RunOnStartupOption_Changed(object sender, RoutedEventArgs e) {
+        if (_isUpdatingSettingsView) return;
+
+        var requestedState = RunOnStartupOption.IsChecked == true;
+        var previousDisplayedState = _runOnStartupDisplayedState;
+        var result = _startupService.SetRunOnStartup(requestedState);
+        var displayedState = result.ActualEnabled ?? previousDisplayedState;
+
+        _isUpdatingSettingsView = true;
+        try {
+            RunOnStartupOption.IsChecked = displayedState;
+            _runOnStartupDisplayedState = displayedState;
+        } finally {
+            _isUpdatingSettingsView = false;
+        }
+
+        if (!result.Success || result.ActualEnabled is null || result.ActualEnabled != requestedState) {
+            MessageBox.Show(
+                result.Error ?? "Windows did not apply the requested startup setting.",
+                "Startup Setting Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     private void GhostModeOption_Changed(object sender, RoutedEventArgs e) {
