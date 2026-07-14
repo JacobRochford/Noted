@@ -221,6 +221,11 @@ public partial class MainWindow : Window {
     }
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e) {
+        var newNoteMode = _settingsService.LoadNewNoteMode();
+        QuickNoteButton.Visibility = newNoteMode == NewNoteMode.Both
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
         // Span the overlay across the full virtual desktop so elements can be dragged to any monitor.
         Left = SystemParameters.VirtualScreenLeft;
         Top = SystemParameters.VirtualScreenTop;
@@ -353,7 +358,14 @@ public partial class MainWindow : Window {
     private void UpdateSettingsView() {
         _isUpdatingSettingsView = true;
         try {
-            PromptForNoteNameOption.IsChecked = _settingsService.LoadPromptForNoteName();
+            var newNoteMode = _settingsService.LoadNewNoteMode();
+            NewNotePromptOption.IsChecked = newNoteMode == NewNoteMode.Prompt;
+            NewNoteQuickOption.IsChecked = newNoteMode == NewNoteMode.Quick;
+            NewNoteBothOption.IsChecked = newNoteMode == NewNoteMode.Both;
+            QuickNoteButton.Visibility = newNoteMode == NewNoteMode.Both
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
             var timestampPlacement = _settingsService.LoadTimestampPlacement();
             TimestampNoneOption.IsChecked = timestampPlacement == NoteTimestampPlacement.None;
             TimestampTopOption.IsChecked = timestampPlacement == NoteTimestampPlacement.Top;
@@ -639,15 +651,27 @@ public partial class MainWindow : Window {
 
             _viewModel.LoadNotes(filename);
             // OnNotesLoaded fires synchronously above, so selection is already set.
-            _notepadService.Open(Path.Combine(_fileService.NotesDirectory, filename));
+            _notepadService.Open(Path.Combine(_fileService.CurrentDirectory, filename));
         } catch (Exception ex) {
             MessageBox.Show($"Failed to create note:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
+    private void QuickNoteButton_Click(object sender, RoutedEventArgs e) {
+        try {
+            var filename = _fileService.CreateNote();
+            _viewModel.LoadNotes(filename);
+            _notepadService.Open(Path.Combine(_fileService.CurrentDirectory, filename));
+        } catch (Exception ex) {
+            MessageBox.Show($"Failed to create quick note:\n{ex.Message}",
+                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private string? CreateNewNoteFromCurrentSettings() {
-        if (!_settingsService.LoadPromptForNoteName())
+        var mode = _settingsService.LoadNewNoteMode();
+        if (mode == NewNoteMode.Quick)
             return _fileService.CreateNote();
 
         var attemptedName = string.Empty;
@@ -669,11 +693,24 @@ public partial class MainWindow : Window {
         }
     }
 
-    private void PromptForNoteNameOption_Changed(object sender, RoutedEventArgs e) {
+    private void NewNoteMode_Changed(object sender, RoutedEventArgs e) {
         if (_isUpdatingSettingsView)
             return;
 
-        _settingsService.SavePromptForNoteName(PromptForNoteNameOption.IsChecked == true);
+        NewNoteMode? newNoteMode = sender switch {
+            RadioButton { Name: nameof(NewNotePromptOption) } => NewNoteMode.Prompt,
+            RadioButton { Name: nameof(NewNoteQuickOption) } => NewNoteMode.Quick,
+            RadioButton { Name: nameof(NewNoteBothOption) } => NewNoteMode.Both,
+            _ => null
+        };
+
+        if (!newNoteMode.HasValue)
+            return;
+
+        _settingsService.SaveNewNoteMode(newNoteMode.Value);
+        QuickNoteButton.Visibility = newNoteMode == NewNoteMode.Both
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private void TimestampPlacementOption_Checked(object sender, RoutedEventArgs e) {

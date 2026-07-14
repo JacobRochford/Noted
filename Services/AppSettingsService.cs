@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Noted.Models;
 
 namespace Noted.Services;
@@ -55,6 +56,38 @@ public enum FolderNavigationMode {
     Expand      // expand/collapse inline within the root list
 }
 
+internal sealed class NewNoteModeJsonConverter : JsonConverter<NewNoteMode?> {
+    public override bool HandleNull => true;
+
+    public override NewNoteMode? Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options) {
+        if (reader.TokenType == JsonTokenType.Number
+                && reader.TryGetInt32(out var value)
+                && Enum.IsDefined(typeof(NewNoteMode), value)) {
+            return (NewNoteMode)value;
+        }
+
+        if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray) {
+            using var ignoredValue = JsonDocument.ParseValue(ref reader);
+        }
+
+        return NewNoteMode.Prompt;
+    }
+
+    public override void Write(
+            Utf8JsonWriter writer,
+            NewNoteMode? value,
+            JsonSerializerOptions options) {
+        if (value.HasValue) {
+            writer.WriteNumberValue((int)value.Value);
+        } else {
+            writer.WriteNullValue();
+        }
+    }
+}
+
 /// Manages application settings stored in JSON format in the local app data folder.
 public sealed class AppSettingsService : IAppSettingsService {
     private const int MaxSettingsBackups = 50;
@@ -107,14 +140,27 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { TimestampPlacement = timestampPlacement });
     }
 
+    public NewNoteMode LoadNewNoteMode() {
+        return LoadSetting(s => s.NewNoteMode ?? NewNoteMode.Prompt);
+    }
+
+    public void SaveNewNoteMode(NewNoteMode newNoteMode) {
+        if (!Enum.IsDefined(typeof(NewNoteMode), newNoteMode)) {
+            throw new ArgumentOutOfRangeException(
+                nameof(newNoteMode), newNoteMode, "Undefined note creation mode.");
+        }
+
+        SaveSetting(s => s with { NewNoteMode = newNoteMode });
+    }
+
     // Loads whether to prompt for note name when creating new notes depending on user settings.
     public bool LoadPromptForNoteName() {
-        return LoadSetting(s => s.PromptForNoteName);
+        return LoadNewNoteMode() == NewNoteMode.Prompt;
     }
 
     /// Saves whether to prompt for note name when creating new notes depending on user settings.
     public void SavePromptForNoteName(bool promptForNoteName) {
-        SaveSetting(s => s with { PromptForNoteName = promptForNoteName });
+        SaveNewNoteMode(promptForNoteName ? NewNoteMode.Prompt : NewNoteMode.Quick);
     }
 
     public string? LoadCustomHeader() {
@@ -200,19 +246,34 @@ public sealed class AppSettingsService : IAppSettingsService {
             return _cachedSettings;
 
         if (!File.Exists(_settingsFilePath)) {
-            _cachedSettings = new AppSettings();
+            _cachedSettings = NormalizeSettings(new AppSettings());
             return _cachedSettings;
         }
 
         try {
             var json = File.ReadAllText(_settingsFilePath);
-            _cachedSettings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            var settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            _cachedSettings = NormalizeSettings(settings);
             return _cachedSettings;
         } catch (JsonException) {
             // Settings file is corrupted; return defaults without caching so
             // a subsequent save can overwrite the bad file cleanly.
-            return new AppSettings();
+            return NormalizeSettings(new AppSettings());
         }
+    }
+
+    private static AppSettings NormalizeSettings(AppSettings settings) {
+        var mode = settings.NewNoteMode
+            ?? (settings.PromptForNoteName.HasValue
+                ? settings.PromptForNoteName.Value
+                    ? NewNoteMode.Prompt
+                    : NewNoteMode.Quick
+                : NewNoteMode.Prompt);
+
+        return settings with {
+            NewNoteMode = mode,
+            PromptForNoteName = null
+        };
     }
 
     private void SaveSettings(AppSettings settings) {
@@ -270,7 +331,10 @@ public sealed class AppSettingsService : IAppSettingsService {
     private sealed record AppSettings {
         public string? NotesDirectory { get; init; }
         public NoteTimestampPlacement TimestampPlacement { get; init; } = NoteTimestampPlacement.None;
-        public bool PromptForNoteName { get; init; }
+        [JsonConverter(typeof(NewNoteModeJsonConverter))]
+        public NewNoteMode? NewNoteMode { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? PromptForNoteName { get; init; }
         public bool ShowModifiedSubtitle { get; init; } = true;
         public string? CustomHeader { get; init; }
         public List<string>? PinnedNotes { get; init; }

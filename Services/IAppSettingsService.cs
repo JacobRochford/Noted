@@ -1,3 +1,5 @@
+using Noted.Models;
+
 namespace Noted.Services;
 
 public interface IAppSettingsService {
@@ -10,6 +12,8 @@ public interface IAppSettingsService {
     void SaveShowModifiedSubtitle(bool showModifiedSubtitle);
     NoteTimestampPlacement LoadTimestampPlacement();
     void SaveTimestampPlacement(NoteTimestampPlacement timestampPlacement);
+    NewNoteMode LoadNewNoteMode();
+    void SaveNewNoteMode(NewNoteMode newNoteMode);
     bool LoadPromptForNoteName();
     void SavePromptForNoteName(bool promptForNoteName);
     string? LoadCustomHeader();

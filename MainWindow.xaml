@@ -232,6 +232,30 @@
                                 </ControlTemplate>
                             </Button.Template>
                         </Button>
+                        <Button x:Name="QuickNoteButton"
+                                Content="⚡"
+                                Click="QuickNoteButton_Click"
+                                FontSize="15" FontWeight="SemiBold"
+                                Foreground="White" Cursor="Hand"
+                                Padding="8,4" Margin="0,0,6,0"
+                                MinWidth="0"
+                                ToolTip="Create a quick note"
+                                Visibility="Collapsed">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="bg" Background="#5BA8C8"
+                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
                         <Button x:Name="SettingsButton"
                                 Content="Settings"
                                 Click="SettingsButton_Click"
@@ -867,22 +891,38 @@
                                     Padding="12"
                                     Margin="0,0,0,10">
                                 <StackPanel>
-                                    <TextBlock Text="Note Naming"
+                                    <TextBlock Text="New Note Behavior"
                                                FontSize="12"
                                                FontWeight="SemiBold"
                                                Foreground="#355A6E"
                                                Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="PromptForNoteNameOption"
-                                            Foreground="#355A6E"
-                                            FontWeight="SemiBold"
-                                            Checked="PromptForNoteNameOption_Changed"
-                                            Unchecked="PromptForNoteNameOption_Changed"
-                                            Margin="0,0,0,0"
-                                            HorizontalAlignment="Stretch">
-                                        <TextBlock Text="Ask for note name when creating a new note"
-                                               TextWrapping="Wrap"
-                                               VerticalAlignment="Center"/>
-                                    </CheckBox>
+                                    <RadioButton x:Name="NewNotePromptOption"
+                                                 GroupName="NewNoteBehavior"
+                                                 Margin="0,0,0,6"
+                                                 Checked="NewNoteMode_Changed"
+                                                 HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Always ask for note name"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </RadioButton>
+                                    <RadioButton x:Name="NewNoteQuickOption"
+                                                 GroupName="NewNoteBehavior"
+                                                 Margin="0,0,0,6"
+                                                 Checked="NewNoteMode_Changed"
+                                                 HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Always create quick note"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </RadioButton>
+                                    <RadioButton x:Name="NewNoteBothOption"
+                                                 GroupName="NewNoteBehavior"
+                                                 Margin="0,0,0,0"
+                                                 Checked="NewNoteMode_Changed"
+                                                 HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Show both buttons (let me choose)"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </RadioButton>
                                     <CheckBox x:Name="ShowModifiedSubtitleOption"
                                             Foreground="#355A6E"
                                             FontWeight="SemiBold"
