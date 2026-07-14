@@ -57,6 +57,7 @@ public enum FolderNavigationMode {
 
 /// Manages application settings stored in JSON format in the local app data folder.
 public sealed class AppSettingsService : IAppSettingsService {
+    private const int MaxSettingsBackups = 50;
     private readonly string _settingsFilePath;
     private AppSettings? _cachedSettings;
 
@@ -216,12 +217,53 @@ public sealed class AppSettingsService : IAppSettingsService {
 
     private void SaveSettings(AppSettings settings) {
         var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+
+        Directory.CreateDirectory(Path.GetDirectoryName(_settingsFilePath)!);
+
+        // backup directory next to settings file
+        var backupDir = Path.Combine(
+            Path.GetDirectoryName(_settingsFilePath)!,
+            "backups"
+        );
+
+        Directory.CreateDirectory(backupDir);
+
+        // if current file exists, back it up before overwrite
+        if (File.Exists(_settingsFilePath)) {
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
+            var fileName = Path.GetFileNameWithoutExtension(_settingsFilePath);
+            var ext = Path.GetExtension(_settingsFilePath);
+            var backupPath = Path.Combine(backupDir, $"{fileName}_{timestamp}{ext}");
+            var suffix = 1;
+
+            while (File.Exists(backupPath)) {
+                backupPath = Path.Combine(backupDir, $"{fileName}_{timestamp}_{suffix:00}{ext}");
+                suffix++;
+            }
+
+            File.Copy(_settingsFilePath, backupPath, overwrite: false);
+        }
+
         // Write to .tmp then rename; File.Move on the same drive is atomic,
         // so a crash mid-write can't leave settings.json half-baked or missing.
         var tmpPath = _settingsFilePath + ".tmp";
         File.WriteAllText(tmpPath, json);
         File.Move(tmpPath, _settingsFilePath, overwrite: true);
         _cachedSettings = settings;
+        PruneSettingsBackups(backupDir);
+    }
+
+    private static void PruneSettingsBackups(string backupDir) {
+        try {
+            var backups = Directory.GetFiles(backupDir, "settings_*.json")
+                .Select(path => new FileInfo(path))
+                .OrderByDescending(info => info.LastWriteTimeUtc)
+                .Skip(MaxSettingsBackups);
+
+            foreach (var backup in backups) {
+                try { backup.Delete(); } catch { }
+            }
+        } catch { }
     }
 
     /// Represents the application settings stored in JSON.
