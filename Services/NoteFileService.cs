@@ -9,6 +9,8 @@ public sealed class NoteFileService : INoteFileService {
     private readonly IAppSettingsService _settingsService;
     private FileSystemWatcher? _watcher;
     private FileSystemWatcher? _directoryWatcher;
+    private readonly Stack<string> _backHistory = new();
+    private readonly Stack<string> _forwardHistory = new();
     private static readonly TimeSpan DeletedNoteRetention = TimeSpan.FromDays(14); // how long to keep deleted notes
     private static readonly HashSet<string> ReservedFileNames = new(StringComparer.OrdinalIgnoreCase) {
         // windows reserved names
@@ -32,6 +34,8 @@ public sealed class NoteFileService : INoteFileService {
     }
     public bool CanNavigateUp =>
         !string.Equals(CurrentDirectory, NotesDirectory, StringComparison.OrdinalIgnoreCase); // at root?
+    public bool CanNavigateBack => _backHistory.Count > 0;
+    public bool CanNavigateForward => _forwardHistory.Count > 0;
     public string DeletedNotesDirectory { get; }
 
     public event EventHandler? FilesChanged;
@@ -88,6 +92,7 @@ public sealed class NoteFileService : INoteFileService {
 
         NotesDirectory = normalizedPath;
         CurrentDirectory = normalizedPath;
+        ResetNavigationHistory();
         _settingsService.SaveNotesDirectory(NotesDirectory);
 
         if (wasWatching)
@@ -358,8 +363,7 @@ public sealed class NoteFileService : INoteFileService {
         if (!target.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(target, root, StringComparison.OrdinalIgnoreCase))
             return;
-        if (Directory.Exists(target))
-            CurrentDirectory = target;
+        NavigateToDirectory(target, clearForwardHistory: true);
     }
 
     // go up one folder (blocks escape)
@@ -367,10 +371,26 @@ public sealed class NoteFileService : INoteFileService {
         if (!CanNavigateUp) return;
         var parent = Path.GetDirectoryName(CurrentDirectory);
         var root = Path.GetFullPath(NotesDirectory);
-        if (parent is null || !parent.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            CurrentDirectory = NotesDirectory;
-        else
-            CurrentDirectory = parent;
+        var target = parent is null || !parent.StartsWith(root, StringComparison.OrdinalIgnoreCase)
+            ? NotesDirectory
+            : parent;
+        NavigateToDirectory(target, clearForwardHistory: true);
+    }
+
+    public void NavigateBack() {
+        if (!TryPopValidHistoryEntry(_backHistory, out var target))
+            return;
+
+        _forwardHistory.Push(CurrentDirectory);
+        CurrentDirectory = target;
+    }
+
+    public void NavigateForward() {
+        if (!TryPopValidHistoryEntry(_forwardHistory, out var target))
+            return;
+
+        _backHistory.Push(CurrentDirectory);
+        CurrentDirectory = target;
     }
 
     // create a new folder (sanitizes name, blocks traversal)
@@ -470,6 +490,43 @@ public sealed class NoteFileService : INoteFileService {
         var candidate = Path.GetFullPath(path);
         return string.Equals(candidate, root, StringComparison.OrdinalIgnoreCase)
             || candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void NavigateToDirectory(string target, bool clearForwardHistory) {
+        if (!Directory.Exists(target)
+            || string.Equals(target, CurrentDirectory, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _backHistory.Push(CurrentDirectory);
+        CurrentDirectory = target;
+
+        if (clearForwardHistory)
+            _forwardHistory.Clear();
+    }
+
+    private bool TryPopValidHistoryEntry(Stack<string> history, out string target) {
+        var root = Path.GetFullPath(NotesDirectory);
+
+        while (history.Count > 0) {
+            var candidate = history.Pop();
+            if (!Directory.Exists(candidate))
+                continue;
+
+            var fullCandidate = Path.GetFullPath(candidate);
+            if (string.Equals(fullCandidate, root, StringComparison.OrdinalIgnoreCase)
+                || fullCandidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) {
+                target = fullCandidate;
+                return true;
+            }
+        }
+
+        target = string.Empty;
+        return false;
+    }
+
+    private void ResetNavigationHistory() {
+        _backHistory.Clear();
+        _forwardHistory.Clear();
     }
 
     private void StopWatching() {

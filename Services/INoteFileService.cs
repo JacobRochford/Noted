@@ -18,9 +18,13 @@ public interface INoteFileService : IDisposable {
     string CurrentDirectory { get; }
     string CurrentFolderName { get; }   // empty if at root
     bool CanNavigateUp { get; }
+    bool CanNavigateBack { get; }
+    bool CanNavigateForward { get; }
     IReadOnlyList<NoteItem> GetFolders();
     void NavigateTo(string folderName);
     void NavigateUp();
+    void NavigateBack();
+    void NavigateForward();
     
     // folder CRUD
     IReadOnlyList<NoteItem> GetNotesInSubfolder(string subfolderName);

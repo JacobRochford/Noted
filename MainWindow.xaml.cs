@@ -98,6 +98,7 @@ public partial class MainWindow : Window {
         NotesPanel.PreviewMouseMove += NotesPanel_PreviewMouseMove;
         NotesPanel.PreviewMouseLeftButtonUp += NotesPanel_PreviewMouseLeftButtonUp;
         MainCanvas.MouseLeftButtonDown += MainCanvas_MouseLeftButtonDown;
+        PreviewMouseDown += MainWindow_PreviewMouseDown;
         KeyDown += MainWindow_KeyDown;
         NotesPanel.MouseEnter += NotesPanel_MouseEnter;
         NotesPanel.MouseLeave += NotesPanel_MouseLeave;
@@ -726,6 +727,24 @@ public partial class MainWindow : Window {
         _viewModel.NavigateUp();
     }
 
+    private void MainWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e) {
+        if (_viewModel.IsSettingsVisible)
+            return;
+
+        if (e.ChangedButton == MouseButton.XButton1) {
+            if (_viewModel.CanNavigateBack) {
+                _viewModel.NavigateBack();
+                e.Handled = true;
+            }
+            return;
+        }
+
+        if (e.ChangedButton == MouseButton.XButton2 && _viewModel.CanNavigateForward) {
+            _viewModel.NavigateForward();
+            e.Handled = true;
+        }
+    }
+
     private void OpenFolderMenuItem_Click(object sender, RoutedEventArgs e) {
         if (FileList.SelectedItem is NoteItem folder && folder.IsFolder)
             _viewModel.NavigateTo(folder.FileName);
@@ -1274,6 +1293,7 @@ public partial class MainWindow : Window {
         DefaultOpacitySlider.ValueChanged -= DefaultOpacitySlider_ValueChanged;
 
         MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;
+        PreviewMouseDown -= MainWindow_PreviewMouseDown;
         KeyDown -= MainWindow_KeyDown;
         
         HeaderText.MouseLeftButtonDown -= HeaderText_MouseLeftButtonDown;

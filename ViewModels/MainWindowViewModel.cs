@@ -120,6 +120,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
     }
 
     public bool CanNavigateUp => _fileService.CanNavigateUp;
+    public bool CanNavigateBack => _fileService.CanNavigateBack;
+    public bool CanNavigateForward => _fileService.CanNavigateForward;
     public string CurrentFolderName => _fileService.CurrentFolderName;
 
     public FolderNavigationMode FolderNavigationMode {
@@ -172,6 +174,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
             LoadNotesDrillDown(pinned);
 
         OnPropertyChanged(nameof(CanNavigateUp));
+        OnPropertyChanged(nameof(CanNavigateBack));
+        OnPropertyChanged(nameof(CanNavigateForward));
         OnPropertyChanged(nameof(CurrentFolderName));
         OnPropertyChanged(nameof(HasNoNotes));
         NotesLoaded?.Invoke(this, EventArgs.Empty);
@@ -291,6 +295,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
 
     public void NavigateUp() {
         _fileService.NavigateUp();
+        ClearFilter();
+        LoadNotes();
+    }
+
+    public void NavigateBack() {
+        _fileService.NavigateBack();
+        ClearFilter();
+        LoadNotes();
+    }
+
+    public void NavigateForward() {
+        _fileService.NavigateForward();
         ClearFilter();
         LoadNotes();
     }
