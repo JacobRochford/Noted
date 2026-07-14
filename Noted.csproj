@@ -24,7 +24,7 @@
 
 
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
-    <Exec Command="taskkill /F /IM &quot;Noted.exe&quot; 2&gt;nul" />
+    <Exec Command="tasklist /FI &quot;IMAGENAME eq Noted.exe&quot; /NH | find /I &quot;Noted.exe&quot; &gt;nul &amp; if errorlevel 1 (exit /b 0) else (taskkill /F /IM &quot;Noted.exe&quot;)" />
   </Target>
 
 </Project>

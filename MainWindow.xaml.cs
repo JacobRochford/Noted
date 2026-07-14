@@ -20,9 +20,10 @@ namespace Noted;
 
 public partial class MainWindow : Window {
     // Services
-    private readonly AppSettingsService _settingsService;
-    private readonly NoteFileService _fileService;
-    private readonly NotepadProcessService _notepadService;
+    private readonly IAppSettingsService _settingsService;
+    private readonly INoteFileService _fileService;
+    private readonly INotepadProcessService _notepadService;
+    private readonly IStartupService _startupService;
     private readonly MainWindowViewModel _viewModel;
     private readonly DispatcherTimer _renameBannerTimer;
     private GlobalHotkeysService? _globalHotkeysService;
@@ -74,17 +75,22 @@ public partial class MainWindow : Window {
         InitializeNotesView();
         InitializeHotkeyUI();
     }
-        _trayIcon = (Hardcodet.Wpf.TaskbarNotification.TaskbarIcon)Resources["TrayIcon"];
 
+    private void InitializeTrayIcon()
+    {
+        _trayIcon = (Hardcodet.Wpf.TaskbarNotification.TaskbarIcon)Resources["TrayIcon"];
+        _trayIcon.TrayRightMouseUp += TrayIcon_TrayRightMouseUp;
+    }
+
+    private void InitializeSettings()
+    {
         _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
         _ghostModeOpacity = _settingsService.LoadGhostModeOpacity();
         _defaultOpacity = _settingsService.LoadDefaultOpacity();
+    }
 
-        _renameBannerTimer = new DispatcherTimer {
-            Interval = TimeSpan.FromSeconds(10)
-        };
-        _renameBannerTimer.Tick += RenameBannerTimer_Tick;
-
+    private void InitializeEventHandlers()
+    {
         OverlayButton.PreviewMouseLeftButtonDown += OverlayButton_MouseLeftButtonDown;
         OverlayButton.PreviewMouseMove += OverlayButton_MouseMove;
         OverlayButton.PreviewMouseLeftButtonUp += OverlayButton_MouseLeftButtonUp;
@@ -97,19 +103,27 @@ public partial class MainWindow : Window {
         NotesPanel.MouseLeave += NotesPanel_MouseLeave;
         GhostModeOpacitySlider.ValueChanged += GhostModeOpacitySlider_ValueChanged;
         DefaultOpacitySlider.ValueChanged += DefaultOpacitySlider_ValueChanged;
-        _trayIcon.TrayRightMouseUp += TrayIcon_TrayRightMouseUp;
+        Closing += OnClosing;
+        SourceInitialized += MainWindow_SourceInitialized;
+        SearchBox.TextChanged += SearchBox_TextChanged;
+        SearchBox.GotFocus += SearchBox_GotFocus;
+        SearchBox.LostFocus += SearchBox_LostFocus;
+        _viewModel.PropertyChanged += OnViewModelFilterTextChanged;
+    }
 
+    private void InitializeNotesView()
+    {
         FileList.ItemsSource = _viewModel.Notes;
         _viewModel.NotesLoaded += OnNotesLoaded;
         _viewModel.LoadNotes();
         UpdateNotesDirectoryDisplay();
         UpdateSettingsView();
         SetSettingsViewVisible(false);
+    }
 
-        // Initialize hotkey combobox
+    private void InitializeHotkeyUI()
+    {
         HotkeyKeyCombo.ItemsSource = HotkeyConstants.ValidKeys;
-
-        // Hook up hotkey UI change events
         ModifierCtrl.Checked += (s, e) => UpdateHotkeyPreview();
         ModifierCtrl.Unchecked += (s, e) => UpdateHotkeyPreview();
         ModifierAlt.Checked += (s, e) => UpdateHotkeyPreview();
@@ -119,17 +133,8 @@ public partial class MainWindow : Window {
         ModifierWin.Checked += (s, e) => UpdateHotkeyPreview();
         ModifierWin.Unchecked += (s, e) => UpdateHotkeyPreview();
         HotkeyKeyCombo.SelectionChanged += (s, e) => UpdateHotkeyPreview();
-
-        Closing += OnClosing;
-        SourceInitialized += MainWindow_SourceInitialized;
-        HeaderText.MouseLeftButtonDown += HeaderText_MouseLeftButtonDown;
-        HeaderTextEdit.LostFocus += HeaderEditBox_LostFocus;
-        HeaderTextEdit.KeyDown += HeaderEditBox_KeyDown;
-        SearchBox.TextChanged += SearchBox_TextChanged;
-        SearchBox.GotFocus += SearchBox_GotFocus;
-        SearchBox.LostFocus += SearchBox_LostFocus;
-        _viewModel.PropertyChanged += OnViewModelFilterTextChanged;
     }
+
     private void HeaderEditBox_LostFocus(object sender, RoutedEventArgs e)
     {
         EndHeaderEdit(true);
@@ -151,42 +156,52 @@ public partial class MainWindow : Window {
     private void HeaderText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
         if (e.ClickCount == 2)
         {
-            // Remove WS_EX_NOACTIVATE temporarily so the window can receive keyboard input
-            var hwnd = new WindowInteropHelper(this).Handle;
-            int exStyle = WindowInterop.GetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE);
-            WindowInterop.SetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE, exStyle & ~WindowInterop.WS_EX_NOACTIVATE);
-            
-            // Bring the window to the foreground
-            WindowInterop.SetForegroundWindow(hwnd);
-            
-            IsHeaderEditing = true;
             e.Handled = true;
+            var currentHeaderText = _viewModel.EditableHeaderText;
+            Dispatcher.InvokeAsync(() => BeginHeaderEdit(currentHeaderText), DispatcherPriority.Input);
         }
+    }
+
+    private void BeginHeaderEdit(string currentHeaderText)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        WindowInterop.StripNoActivate(hwnd);
+        Activate();
+        WindowInterop.SetForegroundWindow(hwnd);
+
+        _viewModel.IsHeaderEditing = true;
+        HeaderText.Visibility = Visibility.Collapsed;
+        HeaderTextEdit.Visibility = Visibility.Visible;
+        _viewModel.HeaderTextEdit = currentHeaderText;
+
+        HeaderTextEdit.Focus();
+        FocusManager.SetFocusedElement(this, HeaderTextEdit);
+        Keyboard.Focus(HeaderTextEdit);
+        HeaderTextEdit.SelectAll();
     }
 
     private void EndHeaderEdit(bool save)
     {
-        if (!IsHeaderEditing) return;
-        IsHeaderEditing = false;
-        
-        // Restore WS_EX_NOACTIVATE flag
+        if (!_viewModel.IsHeaderEditing) return;
+        _viewModel.IsHeaderEditing = false;
+        HeaderText.Visibility = Visibility.Visible;
+        HeaderTextEdit.Visibility = Visibility.Collapsed;
+
         var hwnd = new WindowInteropHelper(this).Handle;
-        int exStyle = WindowInterop.GetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE);
-        WindowInterop.SetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE, exStyle | WindowInterop.WS_EX_NOACTIVATE);
-        
+        WindowInterop.RestoreNoActivate(hwnd);
+
         if (save)
         {
             var newHeader = HeaderTextEdit.Text.Trim();
             if (string.IsNullOrWhiteSpace(newHeader))
             {
-                newHeader = "Noted.";
                 _settingsService.SaveCustomHeader("");
             }
             else
             {
                 _settingsService.SaveCustomHeader(newHeader);
             }
-            HeaderText.Text = newHeader;
+            _viewModel.SetCustomHeader(newHeader);
         }
     }
 
@@ -285,10 +300,8 @@ public partial class MainWindow : Window {
         }
     }
 
-    // Sync HeaderText and restore the tracked selection after every reload of notes. 
-    // This ensures the UI updates immediately after changes instead of waiting for the next FileSystemWatcher event.
+    // Restore the tracked selection after every reload of notes.
     private void OnNotesLoaded(object? sender, EventArgs e) {
-        UpdateHeaderText();
         UpdateNotesDirectoryDisplay();
         if (_viewModel.SelectedFileName is not null)
             FileList.SelectedItem = _viewModel.FindNote(_viewModel.SelectedFileName);
@@ -301,37 +314,19 @@ public partial class MainWindow : Window {
             ? "Return to notes"
             : "Open settings";
         UpdateShowHideNotesDirectoryButton();
-        // No need to set visibility directly; binding handles it
+        // Visibility is handled by binding.
     }
 
     private void UpdateShowHideNotesDirectoryButton()
     {
         if (ShowHideNotesDirectoryButton != null)
-            ShowHideNotesDirectoryButton.Content = ShowNotesDirectory ? "Hide Folder" : "Show Folder";
-        if (SettingsNotesDirectoryText != null)
-            SettingsNotesDirectoryText.Visibility = ShowNotesDirectory ? Visibility.Visible : Visibility.Collapsed;
+            ShowHideNotesDirectoryButton.Content = _viewModel.ShowNotesDirectory ? "Hide Folder" : "Show Folder";
     }
 
     private void ShowHideNotesDirectoryButton_Click(object sender, RoutedEventArgs e)
     {
-        ShowNotesDirectory = !ShowNotesDirectory;
-    }
-
-    private void UpdateHeaderText() {
-        // Only update if HeaderText is visible (panel is wide enough)
-        if (HeaderText.Visibility == Visibility.Visible)
-        {
-            if (SettingsView.Visibility == Visibility.Visible)
-            {
-                HeaderText.Text = "Settings";
-            }
-            else
-            {
-                // Always restore the custom header from settings
-                var savedHeader = _settingsService.LoadCustomHeader();
-                HeaderText.Text = !string.IsNullOrWhiteSpace(savedHeader) ? savedHeader : "Noted.";
-            }
-        }
+        _viewModel.ShowNotesDirectory = !_viewModel.ShowNotesDirectory;
+        UpdateShowHideNotesDirectoryButton();
     }
 
     // Pin note button click handler
@@ -341,14 +336,15 @@ public partial class MainWindow : Window {
         }
     }
 
-    private void SetSettingsViewVisible(bool isVisible) {
-        NotesListView.Visibility = isVisible ? Visibility.Collapsed : Visibility.Visible;
-        SettingsView.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
-        SettingsButton.Content = isVisible ? "Notes" : "Settings";
-        UpdateHeaderText();
+    private void SetSettingsViewVisible(bool setVisible) {
+        NotesListView.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
+        SettingsView.Visibility = setVisible ? Visibility.Visible : Visibility.Collapsed;
+        SettingsButton.Content = setVisible ? "Notes" : "Settings";
+        HeaderText.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
+        _viewModel.IsSettingsVisible = setVisible;
         UpdateNotesDirectoryDisplay();
         // Restore correct opacity when closing settings (slider may have previewed a value)
-        if (!isVisible)
+        if (!setVisible)
             AnimatePanelOpacity(_ghostModeEnabled ? _ghostModeOpacity : _defaultOpacity);
     }
 
@@ -363,7 +359,7 @@ public partial class MainWindow : Window {
             SettingsNotesDirectoryText.Text = _fileService.NotesDirectory;
             var showModified = _settingsService.LoadShowModifiedSubtitle();
             ShowModifiedSubtitleOption.IsChecked = showModified;
-            ShowModifiedSubtitle = showModified;
+            _viewModel.ShowModifiedSubtitle = showModified;
 
             // Load hotkey settings
             var (modifiers, key) = _settingsService.LoadGlobalHotkey();
@@ -461,7 +457,7 @@ public partial class MainWindow : Window {
         if (_isUpdatingSettingsView) return;
         var isChecked = ShowModifiedSubtitleOption.IsChecked ?? true;
         _settingsService.SaveShowModifiedSubtitle(isChecked);
-        ShowModifiedSubtitle = isChecked;
+        _viewModel.ShowModifiedSubtitle = isChecked;
     }
 
     private void GhostModeOption_Changed(object sender, RoutedEventArgs e) {
@@ -515,6 +511,28 @@ public partial class MainWindow : Window {
         NotesPanel.BeginAnimation(UIElement.OpacityProperty, anim);
     }
 
+    internal bool IsNotesPanelVisible => NotesPanel.Visibility == Visibility.Visible;
+
+    internal void ShowNotesPanel() {
+        NotesPanel.Visibility = Visibility.Visible;
+        if (_ghostModeEnabled)
+            AnimatePanelOpacity(_ghostModeOpacity);
+        else
+            AnimatePanelOpacity(_defaultOpacity);
+        if (_notepadService.IsRunning)
+            _notepadService.Restore();
+
+        // force focus for overlay
+        var hwnd = new WindowInteropHelper(this).Handle;
+        WindowInterop.StripNoActivate(hwnd);
+        WindowInterop.SetForegroundWindow(hwnd);
+
+        // focus list after layout
+        Dispatcher.InvokeAsync(() => FileList.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    internal void HideNotesPanel() => HideNotesPanelAndMinimizeNotepad();
+
     private void HideNotesPanelAndMinimizeNotepad() {
         NotesPanel.Visibility = Visibility.Collapsed;
         _notepadService.Minimize();
@@ -548,7 +566,7 @@ public partial class MainWindow : Window {
         {
             // Always refresh notes list when returning from settings
             var showModified = _settingsService.LoadShowModifiedSubtitle();
-            ShowModifiedSubtitle = showModified;
+            _viewModel.ShowModifiedSubtitle = showModified;
             _viewModel.LoadNotes();
         }
         SetSettingsViewVisible(showSettings);
@@ -654,12 +672,26 @@ public partial class MainWindow : Window {
 
         if (note is null) return;
 
-        try {
-            _fileService.DeleteNote(note.FileName);
-            // FileSystemWatcher triggers a debounced reload automatically.
-        } catch (Exception ex) {
-            MessageBox.Show($"Failed to delete note:\n{ex.Message}",
-                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        if (note.IsFolder) {
+            var message = $"Delete folder '{note.DisplayName}' and all its contents?";
+            if (MessageBox.Show(message, "Delete Folder", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                return;
+
+            var (success, error) = _fileService.DeleteFolder(note.FileName);
+            if (!success)
+                MessageBox.Show(error ?? "Failed to delete folder.", "Delete Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            _viewModel.LoadNotes();
+        } else {
+            try {
+                var containingDirectory = note.FullPath is null
+                    ? null
+                    : Path.GetDirectoryName(note.FullPath);
+                _fileService.DeleteNote(note.FileName, containingDirectory);
+                // FileSystemWatcher triggers a debounced reload automatically.
+            } catch (Exception ex) {
+                MessageBox.Show($"Failed to delete note:\n{ex.Message}",
+                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 
@@ -671,7 +703,7 @@ public partial class MainWindow : Window {
     private void OpenSelectedNote() {
         if (FileList.SelectedItem is not NoteItem note) return;
 
-        var filePath = Path.Combine(_fileService.NotesDirectory, note.FileName);
+        var filePath = note.FullPath ?? Path.Combine(_fileService.CurrentDirectory, note.FileName);
         _viewModel.SelectedFileName = note.FileName;
 
         if (_notepadService.Open(filePath)) {
@@ -684,7 +716,47 @@ public partial class MainWindow : Window {
     }
 
     private void OpenSelectedNote_Click(object sender, RoutedEventArgs e) {
-        OpenSelectedNote();
+        if (FileList.SelectedItem is NoteItem note && note.IsFolder)
+            _viewModel.NavigateTo(note.FileName);
+        else
+            OpenSelectedNote();
+    }
+
+    private void NavigateUpButton_Click(object sender, RoutedEventArgs e) {
+        _viewModel.NavigateUp();
+    }
+
+    private void OpenFolderMenuItem_Click(object sender, RoutedEventArgs e) {
+        if (FileList.SelectedItem is NoteItem folder && folder.IsFolder)
+            _viewModel.NavigateTo(folder.FileName);
+    }
+
+    private void NewFolderMenuItem_Click(object sender, RoutedEventArgs e) {
+        var dialog = new NewNoteNameDialog("") { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+
+        var folderName = dialog.NoteName;
+        if (string.IsNullOrWhiteSpace(folderName)) return;
+
+        var (success, error) = _fileService.CreateFolder(folderName);
+        if (!success) {
+            MessageBox.Show(error ?? "Failed to create folder.", "New Folder", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _viewModel.LoadNotes();
+    }
+
+    private void FileList_ContextMenuOpening(object sender, ContextMenuEventArgs e) {
+        var note = FileList.SelectedItem as NoteItem;
+        var isFolder = note?.IsFolder == true;
+        var hasSelection = note is not null;
+        OpenNoteMenuItem.Visibility = !isFolder && hasSelection ? Visibility.Visible : Visibility.Collapsed;
+        OpenFolderMenuItem.Visibility = isFolder ? Visibility.Visible : Visibility.Collapsed;
+        RenameMenuItem.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+        CopyNameMenuItem.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+        DeleteSeparator.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+        DeleteMenuItem.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ChangeFolderButton_Click(object sender, RoutedEventArgs e) {
@@ -748,17 +820,34 @@ public partial class MainWindow : Window {
 
         if (sender is ListBoxItem item && item.DataContext is NoteItem note) {
             FileList.SelectedItem = note;
-            OpenSelectedNote();
+            if (note.IsFolder) {
+                if (_viewModel.IsExpandMode)
+                    _viewModel.ToggleFolderExpansion(note);
+                else
+                    _viewModel.NavigateTo(note.FileName);
+            } else {
+                OpenSelectedNote();
+            }
             e.Handled = true;
         }
     }
 
     private void FileList_KeyDown(object sender, KeyEventArgs e) {
-        if (e.Key == Key.Enter && FileList.SelectedItem is NoteItem) {
-            OpenSelectedNote();
+        if (e.Key == Key.Enter && FileList.SelectedItem is NoteItem enterNote) {
+            if (enterNote.IsFolder) {
+                if (_viewModel.IsExpandMode)
+                    _viewModel.ToggleFolderExpansion(enterNote);
+                else
+                    _viewModel.NavigateTo(enterNote.FileName);
+            } else {
+                OpenSelectedNote();
+            }
             e.Handled = true;
         } else if (e.Key == Key.F2 && FileList.SelectedItem is NoteItem note) {
             StartRenaming(note);
+            e.Handled = true;
+        } else if (e.Key == Key.Delete && FileList.SelectedItem is NoteItem) {
+            DeleteNoteButton_Click(sender, e);
             e.Handled = true;
         }
     }
@@ -815,11 +904,31 @@ public partial class MainWindow : Window {
         note.IsEditing = false;
     }
 
-    private void CommitRename(NoteItem note, string newDisplayName) {
+    private void CommitRename(NoteItem note, string newName) {
+        if (note.IsFolder)
+            CommitFolderRename(note, newName);
+        else
+            CommitNoteRename(note, newName);
+    }
+
+    private void CommitFolderRename(NoteItem folder, string newName) {
+        var (success, error) = _fileService.RenameFolder(folder.FileName, newName);
+        if (!success)
+            MessageBox.Show(error ?? "Rename failed.", "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+        _viewModel.LoadNotes();
+    }
+
+    private void CommitNoteRename(NoteItem note, string newDisplayName) {
         var oldFileName = note.FileName;
-        var oldFilePath = Path.Combine(_fileService.NotesDirectory, oldFileName);
+        var containingDirectory = note.FullPath is null
+            ? _fileService.CurrentDirectory
+            : Path.GetDirectoryName(note.FullPath) ?? _fileService.CurrentDirectory;
+        var oldFilePath = Path.Combine(containingDirectory, oldFileName);
         var wasNoteOpen = _notepadService.IsFileOpen(oldFilePath);
-        var (success, newFileName, error) = _fileService.RenameNote(note.FileName, newDisplayName);
+        var (success, newFileName, error) = _fileService.RenameNote(
+            note.FileName,
+            newDisplayName,
+            containingDirectory);
         if (!success) {
             if (error is not null)
                 MessageBox.Show(error, "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -830,8 +939,7 @@ public partial class MainWindow : Window {
             return;
 
         ShowRenameNotice(_viewModel.FindNote(newFileName), oldFileName);
-        if (_notepadService.Open(Path.Combine(_fileService.NotesDirectory, newFileName))) {
-            // _notepadService.Restore();
+        if (_notepadService.Open(Path.Combine(containingDirectory, newFileName))) {
         }
     }
 

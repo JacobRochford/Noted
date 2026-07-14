@@ -97,10 +97,13 @@ public sealed class NoteFileService : INoteFileService {
         return true;
     }
 
-    public void DeleteNote(string fileName) {
+    public void DeleteNote(string fileName, string? containingDirectory = null) {
         // move note to DeletedNotes (soft delete)
-        var fullPath = Path.GetFullPath(Path.Combine(CurrentDirectory, fileName));
-        if (!fullPath.StartsWith(Path.GetFullPath(NotesDirectory) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        var directory = ResolveNoteDirectory(containingDirectory);
+        if (directory is null)
+            return;
+        var fullPath = Path.GetFullPath(Path.Combine(directory, fileName));
+        if (!IsPathWithinNotesDirectory(fullPath))
             return;
         if (!File.Exists(fullPath))
             return;
@@ -111,9 +114,17 @@ public sealed class NoteFileService : INoteFileService {
         File.Move(fullPath, deletedPath);
     }
 
-    public (bool Success, string? NewFileName, string? Error) RenameNote(string oldFileName, string newDisplayName) {
+    public (bool Success, string? NewFileName, string? Error) RenameNote(
+        string oldFileName,
+        string newDisplayName,
+        string? containingDirectory = null) {
         // rename note file (validates name)
-        var oldPath = Path.Combine(CurrentDirectory, oldFileName);
+        var directory = ResolveNoteDirectory(containingDirectory);
+        if (directory is null)
+            return (false, null, "Access denied.");
+        var oldPath = Path.GetFullPath(Path.Combine(directory, oldFileName));
+        if (!IsPathWithinNotesDirectory(oldPath))
+            return (false, null, "Access denied.");
 
         var validatedFileName = ValidateAndSanitizeFileName(newDisplayName);
         if (string.IsNullOrWhiteSpace(validatedFileName))
@@ -122,7 +133,9 @@ public sealed class NoteFileService : INoteFileService {
         var newFileName = validatedFileName + ".txt";
         if (newFileName == oldFileName) return (true, oldFileName, null);
 
-        var newPath = Path.Combine(CurrentDirectory, newFileName);
+        var newPath = Path.GetFullPath(Path.Combine(directory, newFileName));
+        if (!IsPathWithinNotesDirectory(newPath))
+            return (false, null, "Access denied.");
 
         try {
             if (!File.Exists(oldPath))
@@ -445,6 +458,18 @@ public sealed class NoteFileService : INoteFileService {
             return Path.GetFullPath(savedDirectory);
 
         return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Notes");
+    }
+
+    private string? ResolveNoteDirectory(string? containingDirectory) {
+        var directory = Path.GetFullPath(containingDirectory ?? CurrentDirectory);
+        return IsPathWithinNotesDirectory(directory) ? directory : null;
+    }
+
+    private bool IsPathWithinNotesDirectory(string path) {
+        var root = Path.GetFullPath(NotesDirectory);
+        var candidate = Path.GetFullPath(path);
+        return string.Equals(candidate, root, StringComparison.OrdinalIgnoreCase)
+            || candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
     private void StopWatching() {

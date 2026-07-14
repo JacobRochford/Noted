@@ -9,8 +9,11 @@ public interface INoteFileService : IDisposable {
     IReadOnlyList<NoteItem> GetNotes();
     string CreateNote(string? requestedName = null);
     bool ChangeNotesDirectory(string newDirectory);
-    void DeleteNote(string fileName);
-    (bool Success, string? NewFileName, string? Error) RenameNote(string oldFileName, string newDisplayName);
+    void DeleteNote(string fileName, string? containingDirectory = null);
+    (bool Success, string? NewFileName, string? Error) RenameNote(
+        string oldFileName,
+        string newDisplayName,
+        string? containingDirectory = null);
     void StartWatching();
     string CurrentDirectory { get; }
     string CurrentFolderName { get; }   // empty if at root

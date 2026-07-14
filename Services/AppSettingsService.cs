@@ -1,6 +1,46 @@
 using System.IO;
 using System.Text.Json;
+using Noted.Models;
+
 namespace Noted.Services;
+
+public sealed record ChecklistItemData
+{
+    public string? Text { get; init; }
+    public bool IsChecked { get; init; }
+    public ChecklistPriority Priority { get; init; } = ChecklistPriority.None;
+    public DateTime? DueDate { get; init; }
+    public string? Notes { get; init; }
+    public DateTime CreatedAt { get; init; } = DateTime.Now;
+}
+
+public sealed record ChecklistWindowState
+{
+    public double Left { get; init; } = 100;
+    public double Top { get; init; } = 100;
+    public double Width { get; init; } = 300;
+    public double Height { get; init; } = 400;
+    public double Opacity { get; init; } = 0.88;
+    public double GhostModeOpacity { get; init; } = 0.25;
+    public bool GhostModeEnabled { get; init; } = false;
+}
+
+public sealed record DictionaryItemData
+{
+    public string? Word { get; init; }
+    public string? Description { get; init; }
+}
+
+public sealed record DictionaryWindowState
+{
+    public double Left { get; init; } = 200;
+    public double Top { get; init; } = 150;
+    public double Width { get; init; } = 400;
+    public double Height { get; init; } = 500;
+    public double Opacity { get; init; } = 0.88;
+    public double GhostModeOpacity { get; init; } = 0.25;
+    public bool GhostModeEnabled { get; init; } = false;
+}
 
 /// Specifies where a timestamp should be placed in newly created notes.
 public enum NoteTimestampPlacement {
@@ -105,6 +145,46 @@ public sealed class AppSettingsService : IAppSettingsService {
     public FolderNavigationMode LoadFolderNavigationMode() => LoadSetting(s => s.FolderNavigationMode);
     public void SaveFolderNavigationMode(FolderNavigationMode mode) => SaveSetting(s => s with { FolderNavigationMode = mode });
 
+    public IReadOnlyList<ChecklistItemData> LoadChecklistItems()
+    {
+        return LoadSetting(s => s.ChecklistItems ?? new List<ChecklistItemData>());
+    }
+
+    public void SaveChecklistItems(IReadOnlyList<ChecklistItemData> items)
+    {
+        SaveSetting(s => s with { ChecklistItems = items?.ToList() ?? new List<ChecklistItemData>() });
+    }
+
+    public ChecklistWindowState LoadChecklistWindowState()
+    {
+        return LoadSetting(s => s.ChecklistWindowState ?? new ChecklistWindowState());
+    }
+
+    public void SaveChecklistWindowState(ChecklistWindowState state)
+    {
+        SaveSetting(s => s with { ChecklistWindowState = state });
+    }
+
+    public IReadOnlyList<DictionaryItemData> LoadDictionaryItems()
+    {
+        return LoadSetting(s => s.DictionaryItems ?? new List<DictionaryItemData>());
+    }
+
+    public void SaveDictionaryItems(IReadOnlyList<DictionaryItemData> items)
+    {
+        SaveSetting(s => s with { DictionaryItems = items?.ToList() ?? new List<DictionaryItemData>() });
+    }
+
+    public DictionaryWindowState LoadDictionaryWindowState()
+    {
+        return LoadSetting(s => s.DictionaryWindowState ?? new DictionaryWindowState());
+    }
+
+    public void SaveDictionaryWindowState(DictionaryWindowState state)
+    {
+        SaveSetting(s => s with { DictionaryWindowState = state });
+    }
+
     private T LoadSetting<T>(Func<AppSettings, T> selector) {
         return selector(LoadSettings());
     }
@@ -158,5 +238,9 @@ public sealed class AppSettingsService : IAppSettingsService {
         public double GhostModeOpacity { get; init; } = 0.25;
         public double DefaultOpacity { get; init; } = 0.88;
         public FolderNavigationMode FolderNavigationMode { get; init; } = FolderNavigationMode.DrillDown;
+        public List<ChecklistItemData>? ChecklistItems { get; init; }
+        public ChecklistWindowState? ChecklistWindowState { get; init; }
+        public List<DictionaryItemData>? DictionaryItems { get; init; }
+        public DictionaryWindowState? DictionaryWindowState { get; init; }
     }
 }
