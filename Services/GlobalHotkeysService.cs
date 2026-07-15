@@ -1,187 +1,684 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 
 namespace Noted.Services;
 
-public sealed class GlobalHotkeysService : IDisposable {
-    private const int WM_HOTKEY = 0x0312;
-    private const int HOTKEY_ID = 9001;
+internal sealed record HotkeyRegistration(
+    int Id,
+    string FeatureName,
+    string Modifiers,
+    string Key)
+{
+    public string Combination => $"{Modifiers}+{Key}";
+}
 
-    // Modifier key flags for RegisterHotKey
+internal sealed record HotkeyValidationResult(
+    bool Success,
+    string? Modifiers,
+    string? Key,
+    string Description)
+{
+    public string? Combination => Success ? $"{Modifiers}+{Key}" : null;
+}
+
+internal sealed record HotkeyRegistrationResult(
+    bool Success,
+    HotkeyRegistration? Registration,
+    string? RequestedModifiers,
+    string? RequestedKey,
+    bool InProcessConflict,
+    string? ConflictingFeature,
+    bool OperatingSystemRejected,
+    int? NativeError,
+    string Description);
+
+internal sealed record HotkeyUnregistrationResult(
+    bool Success,
+    bool AlreadyAbsent,
+    HotkeyRegistration? Registration,
+    int? NativeError,
+    string Description);
+
+internal sealed record HotkeyReplacementResult(
+    bool Success,
+    bool NoChange,
+    HotkeyRegistration? ActiveRegistration,
+    HotkeyRegistration? AdditionalActiveRegistration,
+    HotkeyRegistrationResult? CandidateResult,
+    bool RollbackAttempted,
+    bool RollbackSucceeded,
+    int? PreviousUnregisterError,
+    int? CandidateRollbackError,
+    string Description)
+{
+    public bool HasDualActiveRegistrations =>
+        ActiveRegistration is not null && AdditionalActiveRegistration is not null;
+}
+
+public sealed class GlobalHotkeysService : IDisposable
+{
+    private const int WM_HOTKEY = 0x0312;
     private const uint MOD_ALT = 0x0001;
     private const uint MOD_CONTROL = 0x0002;
     private const uint MOD_SHIFT = 0x0004;
     private const uint MOD_WIN = 0x0008;
 
-    private readonly Window _window;
-    private HwndSource? _hwndSource;
-    private bool _isRegistered;
-    private Action? _onHotkeyPressed;
+    private readonly IntPtr _hwnd;
+    private readonly HwndSource _hwndSource;
+    private readonly Dictionary<int, OwnedRegistration> _registrationsById = new();
+    private readonly Dictionary<HotkeyCombination, int> _registrationIdsByCombination = new();
+    private int _nextRegistrationId = 9000;
+    private bool _hookAttached;
+    private bool _disposed;
 
-    public GlobalHotkeysService(Window window) {
-        _window = window;
+    private readonly record struct HotkeyCombination(uint Modifiers, uint VirtualKey);
+
+    private readonly record struct NormalizedHotkey(
+        HotkeyCombination Combination,
+        string Modifiers,
+        string Key);
+
+    private sealed record OwnedRegistration(
+        HotkeyRegistration Registration,
+        HotkeyCombination Combination,
+        Action Callback);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool RegisterHotKey(
+        IntPtr hWnd,
+        int id,
+        uint fsModifiers,
+        uint vk);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+    public GlobalHotkeysService(Window window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+
+        _hwnd = new WindowInteropHelper(window).Handle;
+        if (_hwnd == IntPtr.Zero)
+            throw new InvalidOperationException("The window handle is not available for hotkey registration.");
+
+        _hwndSource = HwndSource.FromHwnd(_hwnd)
+            ?? throw new InvalidOperationException("The window message source is not available for hotkey registration.");
+
+        _hwndSource.AddHook(HwndHook);
+        _hookAttached = true;
     }
 
-    // format: "Ctrl+Shift", "N"
-    public bool Register(string modifiersString, string keyString, Action onHotkeyPressed) {
-        try {
-            if (_isRegistered)
-            {
-                Unregister();
-            }
+    internal HotkeyValidationResult Validate(string? modifiers, string? key)
+    {
+        return TryNormalize(modifiers, key, out var normalized, out var error)
+            ? new HotkeyValidationResult(true, normalized.Modifiers, normalized.Key, string.Empty)
+            : new HotkeyValidationResult(false, null, null, error);
+    }
 
-            _onHotkeyPressed = onHotkeyPressed;
+    internal HotkeyRegistrationResult Register(
+        string featureName,
+        string? modifiers,
+        string? key,
+        Action callback)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
 
-            uint modifiers = ParseModifiers(modifiersString);
-            uint virtualKey = ParseVirtualKey(keyString);
-
-            if (virtualKey == 0) {
-                return false;
-            }
-
-            IntPtr hwnd = new WindowInteropHelper(_window).Handle;
-            if (hwnd == IntPtr.Zero) {
-                return false;
-            }
-
-            if (!RegisterHotKey(hwnd, HOTKEY_ID, modifiers, virtualKey)) {
-                int error = Marshal.GetLastWin32Error();
-                return false;
-            }
-
-            _hwndSource = HwndSource.FromHwnd(hwnd);
-            _hwndSource?.AddHook(HwndHook);
-
-            _isRegistered = true;
-            return true;
-        } catch (Exception ex) {
-            return false;
+        if (_disposed)
+        {
+            return RegistrationFailure(
+                "The global hotkey service has already been disposed.",
+                modifiers,
+                key);
         }
+
+        if (string.IsNullOrWhiteSpace(featureName))
+            return RegistrationFailure("A hotkey feature name is required.", modifiers, key);
+
+        if (!TryNormalize(modifiers, key, out var normalized, out var validationError))
+            return RegistrationFailure(validationError, modifiers, key);
+
+        if (_registrationIdsByCombination.TryGetValue(normalized.Combination, out var conflictingId)
+            && _registrationsById.TryGetValue(conflictingId, out var conflictingRegistration))
+        {
+            return new HotkeyRegistrationResult(
+                false,
+                null,
+                normalized.Modifiers,
+                normalized.Key,
+                true,
+                conflictingRegistration.Registration.FeatureName,
+                false,
+                null,
+                $"{featureName} hotkey {normalized.Modifiers}+{normalized.Key} conflicts with the active {conflictingRegistration.Registration.FeatureName} hotkey.");
+        }
+
+        var id = AllocateRegistrationId();
+        if (!RegisterHotKey(
+                _hwnd,
+                id,
+                normalized.Combination.Modifiers,
+                normalized.Combination.VirtualKey))
+        {
+            var nativeError = Marshal.GetLastWin32Error();
+            var description = DescribeNativeFailure(
+                $"Windows rejected the {featureName} hotkey {normalized.Modifiers}+{normalized.Key}",
+                nativeError);
+            Debug.WriteLine(description);
+
+            return new HotkeyRegistrationResult(
+                false,
+                null,
+                normalized.Modifiers,
+                normalized.Key,
+                false,
+                null,
+                true,
+                nativeError,
+                description);
+        }
+
+        var registration = new HotkeyRegistration(
+            id,
+            featureName,
+            normalized.Modifiers,
+            normalized.Key);
+        var ownedRegistration = new OwnedRegistration(
+            registration,
+            normalized.Combination,
+            callback);
+
+        _registrationsById.Add(id, ownedRegistration);
+        _registrationIdsByCombination.Add(normalized.Combination, id);
+
+        return new HotkeyRegistrationResult(
+            true,
+            registration,
+            normalized.Modifiers,
+            normalized.Key,
+            false,
+            null,
+            false,
+            null,
+            string.Empty);
     }
 
-    public void Unregister() {
-        if (!_isRegistered)
+    internal HotkeyReplacementResult Replace(
+        string featureName,
+        HotkeyRegistration? currentRegistration,
+        string? modifiers,
+        string? key,
+        Action callback)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
+
+        var ownedForFeature = _registrationsById.Values
+            .Where(owned => string.Equals(
+                owned.Registration.FeatureName,
+                featureName,
+                StringComparison.Ordinal))
+            .Select(owned => owned.Registration)
+            .OrderBy(registration => registration.Id)
+            .ToList();
+
+        if (ownedForFeature.Count > 1)
+        {
+            return new HotkeyReplacementResult(
+                false,
+                false,
+                ownedForFeature[0],
+                ownedForFeature[1],
+                null,
+                false,
+                false,
+                null,
+                null,
+                $"{featureName} has multiple active registrations. Restart Noted before attempting another replacement.");
+        }
+
+        if (currentRegistration is null && ownedForFeature.Count == 1)
+        {
+            return new HotkeyReplacementResult(
+                false,
+                false,
+                ownedForFeature[0],
+                null,
+                null,
+                false,
+                false,
+                null,
+                null,
+                $"The active {featureName} registration is not synchronized with the window state.");
+        }
+
+        OwnedRegistration? currentOwned = null;
+        if (currentRegistration is not null)
+        {
+            if (!_registrationsById.TryGetValue(currentRegistration.Id, out currentOwned)
+                || !string.Equals(
+                    currentOwned.Registration.FeatureName,
+                    featureName,
+                    StringComparison.Ordinal))
+            {
+                return new HotkeyReplacementResult(
+                    false,
+                    false,
+                    ownedForFeature.SingleOrDefault(),
+                    null,
+                    null,
+                    false,
+                    false,
+                    null,
+                    null,
+                    $"The previous {featureName} registration is no longer owned by the hotkey service.");
+            }
+        }
+
+        if (!TryNormalize(modifiers, key, out var normalized, out var validationError))
+        {
+            var failedCandidate = RegistrationFailure(validationError, modifiers, key);
+            return ReplacementCandidateFailure(currentOwned?.Registration, failedCandidate);
+        }
+
+        if (currentOwned is not null && currentOwned.Combination == normalized.Combination)
+        {
+            return new HotkeyReplacementResult(
+                true,
+                true,
+                currentOwned.Registration,
+                null,
+                null,
+                false,
+                false,
+                null,
+                null,
+                string.Empty);
+        }
+
+        var candidateResult = Register(
+            featureName,
+            normalized.Modifiers,
+            normalized.Key,
+            callback);
+        if (!candidateResult.Success || candidateResult.Registration is null)
+            return ReplacementCandidateFailure(currentOwned?.Registration, candidateResult);
+
+        var candidate = candidateResult.Registration;
+        if (currentOwned is null)
+        {
+            return new HotkeyReplacementResult(
+                true,
+                false,
+                candidate,
+                null,
+                candidateResult,
+                false,
+                false,
+                null,
+                null,
+                string.Empty);
+        }
+
+        var previousUnregistration = Unregister(currentOwned.Registration.Id);
+        if (previousUnregistration.Success)
+        {
+            return new HotkeyReplacementResult(
+                true,
+                false,
+                candidate,
+                null,
+                candidateResult,
+                false,
+                false,
+                null,
+                null,
+                string.Empty);
+        }
+
+        var candidateRollback = Unregister(candidate.Id);
+        if (candidateRollback.Success)
+        {
+            return new HotkeyReplacementResult(
+                false,
+                false,
+                currentOwned.Registration,
+                null,
+                candidateResult,
+                true,
+                true,
+                previousUnregistration.NativeError,
+                null,
+                $"The new {featureName} hotkey was registered, but the previous hotkey could not be released. The new registration was rolled back and the previous registration remains active. {previousUnregistration.Description}");
+        }
+
+        return new HotkeyReplacementResult(
+            false,
+            false,
+            currentOwned.Registration,
+            candidate,
+            candidateResult,
+            true,
+            false,
+            previousUnregistration.NativeError,
+            candidateRollback.NativeError,
+            $"The previous {featureName} hotkey and candidate hotkey could not be released. Both {currentOwned.Registration.Combination} and {candidate.Combination} may remain active until Noted exits. Previous release: {previousUnregistration.Description} Candidate rollback: {candidateRollback.Description}");
+    }
+
+    internal HotkeyUnregistrationResult Unregister(int id)
+    {
+        if (!_registrationsById.TryGetValue(id, out var ownedRegistration))
+        {
+            return new HotkeyUnregistrationResult(
+                true,
+                true,
+                null,
+                null,
+                "The registration is already absent.");
+        }
+
+        if (_disposed)
+        {
+            return new HotkeyUnregistrationResult(
+                false,
+                false,
+                ownedRegistration.Registration,
+                null,
+                "The global hotkey service has already been disposed.");
+        }
+
+        try
+        {
+            if (!UnregisterHotKey(_hwnd, id))
+            {
+                var nativeError = Marshal.GetLastWin32Error();
+                var description = DescribeNativeFailure(
+                    $"Windows could not unregister {ownedRegistration.Registration.FeatureName} hotkey {ownedRegistration.Registration.Combination}",
+                    nativeError);
+                Debug.WriteLine(description);
+
+                return new HotkeyUnregistrationResult(
+                    false,
+                    false,
+                    ownedRegistration.Registration,
+                    nativeError,
+                    description);
+            }
+        }
+        catch (Exception exception)
+        {
+            var description = $"Unregistering {ownedRegistration.Registration.FeatureName} hotkey {ownedRegistration.Registration.Combination} threw {exception.GetType().Name}: {exception.Message}";
+            Debug.WriteLine(description);
+            return new HotkeyUnregistrationResult(
+                false,
+                false,
+                ownedRegistration.Registration,
+                null,
+                description);
+        }
+
+        _registrationsById.Remove(id);
+        if (_registrationIdsByCombination.TryGetValue(
+                ownedRegistration.Combination,
+                out var combinationId)
+            && combinationId == id)
+        {
+            _registrationIdsByCombination.Remove(ownedRegistration.Combination);
+        }
+
+        return new HotkeyUnregistrationResult(
+            true,
+            false,
+            ownedRegistration.Registration,
+            null,
+            string.Empty);
+    }
+
+    internal IReadOnlyList<HotkeyUnregistrationResult> UnregisterAll()
+    {
+        if (_disposed)
+            return Array.Empty<HotkeyUnregistrationResult>();
+
+        var results = new List<HotkeyUnregistrationResult>();
+        foreach (var id in _registrationsById.Keys.ToList())
+            results.Add(Unregister(id));
+
+        return results;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
             return;
 
-        try {
-            IntPtr hwnd = new WindowInteropHelper(_window).Handle;
-            if (hwnd != IntPtr.Zero) {
-                UnregisterHotKey(hwnd, HOTKEY_ID);
+        var cleanupResults = UnregisterAll();
+        foreach (var failure in cleanupResults.Where(result => !result.Success))
+            Debug.WriteLine($"Hotkey cleanup failure: {failure.Description}");
+
+        if (_hookAttached)
+        {
+            try
+            {
+                _hwndSource.RemoveHook(HwndHook);
+            }
+            catch (Exception exception)
+            {
+                Debug.WriteLine($"Removing the global hotkey window hook failed: {exception}");
             }
 
-            _hwndSource?.RemoveHook(HwndHook);
-            _hwndSource = null;
-            _isRegistered = false;
-        } catch (Exception ex) {
+            _hookAttached = false;
         }
+
+        _disposed = true;
     }
 
-    private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) {
-        if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID) {
-            _onHotkeyPressed?.Invoke();
+    private IntPtr HwndHook(
+        IntPtr hwnd,
+        int message,
+        IntPtr wParam,
+        IntPtr lParam,
+        ref bool handled)
+    {
+        if (message == WM_HOTKEY
+            && _registrationsById.TryGetValue(wParam.ToInt32(), out var registration))
+        {
+            registration.Callback();
             handled = true;
-            return IntPtr.Zero;
         }
 
         return IntPtr.Zero;
     }
 
-    private uint ParseModifiers(string modifiersString) {
-        uint modifiers = 0;
-        var parts = modifiersString.Split('+');
+    private int AllocateRegistrationId()
+    {
+        while (_registrationsById.ContainsKey(_nextRegistrationId))
+            _nextRegistrationId++;
 
-        foreach (var part in parts) {
-            string trimmed = part.Trim().ToLower();
-            modifiers |= trimmed switch {
-                "alt" => MOD_ALT,
-                "ctrl" or "control" => MOD_CONTROL,
-                "shift" => MOD_SHIFT,
-                "win" or "windows" => MOD_WIN,
-                _ => 0
-            };
+        return _nextRegistrationId++;
+    }
+
+    private static HotkeyRegistrationResult RegistrationFailure(
+        string description,
+        string? requestedModifiers,
+        string? requestedKey)
+    {
+        return new HotkeyRegistrationResult(
+            false,
+            null,
+            requestedModifiers,
+            requestedKey,
+            false,
+            null,
+            false,
+            null,
+            description);
+    }
+
+    private static HotkeyReplacementResult ReplacementCandidateFailure(
+        HotkeyRegistration? activeRegistration,
+        HotkeyRegistrationResult candidateResult)
+    {
+        return new HotkeyReplacementResult(
+            false,
+            false,
+            activeRegistration,
+            null,
+            candidateResult,
+            false,
+            false,
+            null,
+            null,
+            candidateResult.Description);
+    }
+
+    private static string DescribeNativeFailure(string context, int nativeError)
+    {
+        return $"{context}. Win32 error {nativeError}: {new Win32Exception(nativeError).Message}";
+    }
+
+    private static bool TryNormalize(
+        string? modifiersText,
+        string? keyText,
+        out NormalizedHotkey normalized,
+        out string error)
+    {
+        normalized = default;
+
+        if (string.IsNullOrWhiteSpace(modifiersText))
+        {
+            error = "Select at least one modifier.";
+            return false;
         }
 
-        return modifiers;
+        var modifierParts = modifiersText.Split('+');
+        if (modifierParts.Length == 0 || modifierParts.Any(string.IsNullOrWhiteSpace))
+        {
+            error = $"The modifier combination '{modifiersText}' is malformed.";
+            return false;
+        }
+
+        var modifierNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        uint modifierFlags = 0;
+        foreach (var rawPart in modifierParts)
+        {
+            var part = rawPart.Trim();
+            var modifier = part.ToLowerInvariant() switch
+            {
+                "ctrl" or "control" => (Name: "Ctrl", Flag: MOD_CONTROL),
+                "alt" => (Name: "Alt", Flag: MOD_ALT),
+                "shift" => (Name: "Shift", Flag: MOD_SHIFT),
+                "win" or "windows" => (Name: "Win", Flag: MOD_WIN),
+                _ => (Name: string.Empty, Flag: 0u)
+            };
+
+            if (modifier.Flag == 0)
+            {
+                error = $"Unknown hotkey modifier '{part}'.";
+                return false;
+            }
+
+            if (!modifierNames.Add(modifier.Name))
+            {
+                error = $"The hotkey modifier '{modifier.Name}' is duplicated.";
+                return false;
+            }
+
+            modifierFlags |= modifier.Flag;
+        }
+
+        if (modifierFlags == 0)
+        {
+            error = "Select at least one modifier.";
+            return false;
+        }
+
+        if (!TryNormalizeKey(keyText, out var normalizedKey, out var virtualKey, out error))
+            return false;
+
+        var canonicalModifiers = new List<string>(4);
+        if ((modifierFlags & MOD_CONTROL) != 0) canonicalModifiers.Add("Ctrl");
+        if ((modifierFlags & MOD_ALT) != 0) canonicalModifiers.Add("Alt");
+        if ((modifierFlags & MOD_SHIFT) != 0) canonicalModifiers.Add("Shift");
+        if ((modifierFlags & MOD_WIN) != 0) canonicalModifiers.Add("Win");
+
+        normalized = new NormalizedHotkey(
+            new HotkeyCombination(modifierFlags, virtualKey),
+            string.Join("+", canonicalModifiers),
+            normalizedKey);
+        error = string.Empty;
+        return true;
     }
 
-    private uint ParseVirtualKey(string keyString) {
-        string key = keyString.Trim().ToUpper();
+    private static bool TryNormalizeKey(
+        string? keyText,
+        out string normalizedKey,
+        out uint virtualKey,
+        out string error)
+    {
+        normalizedKey = string.Empty;
+        virtualKey = 0;
 
-        return key switch {
-            "SPACE" => 0x20,
-            "ENTER" or "RETURN" => 0x0D,
-            "TAB" => 0x09,
-            "ESC" or "ESCAPE" => 0x1B,
-            "DELETE" or "DEL" => 0x2E,
-            "INSERT" or "INS" => 0x2D,
-            "HOME" => 0x24,
-            "END" => 0x23,
-            "PAGEUP" or "PRIOR" => 0x21,
-            "PAGEDOWN" or "NEXT" => 0x22,
-            "UP" => 0x26,
-            "DOWN" => 0x28,
-            "LEFT" => 0x25,
-            "RIGHT" => 0x27,
-            "A" => 0x41,
-            "B" => 0x42,
-            "C" => 0x43,
-            "D" => 0x44,
-            "E" => 0x45,
-            "F" => 0x46,
-            "G" => 0x47,
-            "H" => 0x48,
-            "I" => 0x49,
-            "J" => 0x4A,
-            "K" => 0x4B,
-            "L" => 0x4C,
-            "M" => 0x4D,
-            "N" => 0x4E,
-            "O" => 0x4F,
-            "P" => 0x50,
-            "Q" => 0x51,
-            "R" => 0x52,
-            "S" => 0x53,
-            "T" => 0x54,
-            "U" => 0x55,
-            "V" => 0x56,
-            "W" => 0x57,
-            "X" => 0x58,
-            "Y" => 0x59,
-            "Z" => 0x5A,
-            "0" => 0x30,
-            "1" => 0x31,
-            "2" => 0x32,
-            "3" => 0x33,
-            "4" => 0x34,
-            "5" => 0x35,
-            "6" => 0x36,
-            "7" => 0x37,
-            "8" => 0x38,
-            "9" => 0x39,
-            "F1" => 0x70,
-            "F2" => 0x71,
-            "F3" => 0x72,
-            "F4" => 0x73,
-            "F5" => 0x74,
-            "F6" => 0x75,
-            "F7" => 0x76,
-            "F8" => 0x77,
-            "F9" => 0x78,
-            "F10" => 0x79,
-            "F11" => 0x7A,
-            "F12" => 0x7B,
-            _ => 0
-        };
+        if (string.IsNullOrWhiteSpace(keyText))
+        {
+            error = "Select a hotkey key.";
+            return false;
+        }
+
+        var key = keyText.Trim().ToUpperInvariant();
+        switch (key)
+        {
+            case "SPACE": normalizedKey = "Space"; virtualKey = 0x20; break;
+            case "TAB": normalizedKey = "Tab"; virtualKey = 0x09; break;
+            case "ENTER":
+            case "RETURN": normalizedKey = "Enter"; virtualKey = 0x0D; break;
+            case "ESC":
+            case "ESCAPE": normalizedKey = "Escape"; virtualKey = 0x1B; break;
+            case "DELETE":
+            case "DEL": normalizedKey = "Delete"; virtualKey = 0x2E; break;
+            case "INSERT":
+            case "INS": normalizedKey = "Insert"; virtualKey = 0x2D; break;
+            case "HOME": normalizedKey = "Home"; virtualKey = 0x24; break;
+            case "END": normalizedKey = "End"; virtualKey = 0x23; break;
+            case "PAGEUP":
+            case "PRIOR": normalizedKey = "PageUp"; virtualKey = 0x21; break;
+            case "PAGEDOWN":
+            case "NEXT": normalizedKey = "PageDown"; virtualKey = 0x22; break;
+            case "LEFT": normalizedKey = "Left"; virtualKey = 0x25; break;
+            case "RIGHT": normalizedKey = "Right"; virtualKey = 0x27; break;
+            case "UP": normalizedKey = "Up"; virtualKey = 0x26; break;
+            case "DOWN": normalizedKey = "Down"; virtualKey = 0x28; break;
+            case "PRINT": normalizedKey = "Print"; virtualKey = 0x2C; break;
+            case "PAUSE": normalizedKey = "Pause"; virtualKey = 0x13; break;
+            default:
+                if (key.Length == 1 && key[0] is >= 'A' and <= 'Z')
+                {
+                    normalizedKey = key;
+                    virtualKey = key[0];
+                }
+                else if (key.Length == 1 && key[0] is >= '0' and <= '9')
+                {
+                    normalizedKey = key;
+                    virtualKey = key[0];
+                }
+                else if (key.Length is 2 or 3
+                    && key[0] == 'F'
+                    && int.TryParse(key[1..], out var functionKey)
+                    && functionKey is >= 1 and <= 12)
+                {
+                    normalizedKey = $"F{functionKey}";
+                    virtualKey = (uint)(0x70 + functionKey - 1);
+                }
+                else
+                {
+                    error = $"Unknown hotkey key '{keyText.Trim()}'.";
+                    return false;
+                }
+
+                break;
+        }
+
+        error = string.Empty;
+        return true;
     }
-
-    public void Dispose() {
-        Unregister();
-    }
-
-    [DllImport("user32.dll")]
-    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-
-    [DllImport("user32.dll")]
-    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 }

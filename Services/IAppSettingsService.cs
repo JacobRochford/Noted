@@ -20,6 +20,10 @@ public interface IAppSettingsService {
     void SaveCustomHeader(string? customHeader);
     (string modifiers, string key) LoadGlobalHotkey();
     void SaveGlobalHotkey(string modifiers, string key);
+    (string modifiers, string key) LoadChecklistHotkey();
+    void SaveChecklistHotkey(string modifiers, string key);
+    (string modifiers, string key) LoadDictionaryHotkey();
+    void SaveDictionaryHotkey(string modifiers, string key);
     bool LoadGhostModeEnabled();
     void SaveGhostModeEnabled(bool enabled);
     double LoadGhostModeOpacity();

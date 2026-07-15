@@ -182,6 +182,28 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { HotkeyModifiers = modifiers, HotkeyKey = key });
     }
 
+    public (string modifiers, string key) LoadChecklistHotkey()
+    {
+        var setting = LoadSettings();
+        return (setting.ChecklistHotkeyModifiers ?? "Alt", setting.ChecklistHotkeyKey ?? "C");
+    }
+
+    public void SaveChecklistHotkey(string modifiers, string key)
+    {
+        SaveSetting(s => s with { ChecklistHotkeyModifiers = modifiers, ChecklistHotkeyKey = key });
+    }
+
+    public (string modifiers, string key) LoadDictionaryHotkey()
+    {
+        var setting = LoadSettings();
+        return (setting.DictionaryHotkeyModifiers ?? "Alt", setting.DictionaryHotkeyKey ?? "D");
+    }
+
+    public void SaveDictionaryHotkey(string modifiers, string key)
+    {
+        SaveSetting(s => s with { DictionaryHotkeyModifiers = modifiers, DictionaryHotkeyKey = key });
+    }
+
     public bool LoadGhostModeEnabled() => LoadSetting(s => s.GhostModeEnabled);
     public void SaveGhostModeEnabled(bool enabled) => SaveSetting(s => s with { GhostModeEnabled = enabled });
     public double LoadGhostModeOpacity() => LoadSetting(s => s.GhostModeOpacity);
@@ -361,6 +383,10 @@ public sealed class AppSettingsService : IAppSettingsService {
         public List<string>? PinnedNotes { get; init; }
         public string HotkeyModifiers { get; init; } = "Ctrl+Shift";
         public string HotkeyKey { get; init; } = "Space";
+        public string ChecklistHotkeyModifiers { get; init; } = "Alt";
+        public string ChecklistHotkeyKey { get; init; } = "C";
+        public string DictionaryHotkeyModifiers { get; init; } = "Alt";
+        public string DictionaryHotkeyKey { get; init; } = "D";
         public bool GhostModeEnabled { get; init; } = false;
         public double GhostModeOpacity { get; init; } = 0.25;
         public double DefaultOpacity { get; init; } = 0.88;

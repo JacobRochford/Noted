@@ -27,6 +27,10 @@ public partial class MainWindow : Window {
     private readonly MainWindowViewModel _viewModel;
     private readonly DispatcherTimer _renameBannerTimer;
     private GlobalHotkeysService? _globalHotkeysService;
+    private HotkeyRegistration? _mainHotkeyRegistration;
+    private HotkeyRegistration? _additionalMainHotkeyRegistration;
+    private HotkeyRegistration? _checklistHotkeyRegistration;
+    private HotkeyRegistration? _dictionaryHotkeyRegistration;
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
 
     // UI State
@@ -34,6 +38,8 @@ public partial class MainWindow : Window {
     private bool _runOnStartupDisplayedState;
     private bool _hideButtonHidesAll;
     private bool _cleanupCompleted;
+    private bool _hotkeyInitializationInProgress;
+    private bool _hotkeysInitialized;
 
     // Ghost mode state
     private bool _ghostModeEnabled;
@@ -47,6 +53,14 @@ public partial class MainWindow : Window {
     private double _dragInitialLeft;
     private double _dragInitialTop;
     private const double _dragThreshold = 5.0;
+
+    private static readonly string[] FallbackHotkeyModifiers =
+        { "Alt+Shift", "Ctrl+Alt", "Win+Alt", "Ctrl+Shift" };
+
+    private sealed record InitialHotkeyResult(
+        HotkeyRegistration? Registration,
+        bool UsedFallback,
+        string? Warning);
 
 
     public MainWindow(
@@ -239,51 +253,7 @@ public partial class MainWindow : Window {
         const double marginFromTaskbar = 8;
         Canvas.SetBottom(OverlayButton, taskbarHeight + marginFromTaskbar);
 
-        // Register global hotkey with fallback options
-        _globalHotkeysService = new GlobalHotkeysService(this);
-        var (modifiers, key) = _settingsService.LoadGlobalHotkey();
-        
-        // Try primary hotkey first
-        if (_globalHotkeysService.Register(modifiers, key, OnGlobalHotkeyPressed))
-        {
-            System.Diagnostics.Debug.WriteLine($"Hotkey registered: {modifiers}+{key}");
-        }
-        else
-        {
-            // Try fallback hotkeys
-            var fallbackHotkeys = new[]
-            {
-                ("Alt+Shift", key),
-                ("Ctrl+Alt", key),
-                ("Win+Alt", key),
-                ("Ctrl+Shift", "N"),
-                ("Alt+Shift", "N"),
-                ("Ctrl+Alt", "N"),
-                ("Win+Alt", "N")
-            };
-
-            bool registered = false;
-            foreach (var (fallbackModifiers, fallbackKey) in fallbackHotkeys)
-            {
-                if (_globalHotkeysService.Register(fallbackModifiers, fallbackKey, OnGlobalHotkeyPressed))
-                {
-                    System.Diagnostics.Debug.WriteLine($"Hotkey registered with fallback: {fallbackModifiers}+{fallbackKey}");
-                    _settingsService.SaveGlobalHotkey(fallbackModifiers, fallbackKey);
-                    registered = true;
-                    break;
-                }
-            }
-
-            if (!registered)
-            {
-                MessageBox.Show(
-                    "Failed to register a global hotkey. All common hotkey combinations appear to be in use by other applications.\n\n" +
-                    "You can still use the application by clicking the Notes button in the system tray, or reconfigure your hotkeys in Settings.",
-                    "Hotkey Registration Failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
-        }
+        InitializeGlobalHotkeys();
         
         if (_ghostModeEnabled && NotesPanel.Visibility == Visibility.Visible)
             AnimatePanelOpacity(_ghostModeOpacity);
@@ -291,22 +261,203 @@ public partial class MainWindow : Window {
             AnimatePanelOpacity(_defaultOpacity);
     }
 
+    private void InitializeGlobalHotkeys()
+    {
+        if (_cleanupCompleted
+            || _hotkeysInitialized
+            || _hotkeyInitializationInProgress)
+            return;
+
+        _hotkeyInitializationInProgress = true;
+        var warnings = new List<string>();
+
+        try
+        {
+            _globalHotkeysService ??= new GlobalHotkeysService(this);
+
+            if (_mainHotkeyRegistration is null)
+            {
+                var (modifiers, key) = _settingsService.LoadGlobalHotkey();
+                var result = RegisterWithFallback(
+                    "Main",
+                    modifiers,
+                    key,
+                    "Ctrl+Shift",
+                    "Space",
+                    OnGlobalHotkeyPressed,
+                    _settingsService.SaveGlobalHotkey);
+                _mainHotkeyRegistration = result.Registration;
+                if (result.Warning is not null)
+                    warnings.Add(result.Warning);
+            }
+
+            if (_checklistHotkeyRegistration is null)
+            {
+                var (modifiers, key) = _settingsService.LoadChecklistHotkey();
+                var result = RegisterWithFallback(
+                    "Checklist",
+                    modifiers,
+                    key,
+                    "Alt",
+                    "C",
+                    OnChecklistHotkeyPressed,
+                    _settingsService.SaveChecklistHotkey);
+                _checklistHotkeyRegistration = result.Registration;
+                if (result.Warning is not null)
+                    warnings.Add(result.Warning);
+            }
+
+            if (_dictionaryHotkeyRegistration is null)
+            {
+                var (modifiers, key) = _settingsService.LoadDictionaryHotkey();
+                var result = RegisterWithFallback(
+                    "Dictionary",
+                    modifiers,
+                    key,
+                    "Alt",
+                    "D",
+                    OnDictionaryHotkeyPressed,
+                    _settingsService.SaveDictionaryHotkey);
+                _dictionaryHotkeyRegistration = result.Registration;
+                if (result.Warning is not null)
+                    warnings.Add(result.Warning);
+            }
+
+            _hotkeysInitialized = true;
+            SynchronizeMainHotkeyControls(restoreEditorToActive: true);
+        }
+        catch (Exception exception)
+        {
+            warnings.Add(
+                $"Hotkey initialization stopped before all features were processed: {exception.Message}\n" +
+                "Registrations already owned by Noted were retained; initialization may be retried without replacing the service.");
+        }
+        finally
+        {
+            _hotkeyInitializationInProgress = false;
+        }
+
+        if (warnings.Count > 0)
+        {
+            MessageBox.Show(
+                string.Join("\n\n", warnings),
+                "Hotkey Registration Notice",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private InitialHotkeyResult RegisterWithFallback(
+        string featureName,
+        string requestedModifiers,
+        string requestedKey,
+        string defaultFallbackModifiers,
+        string defaultFallbackKey,
+        Action callback,
+        Action<string, string> saveHotkey)
+    {
+        if (_globalHotkeysService is null)
+        {
+            return new InitialHotkeyResult(
+                null,
+                false,
+                $"{featureName} hotkey could not be registered because the hotkey service is unavailable.");
+        }
+
+        var candidates = new List<(string Modifiers, string Key)>
+        {
+            (requestedModifiers, requestedKey),
+            (defaultFallbackModifiers, defaultFallbackKey),
+            (FallbackHotkeyModifiers[0], requestedKey),
+            (FallbackHotkeyModifiers[1], requestedKey),
+            (FallbackHotkeyModifiers[2], requestedKey),
+            (FallbackHotkeyModifiers[3], requestedKey),
+            (FallbackHotkeyModifiers[0], defaultFallbackKey),
+            (FallbackHotkeyModifiers[1], defaultFallbackKey),
+            (FallbackHotkeyModifiers[2], defaultFallbackKey),
+            (FallbackHotkeyModifiers[3], defaultFallbackKey)
+        };
+
+        var attemptedCombinations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var failures = new List<string>();
+        var requestedValidation = _globalHotkeysService.Validate(
+            requestedModifiers,
+            requestedKey);
+        var requestedDisplay = requestedValidation.Combination
+            ?? $"{requestedModifiers}+{requestedKey}";
+
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            var candidate = candidates[index];
+            var validation = _globalHotkeysService.Validate(candidate.Modifiers, candidate.Key);
+            if (!validation.Success
+                || validation.Modifiers is null
+                || validation.Key is null
+                || validation.Combination is null)
+            {
+                failures.Add(validation.Description);
+                continue;
+            }
+
+            if (!attemptedCombinations.Add(validation.Combination))
+                continue;
+
+            var registrationResult = _globalHotkeysService.Register(
+                featureName,
+                validation.Modifiers,
+                validation.Key,
+                callback);
+            if (!registrationResult.Success || registrationResult.Registration is null)
+            {
+                failures.Add(registrationResult.Description);
+                continue;
+            }
+
+            var registration = registrationResult.Registration;
+            if (index == 0)
+                return new InitialHotkeyResult(registration, false, null);
+
+            string? persistenceWarning = null;
+            try
+            {
+                saveHotkey(registration.Modifiers, registration.Key);
+            }
+            catch (Exception exception)
+            {
+                persistenceWarning =
+                    $" The fallback is active for this session, but saving it failed: {exception.Message}";
+            }
+
+            return new InitialHotkeyResult(
+                registration,
+                true,
+                $"{featureName} hotkey {requestedDisplay} was unavailable. " +
+                $"Active fallback: {registration.Combination}.{persistenceWarning}");
+        }
+
+        var failureSummary = string.Join(
+            " ",
+            failures.Where(failure => !string.IsNullOrWhiteSpace(failure)).Distinct());
+        return new InitialHotkeyResult(
+            null,
+            false,
+            $"{featureName} hotkey {requestedModifiers}+{requestedKey} could not be registered. " +
+            $"No fallback is active. {failureSummary}".TrimEnd());
+    }
+
     private void OnGlobalHotkeyPressed()
     {
-        if (NotesPanel.Visibility == Visibility.Visible)
-        {
-            HideNotesPanelAndMinimizeNotepad();
-        }
-        else
-        {
-            NotesPanel.Visibility = Visibility.Visible;
-            if (_ghostModeEnabled)
-                AnimatePanelOpacity(_ghostModeOpacity);
-            else
-                AnimatePanelOpacity(_defaultOpacity);
-            if (_notepadService.IsRunning)
-                _notepadService.Restore();
-        }
+        WindowManager.ToggleWorkspaceVisibility();
+    }
+
+    private void OnChecklistHotkeyPressed()
+    {
+        WindowManager.ToggleChecklist();
+    }
+
+    private void OnDictionaryHotkeyPressed()
+    {
+        WindowManager.ToggleDictionary();
     }
 
     // Restore the tracked selection after every reload of notes.
@@ -379,16 +530,19 @@ public partial class MainWindow : Window {
 
             // Load hotkey settings
             var (modifiers, key) = _settingsService.LoadGlobalHotkey();
-            HotkeyKeyCombo.SelectedItem = key;
-            
-            // Parse saved modifiers and set checkboxes
-            var modifierList = modifiers.Split('+').Select(m => m.Trim()).ToList();
-            ModifierCtrl.IsChecked = modifierList.Contains("Ctrl");
-            ModifierAlt.IsChecked = modifierList.Contains("Alt");
-            ModifierShift.IsChecked = modifierList.Contains("Shift");
-            ModifierWin.IsChecked = modifierList.Contains("Win");
-            
-            UpdateCurrentHotkeyDisplay(modifiers, key);
+            if (_mainHotkeyRegistration is not null
+                && _additionalMainHotkeyRegistration is null)
+            {
+                SetHotkeyEditor(
+                    _mainHotkeyRegistration.Modifiers,
+                    _mainHotkeyRegistration.Key);
+            }
+            else
+            {
+                SetHotkeyEditor(modifiers, key);
+            }
+
+            UpdateCurrentHotkeyDisplay();
             _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
             _ghostModeOpacity = _settingsService.LoadGhostModeOpacity();
             _defaultOpacity = _settingsService.LoadDefaultOpacity();
@@ -406,9 +560,52 @@ public partial class MainWindow : Window {
         }
     }
 
-    private void UpdateCurrentHotkeyDisplay(string modifiers, string key)
+    private void SetHotkeyEditor(string modifiers, string key)
     {
-        CurrentHotkeyDisplay.Text = $"{modifiers} + {key}";
+        HotkeyKeyCombo.SelectedItem = key;
+
+        var modifierList = modifiers
+            .Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        ModifierCtrl.IsChecked = modifierList.Contains("Ctrl");
+        ModifierAlt.IsChecked = modifierList.Contains("Alt");
+        ModifierShift.IsChecked = modifierList.Contains("Shift");
+        ModifierWin.IsChecked = modifierList.Contains("Win");
+
+        UpdateHotkeyPreview();
+    }
+
+    private void SynchronizeMainHotkeyControls(bool restoreEditorToActive)
+    {
+        if (restoreEditorToActive
+            && _mainHotkeyRegistration is not null
+            && _additionalMainHotkeyRegistration is null)
+        {
+            SetHotkeyEditor(
+                _mainHotkeyRegistration.Modifiers,
+                _mainHotkeyRegistration.Key);
+        }
+
+        UpdateCurrentHotkeyDisplay();
+    }
+
+    private void UpdateCurrentHotkeyDisplay()
+    {
+        if (_mainHotkeyRegistration is null)
+        {
+            CurrentHotkeyDisplay.Text = "Not registered";
+            return;
+        }
+
+        if (_additionalMainHotkeyRegistration is not null)
+        {
+            CurrentHotkeyDisplay.Text =
+                $"Multiple active: {_mainHotkeyRegistration.Combination} and " +
+                _additionalMainHotkeyRegistration.Combination;
+            return;
+        }
+
+        CurrentHotkeyDisplay.Text = _mainHotkeyRegistration.Combination;
     }
 
     private void UpdateHotkeyPreview()
@@ -436,7 +633,9 @@ public partial class MainWindow : Window {
         var selectedKey = HotkeyKeyCombo.SelectedItem as string;
         var builtHotkey = HotkeyConstants.BuildHotkey(selectedModifiers, selectedKey);
 
-        if (string.IsNullOrEmpty(builtHotkey))
+        if (selectedModifiers.Count == 0
+            || string.IsNullOrWhiteSpace(selectedKey)
+            || string.IsNullOrEmpty(builtHotkey))
         {
             MessageBox.Show(
                 "Please select at least one modifier and a key.",
@@ -447,30 +646,92 @@ public partial class MainWindow : Window {
         }
 
         var modifiers = string.Join("+", selectedModifiers);
-
-        // Save to settings
-        _settingsService.SaveGlobalHotkey(modifiers, selectedKey);
-
-        // Re-register the hotkey
-        _globalHotkeysService?.Unregister();
-        _globalHotkeysService = new GlobalHotkeysService(this);
-        if (_globalHotkeysService.Register(modifiers, selectedKey, OnGlobalHotkeyPressed))
-        {
-            UpdateCurrentHotkeyDisplay(modifiers, selectedKey);
-            MessageBox.Show(
-                $"Global hotkey updated to: {builtHotkey}",
-                "Hotkey Updated",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-        }
-        else
+        if (_globalHotkeysService is null)
         {
             MessageBox.Show(
-                $"Failed to register hotkey: {builtHotkey}\nThe hotkey may be in use by another application.",
-                "Hotkey Registration Failed",
+                "The global hotkey service is unavailable. Restart Noted and try again.",
+                "Hotkey Update Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
+            UpdateCurrentHotkeyDisplay();
+            return;
         }
+
+        var validation = _globalHotkeysService.Validate(modifiers, selectedKey);
+        if (!validation.Success || validation.Modifiers is null || validation.Key is null)
+        {
+            SynchronizeMainHotkeyControls(restoreEditorToActive: true);
+            MessageBox.Show(
+                validation.Description,
+                "Invalid Hotkey Selection",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        if (_additionalMainHotkeyRegistration is not null)
+        {
+            UpdateCurrentHotkeyDisplay();
+            MessageBox.Show(
+                "Multiple Main hotkeys may still be active after an earlier rollback failure. " +
+                "Restart Noted before attempting another replacement.",
+                "Hotkey State Is Ambiguous",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var replacement = _globalHotkeysService.Replace(
+            "Main",
+            _mainHotkeyRegistration,
+            validation.Modifiers,
+            validation.Key,
+            OnGlobalHotkeyPressed);
+
+        _mainHotkeyRegistration = replacement.ActiveRegistration;
+        _additionalMainHotkeyRegistration = replacement.AdditionalActiveRegistration;
+
+        if (!replacement.Success)
+        {
+            SynchronizeMainHotkeyControls(
+                restoreEditorToActive: !replacement.HasDualActiveRegistrations
+                    && _mainHotkeyRegistration is not null);
+            MessageBox.Show(
+                replacement.Description,
+                replacement.HasDualActiveRegistrations
+                    ? "Multiple Hotkeys May Be Active"
+                    : "Hotkey Update Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        SynchronizeMainHotkeyControls(restoreEditorToActive: true);
+        if (replacement.NoChange || _mainHotkeyRegistration is null)
+            return;
+
+        try
+        {
+            _settingsService.SaveGlobalHotkey(
+                _mainHotkeyRegistration.Modifiers,
+                _mainHotkeyRegistration.Key);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                $"The hotkey is active as {_mainHotkeyRegistration.Combination}, " +
+                $"but the setting could not be saved: {exception.Message}",
+                "Hotkey Active but Not Saved",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        MessageBox.Show(
+            $"Global hotkey updated to: {_mainHotkeyRegistration.Combination}",
+            "Hotkey Updated",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
     }
     private void ShowModifiedSubtitleOption_Changed(object sender, RoutedEventArgs e)
     {
@@ -1352,6 +1613,11 @@ public partial class MainWindow : Window {
         // cleanup global hotkey
         _globalHotkeysService?.Dispose();
         _globalHotkeysService = null;
+        _mainHotkeyRegistration = null;
+        _additionalMainHotkeyRegistration = null;
+        _checklistHotkeyRegistration = null;
+        _dictionaryHotkeyRegistration = null;
+        _hotkeysInitialized = false;
 
         // cleanup tray icon
         if (_trayIcon is not null) {
