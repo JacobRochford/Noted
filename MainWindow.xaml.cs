@@ -32,6 +32,8 @@ public partial class MainWindow : Window {
     // UI State
     private bool _isUpdatingSettingsView;
     private bool _runOnStartupDisplayedState;
+    private bool _hideButtonHidesAll;
+    private bool _cleanupCompleted;
 
     // Ghost mode state
     private bool _ghostModeEnabled;
@@ -88,6 +90,7 @@ public partial class MainWindow : Window {
         _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
         _ghostModeOpacity = _settingsService.LoadGhostModeOpacity();
         _defaultOpacity = _settingsService.LoadDefaultOpacity();
+        _hideButtonHidesAll = _settingsService.LoadHideButtonHidesAll();
     }
 
     private void InitializeEventHandlers()
@@ -105,7 +108,6 @@ public partial class MainWindow : Window {
         NotesPanel.MouseLeave += NotesPanel_MouseLeave;
         GhostModeOpacitySlider.ValueChanged += GhostModeOpacitySlider_ValueChanged;
         DefaultOpacitySlider.ValueChanged += DefaultOpacitySlider_ValueChanged;
-        Closing += OnClosing;
         SourceInitialized += MainWindow_SourceInitialized;
         SearchBox.TextChanged += SearchBox_TextChanged;
         SearchBox.GotFocus += SearchBox_GotFocus;
@@ -397,6 +399,8 @@ public partial class MainWindow : Window {
             UpdateDefaultOpacityLabel();
             _runOnStartupDisplayedState = _startupService.IsRunOnStartupEnabled;
             RunOnStartupOption.IsChecked = _runOnStartupDisplayedState;
+            _hideButtonHidesAll = _settingsService.LoadHideButtonHidesAll();
+            HideButtonHidesAllOption.IsChecked = _hideButtonHidesAll;
         } finally {
             _isUpdatingSettingsView = false;
         }
@@ -501,6 +505,12 @@ public partial class MainWindow : Window {
         }
     }
 
+    private void HideButtonHidesAllOption_Changed(object sender, RoutedEventArgs e) {
+        if (_isUpdatingSettingsView) return;
+        _hideButtonHidesAll = HideButtonHidesAllOption.IsChecked == true;
+        _settingsService.SaveHideButtonHidesAll(_hideButtonHidesAll);
+    }
+
     private void GhostModeOption_Changed(object sender, RoutedEventArgs e) {
         if (_isUpdatingSettingsView) return;
         _ghostModeEnabled = GhostModeOption.IsChecked ?? false;
@@ -580,21 +590,14 @@ public partial class MainWindow : Window {
     }
 
     private void OverlayButton_Click(object sender, RoutedEventArgs e) {
-        if (NotesPanel.Visibility == Visibility.Visible) {
-            HideNotesPanelAndMinimizeNotepad();
-        } else {
-            NotesPanel.Visibility = Visibility.Visible;
-            if (_ghostModeEnabled)
-                AnimatePanelOpacity(_ghostModeOpacity);
-            else
-                AnimatePanelOpacity(_defaultOpacity);
-            if (_notepadService.IsRunning)
-                _notepadService.Restore();
-        }
+        WindowManager.ToggleWorkspaceVisibility();
     }
 
     private void MinimizeNotesButton_Click(object sender, RoutedEventArgs e) {
-        HideNotesPanelAndMinimizeNotepad();
+        if (_hideButtonHidesAll)
+            WindowManager.HideAll();
+        else
+            HideNotesPanelAndMinimizeNotepad();
     }
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e) {
@@ -617,6 +620,18 @@ public partial class MainWindow : Window {
         // Refresh notes list to reflect any settings changes (e.g., Show Modified Subtitle)
         _viewModel.LoadNotes();
         SetSettingsViewVisible(false);
+    }
+
+    private void ChecklistButton_Click(object sender, RoutedEventArgs e) {
+        WindowManager.ToggleChecklist();
+    }
+
+    private void DictionaryButton_Click(object sender, RoutedEventArgs e) {
+        WindowManager.ToggleDictionary();
+    }
+
+    private void ScratchpadButton_Click(object sender, RoutedEventArgs e) {
+        WindowManager.ToggleScratchpad();
     }
 
     // Copies the selected note's name to the clipboard
@@ -1311,8 +1326,8 @@ public partial class MainWindow : Window {
     // toggle notes panel
     private void TrayShowHideNotes_Click(object sender, RoutedEventArgs e)
     {
-        WindowManager.ToggleAll();
-        }
+        WindowManager.ToggleWorkspaceVisibility();
+    }
 
 
     // open settings
@@ -1328,9 +1343,15 @@ public partial class MainWindow : Window {
     }
     #endregion
 
-    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e) {
+    internal void CleanupResources() {
+        if (_cleanupCompleted)
+            return;
+
+        _cleanupCompleted = true;
+
         // cleanup global hotkey
         _globalHotkeysService?.Dispose();
+        _globalHotkeysService = null;
 
         // cleanup tray icon
         if (_trayIcon is not null) {

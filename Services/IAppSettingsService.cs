@@ -36,6 +36,8 @@ public interface IAppSettingsService {
     void SaveDictionaryItems(IReadOnlyList<DictionaryItemData> items);
     DictionaryWindowState LoadDictionaryWindowState();
     void SaveDictionaryWindowState(DictionaryWindowState state);
+    bool LoadHideButtonHidesAll();
+    void SaveHideButtonHidesAll(bool hidesAll);
     ScratchpadWindowState LoadScratchpadWindowState();
     void SaveScratchpadWindowState(ScratchpadWindowState state);
 }

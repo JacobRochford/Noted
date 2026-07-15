@@ -292,6 +292,75 @@
                                 </ControlTemplate>
                             </Button.Template>
                         </Button>
+                        <Button x:Name="ChecklistButton"
+                                Content="✓"
+                                Click="ChecklistButton_Click"
+                                FontSize="12" FontWeight="SemiBold"
+                                Foreground="White" Cursor="Hand"
+                                Padding="8,4" Margin="0,0,6,0"
+                                MinWidth="0"
+                                ToolTip="Toggle Checklist">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="bg" Background="#5BA8C8"
+                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                        <Button x:Name="DictionaryButton"
+                                Content="📚"
+                                Click="DictionaryButton_Click"
+                                FontSize="12" FontWeight="SemiBold"
+                                Foreground="White" Cursor="Hand"
+                                Padding="8,4" Margin="0,0,6,0"
+                                MinWidth="0"
+                                ToolTip="Toggle Dictionary">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="bg" Background="#5BA8C8"
+                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                        <Button x:Name="ScratchpadButton"
+                                Content="✏"
+                                Click="ScratchpadButton_Click"
+                                FontSize="12" FontWeight="SemiBold"
+                                Foreground="White" Cursor="Hand"
+                                Padding="8,4" Margin="0,0,6,0"
+                                MinWidth="0"
+                                ToolTip="Toggle Scratchpad">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="bg" Background="#5BA8C8"
+                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
                         <Button x:Name="MinimizeNotesButton"
                                 Content="Hide"
                                 Click="MinimizeNotesButton_Click"
@@ -956,6 +1025,31 @@
                                             Unchecked="RunOnStartupOption_Changed"
                                             HorizontalAlignment="Stretch">
                                         <TextBlock Text="Launch Noted automatically when Windows starts"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center"/>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#EFF7FB"
+                                    BorderBrush="#C9DFEC"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="12"
+                                    Margin="0,0,0,10">
+                                <StackPanel>
+                                    <TextBlock Text="Window Behavior"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="#355A6E"
+                                               Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="HideButtonHidesAllOption"
+                                            Foreground="#355A6E"
+                                            FontWeight="SemiBold"
+                                            Checked="HideButtonHidesAllOption_Changed"
+                                            Unchecked="HideButtonHidesAllOption_Changed"
+                                            HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Hide auxiliary windows when hiding notes"
                                                TextWrapping="Wrap"
                                                VerticalAlignment="Center"/>
                                     </CheckBox>

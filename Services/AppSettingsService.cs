@@ -232,6 +232,16 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { DictionaryWindowState = state });
     }
 
+    public bool LoadHideButtonHidesAll()
+    {
+        return LoadSetting(s => s.HideButtonHidesAll);
+    }
+
+    public void SaveHideButtonHidesAll(bool hidesAll)
+    {
+        SaveSetting(s => s with { HideButtonHidesAll = hidesAll });
+    }
+
     public ScratchpadWindowState LoadScratchpadWindowState()
     {
         return LoadSetting(s => s.ScratchpadWindowState ?? new ScratchpadWindowState());
@@ -359,6 +369,8 @@ public sealed class AppSettingsService : IAppSettingsService {
         public ChecklistWindowState? ChecklistWindowState { get; init; }
         public List<DictionaryItemData>? DictionaryItems { get; init; }
         public DictionaryWindowState? DictionaryWindowState { get; init; }
+        [JsonPropertyName("HideButtonClosesAll")]
+        public bool HideButtonHidesAll { get; init; } = true;
         public ScratchpadWindowState? ScratchpadWindowState { get; init; }
     }
 }

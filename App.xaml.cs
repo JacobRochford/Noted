@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Windows;
@@ -14,20 +15,11 @@ public partial class App : Application
     private Mutex? _singleInstanceMutex;
     private AppSettingsService? _settingsService;
     private MainWindow? _mainWindow;
+    private ChecklistWindow? _checklistWindow;
+    private DictionaryWindow? _dictionaryWindow;
     private ScratchpadWindow? _scratchpadWindow;
     private bool _isShuttingDown;
     private string? _lastShutdownWarning;
-
-    internal ScratchpadWindow? ScratchpadWindow
-    {
-        get
-        {
-            if (_isShuttingDown)
-                return _scratchpadWindow;
-
-            return _scratchpadWindow ??= CreateScratchpadWindow();
-        }
-    }
 
     public App()
     {
@@ -82,6 +74,12 @@ public partial class App : Application
         _mainWindow = mainWindow;
         MainWindow = mainWindow;
         mainWindow.Closing += MainWindow_Closing;
+
+        WindowManager.Main = mainWindow;
+        WindowManager.ChecklistProvider = GetOrCreateChecklistWindow;
+        WindowManager.DictionaryProvider = GetOrCreateDictionaryWindow;
+        WindowManager.ScratchpadProvider = GetOrCreateScratchpadWindow;
+
         mainWindow.Show();
     }
 
@@ -89,10 +87,10 @@ public partial class App : Application
     {
         _isShuttingDown = true;
 
-        if (_mainWindow is not null)
+        var mainWindow = _mainWindow;
+        if (mainWindow is not null)
         {
-            _mainWindow.Closing -= MainWindow_Closing;
-            _mainWindow = null;
+            mainWindow.Closing -= MainWindow_Closing;
         }
 
         if (_scratchpadWindow is not null)
@@ -105,10 +103,19 @@ public partial class App : Application
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
-
-            _scratchpadWindow.Close();
-            _scratchpadWindow = null;
         }
+
+        CloseExistingWindow(_checklistWindow, "Checklist");
+        CloseExistingWindow(_dictionaryWindow, "Dictionary");
+        CloseExistingWindow(_scratchpadWindow, "Scratchpad");
+
+        mainWindow?.CleanupResources();
+        WindowManager.ClearAll();
+
+        _mainWindow = null;
+        _checklistWindow = null;
+        _dictionaryWindow = null;
+        _scratchpadWindow = null;
 
         if (_singleInstanceMutex is not null)
         {
@@ -119,13 +126,117 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    private ScratchpadWindow CreateScratchpadWindow()
+    private ChecklistWindow? GetOrCreateChecklistWindow()
     {
+        Dispatcher.VerifyAccess();
+        if (_isShuttingDown)
+            return _checklistWindow;
+
+        if (_checklistWindow is not null)
+            return _checklistWindow;
+
+        var settings = _settingsService
+            ?? throw new InvalidOperationException("Application settings are not initialized.");
+        var window = new ChecklistWindow(settings);
+        window.Closed += ChecklistWindow_Closed;
+        _checklistWindow = window;
+        WindowManager.Checklist = window;
+        return window;
+    }
+
+    private DictionaryWindow? GetOrCreateDictionaryWindow()
+    {
+        Dispatcher.VerifyAccess();
+        if (_isShuttingDown)
+            return _dictionaryWindow;
+
+        if (_dictionaryWindow is not null)
+            return _dictionaryWindow;
+
+        var settings = _settingsService
+            ?? throw new InvalidOperationException("Application settings are not initialized.");
+        var window = new DictionaryWindow(settings);
+        window.Closed += DictionaryWindow_Closed;
+        _dictionaryWindow = window;
+        WindowManager.Dictionary = window;
+        return window;
+    }
+
+    private ScratchpadWindow? GetOrCreateScratchpadWindow()
+    {
+        Dispatcher.VerifyAccess();
+        if (_isShuttingDown)
+            return _scratchpadWindow;
+
+        if (_scratchpadWindow is not null)
+            return _scratchpadWindow;
+
         var settings = _settingsService
             ?? throw new InvalidOperationException("Application settings are not initialized.");
         var contentService = new ScratchpadContentService(settings.StorageDirectory);
         var viewModel = new ScratchpadWindowViewModel(settings, contentService);
-        return new ScratchpadWindow(viewModel);
+        var window = new ScratchpadWindow(viewModel);
+        window.Closed += ScratchpadWindow_Closed;
+        _scratchpadWindow = window;
+        WindowManager.Scratchpad = window;
+        return window;
+    }
+
+    private void ChecklistWindow_Closed(object? sender, EventArgs e)
+    {
+        if (sender is not ChecklistWindow window)
+            return;
+
+        window.Closed -= ChecklistWindow_Closed;
+        if (!ReferenceEquals(_checklistWindow, window))
+            return;
+
+        _checklistWindow = null;
+        if (ReferenceEquals(WindowManager.Checklist, window))
+            WindowManager.Checklist = null;
+    }
+
+    private void DictionaryWindow_Closed(object? sender, EventArgs e)
+    {
+        if (sender is not DictionaryWindow window)
+            return;
+
+        window.Closed -= DictionaryWindow_Closed;
+        if (!ReferenceEquals(_dictionaryWindow, window))
+            return;
+
+        _dictionaryWindow = null;
+        if (ReferenceEquals(WindowManager.Dictionary, window))
+            WindowManager.Dictionary = null;
+    }
+
+    private void ScratchpadWindow_Closed(object? sender, EventArgs e)
+    {
+        if (sender is not ScratchpadWindow window)
+            return;
+
+        window.Closed -= ScratchpadWindow_Closed;
+        if (!ReferenceEquals(_scratchpadWindow, window))
+            return;
+
+        _scratchpadWindow = null;
+        if (ReferenceEquals(WindowManager.Scratchpad, window))
+            WindowManager.Scratchpad = null;
+    }
+
+    private static void CloseExistingWindow(Window? window, string name)
+    {
+        if (window is null)
+            return;
+
+        try
+        {
+            window.Close();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to close the {name} window: {ex}");
+        }
     }
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
