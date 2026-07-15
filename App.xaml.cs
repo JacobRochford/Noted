@@ -1,8 +1,10 @@
+using System.ComponentModel;
 using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 using Noted.Services;
+using Noted.ViewModels;
 
 namespace Noted;
 
@@ -10,6 +12,22 @@ public partial class App : Application
 {
     private const string SingleInstanceMutexName = "Noted.SingleInstance";
     private Mutex? _singleInstanceMutex;
+    private AppSettingsService? _settingsService;
+    private MainWindow? _mainWindow;
+    private ScratchpadWindow? _scratchpadWindow;
+    private bool _isShuttingDown;
+    private string? _lastShutdownWarning;
+
+    internal ScratchpadWindow? ScratchpadWindow
+    {
+        get
+        {
+            if (_isShuttingDown)
+                return _scratchpadWindow;
+
+            return _scratchpadWindow ??= CreateScratchpadWindow();
+        }
+    }
 
     public App()
     {
@@ -58,14 +76,40 @@ public partial class App : Application
         _ = UpdateService.CheckForUpdatesAsync();
 
         var settings = new AppSettingsService();
+        _settingsService = settings;
         var fileService = new NoteFileService(settings);
         var mainWindow = new MainWindow(settings, fileService, new NotepadProcessService(), new StartupService());
+        _mainWindow = mainWindow;
         MainWindow = mainWindow;
+        mainWindow.Closing += MainWindow_Closing;
         mainWindow.Show();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _isShuttingDown = true;
+
+        if (_mainWindow is not null)
+        {
+            _mainWindow.Closing -= MainWindow_Closing;
+            _mainWindow = null;
+        }
+
+        if (_scratchpadWindow is not null)
+        {
+            if (!_scratchpadWindow.TryFlushPendingContent(out var error))
+            {
+                MessageBox.Show(
+                    error ?? "Scratchpad content could not be saved before shutdown.",
+                    "Scratchpad Save Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+
+            _scratchpadWindow.Close();
+            _scratchpadWindow = null;
+        }
+
         if (_singleInstanceMutex is not null)
         {
             _singleInstanceMutex.ReleaseMutex();
@@ -73,6 +117,36 @@ public partial class App : Application
             _singleInstanceMutex = null;
         }
         base.OnExit(e);
+    }
+
+    private ScratchpadWindow CreateScratchpadWindow()
+    {
+        var settings = _settingsService
+            ?? throw new InvalidOperationException("Application settings are not initialized.");
+        var contentService = new ScratchpadContentService(settings.StorageDirectory);
+        var viewModel = new ScratchpadWindowViewModel(settings, contentService);
+        return new ScratchpadWindow(viewModel);
+    }
+
+    private void MainWindow_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_scratchpadWindow is null || _scratchpadWindow.TryFlushPendingContent(out var error))
+        {
+            _lastShutdownWarning = null;
+            return;
+        }
+
+        e.Cancel = true;
+        var message = error ?? "Scratchpad content could not be saved before shutdown.";
+        if (message == _lastShutdownWarning)
+            return;
+
+        _lastShutdownWarning = message;
+        MessageBox.Show(
+            $"Noted could not close because pending Scratchpad content was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
+            "Scratchpad Save Failed",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     // Catches unhandled exceptions thrown on the UI thread.

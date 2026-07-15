@@ -36,4 +36,6 @@ public interface IAppSettingsService {
     void SaveDictionaryItems(IReadOnlyList<DictionaryItemData> items);
     DictionaryWindowState LoadDictionaryWindowState();
     void SaveDictionaryWindowState(DictionaryWindowState state);
+    ScratchpadWindowState LoadScratchpadWindowState();
+    void SaveScratchpadWindowState(ScratchpadWindowState state);
 }

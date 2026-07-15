@@ -232,6 +232,17 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { DictionaryWindowState = state });
     }
 
+    public ScratchpadWindowState LoadScratchpadWindowState()
+    {
+        return LoadSetting(s => s.ScratchpadWindowState ?? new ScratchpadWindowState());
+    }
+
+    public void SaveScratchpadWindowState(ScratchpadWindowState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        SaveSetting(s => s with { ScratchpadWindowState = state });
+    }
+
     private T LoadSetting<T>(Func<AppSettings, T> selector) {
         return selector(LoadSettings());
     }
@@ -348,5 +359,6 @@ public sealed class AppSettingsService : IAppSettingsService {
         public ChecklistWindowState? ChecklistWindowState { get; init; }
         public List<DictionaryItemData>? DictionaryItems { get; init; }
         public DictionaryWindowState? DictionaryWindowState { get; init; }
+        public ScratchpadWindowState? ScratchpadWindowState { get; init; }
     }
 }
