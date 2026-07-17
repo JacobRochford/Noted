@@ -1,59 +1,72 @@
 # Noted.
 
-Noted. is a small Windows note utility built with WPF. It stays out of the way as a floating button, opens a simple note list when you need it, and hands editing off to plain old Notepad.
+Noted is a Windows-only .NET 9 WPF notes utility. It provides a floating Notes button, manages plain `.txt` notes and folders, and opens notes for editing in Windows Notepad. Checklist, Dictionary, and Scratchpad overlays provide related tools without replacing the plain-text note workflow.
 
-The app is meant to be quick: open a note, jot something down, hide it again.
+## Notes and folders
 
+- Notes are regular `.txt` files in the configured notes directory.
+- Notes can be organized in subfolders.
+- Folders can either expand inline or open using drill-down navigation.
+- Drill-down navigation maintains back and forward folder history.
+- Notes can be renamed inline and are refreshed when files change on disk.
+- Deleted notes are moved to `%LocalAppData%\Noted\DeletedNotes` and retained for 14 days.
+- Folder deletion is permanent and includes the folder's contents.
 
-## What it does
+New-note behavior is configurable:
 
-- Keeps a floating button on screen so your notes are always one click away
-- Shows your notes from a folder of plain `.txt` files
-- Opens the selected note in Windows Notepad
-- Creates notes with either a timestamp-based name or a custom name
-- Lets you rename notes inline with `F2`, the Rename button, or the context menu
-- Moves deleted notes into a local recycle-style folder instead of removing them immediately
-- Refreshes the note list automatically when files change on disk
-- Hides the panel and the Notepad window when you click away or press `Esc`
+- **Prompt** asks for a note name before creating it.
+- **Quick** immediately creates a timestamp-named note.
+- **Both** keeps prompted creation on the New button and also shows a separate Quick Note button.
 
+## Auxiliary overlays
 
-## Download / Running
+- **Checklist** maintains locally persisted checklist items.
+- **Dictionary** maintains locally persisted term and definition entries.
+- **Scratchpad** provides a lightweight rich-text workspace. Its content is persisted locally and pending changes are flushed when the window is hidden or closed.
 
-Grab the latest `Noted-*-win-x64.zip` from the [Releases](../../releases) page, unzip the folder, and run `Noted.exe` inside it. No installer or .NET runtime needed — all dependencies are included in the zip.
+Auxiliary windows are created when needed and do not appear automatically at startup.
 
-> **Windows SmartScreen warning** — because the app is not code-signed, Windows may show a "Windows protected your PC" dialog the first time you run it. Click **More info** → **Run anyway** to proceed. This is expected for unsigned apps from independent developers.
+## Hotkeys and visibility
 
-<p align="center">
-  <img width="90%" alt="Noted-1" src="https://github.com/user-attachments/assets/13fe8fcd-ed7a-4082-a697-b748c3a832b5" />  
-</p>
+Default global hotkeys:
 
-<p align="center">
-  <img width="90%" alt="Noted-2" src="https://github.com/user-attachments/assets/f4c65a5c-5712-49b3-87f4-d6fc2e2c8cf3" />
-</p>
+| Action | Hotkey |
+| --- | --- |
+| Toggle the managed workspace | `Ctrl+Shift+Space` |
+| Toggle Checklist | `Alt+C` |
+| Toggle Dictionary | `Alt+D` |
 
+The workspace hotkey hides all visible managed windows. If every managed window is hidden, it shows Notes.
 
+The Notes Hide button has a setting that also hides Checklist, Dictionary, and Scratchpad. This setting is enabled by default. Clicking outside Notes or pressing `Esc` hides the Notes panel and Notepad, but does not necessarily hide an auxiliary window.
+
+## Download and running
+
+Download the latest `Noted-*-win-x64.zip` from the [Releases](../../releases) page, extract it, and run `Noted.exe`. The published package is self-contained, so it does not require a separate .NET installation or installer.
+
+> **Windows SmartScreen warning:** Because the app is not code-signed, Windows may show a "Windows protected your PC" dialog the first time it runs. Select **More info**, then **Run anyway**, to continue.
 
 ## Settings
 
-The settings view lets you:
+Settings include:
 
-- choose a different notes folder
-- decide whether new notes should prompt for a name
-- add a timestamp to new notes at the top, bottom, or not at all
+- notes directory
+- note-creation mode and timestamp placement
+- inline or drill-down folder navigation
+- global hotkeys
+- launch when Windows starts
+- whether the Notes Hide button also hides auxiliary windows
+- overlay opacity and related window behavior
 
-
-<p align="center">
-  <img width="90%" alt="Noted-3" src="https://github.com/user-attachments/assets/42e60faa-7767-4cab-a32a-077dd2e7af30" />
-</p>
+Settings and auxiliary-window state are stored under `%LocalAppData%\Noted`. Scratchpad content is also stored locally.
 
 ## Requirements
 
-**To run the app:** Windows 10/11 x64. No .NET installation required (the release build is self-contained).
+**Published package:** Windows 10 or 11, x64. No separate .NET runtime is required.
 
-**To build from source:** Windows, .NET 9 SDK.
+**Build from source:** Windows and the .NET 9 SDK.
 
-
-## Running From Source
+## Running from source
 
 From the project root:
 
@@ -62,47 +75,24 @@ dotnet build
 dotnet run
 ```
 
-You can also open `Noted.sln` in Visual Studio or VS Code and run it there.
-
-
-## How storage works
-
-- Notes are regular `.txt` files
-- By default, the app creates a `Notes` folder next to the built app
-- You can switch the notes folder in Settings
-- App settings are stored under `%LocalAppData%\Noted\settings.json`
-- Deleted notes are moved to `%LocalAppData%\Noted\DeletedNotes`
-- Deleted note files older than 7 days are cleaned up automatically
-
-If a note name matches the built-in timestamp format, the app shows a friendlier date in the list while keeping the real filename on disk.
-
+You can also open `Noted.sln` in Visual Studio or VS Code and run the project there.
 
 ## Basic use
 
-1. Start the app.
-2. Click the floating button to show the notes panel.
-3. Click `+ New` to create a note.
-4. Click a note or press `Enter` to open it in Notepad.
-5. Use `F2` or the row actions to rename or delete a note.
-6. Press `Esc` or click outside the panel to hide everything.
+1. Start Noted.
+2. Click the floating Notes button or press `Ctrl+Shift+Space`.
+3. Create a note using the configured Prompt, Quick, or Both workflow.
+4. Select a note or press `Enter` to open it in Notepad.
+5. Use folders, search, rename, and delete actions to organize notes.
+6. Open Checklist, Dictionary, or Scratchpad from the Notes toolbar when needed.
 
+## Current limitations
 
-## Project layout
-
-- `MainWindow.xaml` and `MainWindow.xaml.cs` handle the overlay UI, interaction, and note workflow
-- `ViewModels/MainWindowViewModel.cs` manages the note list and refresh logic
-- `Services/NoteFileService.cs` handles file creation, rename, delete, and folder watching
-- `Services/AppSettingsService.cs` stores user settings
-- `Services/NotepadProcessService.cs` manages launching and hiding Notepad
-- `Models/NoteItem.cs` represents items shown in the note list
-
-
-## Notes
-
-- This project uses Notepad as the editor. It does not include a custom text editor.
-- The app is Windows-only because it depends on WPF and basic Win32 window handling.
-- When you change note folders, the app may ask you to finish with the currently open note first.
-
+- Noted is Windows-only because it uses WPF and Win32 window behavior.
+- Notes are plain `.txt` files only. Markdown is not supported.
+- Windows Notepad is the note editor.
+- Data is stored locally. Cloud synchronization and cloud backup are not provided.
+- Folder deletion is permanent.
 
 ## License
 

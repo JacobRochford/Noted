@@ -499,7 +499,6 @@ public partial class MainWindow : Window {
         UpdateShowHideNotesDirectoryButton();
     }
 
-    // Pin note button click handler
     private void PinNoteButton_Click(object sender, RoutedEventArgs e) {
         if (sender is FrameworkElement element && element.DataContext is NoteItem note) {
             _viewModel.TogglePin(note);
@@ -989,7 +988,6 @@ public partial class MainWindow : Window {
         WindowManager.ToggleScratchpad();
     }
 
-    // Copies the selected note's name to the clipboard
     private void CopyNoteName_Click(object sender, RoutedEventArgs e)
     {
         NoteItem? note = null;
@@ -1139,6 +1137,7 @@ public partial class MainWindow : Window {
     private void OpenSelectedNote() {
         if (FileList.SelectedItem is not NoteItem note) return;
 
+        // FullPath is set for child notes in Expand mode; drill-down mode uses the current folder.
         var filePath = note.FullPath ?? Path.Combine(_fileService.CurrentDirectory, note.FileName);
         _viewModel.SelectedFileName = note.FileName;
 
@@ -1710,20 +1709,17 @@ public partial class MainWindow : Window {
     }
 
 
-    // toggle notes panel
     private void TrayShowHideNotes_Click(object sender, RoutedEventArgs e)
     {
         WindowManager.ToggleWorkspaceVisibility();
     }
 
 
-    // open settings
     private void TraySettings_Click(object sender, RoutedEventArgs e)
     {
         SettingsButton_Click(sender, e);
     }
 
-    // exit app
     private void TrayExit_Click(object sender, RoutedEventArgs e)
     {
         Close();

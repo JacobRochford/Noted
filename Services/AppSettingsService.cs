@@ -105,13 +105,11 @@ public sealed class AppSettingsService : IAppSettingsService {
         _settingsFilePath = Path.Combine(StorageDirectory, "settings.json");
     }
 
-    /// Loads the configured notes directory path.
     public string? LoadNotesDirectory() {
         var dir = LoadSetting(s => s.NotesDirectory);
         return string.IsNullOrWhiteSpace(dir) ? null : dir;
     }
 
-    /// Saves the notes directory path to settings.
     public void SaveNotesDirectory(string notesDirectory) {
         SaveSetting(s => s with { NotesDirectory = notesDirectory });
     }
@@ -153,12 +151,10 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { NewNoteMode = newNoteMode });
     }
 
-    // Loads whether to prompt for note name when creating new notes depending on user settings.
     public bool LoadPromptForNoteName() {
         return LoadNewNoteMode() == NewNoteMode.Prompt;
     }
 
-    /// Saves whether to prompt for note name when creating new notes depending on user settings.
     public void SavePromptForNoteName(bool promptForNoteName) {
         SaveNewNoteMode(promptForNoteName ? NewNoteMode.Prompt : NewNoteMode.Quick);
     }
@@ -324,7 +320,6 @@ public sealed class AppSettingsService : IAppSettingsService {
 
         Directory.CreateDirectory(Path.GetDirectoryName(_settingsFilePath)!);
 
-        // backup directory next to settings file
         var backupDir = Path.Combine(
             Path.GetDirectoryName(_settingsFilePath)!,
             "backups"
@@ -332,7 +327,6 @@ public sealed class AppSettingsService : IAppSettingsService {
 
         Directory.CreateDirectory(backupDir);
 
-        // if current file exists, back it up before overwrite
         if (File.Exists(_settingsFilePath)) {
             var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
             var fileName = Path.GetFileNameWithoutExtension(_settingsFilePath);
