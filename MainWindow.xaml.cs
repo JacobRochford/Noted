@@ -40,8 +40,12 @@ public partial class MainWindow : Window {
     private bool _cleanupCompleted;
     private bool _hotkeyInitializationInProgress;
     private bool _hotkeysInitialized;
+    private bool _isNoActivateTemporarilyStripped;
 
     // Ghost mode state
+    private const double DefaultPanelOpacity = 0.88;
+    private const double DefaultGhostModeOpacity = 0.25;
+    private const double MinimumPanelOpacity = 0.05;
     private bool _ghostModeEnabled;
     private double _ghostModeOpacity;
     private double _defaultOpacity;
@@ -102,8 +106,14 @@ public partial class MainWindow : Window {
     private void InitializeSettings()
     {
         _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
-        _ghostModeOpacity = _settingsService.LoadGhostModeOpacity();
-        _defaultOpacity = _settingsService.LoadDefaultOpacity();
+        _ghostModeOpacity = NormalizeOpacity(
+            _settingsService.LoadGhostModeOpacity(),
+            0.0,
+            DefaultGhostModeOpacity);
+        _defaultOpacity = NormalizeOpacity(
+            _settingsService.LoadDefaultOpacity(),
+            MinimumPanelOpacity,
+            DefaultPanelOpacity);
         _hideButtonHidesAll = _settingsService.LoadHideButtonHidesAll();
     }
 
@@ -256,7 +266,7 @@ public partial class MainWindow : Window {
         InitializeGlobalHotkeys();
         
         if (_ghostModeEnabled && NotesPanel.Visibility == Visibility.Visible)
-            AnimatePanelOpacity(_ghostModeOpacity);
+            AnimatePanelOpacity(_ghostModeOpacity, allowFullyTransparent: true);
         else
             AnimatePanelOpacity(_defaultOpacity);
     }
@@ -505,7 +515,9 @@ public partial class MainWindow : Window {
         UpdateNotesDirectoryDisplay();
         // Restore correct opacity when closing settings (slider may have previewed a value)
         if (!setVisible)
-            AnimatePanelOpacity(_ghostModeEnabled ? _ghostModeOpacity : _defaultOpacity);
+            AnimatePanelOpacity(
+                _ghostModeEnabled ? _ghostModeOpacity : _defaultOpacity,
+                allowFullyTransparent: _ghostModeEnabled);
     }
 
     private void UpdateSettingsView() {
@@ -544,13 +556,26 @@ public partial class MainWindow : Window {
 
             UpdateCurrentHotkeyDisplay();
             _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
-            _ghostModeOpacity = _settingsService.LoadGhostModeOpacity();
-            _defaultOpacity = _settingsService.LoadDefaultOpacity();
+            _ghostModeOpacity = NormalizeOpacity(
+                _settingsService.LoadGhostModeOpacity(),
+                0.0,
+                DefaultGhostModeOpacity);
+            _defaultOpacity = NormalizeOpacity(
+                _settingsService.LoadDefaultOpacity(),
+                MinimumPanelOpacity,
+                DefaultPanelOpacity);
             GhostModeOption.IsChecked = _ghostModeEnabled;
             GhostModeOpacitySlider.Value = _ghostModeOpacity * 100;
             UpdateGhostModeOpacityLabel();
             DefaultOpacitySlider.Value = _defaultOpacity * 100;
             UpdateDefaultOpacityLabel();
+            var folderNavigationMode = _settingsService.LoadFolderNavigationMode()
+                == FolderNavigationMode.Expand
+                ? FolderNavigationMode.Expand
+                : FolderNavigationMode.DrillDown;
+            FolderNavDrillDownOption.IsChecked = folderNavigationMode == FolderNavigationMode.DrillDown;
+            FolderNavExpandOption.IsChecked = folderNavigationMode == FolderNavigationMode.Expand;
+            _viewModel.FolderNavigationMode = folderNavigationMode;
             _runOnStartupDisplayedState = _startupService.IsRunOnStartupEnabled;
             RunOnStartupOption.IsChecked = _runOnStartupDisplayedState;
             _hideButtonHidesAll = _settingsService.LoadHideButtonHidesAll();
@@ -772,6 +797,22 @@ public partial class MainWindow : Window {
         _settingsService.SaveHideButtonHidesAll(_hideButtonHidesAll);
     }
 
+    private void FolderNavOption_Checked(object sender, RoutedEventArgs e) {
+        if (_isUpdatingSettingsView) return;
+
+        var folderNavigationMode = sender switch {
+            RadioButton { Name: nameof(FolderNavDrillDownOption) } => FolderNavigationMode.DrillDown,
+            RadioButton { Name: nameof(FolderNavExpandOption) } => FolderNavigationMode.Expand,
+            _ => (FolderNavigationMode?)null
+        };
+
+        if (!folderNavigationMode.HasValue)
+            return;
+
+        _settingsService.SaveFolderNavigationMode(folderNavigationMode.Value);
+        _viewModel.FolderNavigationMode = folderNavigationMode.Value;
+    }
+
     private void GhostModeOption_Changed(object sender, RoutedEventArgs e) {
         if (_isUpdatingSettingsView) return;
         _ghostModeEnabled = GhostModeOption.IsChecked ?? false;
@@ -779,16 +820,20 @@ public partial class MainWindow : Window {
         if (!_ghostModeEnabled)
             AnimatePanelOpacity(_defaultOpacity);
         else if (NotesPanel.Visibility == Visibility.Visible && !NotesPanel.IsMouseOver)
-            AnimatePanelOpacity(_ghostModeOpacity);
+            AnimatePanelOpacity(_ghostModeOpacity, allowFullyTransparent: true);
     }
 
     private void GhostModeOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) {
         if (_isUpdatingSettingsView) return;
-        _ghostModeOpacity = GhostModeOpacitySlider.Value / 100.0;
+        _ghostModeOpacity = NormalizeOpacity(
+            e.NewValue / 100.0,
+            0.0,
+            DefaultGhostModeOpacity);
+        CorrectOpacitySliderValue(GhostModeOpacitySlider, _ghostModeOpacity);
         _settingsService.SaveGhostModeOpacity(_ghostModeOpacity);
         UpdateGhostModeOpacityLabel();
         if (NotesPanel.Visibility == Visibility.Visible)
-            AnimatePanelOpacity(_ghostModeOpacity);
+            AnimatePanelOpacity(_ghostModeOpacity, allowFullyTransparent: true);
     }
 
     private void UpdateGhostModeOpacityLabel() {
@@ -797,7 +842,11 @@ public partial class MainWindow : Window {
 
     private void DefaultOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) {
         if (_isUpdatingSettingsView) return;
-        _defaultOpacity = DefaultOpacitySlider.Value / 100.0;
+        _defaultOpacity = NormalizeOpacity(
+            e.NewValue / 100.0,
+            MinimumPanelOpacity,
+            DefaultPanelOpacity);
+        CorrectOpacitySliderValue(DefaultOpacitySlider, _defaultOpacity);
         _settingsService.SaveDefaultOpacity(_defaultOpacity);
         UpdateDefaultOpacityLabel();
         if (NotesPanel.Visibility == Visibility.Visible && (!_ghostModeEnabled || NotesPanel.IsMouseOver))
@@ -808,6 +857,26 @@ public partial class MainWindow : Window {
         DefaultOpacityLabel.Text = $"{(int)DefaultOpacitySlider.Value}%";
     }
 
+    private void CorrectOpacitySliderValue(Slider slider, double normalizedOpacity) {
+        var displayValue = normalizedOpacity * 100.0;
+        if (Math.Abs(slider.Value - displayValue) < 0.0001)
+            return;
+
+        _isUpdatingSettingsView = true;
+        try {
+            slider.Value = displayValue;
+        } finally {
+            _isUpdatingSettingsView = false;
+        }
+    }
+
+    private static double NormalizeOpacity(double value, double minimum, double fallback) {
+        if (!double.IsFinite(value))
+            return fallback;
+
+        return Math.Clamp(value, minimum, 1.0);
+    }
+
     private void NotesPanel_MouseEnter(object sender, MouseEventArgs e) {
         if (_ghostModeEnabled)
             AnimatePanelOpacity(_defaultOpacity);
@@ -815,11 +884,18 @@ public partial class MainWindow : Window {
 
     private void NotesPanel_MouseLeave(object sender, MouseEventArgs e) {
         if (_ghostModeEnabled)
-            AnimatePanelOpacity(_ghostModeOpacity);
+            AnimatePanelOpacity(_ghostModeOpacity, allowFullyTransparent: true);
     }
 
-    private void AnimatePanelOpacity(double targetOpacity) {
-        var anim = new DoubleAnimation(NotesPanel.Opacity, targetOpacity, new Duration(TimeSpan.FromMilliseconds(200)));
+    private void AnimatePanelOpacity(double targetOpacity, bool allowFullyTransparent = false) {
+        var normalizedTargetOpacity = NormalizeOpacity(
+            targetOpacity,
+            allowFullyTransparent ? 0.0 : MinimumPanelOpacity,
+            allowFullyTransparent ? DefaultGhostModeOpacity : DefaultPanelOpacity);
+        var anim = new DoubleAnimation(
+            NotesPanel.Opacity,
+            normalizedTargetOpacity,
+            new Duration(TimeSpan.FromMilliseconds(200)));
         NotesPanel.BeginAnimation(UIElement.OpacityProperty, anim);
     }
 
@@ -828,26 +904,44 @@ public partial class MainWindow : Window {
     internal void ShowNotesPanel() {
         NotesPanel.Visibility = Visibility.Visible;
         if (_ghostModeEnabled)
-            AnimatePanelOpacity(_ghostModeOpacity);
+            AnimatePanelOpacity(_ghostModeOpacity, allowFullyTransparent: true);
         else
             AnimatePanelOpacity(_defaultOpacity);
         if (_notepadService.IsRunning)
             _notepadService.Restore();
 
         // force focus for overlay
-        var hwnd = new WindowInteropHelper(this).Handle;
-        WindowInterop.StripNoActivate(hwnd);
-        WindowInterop.SetForegroundWindow(hwnd);
+        var hwnd = TemporarilyAllowWindowActivation();
+        try {
+            if (!WindowInterop.SetForegroundWindow(hwnd)) {
+                RestoreNoActivateAfterInteraction();
+                return;
+            }
 
-        // focus list after layout
-        Dispatcher.InvokeAsync(() => FileList.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+            // focus list after layout
+            Dispatcher.InvokeAsync(() => {
+                try {
+                    FileList.Focus();
+                } finally {
+                    RestoreNoActivateAfterInteraction();
+                }
+            }, DispatcherPriority.Input);
+        } catch {
+            RestoreNoActivateAfterInteraction();
+            throw;
+        }
     }
 
     internal void HideNotesPanel() => HideNotesPanelAndMinimizeNotepad();
 
     private void HideNotesPanelAndMinimizeNotepad() {
-        NotesPanel.Visibility = Visibility.Collapsed;
-        _notepadService.Minimize();
+        try {
+            _viewModel.ClearFilter();
+        } finally {
+            RestoreNoActivateAfterInteraction();
+            NotesPanel.Visibility = Visibility.Collapsed;
+            _notepadService.Minimize();
+        }
     }
 
     private void OverlayButton_Click(object sender, RoutedEventArgs e) {
@@ -1227,48 +1321,41 @@ public partial class MainWindow : Window {
     }
 
     private void RenameTextBox_KeyDown(object sender, KeyEventArgs e) {
-        var textBox = sender as TextBox;
-        var note = FileList.SelectedItem as NoteItem;
+        if (e.Key is not (Key.Return or Key.Escape))
+            return;
 
-        if (note == null) return;
-        var originalName = Path.GetFileNameWithoutExtension(note.FileName);
+        e.Handled = true;
+        if (sender is not TextBox textBox)
+            return;
 
-        if (e.Key == Key.Return) {
-            var newName = textBox?.Text.Trim() ?? note.EditableName;
-            if (!string.IsNullOrWhiteSpace(newName) && newName != originalName)
-                CommitRename(note, newName);
-            note.IsEditing = false;
-            e.Handled = true;
-        } else if (e.Key == Key.Escape) {
-            note.EditableName = originalName;
-            note.IsEditing = false;
-            e.Handled = true;
-        }
+        CompleteRename(textBox, commitChanges: e.Key == Key.Return);
     }
 
     private void RenameTextBox_LostFocus(object sender, RoutedEventArgs e) {
-        var textBox = sender as TextBox;
-        if (textBox == null) return;
-
-        var listBoxItem = FindVisualParent<ListBoxItem>(textBox);
-        if (listBoxItem?.DataContext is not NoteItem note) return;
-        if (!note.IsEditing) return;
-        var originalName = Path.GetFileNameWithoutExtension(note.FileName);
-
-        var newName = textBox.Text.Trim();
-        if (!string.IsNullOrWhiteSpace(newName) && newName != originalName)
-            CommitRename(note, newName);
-        else
-            note.EditableName = originalName;
-
-        note.IsEditing = false;
+        if (sender is TextBox textBox)
+            CompleteRename(textBox, commitChanges: true);
     }
 
-    private void CommitRename(NoteItem note, string newName) {
-        if (note.IsFolder)
-            CommitFolderRename(note, newName);
+    private void CompleteRename(TextBox textBox, bool commitChanges) {
+        if (textBox.DataContext is not NoteItem note || !note.IsEditing)
+            return;
+
+        var originalDisplayName = Path.GetFileNameWithoutExtension(note.FileName);
+        var requestedEditedName = textBox.Text.Trim();
+        var isFolder = note.IsFolder;
+
+        note.IsEditing = false;
+        note.EditableName = originalDisplayName;
+
+        if (!commitChanges
+            || string.IsNullOrWhiteSpace(requestedEditedName)
+            || string.Equals(requestedEditedName, originalDisplayName, StringComparison.Ordinal))
+            return;
+
+        if (isFolder)
+            CommitFolderRename(note, requestedEditedName);
         else
-            CommitNoteRename(note, newName);
+            CommitNoteRename(note, requestedEditedName);
     }
 
     private void CommitFolderRename(NoteItem folder, string newName) {
@@ -1367,27 +1454,38 @@ public partial class MainWindow : Window {
         return null;
     }
 
-    private static T? FindVisualParent<T>(DependencyObject child) where T : DependencyObject {
-        DependencyObject parentObject = VisualTreeHelper.GetParent(child);
-        if (parentObject == null) return null;
+    private IntPtr TemporarilyAllowWindowActivation() {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (_isNoActivateTemporarilyStripped)
+            return hwnd;
 
-        if (parentObject is T parent) return parent;
-        return FindVisualParent<T>(parentObject);
+        WindowInterop.StripNoActivate(hwnd);
+        _isNoActivateTemporarilyStripped = true;
+        return hwnd;
+    }
+
+    private void RestoreNoActivateAfterInteraction() {
+        if (!_isNoActivateTemporarilyStripped)
+            return;
+
+        var hwnd = new WindowInteropHelper(this).Handle;
+        WindowInterop.RestoreNoActivate(hwnd);
+        _isNoActivateTemporarilyStripped = false;
     }
 
     private void SearchBox_GotFocus(object sender, RoutedEventArgs e) {
-        // WS_EX_NOACTIVATE blocks all keyboard input. Strip it while the search
-        // box is focused (same pattern as the header edit TextBox).
-        var hwnd = new WindowInteropHelper(this).Handle;
-        int exStyle = WindowInterop.GetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE);
-        WindowInterop.SetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE, exStyle & ~WindowInterop.WS_EX_NOACTIVATE);
-        WindowInterop.SetForegroundWindow(hwnd);
+        var hwnd = TemporarilyAllowWindowActivation();
+        try {
+            if (!WindowInterop.SetForegroundWindow(hwnd))
+                RestoreNoActivateAfterInteraction();
+        } catch {
+            RestoreNoActivateAfterInteraction();
+            throw;
+        }
     }
 
     private void SearchBox_LostFocus(object sender, RoutedEventArgs e) {
-        var hwnd = new WindowInteropHelper(this).Handle;
-        int exStyle = WindowInterop.GetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE);
-        WindowInterop.SetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE, exStyle | WindowInterop.WS_EX_NOACTIVATE);
+        RestoreNoActivateAfterInteraction();
     }
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) {
@@ -1401,8 +1499,36 @@ public partial class MainWindow : Window {
 
     private void SearchBox_KeyDown(object sender, KeyEventArgs e) {
         if (e.Key == Key.Escape && !string.IsNullOrEmpty(_viewModel.FilterText)) {
-            _viewModel.ClearFilter(); // triggers OnViewModelFilterTextChanged → SearchBox.Text = ""
-            e.Handled = true; // keep the panel open; don't bubble to the window-level Escape handler
+            e.Handled = true;
+            try {
+                _viewModel.ClearFilter();
+            } finally {
+                RestoreNoActivateAfterInteraction();
+            }
+            return;
+        }
+
+        if (e.Key != Key.Enter
+            || FileList.Items.Count == 0
+            || FileList.Items[0] is not NoteItem firstDisplayedItem)
+            return;
+
+        e.Handled = true;
+        FileList.SelectedItem = firstDisplayedItem;
+
+        try {
+            if (firstDisplayedItem.IsFolder) {
+                if (_viewModel.IsExpandMode)
+                    _viewModel.ToggleFolderExpansion(firstDisplayedItem);
+                else
+                    _viewModel.NavigateTo(firstDisplayedItem.FileName);
+
+                Dispatcher.InvokeAsync(() => FileList.Focus(), DispatcherPriority.Input);
+            } else {
+                OpenSelectedNote();
+            }
+        } finally {
+            RestoreNoActivateAfterInteraction();
         }
     }
 

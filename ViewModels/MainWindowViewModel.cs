@@ -178,6 +178,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
         OnPropertyChanged(nameof(CanNavigateForward));
         OnPropertyChanged(nameof(CurrentFolderName));
         OnPropertyChanged(nameof(HasNoNotes));
+        OnPropertyChanged(nameof(HasNoFilterResults));
         NotesLoaded?.Invoke(this, EventArgs.Empty);
     }
 

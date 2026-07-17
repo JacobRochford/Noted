@@ -175,7 +175,7 @@
                                        VerticalAlignment="Center"
                                        Cursor="Hand"
                                        FocusVisualStyle="{x:Null}"
-                                       ToolTip="Double-click to set a custom header for your app"
+                                       ToolTip="Double-click to set a custom header"
                                        Visibility="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthToHeaderVisibilityConverter}}"
                                        MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"/>
                             <TextBox x:Name="HeaderTextEdit"
@@ -186,7 +186,7 @@
                                      Visibility="Collapsed"
                                      MinWidth="80"
                                      FocusVisualStyle="{x:Null}"
-                                     ToolTip="Enter a custom header and press Enter to save"
+                                     ToolTip="Enter or click away to save"
                                      LostFocus="HeaderEditBox_LostFocus"
                                      KeyDown="HeaderEditBox_KeyDown"/>
                         </Grid>
@@ -592,6 +592,18 @@
                                    FontSize="12"
                                    Visibility="{Binding HasNoFilterResults, Converter={StaticResource BoolToVisibility}}"/>
 
+                        <TextBlock DockPanel.Dock="Top"
+                                   Text="This folder is empty. Select + New to create a note."
+                                   HorizontalAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   Margin="16,20,16,0"
+                                   Foreground="#A0B8C8"
+                                   FontStyle="Italic"
+                                   FontSize="12"
+                                   IsHitTestVisible="False"
+                                   Visibility="{Binding HasNoNotes, Converter={StaticResource BoolToVisibility}}"/>
+
                         <!-- File list -->
                         <ListBox x:Name="FileList"
                                  Foreground="#333333"
@@ -882,6 +894,9 @@
                                                         <Trigger Property="IsSelected" Value="True">
                                                             <Setter TargetName="ItemBorder" Property="Background" Value="#C4E2F2"/>
                                                         </Trigger>
+                                                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                            <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#5BA8C8"/>
+                                                        </Trigger>
                                                     </ControlTemplate.Triggers>
                                                 </ControlTemplate>
                                             </Setter.Value>
@@ -1013,6 +1028,43 @@
                                     Padding="12"
                                     Margin="0,0,0,10">
                                 <StackPanel>
+                                    <TextBlock Text="Folder Navigation"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="#355A6E"
+                                               Margin="0,0,0,8"/>
+                                    <TextBlock Text="How clicking a folder opens it"
+                                               FontSize="11"
+                                               Foreground="#5F7480"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,8"/>
+                                    <RadioButton x:Name="FolderNavDrillDownOption"
+                                                 GroupName="FolderNavigation"
+                                                 Margin="0,0,0,6"
+                                                 Checked="FolderNavOption_Checked"
+                                                 HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Navigate into folder (drill-down)"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </RadioButton>
+                                    <RadioButton x:Name="FolderNavExpandOption"
+                                                 GroupName="FolderNavigation"
+                                                 Checked="FolderNavOption_Checked"
+                                                 HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Expand folder inline (tree view)"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </RadioButton>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#EFF7FB"
+                                    BorderBrush="#C9DFEC"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="12"
+                                    Margin="0,0,0,10">
+                                <StackPanel>
                                     <TextBlock Text="Startup"
                                                FontSize="12"
                                                FontWeight="SemiBold"
@@ -1042,6 +1094,11 @@
                                                FontSize="12"
                                                FontWeight="SemiBold"
                                                Foreground="#355A6E"
+                                               Margin="0,0,0,8"/>
+                                    <TextBlock Text="Choose whether Hide also hides all auxiliary windows"
+                                               FontSize="11"
+                                               Foreground="#5F7480"
+                                               TextWrapping="Wrap"
                                                Margin="0,0,0,8"/>
                                     <CheckBox x:Name="HideButtonHidesAllOption"
                                             Foreground="#355A6E"
@@ -1091,7 +1148,7 @@
                                                    TextAlignment="Right"/>
                                     </Grid>
                                     <Slider x:Name="DefaultOpacitySlider"
-                                            Minimum="0"
+                                            Minimum="5"
                                             Maximum="100"
                                             Value="95"
                                             SmallChange="1"
