@@ -1,4 +1,5 @@
 using System.IO;
+using System.Security;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Noted.Models;
@@ -97,12 +98,22 @@ public sealed class AppSettingsService : IAppSettingsService {
     /// Gets the directory where settings are stored.
     public string StorageDirectory { get; }
 
-    public AppSettingsService() {
-        StorageDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Noted");
-        Directory.CreateDirectory(StorageDirectory);
+    public AppSettingsService(string? storageDirectory = null) {
+        StorageDirectory = string.IsNullOrWhiteSpace(storageDirectory)
+            ? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Noted")
+            : Path.GetFullPath(storageDirectory);
         _settingsFilePath = Path.Combine(StorageDirectory, "settings.json");
+
+        try {
+            Directory.CreateDirectory(StorageDirectory);
+        } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
+            throw CreatePersistenceException(
+                $"Noted could not initialize its settings folder at '{StorageDirectory}'. "
+                + "Check that the location exists and that you have permission to write to it, then restart Noted.",
+                ex);
+        }
     }
 
     public string? LoadNotesDirectory() {
@@ -294,10 +305,16 @@ public sealed class AppSettingsService : IAppSettingsService {
             var settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
             _cachedSettings = NormalizeSettings(settings);
             return _cachedSettings;
-        } catch (JsonException) {
-            // Settings file is corrupted; return defaults without caching so
-            // a subsequent save can overwrite the bad file cleanly.
-            return NormalizeSettings(new AppSettings());
+        } catch (JsonException ex) {
+            throw CreatePersistenceException(
+                $"Noted could not read settings from '{_settingsFilePath}' because the file is malformed. "
+                + "Move or repair settings.json, then restart Noted. The existing file was not changed.",
+                ex);
+        } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
+            throw CreatePersistenceException(
+                $"Noted could not read settings from '{_settingsFilePath}'. "
+                + "Check that the file is available and that you have permission to read it, then retry.",
+                ex);
         }
     }
 
@@ -316,39 +333,64 @@ public sealed class AppSettingsService : IAppSettingsService {
     }
 
     private void SaveSettings(AppSettings settings) {
-        var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
+        var tmpPath = _settingsFilePath + ".tmp";
 
-        Directory.CreateDirectory(Path.GetDirectoryName(_settingsFilePath)!);
+        try {
+            var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true });
 
-        var backupDir = Path.Combine(
-            Path.GetDirectoryName(_settingsFilePath)!,
-            "backups"
-        );
+            Directory.CreateDirectory(Path.GetDirectoryName(_settingsFilePath)!);
 
-        Directory.CreateDirectory(backupDir);
+            var backupDir = Path.Combine(
+                Path.GetDirectoryName(_settingsFilePath)!,
+                "backups"
+            );
 
-        if (File.Exists(_settingsFilePath)) {
-            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
-            var fileName = Path.GetFileNameWithoutExtension(_settingsFilePath);
-            var ext = Path.GetExtension(_settingsFilePath);
-            var backupPath = Path.Combine(backupDir, $"{fileName}_{timestamp}{ext}");
-            var suffix = 1;
+            Directory.CreateDirectory(backupDir);
 
-            while (File.Exists(backupPath)) {
-                backupPath = Path.Combine(backupDir, $"{fileName}_{timestamp}_{suffix:00}{ext}");
-                suffix++;
+            if (File.Exists(_settingsFilePath)) {
+                var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
+                var fileName = Path.GetFileNameWithoutExtension(_settingsFilePath);
+                var ext = Path.GetExtension(_settingsFilePath);
+                var backupPath = Path.Combine(backupDir, $"{fileName}_{timestamp}{ext}");
+                var suffix = 1;
+
+                while (File.Exists(backupPath)) {
+                    backupPath = Path.Combine(backupDir, $"{fileName}_{timestamp}_{suffix:00}{ext}");
+                    suffix++;
+                }
+
+                File.Copy(_settingsFilePath, backupPath, overwrite: false);
             }
 
-            File.Copy(_settingsFilePath, backupPath, overwrite: false);
+            // Write to .tmp then rename; File.Move on the same drive is atomic,
+            // so a crash mid-write can't leave settings.json half-baked or missing.
+            File.WriteAllText(tmpPath, json);
+            File.Move(tmpPath, _settingsFilePath, overwrite: true);
+            _cachedSettings = settings;
+            PruneSettingsBackups(backupDir);
+        } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
+            TryDeleteTemporarySettingsFile(tmpPath);
+            throw CreatePersistenceException(
+                $"Noted could not save settings to '{_settingsFilePath}'. "
+                + "Your latest setting change was not saved. Check that the location is available and writable, then retry.",
+                ex);
         }
+    }
 
-        // Write to .tmp then rename; File.Move on the same drive is atomic,
-        // so a crash mid-write can't leave settings.json half-baked or missing.
-        var tmpPath = _settingsFilePath + ".tmp";
-        File.WriteAllText(tmpPath, json);
-        File.Move(tmpPath, _settingsFilePath, overwrite: true);
-        _cachedSettings = settings;
-        PruneSettingsBackups(backupDir);
+    private static bool IsExpectedSettingsIoException(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException or SecurityException;
+
+    private static SettingsPersistenceException CreatePersistenceException(string message, Exception innerException) =>
+        new(message, innerException);
+
+    private static void TryDeleteTemporarySettingsFile(string path) {
+        try {
+            if (File.Exists(path))
+                File.Delete(path);
+        } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
+            // Preserve the original persistence error. A later successful save
+            // replaces this same temporary path.
+        }
     }
 
     private static void PruneSettingsBackups(string backupDir) {

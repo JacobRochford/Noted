@@ -20,6 +20,7 @@ public partial class App : Application
     private ScratchpadWindow? _scratchpadWindow;
     private bool _isShuttingDown;
     private string? _lastShutdownWarning;
+    private int _fatalErrorShown;
 
     public App()
     {
@@ -63,67 +64,95 @@ public partial class App : Application
             return;
         }
 
-        base.OnStartup(e);
-        TryCreateDesktopShortcut();
-        _ = UpdateService.CheckForUpdatesAsync();
+        NoteFileService? startupFileService = null;
+        NotepadProcessService? startupNotepadService = null;
 
-        var settings = new AppSettingsService();
-        _settingsService = settings;
-        var fileService = new NoteFileService(settings);
-        var mainWindow = new MainWindow(settings, fileService, new NotepadProcessService(), new StartupService());
-        _mainWindow = mainWindow;
-        MainWindow = mainWindow;
-        mainWindow.Closing += MainWindow_Closing;
+        try
+        {
+            base.OnStartup(e);
+            TryCreateDesktopShortcut();
 
-        WindowManager.Main = mainWindow;
-        WindowManager.ChecklistProvider = GetOrCreateChecklistWindow;
-        WindowManager.DictionaryProvider = GetOrCreateDictionaryWindow;
-        WindowManager.ScratchpadProvider = GetOrCreateScratchpadWindow;
+            var settings = new AppSettingsService();
+            _settingsService = settings;
+            startupFileService = new NoteFileService(settings);
+            startupNotepadService = new NotepadProcessService();
+            var mainWindow = new MainWindow(
+                settings,
+                startupFileService,
+                startupNotepadService,
+                new StartupService());
+            _mainWindow = mainWindow;
+            MainWindow = mainWindow;
+            mainWindow.Closing += MainWindow_Closing;
 
-        mainWindow.Show();
+            WindowManager.Main = mainWindow;
+            WindowManager.ChecklistProvider = GetOrCreateChecklistWindow;
+            WindowManager.DictionaryProvider = GetOrCreateDictionaryWindow;
+            WindowManager.ScratchpadProvider = GetOrCreateScratchpadWindow;
+
+            mainWindow.Show();
+            _ = UpdateService.CheckForUpdatesAsync();
+        }
+        catch (Exception ex)
+        {
+            if (_mainWindow is null)
+            {
+                try { startupNotepadService?.Dispose(); } catch (Exception cleanupException) { Debug.WriteLine(cleanupException); }
+                try { startupFileService?.Dispose(); } catch (Exception cleanupException) { Debug.WriteLine(cleanupException); }
+            }
+
+            HandleFatalStartupFailure(ex);
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         _isShuttingDown = true;
 
-        var mainWindow = _mainWindow;
-        if (mainWindow is not null)
+        try
         {
-            mainWindow.Closing -= MainWindow_Closing;
-        }
 
-        if (_scratchpadWindow is not null)
-        {
-            if (!_scratchpadWindow.TryFlushPendingContent(out var error))
+            var mainWindow = _mainWindow;
+            if (mainWindow is not null)
             {
-                MessageBox.Show(
-                    error ?? "Scratchpad content could not be saved before shutdown.",
-                    "Scratchpad Save Failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                mainWindow.Closing -= MainWindow_Closing;
+            }
+
+            if (_scratchpadWindow is not null)
+            {
+                if (!_scratchpadWindow.TryFlushPendingContent(out var error))
+                {
+                    MessageBox.Show(
+                        error ?? "Scratchpad content could not be saved before shutdown.",
+                        "Scratchpad Save Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+            }
+
+            CloseExistingWindow(_checklistWindow, "Checklist");
+            CloseExistingWindow(_dictionaryWindow, "Dictionary");
+            CloseExistingWindow(_scratchpadWindow, "Scratchpad");
+
+            mainWindow?.CleanupResources();
+            WindowManager.ClearAll();
+
+            _mainWindow = null;
+            _checklistWindow = null;
+            _dictionaryWindow = null;
+            _scratchpadWindow = null;
+        }
+        finally
+        {
+            try
+            {
+                ReleaseSingleInstanceMutex();
+            }
+            finally
+            {
+                base.OnExit(e);
             }
         }
-
-        CloseExistingWindow(_checklistWindow, "Checklist");
-        CloseExistingWindow(_dictionaryWindow, "Dictionary");
-        CloseExistingWindow(_scratchpadWindow, "Scratchpad");
-
-        mainWindow?.CleanupResources();
-        WindowManager.ClearAll();
-
-        _mainWindow = null;
-        _checklistWindow = null;
-        _dictionaryWindow = null;
-        _scratchpadWindow = null;
-
-        if (_singleInstanceMutex is not null)
-        {
-            _singleInstanceMutex.ReleaseMutex();
-            _singleInstanceMutex.Dispose();
-            _singleInstanceMutex = null;
-        }
-        base.OnExit(e);
     }
 
     private ChecklistWindow? GetOrCreateChecklistWindow()
@@ -260,32 +289,33 @@ public partial class App : Application
             MessageBoxImage.Warning);
     }
 
-    // Catches unhandled exceptions thrown on the UI thread.
-    // Setting Handled = true keeps the overlay alive instead of crashing.
-    private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    // Expected settings failures are recoverable after actionable feedback.
+    // Every other unhandled dispatcher exception remains fatal.
+    private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        e.Handled = true;
-        MessageBox.Show(
-            $"An unexpected error occurred:\n\n{e.Exception.Message}\n\nNoted will continue running. If the problem persists, please restart the app.",
-            "Noted — Unexpected Error",
-            MessageBoxButton.OK,
-            MessageBoxImage.Warning);
+        if (e.Exception is SettingsPersistenceException)
+        {
+            e.Handled = true;
+            MessageBox.Show(
+                e.Exception.Message,
+                "Noted - Settings Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        ShowFatalError("An unexpected application error occurred.", e.Exception);
+        ReleaseSingleInstanceMutex();
     }
 
     // Catches unhandled exceptions on non-UI threads (e.g. background workers).
     // The runtime may still terminate the process after this fires, but the user
     // sees a clear message rather than a silent crash.
-    private static void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    private void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
-        var message = e.ExceptionObject is Exception ex
-            ? ex.Message
-            : e.ExceptionObject?.ToString() ?? "Unknown error";
-
-        MessageBox.Show(
-            $"A fatal error occurred and Noted must close:\n\n{message}",
-            "Noted — Fatal Error",
-            MessageBoxButton.OK,
-            MessageBoxImage.Error);
+        var exception = e.ExceptionObject as Exception
+            ?? new InvalidOperationException(e.ExceptionObject?.ToString() ?? "Unknown error");
+        ShowFatalError("A fatal background error occurred.", exception);
     }
 
     // Catches exceptions from fire-and-forget Tasks that were never awaited.
@@ -294,6 +324,59 @@ public partial class App : Application
     private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {
         e.SetObserved();
+    }
+
+    private void HandleFatalStartupFailure(Exception exception)
+    {
+        _isShuttingDown = true;
+        try
+        {
+            ShowFatalError("Noted could not start.", exception);
+        }
+        finally
+        {
+            // Release before requesting shutdown so an immediate relaunch is
+            // not blocked even if cleanup encounters another failure.
+            ReleaseSingleInstanceMutex();
+            Shutdown(-1);
+        }
+    }
+
+    private void ShowFatalError(string context, Exception exception)
+    {
+        if (Interlocked.Exchange(ref _fatalErrorShown, 1) != 0)
+            return;
+
+        var message = exception is SettingsPersistenceException
+            ? exception.Message
+            : $"{context}\n\n{exception.Message}";
+
+        MessageBox.Show(
+            $"{message}\n\nNoted must close.",
+            "Noted - Fatal Error",
+            MessageBoxButton.OK,
+            MessageBoxImage.Error);
+    }
+
+    private void ReleaseSingleInstanceMutex()
+    {
+        var mutex = _singleInstanceMutex;
+        if (mutex is null)
+            return;
+
+        _singleInstanceMutex = null;
+        try
+        {
+            mutex.ReleaseMutex();
+        }
+        catch (ApplicationException ex)
+        {
+            Debug.WriteLine($"The single-instance mutex was not owned by this thread: {ex}");
+        }
+        finally
+        {
+            mutex.Dispose();
+        }
     }
 
     private static void TryCreateDesktopShortcut()
