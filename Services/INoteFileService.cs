@@ -7,6 +7,8 @@ public interface INoteFileService : IDisposable {
     string DeletedNotesDirectory { get; }
     event EventHandler? FilesChanged;
     IReadOnlyList<NoteItem> GetNotes();
+    IReadOnlyList<string> GetAllNoteKeys();
+    string GetNoteKey(string filePath);
     string CreateNote(string? requestedName = null);
     bool ChangeNotesDirectory(string newDirectory);
     void DeleteNote(string fileName, string? containingDirectory = null);

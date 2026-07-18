@@ -61,6 +61,7 @@ public sealed class NoteFileService : INoteFileService {
                 var name = info.Name;
                 return new NoteItem {
                     FileName = name,
+                    NoteKey = GetNoteKey(info.FullName),
                     DisplayName = FormatNoteName(name),
                     EditableName = Path.GetFileNameWithoutExtension(name),
                     Subtitle = BuildSubtitle(name, info.LastWriteTime),
@@ -68,6 +69,27 @@ public sealed class NoteFileService : INoteFileService {
                 };
             })
             .ToList();
+    }
+
+    public IReadOnlyList<string> GetAllNoteKeys() {
+        if (!Directory.Exists(NotesDirectory))
+            return Array.Empty<string>();
+
+        return Directory.GetFiles(NotesDirectory, "*.txt", SearchOption.AllDirectories)
+            .Select(GetNoteKey)
+            .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public string GetNoteKey(string filePath) {
+        var fullPath = Path.GetFullPath(filePath);
+        if (!IsPathWithinNotesDirectory(fullPath))
+            throw new ArgumentException("The note path must be inside the configured notes directory.", nameof(filePath));
+
+        var relativePath = Path.GetRelativePath(Path.GetFullPath(NotesDirectory), fullPath)
+            .Replace(Path.DirectorySeparatorChar, '/')
+            .Replace(Path.AltDirectorySeparatorChar, '/');
+        return $"./{relativePath}";
     }
 
     public string CreateNote(string? requestedName = null) {
@@ -345,6 +367,7 @@ public sealed class NoteFileService : INoteFileService {
                 var name = info.Name;
                 return new NoteItem {
                     FileName = name,
+                    NoteKey = GetNoteKey(info.FullName),
                     DisplayName = FormatNoteName(name),
                     EditableName = Path.GetFileNameWithoutExtension(name),
                     Subtitle = BuildSubtitle(name, info.LastWriteTime),

@@ -473,8 +473,8 @@ public partial class MainWindow : Window {
     // Restore the tracked selection after every reload of notes.
     private void OnNotesLoaded(object? sender, EventArgs e) {
         UpdateNotesDirectoryDisplay();
-        if (_viewModel.SelectedFileName is not null)
-            FileList.SelectedItem = _viewModel.FindNote(_viewModel.SelectedFileName);
+        if (_viewModel.SelectedNoteKey is not null)
+            FileList.SelectedItem = _viewModel.FindNote(_viewModel.SelectedNoteKey);
     }
 
 
@@ -1017,9 +1017,10 @@ public partial class MainWindow : Window {
             if (filename is null)
                 return;
 
-            _viewModel.LoadNotes(filename);
+            var filePath = Path.Combine(_fileService.CurrentDirectory, filename);
+            _viewModel.LoadNotes(_fileService.GetNoteKey(filePath));
             // OnNotesLoaded fires synchronously above, so selection is already set.
-            _notepadService.Open(Path.Combine(_fileService.CurrentDirectory, filename));
+            _notepadService.Open(filePath);
         } catch (Exception ex) {
             MessageBox.Show($"Failed to create note:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -1029,8 +1030,9 @@ public partial class MainWindow : Window {
     private void QuickNoteButton_Click(object sender, RoutedEventArgs e) {
         try {
             var filename = _fileService.CreateNote();
-            _viewModel.LoadNotes(filename);
-            _notepadService.Open(Path.Combine(_fileService.CurrentDirectory, filename));
+            var filePath = Path.Combine(_fileService.CurrentDirectory, filename);
+            _viewModel.LoadNotes(_fileService.GetNoteKey(filePath));
+            _notepadService.Open(filePath);
         } catch (Exception ex) {
             MessageBox.Show($"Failed to create quick note:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -1131,7 +1133,7 @@ public partial class MainWindow : Window {
 
     private void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e) {
         if (FileList.SelectedItem is NoteItem note)
-            _viewModel.SelectedFileName = note.FileName;
+            _viewModel.SelectedNoteKey = note.IsFolder ? null : note.NoteKey;
     }
 
     private void OpenSelectedNote() {
@@ -1139,7 +1141,7 @@ public partial class MainWindow : Window {
 
         // FullPath is set for child notes in Expand mode; drill-down mode uses the current folder.
         var filePath = note.FullPath ?? Path.Combine(_fileService.CurrentDirectory, note.FileName);
-        _viewModel.SelectedFileName = note.FileName;
+        _viewModel.SelectedNoteKey = note.NoteKey;
 
         if (_notepadService.Open(filePath)) {
             _notepadService.Restore();
@@ -1227,7 +1229,7 @@ public partial class MainWindow : Window {
                 return;
 
             var changed = _fileService.ChangeNotesDirectory(dialog.FolderName);
-            _viewModel.SelectedFileName = null;
+            _viewModel.SelectedNoteKey = null;
             if (changed) {
                 _viewModel.ClearFilter();
                 _viewModel.LoadNotes();
@@ -1380,12 +1382,16 @@ public partial class MainWindow : Window {
                 MessageBox.Show(error, "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        _viewModel.LoadNotes(newFileName ?? note.FileName);
+        var renamedFileName = newFileName ?? note.FileName;
+        var renamedFilePath = Path.Combine(containingDirectory, renamedFileName);
+        var renamedNoteKey = _fileService.GetNoteKey(renamedFilePath);
+        _viewModel.ReplacePinnedNoteKey(note.NoteKey, renamedNoteKey);
+        _viewModel.LoadNotes(renamedNoteKey);
         if (!wasNoteOpen || newFileName is null)
             return;
 
-        ShowRenameNotice(_viewModel.FindNote(newFileName), oldFileName);
-        if (_notepadService.Open(Path.Combine(containingDirectory, newFileName))) {
+        ShowRenameNotice(_viewModel.FindNote(renamedNoteKey), oldFileName);
+        if (_notepadService.Open(renamedFilePath)) {
         }
     }
 

@@ -13,6 +13,7 @@ public sealed class NoteItem : INotifyPropertyChanged {
     private int _indentLevel;
 
     public string FileName { get; init; } = "";
+    public string NoteKey { get; init; } = "";
     public DateTime LastModified { get; set; }
     public bool IsPinned {
         get => _isPinned;

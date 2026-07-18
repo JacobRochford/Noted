@@ -25,6 +25,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
     private string _customHeaderText = DefaultHeaderText;
     private FolderNavigationMode _folderNavigationMode;
     private readonly HashSet<string> _expandedFolders = new();
+    private HashSet<string> _pinnedNoteKeys = new(StringComparer.OrdinalIgnoreCase);
 
     public ObservableCollection<NoteItem> Notes { get; } = new();
     
@@ -140,7 +141,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
     // true if folder is expanded in Expand mode, or if we're in Drill-down mode (where folders are always "expanded")
     public bool IsExpandMode => _folderNavigationMode == FolderNavigationMode.Expand;
 
-    public string? SelectedFileName { get; set; }
+    public string? SelectedNoteKey { get; set; }
     public event EventHandler? NotesLoaded;
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -160,18 +161,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
     
 
     // Loads notes and folders for the current view
-    public void LoadNotes(string? selectedFileName = null) {
-        if (selectedFileName != null)
-            SelectedFileName = selectedFileName;
+    public void LoadNotes(string? selectedNoteKey = null) {
+        if (selectedNoteKey != null)
+            SelectedNoteKey = selectedNoteKey;
 
-        var pinned = new HashSet<string>(_settingsService.LoadPinnedNotes() ?? Array.Empty<string>());
+        _pinnedNoteKeys = LoadPinnedNoteKeys();
         Notes.Clear();
 
         // Use Expand mode only at root
         if (_folderNavigationMode == FolderNavigationMode.Expand && !_fileService.CanNavigateUp)
-            LoadNotesExpanded(pinned);
+            LoadNotesExpanded(_pinnedNoteKeys);
         else
-            LoadNotesDrillDown(pinned);
+            LoadNotesDrillDown(_pinnedNoteKeys);
 
         OnPropertyChanged(nameof(CanNavigateUp));
         OnPropertyChanged(nameof(CanNavigateBack));
@@ -189,7 +190,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
         foreach (var folder in folders)
             Notes.Add(folder);
         foreach (var item in items) {
-            item.IsPinned = pinned.Contains(item.FileName);
+            item.IsPinned = pinned.Contains(item.NoteKey);
             Notes.Add(item);
         }
         HeaderText = BuildHeaderText(items.Count);
@@ -201,7 +202,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
         var folders = _fileService.GetFolders();
         var rootNotes = _fileService.GetNotes();
         foreach (var n in rootNotes)
-            n.IsPinned = pinned.Contains(n.FileName);
+            n.IsPinned = pinned.Contains(n.NoteKey);
 
         int childCount = 0;
         // Folders sorted by name, each optionally followed by their expanded children
@@ -212,6 +213,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
                 var children = _fileService.GetNotesInSubfolder(folder.FileName);
                 childCount += children.Count;
                 foreach (var child in children) {
+                    child.IsPinned = pinned.Contains(child.NoteKey);
                     child.IndentLevel = 1;
                     Notes.Add(child);
                 }
@@ -239,16 +241,92 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
         HeaderText = BuildHeaderText(Notes.Count(note => !note.IsFolder));
     }
 
-    public NoteItem? FindNote(string? fileName) =>
-        fileName is null ? null : Notes.FirstOrDefault(n => n.FileName == fileName);
+    public NoteItem? FindNote(string? noteKey) =>
+        noteKey is null
+            ? null
+            : Notes.FirstOrDefault(n =>
+                !n.IsFolder && string.Equals(n.NoteKey, noteKey, StringComparison.OrdinalIgnoreCase));
 
     // Toggle pin state for a note
     public void TogglePin(NoteItem note) {
-        if (note == null || note.IsFolder)
+        if (note == null || note.IsFolder || string.IsNullOrWhiteSpace(note.NoteKey))
             return;
+
         note.IsPinned = !note.IsPinned;
-        _settingsService.SavePinnedNotes(Notes.Where(n => n.IsPinned).Select(n => n.FileName).ToList());
-        ResortNotes();
+        if (note.IsPinned)
+            _pinnedNoteKeys.Add(note.NoteKey);
+        else
+            _pinnedNoteKeys.Remove(note.NoteKey);
+
+        SavePinnedNoteKeys();
+        if (_folderNavigationMode == FolderNavigationMode.Expand && !_fileService.CanNavigateUp)
+            LoadNotes();
+        else
+            ResortNotes();
+    }
+
+    public void ReplacePinnedNoteKey(string oldNoteKey, string newNoteKey) {
+        if (string.IsNullOrWhiteSpace(oldNoteKey)
+            || string.IsNullOrWhiteSpace(newNoteKey)
+            || !_pinnedNoteKeys.Remove(oldNoteKey))
+            return;
+
+        _pinnedNoteKeys.Add(newNoteKey);
+        SavePinnedNoteKeys();
+    }
+
+    private HashSet<string> LoadPinnedNoteKeys() {
+        var storedKeys = _settingsService.LoadPinnedNotes() ?? Array.Empty<string>();
+        var resolvedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var legacyKeys = new List<string>();
+
+        foreach (var storedKey in storedKeys) {
+            if (string.IsNullOrWhiteSpace(storedKey))
+                continue;
+
+            var normalized = storedKey.Trim().Replace('\\', '/');
+            if (normalized.StartsWith("./", StringComparison.Ordinal))
+                resolvedKeys.Add(normalized);
+            else
+                legacyKeys.Add(normalized);
+        }
+
+        if (legacyKeys.Count == 0)
+            return resolvedKeys;
+
+        var allNoteKeys = _fileService.GetAllNoteKeys();
+        foreach (var legacyKey in legacyKeys) {
+            var legacyPath = legacyKey.TrimStart('/');
+            if (legacyPath.Contains('/')) {
+                var exactKey = $"./{legacyPath}";
+                var exactMatch = allNoteKeys.FirstOrDefault(key =>
+                    string.Equals(key, exactKey, StringComparison.OrdinalIgnoreCase));
+                if (exactMatch is not null)
+                    resolvedKeys.Add(exactMatch);
+                continue;
+            }
+
+            var matches = allNoteKeys
+                .Where(key => string.Equals(GetNoteKeyFileName(key), legacyPath, StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            if (matches.Count == 1)
+                resolvedKeys.Add(matches[0]);
+        }
+
+        _settingsService.SavePinnedNotes(
+            resolvedKeys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToList());
+        return resolvedKeys;
+    }
+
+    private void SavePinnedNoteKeys() {
+        _settingsService.SavePinnedNotes(
+            _pinnedNoteKeys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    private static string GetNoteKeyFileName(string noteKey) {
+        var separatorIndex = noteKey.LastIndexOf('/');
+        return separatorIndex >= 0 ? noteKey[(separatorIndex + 1)..] : noteKey;
     }
 
     // Resort notes in-place: folders, then pinned, then alpha
