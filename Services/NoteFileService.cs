@@ -317,6 +317,7 @@ public sealed class NoteFileService : INoteFileService {
             EnableRaisingEvents = true
         };
         _watcher.Created += OnFileSystemChanged;
+        _watcher.Changed += OnFileSystemChanged;
         _watcher.Deleted += OnFileSystemChanged;
         _watcher.Renamed += OnFileSystemChanged;
         // separate watcher for folder create/rename/delete ("*.txt" filter misses dirs)
@@ -555,6 +556,7 @@ public sealed class NoteFileService : INoteFileService {
     private void StopWatching() {
         if (_watcher != null) {
             _watcher.Created -= OnFileSystemChanged;
+            _watcher.Changed -= OnFileSystemChanged;
             _watcher.Deleted -= OnFileSystemChanged;
             _watcher.Renamed -= OnFileSystemChanged;
             _watcher.Dispose();
