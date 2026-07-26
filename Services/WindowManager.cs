@@ -7,6 +7,7 @@
         public static ChecklistWindow? Checklist { get; set; }
         public static DictionaryWindow? Dictionary { get; set; }
         public static ScratchpadWindow? Scratchpad { get; set; }
+        public static NoteEditorWindow? Editor { get; set; }
 
         internal static Func<ChecklistWindow?>? ChecklistProvider { get; set; }
         internal static Func<DictionaryWindow?>? DictionaryProvider { get; set; }
@@ -16,7 +17,8 @@
             => (Main?.IsNotesPanelVisible == true)
             || (Checklist?.IsWindowVisible == true)
             || (Dictionary?.IsWindowVisible == true)
-            || (Scratchpad?.IsWindowVisible == true);
+            || (Scratchpad?.IsWindowVisible == true)
+            || (Editor?.IsWindowVisible == true);
 
         public static void HideAll()
         {
@@ -24,13 +26,20 @@
             Checklist?.HideWindow();
             Dictionary?.HideWindow();
             Scratchpad?.HideWindow();
+            Editor?.HideWindow();
         }
 
-        public static void ShowNotesPanel() => Main?.ShowNotesPanel();
+        public static void ShowNotesPanel()
+        {
+            Main?.ShowNotesPanel();
+            if (Editor?.OpenFilePath is not null)
+                Editor.ShowWindow();
+        }
 
         public static void HideChecklist() => Checklist?.HideWindow();
         public static void HideDictionary() => Dictionary?.HideWindow();
         public static void HideScratchpad() => Scratchpad?.HideWindow();
+        public static void HideEditor() => Editor?.HideWindow();
 
         public static void ShowChecklistPanel()
         {
@@ -100,6 +109,7 @@
             Checklist = null;
             Dictionary = null;
             Scratchpad = null;
+            Editor = null;
             ChecklistProvider = null;
             DictionaryProvider = null;
             ScratchpadProvider = null;

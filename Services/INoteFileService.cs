@@ -11,7 +11,7 @@ public interface INoteFileService : IDisposable {
     string GetNoteKey(string filePath);
     string CreateNote(string? requestedName = null);
     bool ChangeNotesDirectory(string newDirectory);
-    void DeleteNote(string fileName, string? containingDirectory = null);
+    bool DeleteNote(string fileName, string? containingDirectory = null);
     (bool Success, string? NewFileName, string? Error) RenameNote(
         string oldFileName,
         string newDisplayName,
@@ -31,6 +31,6 @@ public interface INoteFileService : IDisposable {
     // folder CRUD
     IReadOnlyList<NoteItem> GetNotesInSubfolder(string subfolderName);
     (bool Success, string? Error) CreateFolder(string folderName);
-    (bool Success, string? Error) RenameFolder(string oldName, string newName);
+    (bool Success, string? NewFolderName, string? Error) RenameFolder(string oldName, string newName);
     (bool Success, string? Error) DeleteFolder(string folderName);
 }

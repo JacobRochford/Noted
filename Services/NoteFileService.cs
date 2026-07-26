@@ -110,35 +110,49 @@ public sealed class NoteFileService : INoteFileService {
             return false;
 
         var wasWatching = _watcher is not null;
-        StopWatching();
+        FileSystemWatcher? newFileWatcher = null;
+        FileSystemWatcher? newDirectoryWatcher = null;
+
+        try {
+            if (wasWatching)
+                (newFileWatcher, newDirectoryWatcher) = CreateWatchers(normalizedPath);
+
+            // Persist before exposing the new root to callers. If this fails,
+            // the current root, navigation state, and existing watchers remain intact.
+            _settingsService.SaveNotesDirectory(normalizedPath);
+        } catch {
+            DisposeFileWatcher(newFileWatcher);
+            DisposeDirectoryWatcher(newDirectoryWatcher);
+            throw;
+        }
 
         NotesDirectory = normalizedPath;
         CurrentDirectory = normalizedPath;
         ResetNavigationHistory();
-        _settingsService.SaveNotesDirectory(NotesDirectory);
 
-        if (wasWatching)
-            StartWatching();
+        if (newFileWatcher is not null && newDirectoryWatcher is not null)
+            ReplaceWatchers(newFileWatcher, newDirectoryWatcher);
 
         FilesChanged?.Invoke(this, EventArgs.Empty);
         return true;
     }
 
-    public void DeleteNote(string fileName, string? containingDirectory = null) {
+    public bool DeleteNote(string fileName, string? containingDirectory = null) {
         // move note to DeletedNotes (soft delete)
         var directory = ResolveNoteDirectory(containingDirectory);
         if (directory is null)
-            return;
+            return false;
         var fullPath = Path.GetFullPath(Path.Combine(directory, fileName));
         if (!IsPathWithinNotesDirectory(fullPath))
-            return;
+            return false;
         if (!File.Exists(fullPath))
-            return;
+            return false;
 
         Directory.CreateDirectory(DeletedNotesDirectory);
 
         var deletedPath = BuildDeletedNotePath(fileName);
         File.Move(fullPath, deletedPath);
+        return true;
     }
 
     public (bool Success, string? NewFileName, string? Error) RenameNote(
@@ -198,7 +212,7 @@ public sealed class NoteFileService : INoteFileService {
         var timestampText = timestamp.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
         return timestampPlacement switch {
-            NoteTimestampPlacement.Top => timestampText + Environment.NewLine + Environment.NewLine,
+            NoteTimestampPlacement.Top => timestampText + Environment.NewLine + Environment.NewLine + Environment.NewLine,
             NoteTimestampPlacement.Bottom => string.Join(Environment.NewLine, Enumerable.Repeat(string.Empty, 30)) + Environment.NewLine + timestampText,
             _ => string.Empty
         };
@@ -310,28 +324,55 @@ public sealed class NoteFileService : INoteFileService {
 
     // start watching for file/folder changes
     public void StartWatching() {
-        StopWatching();
-        _watcher = new FileSystemWatcher(NotesDirectory, "*.txt") {
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
-            IncludeSubdirectories = true,
-            EnableRaisingEvents = true
-        };
-        _watcher.Created += OnFileSystemChanged;
-        _watcher.Changed += OnFileSystemChanged;
-        _watcher.Deleted += OnFileSystemChanged;
-        _watcher.Renamed += OnFileSystemChanged;
-        // separate watcher for folder create/rename/delete ("*.txt" filter misses dirs)
-        _directoryWatcher = new FileSystemWatcher(NotesDirectory) {
-            NotifyFilter = NotifyFilters.DirectoryName,
-            IncludeSubdirectories = true,
-            EnableRaisingEvents = true
-        };
-        _directoryWatcher.Created += OnFileSystemChanged;
-        _directoryWatcher.Deleted += OnFileSystemChanged;
-        _directoryWatcher.Renamed += OnFileSystemChanged;
+        var (fileWatcher, directoryWatcher) = CreateWatchers(NotesDirectory);
+        ReplaceWatchers(fileWatcher, directoryWatcher);
     }
 
-    // notify listeners on file/folder change
+    private static (FileSystemWatcher FileWatcher, FileSystemWatcher DirectoryWatcher) CreateWatchers(
+        string notesDirectory) {
+        FileSystemWatcher? fileWatcher = null;
+        FileSystemWatcher? directoryWatcher = null;
+
+        try {
+            fileWatcher = new FileSystemWatcher(notesDirectory, "*.txt") {
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
+                IncludeSubdirectories = true,
+                EnableRaisingEvents = true
+            };
+            directoryWatcher = new FileSystemWatcher(notesDirectory) {
+                NotifyFilter = NotifyFilters.DirectoryName,
+                IncludeSubdirectories = true,
+                EnableRaisingEvents = true
+            };
+
+            return (fileWatcher, directoryWatcher);
+        } catch {
+            fileWatcher?.Dispose();
+            directoryWatcher?.Dispose();
+            throw;
+        }
+    }
+
+    private void ReplaceWatchers(
+        FileSystemWatcher fileWatcher,
+        FileSystemWatcher directoryWatcher) {
+        fileWatcher.Created += OnFileSystemChanged;
+        fileWatcher.Changed += OnFileSystemChanged;
+        fileWatcher.Deleted += OnFileSystemChanged;
+        fileWatcher.Renamed += OnFileSystemChanged;
+        directoryWatcher.Created += OnFileSystemChanged;
+        directoryWatcher.Deleted += OnFileSystemChanged;
+        directoryWatcher.Renamed += OnFileSystemChanged;
+
+        var previousFileWatcher = _watcher;
+        var previousDirectoryWatcher = _directoryWatcher;
+        _watcher = fileWatcher;
+        _directoryWatcher = directoryWatcher;
+
+        DisposeFileWatcher(previousFileWatcher);
+        DisposeDirectoryWatcher(previousDirectoryWatcher);
+    }
+
     private void OnFileSystemChanged(object sender, FileSystemEventArgs e) {
         FilesChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -438,29 +479,29 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     // rename a folder (sanitizes name, blocks traversal)
-    public (bool Success, string? Error) RenameFolder(string oldName, string newName) {
+    public (bool Success, string? NewFolderName, string? Error) RenameFolder(string oldName, string newName) {
         var sanitized = ValidateAndSanitizeFolderName(newName);
         if (string.IsNullOrWhiteSpace(sanitized))
-            return (false, "Invalid or reserved folder name.");
+            return (false, null, "Invalid or reserved folder name.");
         if (string.Equals(sanitized, oldName, StringComparison.OrdinalIgnoreCase))
-            return (true, null);
+            return (true, sanitized, null);
 
         var root = Path.GetFullPath(NotesDirectory) + Path.DirectorySeparatorChar;
         var oldPath = Path.GetFullPath(Path.Combine(CurrentDirectory, oldName));
         var newPath = Path.GetFullPath(Path.Combine(CurrentDirectory, sanitized));
 
         if (!oldPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            return (false, "Access denied.");
+            return (false, null, "Access denied.");
         if (!Directory.Exists(oldPath))
-            return (false, "Folder not found.");
+            return (false, null, "Folder not found.");
         if (Directory.Exists(newPath))
-            return (false, "A folder with that name already exists.");
+            return (false, null, "A folder with that name already exists.");
 
         try {
             Directory.Move(oldPath, newPath);
-            return (true, null);
+            return (true, sanitized, null);
         } catch (Exception ex) {
-            return (false, ex.Message);
+            return (false, null, ex.Message);
         }
     }
 
@@ -554,21 +595,34 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     private void StopWatching() {
-        if (_watcher != null) {
-            _watcher.Created -= OnFileSystemChanged;
-            _watcher.Changed -= OnFileSystemChanged;
-            _watcher.Deleted -= OnFileSystemChanged;
-            _watcher.Renamed -= OnFileSystemChanged;
-            _watcher.Dispose();
-            _watcher = null;
-        }
-        if (_directoryWatcher != null) {
-            _directoryWatcher.Created -= OnFileSystemChanged;
-            _directoryWatcher.Deleted -= OnFileSystemChanged;
-            _directoryWatcher.Renamed -= OnFileSystemChanged;
-            _directoryWatcher.Dispose();
-            _directoryWatcher = null;
-        }
+        var fileWatcher = _watcher;
+        var directoryWatcher = _directoryWatcher;
+        _watcher = null;
+        _directoryWatcher = null;
+
+        DisposeFileWatcher(fileWatcher);
+        DisposeDirectoryWatcher(directoryWatcher);
+    }
+
+    private void DisposeFileWatcher(FileSystemWatcher? watcher) {
+        if (watcher is null)
+            return;
+
+        watcher.Created -= OnFileSystemChanged;
+        watcher.Changed -= OnFileSystemChanged;
+        watcher.Deleted -= OnFileSystemChanged;
+        watcher.Renamed -= OnFileSystemChanged;
+        watcher.Dispose();
+    }
+
+    private void DisposeDirectoryWatcher(FileSystemWatcher? watcher) {
+        if (watcher is null)
+            return;
+
+        watcher.Created -= OnFileSystemChanged;
+        watcher.Deleted -= OnFileSystemChanged;
+        watcher.Renamed -= OnFileSystemChanged;
+        watcher.Dispose();
     }
 
     public void Dispose() {

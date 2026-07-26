@@ -1454,34 +1454,6 @@
             </Grid>
         </Border>
 
-        <Popup x:Name="RenameNoticePopup"
-               AllowsTransparency="True"
-               Focusable="False"
-               IsHitTestVisible="False"
-               Placement="Relative"
-               PlacementTarget="{Binding ElementName=NotesPanel}"
-               StaysOpen="True">
-            <Border Width="220"
-                    Padding="12,10"
-                    Background="#FFF5D9"
-                    BorderBrush="#E5C97A"
-                    BorderThickness="1"
-                    CornerRadius="10"
-                    SnapsToDevicePixels="True">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="14"
-                                      Direction="270"
-                                      Opacity="0.18"
-                                      ShadowDepth="4"
-                                      Color="#000000"/>
-                </Border.Effect>
-                <TextBlock x:Name="RenameNoticeText"
-                           FontSize="11"
-                           Foreground="#7B5A12"
-                           TextWrapping="Wrap"/>
-            </Border>
-        </Popup>
-
         <Button x:Name="OverlayButton"
                 Content="Notes"
             Width="96" Height="48"

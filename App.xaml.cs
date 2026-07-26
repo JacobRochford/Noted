@@ -14,7 +14,9 @@ public partial class App : Application
     private const string SingleInstanceMutexName = "Noted.SingleInstance";
     private Mutex? _singleInstanceMutex;
     private AppSettingsService? _settingsService;
+    private NoteFileService? _fileService;
     private MainWindow? _mainWindow;
+    private NoteEditorWindow? _noteEditorWindow;
     private ChecklistWindow? _checklistWindow;
     private DictionaryWindow? _dictionaryWindow;
     private ScratchpadWindow? _scratchpadWindow;
@@ -65,7 +67,7 @@ public partial class App : Application
         }
 
         NoteFileService? startupFileService = null;
-        NotepadProcessService? startupNotepadService = null;
+        NoteEditorWindow? startupNoteEditor = null;
 
         try
         {
@@ -74,13 +76,18 @@ public partial class App : Application
 
             var settings = new AppSettingsService();
             _settingsService = settings;
-            startupFileService = new NoteFileService(settings);
-            startupNotepadService = new NotepadProcessService();
+            var fileService = new NoteFileService(settings);
+            startupFileService = fileService;
+            var noteEditor = new NoteEditorWindow(
+                new NoteContentService(() => fileService.NotesDirectory));
+            startupNoteEditor = noteEditor;
             var mainWindow = new MainWindow(
                 settings,
-                startupFileService,
-                startupNotepadService,
+                fileService,
+                noteEditor,
                 new StartupService());
+            _fileService = fileService;
+            _noteEditorWindow = noteEditor;
             _mainWindow = mainWindow;
             MainWindow = mainWindow;
             mainWindow.Closing += MainWindow_Closing;
@@ -89,6 +96,7 @@ public partial class App : Application
             WindowManager.ChecklistProvider = GetOrCreateChecklistWindow;
             WindowManager.DictionaryProvider = GetOrCreateDictionaryWindow;
             WindowManager.ScratchpadProvider = GetOrCreateScratchpadWindow;
+            WindowManager.Editor = noteEditor;
 
             mainWindow.Show();
             _ = UpdateService.CheckForUpdatesAsync();
@@ -97,7 +105,7 @@ public partial class App : Application
         {
             if (_mainWindow is null)
             {
-                try { startupNotepadService?.Dispose(); } catch (Exception cleanupException) { Debug.WriteLine(cleanupException); }
+                CloseExistingWindow(startupNoteEditor, "note editor");
                 try { startupFileService?.Dispose(); } catch (Exception cleanupException) { Debug.WriteLine(cleanupException); }
             }
 
@@ -133,11 +141,15 @@ public partial class App : Application
             CloseExistingWindow(_checklistWindow, "Checklist");
             CloseExistingWindow(_dictionaryWindow, "Dictionary");
             CloseExistingWindow(_scratchpadWindow, "Scratchpad");
+            CloseExistingWindow(_noteEditorWindow, "note editor");
 
             mainWindow?.CleanupResources();
+            try { _fileService?.Dispose(); } catch (Exception ex) { Debug.WriteLine(ex); }
             WindowManager.ClearAll();
 
+            _fileService = null;
             _mainWindow = null;
+            _noteEditorWindow = null;
             _checklistWindow = null;
             _dictionaryWindow = null;
             _scratchpadWindow = null;
@@ -270,23 +282,25 @@ public partial class App : Application
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
-        if (_scratchpadWindow is null || _scratchpadWindow.TryFlushPendingContent(out var error))
+        if (_scratchpadWindow is not null && !_scratchpadWindow.TryFlushPendingContent(out var error))
         {
-            _lastShutdownWarning = null;
+            e.Cancel = true;
+            var message = error ?? "Scratchpad content could not be saved before shutdown.";
+            if (message == _lastShutdownWarning)
+                return;
+
+            _lastShutdownWarning = message;
+            MessageBox.Show(
+                $"Noted could not close because pending Scratchpad content was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
+                "Scratchpad Save Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
             return;
         }
 
-        e.Cancel = true;
-        var message = error ?? "Scratchpad content could not be saved before shutdown.";
-        if (message == _lastShutdownWarning)
-            return;
-
-        _lastShutdownWarning = message;
-        MessageBox.Show(
-            $"Noted could not close because pending Scratchpad content was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
-            "Scratchpad Save Failed",
-            MessageBoxButton.OK,
-            MessageBoxImage.Warning);
+        _lastShutdownWarning = null;
+        if (_noteEditorWindow is not null && !_noteEditorWindow.TryPrepareForClose())
+            e.Cancel = true;
     }
 
     // Expected settings failures are recoverable after actionable feedback.
