@@ -58,8 +58,10 @@ public sealed class NoteContentService : INoteContentService
         var rootPath = Path.GetFullPath(notesDirectory);
         var fullPath = Path.GetFullPath(filePath);
 
-        if (!string.Equals(Path.GetExtension(fullPath), ".txt", StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("Only .txt note files can be opened or saved.", nameof(filePath));
+        if (!NoteFileExtensions.IsSupported(fullPath))
+            throw new ArgumentException(
+                "Only .txt, .md, and .markdown note files can be opened or saved.",
+                nameof(filePath));
 
         var relativePath = Path.GetRelativePath(rootPath, fullPath);
         if (Path.IsPathRooted(relativePath) ||

@@ -51,10 +51,10 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     public IReadOnlyList<NoteItem> GetNotes() {
-        // get all .txt notes in current dir
+        // get all supported notes in current dir
         if (!Directory.Exists(CurrentDirectory)) CurrentDirectory = NotesDirectory;
         // Notes are always sorted by last modified (descending)
-        return Directory.GetFiles(CurrentDirectory, "*.txt")
+        return EnumerateNoteFiles(CurrentDirectory)
             .Select(path => new FileInfo(path))
             .OrderByDescending(info => info.LastWriteTime)
             .Select(info => {
@@ -75,7 +75,7 @@ public sealed class NoteFileService : INoteFileService {
         if (!Directory.Exists(NotesDirectory))
             return Array.Empty<string>();
 
-        return Directory.GetFiles(NotesDirectory, "*.txt", SearchOption.AllDirectories)
+        return EnumerateNoteFiles(NotesDirectory, SearchOption.AllDirectories)
             .Select(GetNoteKey)
             .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -171,7 +171,11 @@ public sealed class NoteFileService : INoteFileService {
         if (string.IsNullOrWhiteSpace(validatedFileName))
             return (false, null, "Invalid or reserved file name.");
 
-        var newFileName = validatedFileName + ".txt";
+        var extension = Path.GetExtension(oldFileName);
+        if (!NoteFileExtensions.IsSupported(oldFileName))
+            return (false, null, "Unsupported note file type.");
+
+        var newFileName = validatedFileName + extension;
         if (newFileName == oldFileName) return (true, oldFileName, null);
 
         var newPath = Path.GetFullPath(Path.Combine(directory, newFileName));
@@ -240,7 +244,7 @@ public sealed class NoteFileService : INoteFileService {
             return;
 
         var cutoff = DateTime.Now - DeletedNoteRetention;
-        foreach (var path in Directory.GetFiles(DeletedNotesDirectory, "*.txt")) {
+        foreach (var path in EnumerateNoteFiles(DeletedNotesDirectory)) {
             try {
                 var info = new FileInfo(path);
                 if (info.LastWriteTime < cutoff)
@@ -280,7 +284,7 @@ public sealed class NoteFileService : INoteFileService {
         return candidate;
     }
 
-    // remove invalid chars, reserved names, .txt extension
+    // remove invalid chars, reserved names, and supported note extensions
     private static string? ValidateAndSanitizeFileName(string value) {
         var sanitized = Path.GetInvalidFileNameChars().Aggregate(
             value,
@@ -290,8 +294,10 @@ public sealed class NoteFileService : INoteFileService {
         if (string.IsNullOrWhiteSpace(sanitized))
             return null;
 
-        if (sanitized.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
-            sanitized = sanitized[..^4].TrimEnd();
+        var extension = NoteFileExtensions.Supported
+            .FirstOrDefault(candidate => sanitized.EndsWith(candidate, StringComparison.OrdinalIgnoreCase));
+        if (extension is not null)
+            sanitized = sanitized[..^extension.Length].TrimEnd();
 
         if (string.IsNullOrWhiteSpace(sanitized) || ReservedFileNames.Contains(sanitized))
             return null;
@@ -334,11 +340,14 @@ public sealed class NoteFileService : INoteFileService {
         FileSystemWatcher? directoryWatcher = null;
 
         try {
-            fileWatcher = new FileSystemWatcher(notesDirectory, "*.txt") {
+            fileWatcher = new FileSystemWatcher(notesDirectory) {
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
                 IncludeSubdirectories = true,
-                EnableRaisingEvents = true
+                EnableRaisingEvents = false
             };
+            foreach (var extension in NoteFileExtensions.Supported)
+                fileWatcher.Filters.Add($"*{extension}");
+            fileWatcher.EnableRaisingEvents = true;
             directoryWatcher = new FileSystemWatcher(notesDirectory) {
                 NotifyFilter = NotifyFilters.DirectoryName,
                 IncludeSubdirectories = true,
@@ -393,7 +402,7 @@ public sealed class NoteFileService : INoteFileService {
             .ToList();
     }
 
-    // get .txt notes in a subfolder, don't change nav state (Expand mode)
+    // get supported notes in a subfolder, don't change nav state (Expand mode)
     public IReadOnlyList<NoteItem> GetNotesInSubfolder(string subfolderName) {
         var subfolderPath = Path.GetFullPath(Path.Combine(NotesDirectory, subfolderName));
         var root = Path.GetFullPath(NotesDirectory);
@@ -402,7 +411,7 @@ public sealed class NoteFileService : INoteFileService {
             return Array.Empty<NoteItem>();
         if (!Directory.Exists(subfolderPath))
             return Array.Empty<NoteItem>();
-        return Directory.GetFiles(subfolderPath, "*.txt")
+        return EnumerateNoteFiles(subfolderPath)
             .Select(path => new FileInfo(path))
             .OrderByDescending(info => info.LastWriteTime)
             .Select(info => {
@@ -418,6 +427,14 @@ public sealed class NoteFileService : INoteFileService {
                 };
             })
             .ToList();
+    }
+
+    private static IEnumerable<string> EnumerateNoteFiles(
+        string directory,
+        SearchOption searchOption = SearchOption.TopDirectoryOnly)
+    {
+        return Directory.EnumerateFiles(directory, "*", searchOption)
+            .Where(NoteFileExtensions.IsSupported);
     }
 
     // go into a folder (blocks path traversal)
