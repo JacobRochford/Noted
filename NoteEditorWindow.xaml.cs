@@ -4,6 +4,7 @@ using System.Security;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Noted.Services;
 
 namespace Noted;
@@ -12,6 +13,8 @@ public partial class NoteEditorWindow : Window
 {
     private readonly INoteContentService _contentService;
     private readonly IAppSettingsService _settingsService;
+    private readonly INoteRecoveryService _recoveryService;
+    private readonly DispatcherTimer _recoverySaveTimer;
     private string? _openFilePath;
     private string _savedContent = string.Empty;
     private bool _isDirty;
@@ -20,15 +23,24 @@ public partial class NoteEditorWindow : Window
     private bool _isMarkdownPreviewEnabled;
     private bool _isDocumentReplacementPrepared;
     private bool _isPreparedForApplicationClose;
+    private bool _discardRecoveryWhenActionCompletes;
 
     public NoteEditorWindow(
         INoteContentService contentService,
-        IAppSettingsService settingsService)
+        IAppSettingsService settingsService,
+        INoteRecoveryService recoveryService)
     {
         ArgumentNullException.ThrowIfNull(contentService);
         ArgumentNullException.ThrowIfNull(settingsService);
+        ArgumentNullException.ThrowIfNull(recoveryService);
         _contentService = contentService;
         _settingsService = settingsService;
+        _recoveryService = recoveryService;
+        _recoverySaveTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(750)
+        };
+        _recoverySaveTimer.Tick += RecoverySaveTimer_Tick;
 
         InitializeComponent();
         var windowState = _settingsService.LoadNoteEditorWindowState();
@@ -76,6 +88,7 @@ public partial class NoteEditorWindow : Window
     internal void CancelPreparedDocumentReplacement()
     {
         _isDocumentReplacementPrepared = false;
+        _discardRecoveryWhenActionCompletes = false;
     }
 
     internal bool TryPrepareForDocumentClear()
@@ -133,6 +146,33 @@ public partial class NoteEditorWindow : Window
     public void CancelPreparedClose()
     {
         _isPreparedForApplicationClose = false;
+        _discardRecoveryWhenActionCompletes = false;
+    }
+
+    internal bool TryRestoreRecoveryDraft()
+    {
+        var draft = _recoveryService.LoadDraft();
+        if (draft is null || !File.Exists(draft.FilePath))
+            return false;
+
+        try
+        {
+            var persistedContent = _contentService.Load(draft.FilePath);
+            if (string.Equals(draft.Content, persistedContent, StringComparison.Ordinal))
+            {
+                _recoveryService.DeleteDraft(draft.FilePath);
+                return false;
+            }
+
+            SetRecoveredDocument(draft.FilePath, persistedContent, draft.Content);
+            ShowWindow();
+            return true;
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+            return false;
+        }
     }
 
     public bool IsEditingFile(string filePath)
@@ -195,7 +235,10 @@ public partial class NoteEditorWindow : Window
         if (!IsEditingFile(oldFilePath))
             return;
 
+        var normalizedOldPath = _openFilePath!;
         _openFilePath = NormalizePath(newFilePath);
+        if (_isDirty)
+            MoveRecoveryDraft(normalizedOldPath, _openFilePath);
         UpdateEditorState();
     }
 
@@ -209,12 +252,16 @@ public partial class NoteEditorWindow : Window
             return;
 
         var relativePath = Path.GetRelativePath(normalizedOldDirectory, _openFilePath);
+        var previousPath = _openFilePath;
         _openFilePath = Path.GetFullPath(Path.Combine(NormalizePath(newDirectoryPath), relativePath));
+        if (_isDirty)
+            MoveRecoveryDraft(previousPath, _openFilePath);
         UpdateEditorState();
     }
 
     public void ClearDocument()
     {
+        DeleteRecoveryDraft();
         _isLoading = true;
         EditorTextBox.Clear();
         ResetUndoHistory();
@@ -224,6 +271,7 @@ public partial class NoteEditorWindow : Window
         _savedContent = string.Empty;
         _isDirty = false;
         _isDocumentReplacementPrepared = false;
+        _discardRecoveryWhenActionCompletes = false;
         UpdateMarkdownPreview();
         UpdateEditorState();
     }
@@ -258,6 +306,7 @@ public partial class NoteEditorWindow : Window
 
     private void SetDocument(string filePath, string content)
     {
+        DeleteRecoveryDraft();
         _isLoading = true;
         EditorTextBox.Text = content;
         EditorTextBox.CaretIndex = 0;
@@ -267,6 +316,23 @@ public partial class NoteEditorWindow : Window
         _openFilePath = filePath;
         _savedContent = content;
         _isDirty = false;
+        _discardRecoveryWhenActionCompletes = false;
+        UpdateMarkdownPreview();
+        UpdateEditorState();
+    }
+
+    private void SetRecoveredDocument(string filePath, string persistedContent, string recoveredContent)
+    {
+        _isLoading = true;
+        EditorTextBox.Text = recoveredContent;
+        EditorTextBox.CaretIndex = recoveredContent.Length;
+        ResetUndoHistory();
+        _isLoading = false;
+
+        _openFilePath = NormalizePath(filePath);
+        _savedContent = persistedContent;
+        _isDirty = true;
+        _discardRecoveryWhenActionCompletes = false;
         UpdateMarkdownPreview();
         UpdateEditorState();
     }
@@ -285,12 +351,14 @@ public partial class NoteEditorWindow : Window
         var noteName = Path.GetFileNameWithoutExtension(_openFilePath);
         var result = ShowSavePrompt(noteName);
 
-        return result switch
+        if (result == MessageBoxResult.Yes)
         {
-            MessageBoxResult.Yes => TrySaveCurrentNote(),
-            MessageBoxResult.No => true,
-            _ => false
-        };
+            _discardRecoveryWhenActionCompletes = false;
+            return TrySaveCurrentNote();
+        }
+
+        _discardRecoveryWhenActionCompletes = result == MessageBoxResult.No;
+        return _discardRecoveryWhenActionCompletes;
     }
 
     private bool TrySaveCurrentNote()
@@ -304,6 +372,8 @@ public partial class NoteEditorWindow : Window
             _contentService.Save(_openFilePath, content);
             _savedContent = content;
             _isDirty = false;
+            _discardRecoveryWhenActionCompletes = false;
+            DeleteRecoveryDraft();
             UpdateEditorState();
             return true;
         }
@@ -410,8 +480,63 @@ public partial class NoteEditorWindow : Window
             return;
 
         _isDirty = !string.Equals(EditorTextBox.Text, _savedContent, StringComparison.Ordinal);
+        ScheduleRecoveryDraftSave();
         UpdateMarkdownPreview();
         UpdateEditorState();
+    }
+
+    private void ScheduleRecoveryDraftSave()
+    {
+        _recoverySaveTimer.Stop();
+        if (_isDirty && _openFilePath is not null)
+        {
+            _recoverySaveTimer.Start();
+            return;
+        }
+
+        DeleteRecoveryDraft();
+    }
+
+    private void RecoverySaveTimer_Tick(object? sender, EventArgs e)
+    {
+        _recoverySaveTimer.Stop();
+        SaveRecoveryDraft();
+    }
+
+    private void SaveRecoveryDraft()
+    {
+        if (!_isDirty || _openFilePath is null)
+            return;
+
+        try
+        {
+            _recoveryService.SaveDraft(_openFilePath, EditorTextBox.Text);
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+        }
+    }
+
+    private void DeleteRecoveryDraft()
+    {
+        _recoverySaveTimer.Stop();
+        if (_openFilePath is not null)
+            _recoveryService.DeleteDraft(_openFilePath);
+    }
+
+    private void MoveRecoveryDraft(string oldFilePath, string newFilePath)
+    {
+        _recoverySaveTimer.Stop();
+        try
+        {
+            _recoveryService.MoveDraft(oldFilePath, newFilePath);
+            _recoveryService.SaveDraft(newFilePath, EditorTextBox.Text);
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+        }
     }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
@@ -503,7 +628,11 @@ public partial class NoteEditorWindow : Window
         SaveWindowSize();
 
         if (_isPreparedForApplicationClose)
+        {
+            if (_discardRecoveryWhenActionCompletes)
+                DeleteRecoveryDraft();
             return;
+        }
 
         e.Cancel = true;
         if (!TryResolveDirtyChanges())

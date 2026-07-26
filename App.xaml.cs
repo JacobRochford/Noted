@@ -81,7 +81,8 @@ public partial class App : Application
             startupFileService = fileService;
             var noteEditor = new NoteEditorWindow(
                 new NoteContentService(() => fileService.NotesDirectory),
-                settings);
+                settings,
+                new NoteRecoveryService(settings.StorageDirectory));
             startupNoteEditor = noteEditor;
             var mainWindow = new MainWindow(
                 settings,
@@ -102,6 +103,7 @@ public partial class App : Application
             WindowManager.Editor = noteEditor;
 
             mainWindow.Show();
+            noteEditor.TryRestoreRecoveryDraft();
             _ = UpdateService.CheckForUpdatesAsync();
         }
         catch (Exception ex)
