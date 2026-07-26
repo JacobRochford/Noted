@@ -17,6 +17,7 @@ public partial class NoteEditorWindow : Window
     private bool _isDirty;
     private bool _isLoading;
     private bool _hasLoaded;
+    private bool _isMarkdownPreviewEnabled;
     private bool _isDocumentReplacementPrepared;
     private bool _isPreparedForApplicationClose;
 
@@ -223,6 +224,7 @@ public partial class NoteEditorWindow : Window
         _savedContent = string.Empty;
         _isDirty = false;
         _isDocumentReplacementPrepared = false;
+        UpdateMarkdownPreview();
         UpdateEditorState();
     }
 
@@ -235,8 +237,7 @@ public partial class NoteEditorWindow : Window
             WindowState = WindowState.Normal;
 
         Activate();
-        EditorTextBox.Focus();
-        Keyboard.Focus(EditorTextBox);
+        FocusActiveSurface();
     }
 
     public void HideWindow()
@@ -244,11 +245,15 @@ public partial class NoteEditorWindow : Window
         Hide();
     }
 
-    internal void MoveCaretToEnd()
+    internal void BeginEditingCreatedNote(bool moveCaretToEnd)
     {
-        EditorTextBox.CaretIndex = EditorTextBox.Text.Length;
-        EditorTextBox.ScrollToEnd();
-        EditorTextBox.Focus();
+        SetMarkdownPreviewEnabled(false);
+        if (moveCaretToEnd)
+        {
+            EditorTextBox.CaretIndex = EditorTextBox.Text.Length;
+            EditorTextBox.ScrollToEnd();
+        }
+        FocusActiveSurface();
     }
 
     private void SetDocument(string filePath, string content)
@@ -262,6 +267,7 @@ public partial class NoteEditorWindow : Window
         _openFilePath = filePath;
         _savedContent = content;
         _isDirty = false;
+        UpdateMarkdownPreview();
         UpdateEditorState();
     }
 
@@ -404,6 +410,7 @@ public partial class NoteEditorWindow : Window
             return;
 
         _isDirty = !string.Equals(EditorTextBox.Text, _savedContent, StringComparison.Ordinal);
+        UpdateMarkdownPreview();
         UpdateEditorState();
     }
 
@@ -423,20 +430,72 @@ public partial class NoteEditorWindow : Window
         ContextWordWrapMenuItem.IsChecked = enabled;
     }
 
+    private void MarkdownMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        SetMarkdownPreviewEnabled(sender is MenuItem { IsChecked: true });
+    }
+
+    private void ToggleMarkdownPreview()
+    {
+        SetMarkdownPreviewEnabled(!_isMarkdownPreviewEnabled);
+    }
+
+    private void SetMarkdownPreviewEnabled(bool enabled)
+    {
+        _isMarkdownPreviewEnabled = enabled;
+        HeaderMarkdownMenuItem.IsChecked = enabled;
+        ContextMarkdownMenuItem.IsChecked = enabled;
+        PreviewMarkdownMenuItem.IsChecked = enabled;
+        EditorTextBox.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
+        MarkdownPreview.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
+
+        if (enabled)
+            UpdateMarkdownPreview();
+
+        FocusActiveSurface();
+    }
+
+    private void UpdateMarkdownPreview()
+    {
+        if (_isMarkdownPreviewEnabled)
+            MarkdownPreview.Document = MarkdownRenderer.Render(EditorTextBox.Text);
+    }
+
+    private void FocusActiveSurface()
+    {
+        if (_isMarkdownPreviewEnabled)
+        {
+            MarkdownPreview.Focus();
+            Keyboard.Focus(MarkdownPreview);
+            return;
+        }
+
+        EditorTextBox.Focus();
+        Keyboard.Focus(EditorTextBox);
+    }
+
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
         _hasLoaded = true;
         if (_openFilePath is not null)
-            EditorTextBox.Focus();
+            FocusActiveSurface();
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.S || Keyboard.Modifiers != ModifierKeys.Control)
+        if (e.Key == Key.V &&
+            Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+        {
+            ToggleMarkdownPreview();
+            e.Handled = true;
             return;
+        }
 
-        TrySaveCurrentNote();
-        e.Handled = true;
+        if (e.Key == Key.S && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            TrySaveCurrentNote();
+            e.Handled = true;
+        }
     }
 
     private void Window_Closing(object? sender, CancelEventArgs e)

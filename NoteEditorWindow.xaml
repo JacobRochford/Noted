@@ -131,6 +131,11 @@
                                       Header="Word Wrap"
                                       IsCheckable="True"
                                       Click="WordWrapMenuItem_Click"/>
+                            <MenuItem x:Name="HeaderMarkdownMenuItem"
+                                      Header="Markdown Preview"
+                                      InputGestureText="Ctrl+Shift+V"
+                                      IsCheckable="True"
+                                      Click="MarkdownMenuItem_Click"/>
                         </MenuItem>
                     </Menu>
                     <TextBlock x:Name="DirtyStatusText"
@@ -160,6 +165,7 @@
                 BorderBrush="#C9DFEC"
                 BorderThickness="1"
                 CornerRadius="8">
+            <Grid>
             <TextBox x:Name="EditorTextBox"
                      Padding="10"
                      AcceptsReturn="True"
@@ -195,9 +201,37 @@
                                   Header="Word Wrap"
                                   IsCheckable="True"
                                   Click="WordWrapMenuItem_Click"/>
+                        <MenuItem x:Name="ContextMarkdownMenuItem"
+                                  Header="Markdown Preview"
+                                  InputGestureText="Ctrl+Shift+V"
+                                  IsCheckable="True"
+                                  Click="MarkdownMenuItem_Click"/>
                     </ContextMenu>
                 </TextBox.ContextMenu>
             </TextBox>
+
+            <FlowDocumentScrollViewer x:Name="MarkdownPreview"
+                                      Background="White"
+                                      BorderThickness="0"
+                                      IsToolBarVisible="False"
+                                      Visibility="Collapsed"
+                                      VerticalScrollBarVisibility="Auto">
+                <FlowDocumentScrollViewer.ContextMenu>
+                    <ContextMenu Background="#F5F9FC"
+                                 BorderBrush="#A8CDE0"
+                                 BorderThickness="1"
+                                 Padding="4">
+                        <MenuItem Header="Copy" Command="ApplicationCommands.Copy"/>
+                        <Separator/>
+                        <MenuItem x:Name="PreviewMarkdownMenuItem"
+                                  Header="Markdown Preview"
+                                  InputGestureText="Ctrl+Shift+V"
+                                  IsCheckable="True"
+                                  Click="MarkdownMenuItem_Click"/>
+                    </ContextMenu>
+                </FlowDocumentScrollViewer.ContextMenu>
+            </FlowDocumentScrollViewer>
+            </Grid>
         </Border>
     </DockPanel>
 </Window>

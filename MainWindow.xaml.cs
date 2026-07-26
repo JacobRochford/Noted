@@ -1564,8 +1564,8 @@ public partial class MainWindow : Window {
         if (!OpenPreparedNoteInEditor(filePath))
             return false;
 
-        if (_settingsService.LoadTimestampPlacement() == NoteTimestampPlacement.Top)
-            _noteEditor.MoveCaretToEnd();
+        _noteEditor.BeginEditingCreatedNote(
+            moveCaretToEnd: _settingsService.LoadTimestampPlacement() == NoteTimestampPlacement.Top);
 
         return true;
     }
