@@ -123,7 +123,7 @@
         <!-- Tray context menu (opened manually to ensure proper foreground activation) -->
         <ContextMenu x:Key="TrayContextMenu" Style="{StaticResource TrayContextMenuStyle}">
             <MenuItem Header="Show/Hide Notes" Click="TrayShowHideNotes_Click" Style="{StaticResource TrayMenuItemStyle}"/>
-            <MenuItem Header="Settings" Click="TraySettings_Click" Style="{StaticResource TrayMenuItemStyle}"/>
+            <MenuItem Header="⚙" Click="TraySettings_Click" Style="{StaticResource TrayMenuItemStyle}"/>
             <Separator Style="{StaticResource TrayMenuSeparatorStyle}"/>
             <MenuItem Header="Exit" Click="TrayExit_Click" Style="{StaticResource TrayMenuItemStyle}"/>
         </ContextMenu>
@@ -197,9 +197,9 @@
                                 HorizontalAlignment="Right"
                                 Margin="8,0,0,0">
                         <Button x:Name="NewNoteButton"
-                                Content="+ New"
+                                Content="➕"
                                 Click="NewNoteButton_Click"
-                                FontSize="12" FontWeight="SemiBold"
+                                FontSize="15" FontWeight="SemiBold"
                                 Foreground="White" Cursor="Hand"
                                 Padding="10,4" Margin="0,0,6,0"
                                 MinWidth="0">
@@ -239,8 +239,12 @@
                                 Foreground="White" Cursor="Hand"
                                 Padding="8,4" Margin="0,0,6,0"
                                 MinWidth="0"
-                                ToolTip="Create a quick note"
-                                Visibility="Collapsed">
+                                ToolTip="Create a quick note">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </Style>
+                            </Button.Style>
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <Border x:Name="bg" Background="#5BA8C8"
@@ -257,10 +261,11 @@
                             </Button.Template>
                         </Button>
                         <Button x:Name="SettingsButton"
-                                Content="Settings"
+                                Content="⚙"
                                 Click="SettingsButton_Click"
                                 FontSize="12" FontWeight="SemiBold"
                                 Foreground="White" Cursor="Hand"
+                                ToolTip="Settings"
                                 Padding="10,4" Margin="0,0,6,0"
                                 MinWidth="0">
                             <Button.Style>
@@ -385,7 +390,7 @@
                             </Button.Template>
                         </Button>
                         <Button x:Name="MinimizeNotesButton"
-                                Content="Hide"
+                                Content="✕"
                                 Click="MinimizeNotesButton_Click"
                                 FontSize="12" FontWeight="SemiBold"
                                 Foreground="White" Cursor="Hand"
@@ -639,7 +644,10 @@
                                  MinHeight="60"
                                  VerticalAlignment="Stretch"
                                  DockPanel.Dock="Bottom"
-                              
+                                 ScrollViewer.CanContentScroll="True"
+                                 VirtualizingPanel.IsVirtualizing="True"
+                                 VirtualizingPanel.VirtualizationMode="Recycling"
+                                 VirtualizingStackPanel.ScrollUnit="Pixel"
                                  Margin="0,0,4,0">
                                 <ListBox.ContextMenu>
                                     <ContextMenu>
@@ -1033,7 +1041,7 @@
                                     <CheckBox x:Name="ShowModifiedSubtitleOption"
                                             Foreground="#355A6E"
                                             FontWeight="SemiBold"
-                                            Margin="0,6,0,0"
+                                            Margin="0,12,0,0"
                                             Checked="ShowModifiedSubtitleOption_Changed"
                                             Unchecked="ShowModifiedSubtitleOption_Changed"
                                             HorizontalAlignment="Stretch">
