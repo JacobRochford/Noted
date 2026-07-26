@@ -11,19 +11,28 @@ namespace Noted;
 public partial class NoteEditorWindow : Window
 {
     private readonly INoteContentService _contentService;
+    private readonly IAppSettingsService _settingsService;
     private string? _openFilePath;
     private string _savedContent = string.Empty;
     private bool _isDirty;
     private bool _isLoading;
+    private bool _hasLoaded;
     private bool _isDocumentReplacementPrepared;
     private bool _isPreparedForApplicationClose;
 
-    public NoteEditorWindow(INoteContentService contentService)
+    public NoteEditorWindow(
+        INoteContentService contentService,
+        IAppSettingsService settingsService)
     {
         ArgumentNullException.ThrowIfNull(contentService);
+        ArgumentNullException.ThrowIfNull(settingsService);
         _contentService = contentService;
+        _settingsService = settingsService;
 
         InitializeComponent();
+        var windowState = _settingsService.LoadNoteEditorWindowState();
+        Width = NormalizeWindowDimension(windowState.Width, MinWidth, 900);
+        Height = NormalizeWindowDimension(windowState.Height, MinHeight, 650);
         UpdateEditorState();
     }
 
@@ -361,6 +370,34 @@ public partial class NoteEditorWindow : Window
             NotSupportedException;
     }
 
+    private static double NormalizeWindowDimension(double value, double minimum, double fallback)
+    {
+        return double.IsFinite(value) && value >= minimum ? value : fallback;
+    }
+
+    private void SaveWindowSize()
+    {
+        if (!_hasLoaded)
+            return;
+
+        var bounds = WindowState == WindowState.Normal
+            ? new Rect(Left, Top, ActualWidth, ActualHeight)
+            : RestoreBounds;
+
+        try
+        {
+            _settingsService.SaveNoteEditorWindowState(new NoteEditorWindowState
+            {
+                Width = NormalizeWindowDimension(bounds.Width, MinWidth, 900),
+                Height = NormalizeWindowDimension(bounds.Height, MinHeight, 650)
+            });
+        }
+        catch (SettingsPersistenceException ex)
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+        }
+    }
+
     private void EditorTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
     {
         if (_isLoading || _openFilePath is null)
@@ -388,6 +425,7 @@ public partial class NoteEditorWindow : Window
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        _hasLoaded = true;
         if (_openFilePath is not null)
             EditorTextBox.Focus();
     }
@@ -403,6 +441,8 @@ public partial class NoteEditorWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        SaveWindowSize();
+
         if (_isPreparedForApplicationClose)
             return;
 

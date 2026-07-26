@@ -44,6 +44,12 @@ public sealed record DictionaryWindowState
     public bool GhostModeEnabled { get; init; } = false;
 }
 
+public sealed record NoteEditorWindowState
+{
+    public double Width { get; init; } = 900;
+    public double Height { get; init; } = 650;
+}
+
 /// Specifies where a timestamp should be placed in newly created notes.
 public enum NoteTimestampPlacement {
     None,
@@ -282,6 +288,17 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { ScratchpadWindowState = state });
     }
 
+    public NoteEditorWindowState LoadNoteEditorWindowState()
+    {
+        return LoadSetting(s => s.NoteEditorWindowState ?? new NoteEditorWindowState());
+    }
+
+    public void SaveNoteEditorWindowState(NoteEditorWindowState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        SaveSetting(s => s with { NoteEditorWindowState = state });
+    }
+
     private T LoadSetting<T>(Func<AppSettings, T> selector) {
         return selector(LoadSettings());
     }
@@ -434,5 +451,6 @@ public sealed class AppSettingsService : IAppSettingsService {
         [JsonPropertyName("HideButtonClosesAll")]
         public bool HideButtonHidesAll { get; init; } = true;
         public ScratchpadWindowState? ScratchpadWindowState { get; init; }
+        public NoteEditorWindowState? NoteEditorWindowState { get; init; }
     }
 }

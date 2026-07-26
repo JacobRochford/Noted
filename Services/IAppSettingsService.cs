@@ -44,4 +44,6 @@ public interface IAppSettingsService {
     void SaveHideButtonHidesAll(bool hidesAll);
     ScratchpadWindowState LoadScratchpadWindowState();
     void SaveScratchpadWindowState(ScratchpadWindowState state);
+    NoteEditorWindowState LoadNoteEditorWindowState();
+    void SaveNoteEditorWindowState(NoteEditorWindowState state);
 }

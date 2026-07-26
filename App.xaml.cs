@@ -80,7 +80,8 @@ public partial class App : Application
             var fileService = new NoteFileService(settings);
             startupFileService = fileService;
             var noteEditor = new NoteEditorWindow(
-                new NoteContentService(() => fileService.NotesDirectory));
+                new NoteContentService(() => fileService.NotesDirectory),
+                settings);
             startupNoteEditor = noteEditor;
             var mainWindow = new MainWindow(
                 settings,
