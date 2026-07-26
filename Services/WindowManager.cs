@@ -12,6 +12,7 @@
         internal static Func<ChecklistWindow?>? ChecklistProvider { get; set; }
         internal static Func<DictionaryWindow?>? DictionaryProvider { get; set; }
         internal static Func<ScratchpadWindow?>? ScratchpadProvider { get; set; }
+        internal static Action? MicroScratchpadProvider { get; set; }
 
         public static bool AnyWindowVisible()
             => (Main?.IsNotesPanelVisible == true)
@@ -71,6 +72,8 @@
             window.ShowWindow();
         }
 
+        public static void OpenMicroScratchpad() => MicroScratchpadProvider?.Invoke();
+
         public static void ToggleWorkspaceVisibility()
         {
             if (AnyWindowVisible())
@@ -113,6 +116,7 @@
             ChecklistProvider = null;
             DictionaryProvider = null;
             ScratchpadProvider = null;
+            MicroScratchpadProvider = null;
         }
     }
 }

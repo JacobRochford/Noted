@@ -361,6 +361,29 @@
                                 </ControlTemplate>
                             </Button.Template>
                         </Button>
+                        <Button x:Name="MicroScratchpadButton"
+                                Content="▤"
+                                Click="MicroScratchpadButton_Click"
+                                FontSize="13" FontWeight="SemiBold"
+                                Foreground="White" Cursor="Hand"
+                                Padding="8,4" Margin="0,0,6,0"
+                                MinWidth="0"
+                                ToolTip="New micro scratchpad">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="bg" Background="#5BA8C8"
+                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
                         <Button x:Name="MinimizeNotesButton"
                                 Content="Hide"
                                 Click="MinimizeNotesButton_Click"

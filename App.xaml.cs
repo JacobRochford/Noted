@@ -20,6 +20,7 @@ public partial class App : Application
     private ChecklistWindow? _checklistWindow;
     private DictionaryWindow? _dictionaryWindow;
     private ScratchpadWindow? _scratchpadWindow;
+    private readonly HashSet<MicroScratchpadWindow> _microScratchpadWindows = [];
     private bool _isShuttingDown;
     private string? _lastShutdownWarning;
     private int _fatalErrorShown;
@@ -96,6 +97,7 @@ public partial class App : Application
             WindowManager.ChecklistProvider = GetOrCreateChecklistWindow;
             WindowManager.DictionaryProvider = GetOrCreateDictionaryWindow;
             WindowManager.ScratchpadProvider = GetOrCreateScratchpadWindow;
+            WindowManager.MicroScratchpadProvider = OpenMicroScratchpadWindow;
             WindowManager.Editor = noteEditor;
 
             mainWindow.Show();
@@ -142,6 +144,7 @@ public partial class App : Application
             CloseExistingWindow(_dictionaryWindow, "Dictionary");
             CloseExistingWindow(_scratchpadWindow, "Scratchpad");
             CloseExistingWindow(_noteEditorWindow, "note editor");
+            CloseMicroScratchpadWindows();
 
             mainWindow?.CleanupResources();
             try { _fileService?.Dispose(); } catch (Exception ex) { Debug.WriteLine(ex); }
@@ -263,6 +266,38 @@ public partial class App : Application
         _scratchpadWindow = null;
         if (ReferenceEquals(WindowManager.Scratchpad, window))
             WindowManager.Scratchpad = null;
+    }
+
+    private void OpenMicroScratchpadWindow()
+    {
+        Dispatcher.VerifyAccess();
+        if (_isShuttingDown)
+            return;
+
+        var window = new MicroScratchpadWindow();
+        window.Closed += MicroScratchpadWindow_Closed;
+        _microScratchpadWindows.Add(window);
+        window.Show();
+    }
+
+    private void MicroScratchpadWindow_Closed(object? sender, EventArgs e)
+    {
+        if (sender is not MicroScratchpadWindow window)
+            return;
+
+        window.Closed -= MicroScratchpadWindow_Closed;
+        _microScratchpadWindows.Remove(window);
+    }
+
+    private void CloseMicroScratchpadWindows()
+    {
+        foreach (var window in _microScratchpadWindows.ToArray())
+        {
+            window.Closed -= MicroScratchpadWindow_Closed;
+            CloseExistingWindow(window, "micro scratchpad");
+        }
+
+        _microScratchpadWindows.Clear();
     }
 
     private static void CloseExistingWindow(Window? window, string name)

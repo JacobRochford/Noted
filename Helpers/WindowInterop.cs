@@ -12,8 +12,12 @@ internal static class WindowInterop {
     internal const uint SWP_NOACTIVATE  = 0x0010;
 
     internal const int  GWL_EXSTYLE     = -20;
+    internal const int  GWL_STYLE       = -16;
     internal const int  WS_EX_TOOLWINDOW = 0x00000080;
     internal const int  WS_EX_NOACTIVATE = 0x08000000;
+    internal const int  WS_MINIMIZEBOX   = 0x00020000;
+    internal const int  WS_MAXIMIZEBOX   = 0x00010000;
+    internal const uint SWP_FRAMECHANGED = 0x0020;
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -48,5 +52,13 @@ internal static class WindowInterop {
     {
         int style = GetWindowLong(hwnd, GWL_EXSTYLE);
         SetWindowLong(hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE);
+    }
+
+    internal static void RemoveMinimizeAndMaximizeBoxes(IntPtr hwnd)
+    {
+        int style = GetWindowLong(hwnd, GWL_STYLE);
+        SetWindowLong(hwnd, GWL_STYLE, style & ~WS_MINIMIZEBOX & ~WS_MAXIMIZEBOX);
+        SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
 }
