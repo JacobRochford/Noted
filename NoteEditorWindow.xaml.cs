@@ -75,6 +75,7 @@ public partial class NoteEditorWindow : Window
     public string? OpenFilePath => _activeDocument?.FilePath;
     public bool IsDirty => _documents.Any(document => document.IsDirty);
     public bool IsWindowVisible => IsVisible;
+    public event EventHandler? NewNoteRequested;
 
     public bool OpenNote(string filePath)
     {
@@ -759,6 +760,16 @@ public partial class NoteEditorWindow : Window
         TrySaveCurrentNote();
     }
 
+    private void NewNoteButton_Click(object sender, RoutedEventArgs e)
+    {
+        RequestNewNote();
+    }
+
+    private void RequestNewNote()
+    {
+        NewNoteRequested?.Invoke(this, EventArgs.Empty);
+    }
+
     private void OpenTabsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_isLoading && OpenTabsList.SelectedItem is OpenNoteDocument document)
@@ -1011,6 +1022,13 @@ public partial class NoteEditorWindow : Window
         if (e.Key == Key.S && modifiers == ModifierKeys.Control)
         {
             TrySaveCurrentNote();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.N && modifiers == ModifierKeys.Control)
+        {
+            RequestNewNote();
             e.Handled = true;
             return;
         }

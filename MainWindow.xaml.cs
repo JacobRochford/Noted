@@ -138,6 +138,7 @@ public partial class MainWindow : Window {
         SearchBox.TextChanged += SearchBox_TextChanged;
         SearchBox.GotFocus += SearchBox_GotFocus;
         SearchBox.LostFocus += SearchBox_LostFocus;
+        _noteEditor.NewNoteRequested += NoteEditor_NewNoteRequested;
         _viewModel.PropertyChanged += OnViewModelFilterTextChanged;
     }
 
@@ -1164,8 +1165,16 @@ public partial class MainWindow : Window {
         }
     }
     private void NewNoteButton_Click(object sender, RoutedEventArgs e) {
+        CreateAndOpenNewNote(this);
+    }
+
+    private void NoteEditor_NewNoteRequested(object? sender, EventArgs e) {
+        CreateAndOpenNewNote(_noteEditor);
+    }
+
+    private void CreateAndOpenNewNote(Window owner) {
         try {
-            var filename = CreateNewNoteFromCurrentSettings();
+            var filename = CreateNewNoteFromCurrentSettings(owner);
             if (filename is null)
                 return;
 
@@ -1174,7 +1183,7 @@ public partial class MainWindow : Window {
             // OnNotesLoaded fires synchronously above, so selection is already set.
             OpenCreatedNoteInEditor(filePath);
         } catch (Exception ex) {
-            MessageBox.Show($"Failed to create note:\n{ex.Message}",
+            MessageBox.Show(owner, $"Failed to create note:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -1194,7 +1203,7 @@ public partial class MainWindow : Window {
         }
     }
 
-    private string? CreateNewNoteFromCurrentSettings() {
+    private string? CreateNewNoteFromCurrentSettings(Window owner) {
         var mode = _settingsService.LoadNewNoteMode();
 
         // In "Quick" mode, skip the dialog
@@ -1205,7 +1214,7 @@ public partial class MainWindow : Window {
         var attemptedName = string.Empty;
         while (true) {
             var dialog = new NewNoteNameDialog(attemptedName) {
-                Owner = this
+                Owner = owner
             };
 
             if (dialog.ShowDialog() != true)
@@ -1215,7 +1224,7 @@ public partial class MainWindow : Window {
                 return _fileService.CreateNote(dialog.NoteName);
             } catch (InvalidOperationException ex) {
                 attemptedName = dialog.NoteName;
-                MessageBox.Show(ex.Message,
+                MessageBox.Show(owner, ex.Message,
                     "New Note Name", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
@@ -1996,6 +2005,7 @@ public partial class MainWindow : Window {
         SearchBox.TextChanged -= SearchBox_TextChanged;
         SearchBox.GotFocus -= SearchBox_GotFocus;
         SearchBox.LostFocus -= SearchBox_LostFocus;
+        _noteEditor.NewNoteRequested -= NoteEditor_NewNoteRequested;
         _viewModel.PropertyChanged -= OnViewModelFilterTextChanged;
 
         _viewModel.NotesLoaded -= OnNotesLoaded;

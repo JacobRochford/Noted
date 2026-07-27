@@ -238,12 +238,31 @@
                         CornerRadius="7,0,0,7"
                         Padding="7">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Top"
-                                   Margin="5,3,5,7"
-                                   Foreground="#66879A"
-                                   FontSize="10"
-                                   FontWeight="SemiBold"
-                                   Text="OPEN NOTES"/>
+                        <Grid DockPanel.Dock="Top" Margin="5,0,0,7">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center"
+                                       Foreground="#66879A"
+                                       FontSize="10"
+                                       FontWeight="SemiBold"
+                                       Text="OPEN NOTES"/>
+                            <Button Grid.Column="1"
+                                    Width="22"
+                                    Height="22"
+                                    Padding="2"
+                                    Click="NewNoteButton_Click"
+                                    Style="{StaticResource HeaderIconButton}"
+                                    ToolTip="New note (Ctrl+N)"
+                                    AutomationProperties.Name="New note">
+                                <TextBlock Foreground="#355A6E"
+                                           FontSize="17"
+                                           FontWeight="Normal"
+                                           LineHeight="17"
+                                           Text="+"/>
+                            </Button>
+                        </Grid>
 
                         <ListBox x:Name="OpenTabsList"
                                  AllowDrop="True"
