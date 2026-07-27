@@ -1131,6 +1131,15 @@
                                                Foreground="#5F7480"
                                                TextWrapping="Wrap"
                                                Margin="0,0,0,8"/>
+                                    <TextBlock Text="Open Noted on"
+                                               FontSize="11"
+                                               Foreground="#5F7480"
+                                               Margin="0,0,0,4"/>
+                                    <ComboBox x:Name="PreferredDisplayCombo"
+                                              Margin="0,0,0,12"
+                                              MinHeight="28"
+                                              DisplayMemberPath="Label"
+                                              SelectionChanged="PreferredDisplayCombo_SelectionChanged"/>
                                     <CheckBox x:Name="HideButtonHidesAllOption"
                                             Foreground="#355A6E"
                                             FontWeight="SemiBold"

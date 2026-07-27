@@ -891,7 +891,33 @@ public partial class NoteEditorWindow : Window
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
         _hasLoaded = true;
+        PositionOnPreferredDisplay();
         FocusActiveSurface();
+    }
+
+    private void PositionOnPreferredDisplay()
+    {
+        var screens = DisplayMonitorService.GetDisplays();
+        var preferredDeviceName = _settingsService.LoadPreferredDisplayDeviceName();
+        var screen = !string.IsNullOrWhiteSpace(preferredDeviceName)
+            ? screens.FirstOrDefault(candidate =>
+                string.Equals(
+                    candidate.DeviceName,
+                    preferredDeviceName,
+                    StringComparison.OrdinalIgnoreCase))
+            : null;
+        screen ??= screens.FirstOrDefault(candidate => candidate.IsPrimary)
+            ?? screens.FirstOrDefault();
+        if (screen is null)
+            return;
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var workLeft = screen.WorkLeft / dpi.DpiScaleX;
+        var workTop = screen.WorkTop / dpi.DpiScaleY;
+        var workWidth = screen.WorkWidth / dpi.DpiScaleX;
+        var workHeight = screen.WorkHeight / dpi.DpiScaleY;
+        Left = workLeft + Math.Max(0, (workWidth - ActualWidth) / 2);
+        Top = workTop + Math.Max(0, (workHeight - ActualHeight) / 2);
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)

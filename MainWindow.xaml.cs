@@ -36,6 +36,7 @@ public partial class MainWindow : Window {
     private bool _isUpdatingSettingsView;
     private bool _runOnStartupDisplayedState;
     private bool _hideButtonHidesAll;
+    private string? _preferredDisplayDeviceName;
     private bool _cleanupCompleted;
     private bool _hotkeyInitializationInProgress;
     private bool _hotkeysInitialized;
@@ -65,6 +66,8 @@ public partial class MainWindow : Window {
         HotkeyRegistration? Registration,
         bool UsedFallback,
         string? Warning);
+
+    private sealed record DisplayOption(string? DeviceName, string Label);
 
 
     public MainWindow(
@@ -110,6 +113,7 @@ public partial class MainWindow : Window {
             MinimumPanelOpacity,
             DefaultPanelOpacity);
         _hideButtonHidesAll = _settingsService.LoadHideButtonHidesAll();
+        _preferredDisplayDeviceName = _settingsService.LoadPreferredDisplayDeviceName();
     }
 
 
@@ -260,10 +264,9 @@ public partial class MainWindow : Window {
         Width = SystemParameters.VirtualScreenWidth;
         Height = SystemParameters.VirtualScreenHeight;
 
-        // overlay button: just above system tray
-        const double taskbarHeight = 60;
-        const double marginFromTaskbar = 8;
-        Canvas.SetBottom(OverlayButton, taskbarHeight + marginFromTaskbar);
+        Dispatcher.BeginInvoke(
+            PositionWorkspaceOnPreferredDisplay,
+            DispatcherPriority.Loaded);
 
         InitializeGlobalHotkeys();
 
@@ -578,6 +581,8 @@ public partial class MainWindow : Window {
             RunOnStartupOption.IsChecked = _runOnStartupDisplayedState;
             _hideButtonHidesAll = _settingsService.LoadHideButtonHidesAll();
             HideButtonHidesAllOption.IsChecked = _hideButtonHidesAll;
+            _preferredDisplayDeviceName = _settingsService.LoadPreferredDisplayDeviceName();
+            UpdatePreferredDisplayOptions();
             var folderNavigationMode = _settingsService.LoadFolderNavigationMode()
                 == FolderNavigationMode.Expand
                 ? FolderNavigationMode.Expand
@@ -588,6 +593,109 @@ public partial class MainWindow : Window {
         } finally {
             _isUpdatingSettingsView = false;
         }
+    }
+
+    private void UpdatePreferredDisplayOptions()
+    {
+        var screens = DisplayMonitorService.GetDisplays();
+        var primary = screens.FirstOrDefault(screen => screen.IsPrimary)
+            ?? screens.FirstOrDefault();
+        var options = new List<DisplayOption>
+        {
+            new(
+                DeviceName: null,
+                Label: primary is null
+                    ? "Windows primary display"
+                    : $"Windows primary display ({FormatDisplayName(primary.DeviceName)})")
+        };
+
+        options.AddRange(screens
+            .OrderBy(screen => screen.DeviceName, StringComparer.OrdinalIgnoreCase)
+            .Select(screen => new DisplayOption(
+                screen.DeviceName,
+                $"{FormatDisplayName(screen.DeviceName)}  " +
+                $"{screen.WorkWidth} × {screen.WorkHeight}" +
+                (screen.IsPrimary ? "  (primary)" : string.Empty))));
+
+        PreferredDisplayCombo.ItemsSource = options;
+        PreferredDisplayCombo.SelectedItem = options.FirstOrDefault(option =>
+                string.Equals(
+                    option.DeviceName,
+                    _preferredDisplayDeviceName,
+                    StringComparison.OrdinalIgnoreCase))
+            ?? options[0];
+    }
+
+    private void PreferredDisplayCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingSettingsView ||
+            PreferredDisplayCombo.SelectedItem is not DisplayOption option)
+        {
+            return;
+        }
+
+        _settingsService.SavePreferredDisplayDeviceName(option.DeviceName);
+        _preferredDisplayDeviceName = option.DeviceName;
+        Dispatcher.BeginInvoke(PositionWorkspaceOnPreferredDisplay, DispatcherPriority.Loaded);
+    }
+
+    private void PositionWorkspaceOnPreferredDisplay()
+    {
+        var screen = ResolvePreferredDisplay();
+        if (screen is null)
+            return;
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var workLeft = screen.WorkLeft / dpi.DpiScaleX - SystemParameters.VirtualScreenLeft;
+        var workTop = screen.WorkTop / dpi.DpiScaleY - SystemParameters.VirtualScreenTop;
+        var workWidth = screen.WorkWidth / dpi.DpiScaleX;
+        var workHeight = screen.WorkHeight / dpi.DpiScaleY;
+
+        var panelWidth = NotesPanel.ActualWidth > 0 ? NotesPanel.ActualWidth : NotesPanel.Width;
+        var panelHeight = NotesPanel.ActualHeight > 0 ? NotesPanel.ActualHeight : NotesPanel.Height;
+        var panelLeft = Math.Max(workLeft + 8, workLeft + workWidth - panelWidth - 40);
+        var panelTop = Math.Clamp(
+            workTop + 60,
+            workTop + 8,
+            Math.Max(workTop + 8, workTop + workHeight - panelHeight - 8));
+
+        Canvas.SetRight(NotesPanel, double.NaN);
+        Canvas.SetBottom(NotesPanel, double.NaN);
+        Canvas.SetLeft(NotesPanel, panelLeft);
+        Canvas.SetTop(NotesPanel, panelTop);
+
+        var buttonWidth = OverlayButton.ActualWidth > 0 ? OverlayButton.ActualWidth : OverlayButton.Width;
+        var buttonHeight = OverlayButton.ActualHeight > 0 ? OverlayButton.ActualHeight : OverlayButton.Height;
+        Canvas.SetRight(OverlayButton, double.NaN);
+        Canvas.SetBottom(OverlayButton, double.NaN);
+        Canvas.SetLeft(OverlayButton, workLeft + workWidth - buttonWidth - 20);
+        Canvas.SetTop(OverlayButton, workTop + workHeight - buttonHeight - 8);
+    }
+
+    private DisplayMonitorInfo? ResolvePreferredDisplay()
+    {
+        var screens = DisplayMonitorService.GetDisplays();
+        if (!string.IsNullOrWhiteSpace(_preferredDisplayDeviceName))
+        {
+            var preferred = screens.FirstOrDefault(screen =>
+                string.Equals(
+                    screen.DeviceName,
+                    _preferredDisplayDeviceName,
+                    StringComparison.OrdinalIgnoreCase));
+            if (preferred is not null)
+                return preferred;
+        }
+
+        return screens.FirstOrDefault(screen => screen.IsPrimary)
+            ?? screens.FirstOrDefault();
+    }
+
+    private static string FormatDisplayName(string deviceName)
+    {
+        var name = deviceName.Replace(@"\\.\", string.Empty, StringComparison.OrdinalIgnoreCase);
+        return name.StartsWith("DISPLAY", StringComparison.OrdinalIgnoreCase)
+            ? $"Display {name["DISPLAY".Length..]}"
+            : name;
     }
 
 

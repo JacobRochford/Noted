@@ -309,6 +309,21 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { RestoreEditorSession = enabled });
     }
 
+    public string? LoadPreferredDisplayDeviceName()
+    {
+        return LoadSetting(s => s.PreferredDisplayDeviceName);
+    }
+
+    public void SavePreferredDisplayDeviceName(string? deviceName)
+    {
+        SaveSetting(s => s with
+        {
+            PreferredDisplayDeviceName = string.IsNullOrWhiteSpace(deviceName)
+                ? null
+                : deviceName
+        });
+    }
+
     private T LoadSetting<T>(Func<AppSettings, T> selector) {
         return selector(LoadSettings());
     }
@@ -463,5 +478,6 @@ public sealed class AppSettingsService : IAppSettingsService {
         public ScratchpadWindowState? ScratchpadWindowState { get; init; }
         public NoteEditorWindowState? NoteEditorWindowState { get; init; }
         public bool RestoreEditorSession { get; init; } = true;
+        public string? PreferredDisplayDeviceName { get; init; }
     }
 }

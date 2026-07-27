@@ -48,4 +48,6 @@ public interface IAppSettingsService {
     void SaveNoteEditorWindowState(NoteEditorWindowState state);
     bool LoadRestoreEditorSession();
     void SaveRestoreEditorSession(bool enabled);
+    string? LoadPreferredDisplayDeviceName();
+    void SavePreferredDisplayDeviceName(string? deviceName);
 }
