@@ -37,6 +37,7 @@ public sealed class NoteFileService : INoteFileService {
     public bool CanNavigateBack => _backHistory.Count > 0;
     public bool CanNavigateForward => _forwardHistory.Count > 0;
     public string DeletedNotesDirectory { get; }
+    public string ArchivedNotesDirectory => Path.Combine(NotesDirectory, ".archive");
 
     public event EventHandler? FilesChanged;
 
@@ -76,6 +77,7 @@ public sealed class NoteFileService : INoteFileService {
             return Array.Empty<string>();
 
         return EnumerateNoteFiles(NotesDirectory, SearchOption.AllDirectories)
+            .Where(path => !IsPathWithinArchiveDirectory(path))
             .Select(GetNoteKey)
             .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -153,6 +155,88 @@ public sealed class NoteFileService : INoteFileService {
         var deletedPath = BuildDeletedNotePath(fileName);
         File.Move(fullPath, deletedPath);
         return true;
+    }
+
+    public IReadOnlyList<ArchivedNoteItem> GetArchivedNotes() {
+        if (!Directory.Exists(ArchivedNotesDirectory))
+            return Array.Empty<ArchivedNoteItem>();
+
+        return EnumerateNoteFiles(ArchivedNotesDirectory, SearchOption.AllDirectories)
+            .Select(path => new FileInfo(path))
+            .OrderByDescending(info => info.LastWriteTime)
+            .Select(info => {
+                var relativePath = Path.GetRelativePath(ArchivedNotesDirectory, info.FullName);
+                var folder = Path.GetDirectoryName(relativePath)?
+                    .Replace(Path.DirectorySeparatorChar, '/');
+                var subtitle = BuildSubtitle(info.Name, info.LastWriteTime);
+                return new ArchivedNoteItem {
+                    RelativePath = relativePath,
+                    FileName = info.Name,
+                    DisplayName = FormatNoteName(info.Name),
+                    Subtitle = string.IsNullOrWhiteSpace(folder)
+                        ? subtitle
+                        : $"{folder} • {subtitle}",
+                    LastModified = info.LastWriteTime
+                };
+            })
+            .ToList();
+    }
+
+    public (bool Success, string? Error) ArchiveNote(
+        string fileName,
+        string? containingDirectory = null) {
+        var directory = ResolveNoteDirectory(containingDirectory);
+        if (directory is null)
+            return (false, "Access denied.");
+
+        var sourcePath = Path.GetFullPath(Path.Combine(directory, fileName));
+        if (!IsPathWithinNotesDirectory(sourcePath) ||
+            IsPathWithinArchiveDirectory(sourcePath) ||
+            !File.Exists(sourcePath)) {
+            return (false, "The note could not be found.");
+        }
+
+        var relativePath = Path.GetRelativePath(NotesDirectory, sourcePath);
+        var archivePath = Path.GetFullPath(Path.Combine(ArchivedNotesDirectory, relativePath));
+        if (!IsPathWithinArchiveDirectory(archivePath))
+            return (false, "Access denied.");
+        if (File.Exists(archivePath))
+            return (false, "A note with the same path is already archived.");
+
+        try {
+            Directory.CreateDirectory(Path.GetDirectoryName(archivePath)!);
+            File.Move(sourcePath, archivePath);
+            FilesChanged?.Invoke(this, EventArgs.Empty);
+            return (true, null);
+        } catch (Exception ex) when (IsExpectedFileOperationException(ex)) {
+            return (false, ex.Message);
+        }
+    }
+
+    public (bool Success, string? Error) RestoreArchivedNote(string relativePath) {
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return (false, "The archived note path is required.");
+
+        var sourcePath = Path.GetFullPath(Path.Combine(ArchivedNotesDirectory, relativePath));
+        var destinationPath = Path.GetFullPath(Path.Combine(NotesDirectory, relativePath));
+        if (!IsPathWithinArchiveDirectory(sourcePath) ||
+            !IsPathWithinNotesDirectory(destinationPath) ||
+            IsPathWithinArchiveDirectory(destinationPath) ||
+            !File.Exists(sourcePath)) {
+            return (false, "The archived note could not be found.");
+        }
+        if (File.Exists(destinationPath))
+            return (false, "A note already exists at the original path.");
+
+        try {
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            File.Move(sourcePath, destinationPath);
+            DeleteEmptyArchiveDirectories(Path.GetDirectoryName(sourcePath));
+            FilesChanged?.Invoke(this, EventArgs.Empty);
+            return (true, null);
+        } catch (Exception ex) when (IsExpectedFileOperationException(ex)) {
+            return (false, ex.Message);
+        }
     }
 
     public (bool Success, string? NewFileName, string? Error) RenameNote(
@@ -390,6 +474,7 @@ public sealed class NoteFileService : INoteFileService {
     public IReadOnlyList<NoteItem> GetFolders() {
         if (!Directory.Exists(CurrentDirectory)) CurrentDirectory = NotesDirectory;
         return Directory.GetDirectories(CurrentDirectory)
+            .Where(path => !PathsEqual(path, ArchivedNotesDirectory))
             .Select(path => new DirectoryInfo(path))
             .OrderBy(info => info.Name, StringComparer.OrdinalIgnoreCase)
             .Select(info => new NoteItem {
@@ -410,6 +495,8 @@ public sealed class NoteFileService : INoteFileService {
         if (!subfolderPath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             return Array.Empty<NoteItem>();
         if (!Directory.Exists(subfolderPath))
+            return Array.Empty<NoteItem>();
+        if (IsPathWithinArchiveDirectory(subfolderPath))
             return Array.Empty<NoteItem>();
         return EnumerateNoteFiles(subfolderPath)
             .Select(path => new FileInfo(path))
@@ -444,6 +531,8 @@ public sealed class NoteFileService : INoteFileService {
         // block path traversal, don't let user escape root
         if (!target.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(target, root, StringComparison.OrdinalIgnoreCase))
+            return;
+        if (IsPathWithinArchiveDirectory(target))
             return;
         NavigateToDirectory(target, clearForwardHistory: true);
     }
@@ -568,10 +657,47 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     private bool IsPathWithinNotesDirectory(string path) {
-        var root = Path.GetFullPath(NotesDirectory);
+        return IsPathWithinDirectory(path, NotesDirectory);
+    }
+
+    private bool IsPathWithinArchiveDirectory(string path) {
+        return IsPathWithinDirectory(path, ArchivedNotesDirectory);
+    }
+
+    private static bool IsPathWithinDirectory(string path, string directory) {
+        var root = Path.GetFullPath(directory);
         var candidate = Path.GetFullPath(path);
-        return string.Equals(candidate, root, StringComparison.OrdinalIgnoreCase)
+        return PathsEqual(candidate, root)
             || candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool PathsEqual(string left, string right) {
+        return string.Equals(
+            Path.GetFullPath(left),
+            Path.GetFullPath(right),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void DeleteEmptyArchiveDirectories(string? directory) {
+        while (!string.IsNullOrWhiteSpace(directory) &&
+               !PathsEqual(directory, ArchivedNotesDirectory) &&
+               IsPathWithinArchiveDirectory(directory)) {
+            if (!Directory.Exists(directory) ||
+                Directory.EnumerateFileSystemEntries(directory).Any()) {
+                return;
+            }
+
+            Directory.Delete(directory);
+            directory = Path.GetDirectoryName(directory);
+        }
+    }
+
+    private static bool IsExpectedFileOperationException(Exception exception) {
+        return exception is IOException or
+            UnauthorizedAccessException or
+            System.Security.SecurityException or
+            ArgumentException or
+            NotSupportedException;
     }
 
     private void NavigateToDirectory(string target, bool clearForwardHistory) {
@@ -595,6 +721,8 @@ public sealed class NoteFileService : INoteFileService {
                 continue;
 
             var fullCandidate = Path.GetFullPath(candidate);
+            if (IsPathWithinArchiveDirectory(fullCandidate))
+                continue;
             if (string.Equals(fullCandidate, root, StringComparison.OrdinalIgnoreCase)
                 || fullCandidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) {
                 target = fullCandidate;

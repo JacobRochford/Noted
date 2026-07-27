@@ -5,13 +5,17 @@ namespace Noted.Services;
 public interface INoteFileService : IDisposable {
     string NotesDirectory { get; }
     string DeletedNotesDirectory { get; }
+    string ArchivedNotesDirectory { get; }
     event EventHandler? FilesChanged;
     IReadOnlyList<NoteItem> GetNotes();
+    IReadOnlyList<ArchivedNoteItem> GetArchivedNotes();
     IReadOnlyList<string> GetAllNoteKeys();
     string GetNoteKey(string filePath);
     string CreateNote(string? requestedName = null);
     bool ChangeNotesDirectory(string newDirectory);
     bool DeleteNote(string fileName, string? containingDirectory = null);
+    (bool Success, string? Error) ArchiveNote(string fileName, string? containingDirectory = null);
+    (bool Success, string? Error) RestoreArchivedNote(string relativePath);
     (bool Success, string? NewFileName, string? Error) RenameNote(
         string oldFileName,
         string newDisplayName,
