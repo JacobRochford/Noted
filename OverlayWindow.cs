@@ -24,6 +24,8 @@ public abstract class OverlayWindow : Window
 
         Loaded += OnOverlayLoaded;
         Closing += OnOverlayClosing;
+        MouseEnter += OnOverlayMouseEnter;
+        MouseLeave += OnOverlayMouseLeave;
     }
 
     private void OnOverlayLoaded(object sender, RoutedEventArgs e)
@@ -35,6 +37,18 @@ public abstract class OverlayWindow : Window
     private void OnOverlayClosing(object? sender, CancelEventArgs e)
     {
         SaveWindowState();
+    }
+
+    private void OnOverlayMouseEnter(object sender, MouseEventArgs e)
+    {
+        if (_ghostModeEnabled)
+            AnimateOpacity(_defaultOpacity);
+    }
+
+    private void OnOverlayMouseLeave(object sender, MouseEventArgs e)
+    {
+        if (_ghostModeEnabled)
+            AnimateOpacity(_ghostModeOpacity);
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -69,7 +83,7 @@ public abstract class OverlayWindow : Window
     protected void ApplyGhostMode(bool enabled)
     {
         _ghostModeEnabled = enabled;
-        AnimateOpacity(enabled ? _ghostModeOpacity : _defaultOpacity);
+        AnimateOpacity(enabled && !IsMouseOver ? _ghostModeOpacity : _defaultOpacity);
     }
 
     protected void AnimateOpacity(double opacity)
