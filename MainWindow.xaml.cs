@@ -1068,15 +1068,10 @@ public partial class MainWindow : Window {
         } catch (Exception ex) {
             MessageBox.Show($"Failed to create note:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        } finally {
-            _noteEditor.CancelPreparedDocumentReplacement();
         }
     }
 
     private void QuickNoteButton_Click(object sender, RoutedEventArgs e) {
-        if (!_noteEditor.TryPrepareForDocumentReplacement())
-            return;
-
         try {
             var filename = _fileService.CreateNote();
             if (filename is null)
@@ -1088,8 +1083,6 @@ public partial class MainWindow : Window {
         } catch (Exception ex) {
             MessageBox.Show($"Failed to create quick note:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        } finally {
-            _noteEditor.CancelPreparedDocumentReplacement();
         }
     }
 
@@ -1097,12 +1090,8 @@ public partial class MainWindow : Window {
         var mode = _settingsService.LoadNewNoteMode();
 
         // In "Quick" mode, skip the dialog
-        if (mode == NewNoteMode.Quick) {
-            if (!_noteEditor.TryPrepareForDocumentReplacement())
-                return null;
-
+        if (mode == NewNoteMode.Quick)
             return _fileService.CreateNote();
-        }
 
         // In "Prompt" or "Both" modes, show the dialog
         var attemptedName = string.Empty;
@@ -1112,9 +1101,6 @@ public partial class MainWindow : Window {
             };
 
             if (dialog.ShowDialog() != true)
-                return null;
-
-            if (!_noteEditor.TryPrepareForDocumentReplacement())
                 return null;
 
             try {
@@ -1552,16 +1538,8 @@ public partial class MainWindow : Window {
         return false;
     }
 
-    private bool OpenPreparedNoteInEditor(string filePath) {
-        if (_noteEditor.OpenPreparedNote(filePath))
-            return true;
-
-        RestoreSelectionToOpenEditorNote();
-        return false;
-    }
-
     private bool OpenCreatedNoteInEditor(string filePath) {
-        if (!OpenPreparedNoteInEditor(filePath))
+        if (!OpenNoteInEditor(filePath))
             return false;
 
         _noteEditor.BeginEditingCreatedNote(

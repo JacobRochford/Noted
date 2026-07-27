@@ -46,4 +46,6 @@ public interface IAppSettingsService {
     void SaveScratchpadWindowState(ScratchpadWindowState state);
     NoteEditorWindowState LoadNoteEditorWindowState();
     void SaveNoteEditorWindowState(NoteEditorWindowState state);
+    bool LoadRestoreEditorSession();
+    void SaveRestoreEditorSession(bool enabled);
 }

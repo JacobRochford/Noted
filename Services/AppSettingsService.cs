@@ -299,6 +299,16 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { NoteEditorWindowState = state });
     }
 
+    public bool LoadRestoreEditorSession()
+    {
+        return LoadSetting(s => s.RestoreEditorSession);
+    }
+
+    public void SaveRestoreEditorSession(bool enabled)
+    {
+        SaveSetting(s => s with { RestoreEditorSession = enabled });
+    }
+
     private T LoadSetting<T>(Func<AppSettings, T> selector) {
         return selector(LoadSettings());
     }
@@ -452,5 +462,6 @@ public sealed class AppSettingsService : IAppSettingsService {
         public bool HideButtonHidesAll { get; init; } = true;
         public ScratchpadWindowState? ScratchpadWindowState { get; init; }
         public NoteEditorWindowState? NoteEditorWindowState { get; init; }
+        public bool RestoreEditorSession { get; init; } = true;
     }
 }

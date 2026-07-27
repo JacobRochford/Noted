@@ -4,7 +4,7 @@
         Title="Note Editor"
         Width="900"
         Height="650"
-        MinWidth="320"
+        MinWidth="520"
         MinHeight="250"
         Background="#F5F9FC"
         FontFamily="Segoe UI"
@@ -136,6 +136,11 @@
                                       InputGestureText="Ctrl+Shift+V"
                                       IsCheckable="True"
                                       Click="MarkdownMenuItem_Click"/>
+                            <Separator/>
+                            <MenuItem x:Name="RestoreSessionMenuItem"
+                                      Header="Reopen Tabs on Startup"
+                                      IsCheckable="True"
+                                      Click="RestoreSessionMenuItem_Click"/>
                         </MenuItem>
                     </Menu>
                     <TextBlock x:Name="DirtyStatusText"
@@ -166,71 +171,169 @@
                 BorderThickness="1"
                 CornerRadius="8">
             <Grid>
-            <TextBox x:Name="EditorTextBox"
-                     Padding="10"
-                     AcceptsReturn="True"
-                     AcceptsTab="True"
-                     Background="White"
-                     BorderThickness="0"
-                     CaretBrush="#2C6E91"
-                     Foreground="#333333"
-                     FontFamily="Consolas"
-                     FontSize="14"
-                     HorizontalScrollBarVisibility="Auto"
-                     IsEnabled="False"
-                     SelectionBrush="#91C5DE"
-                     SpellCheck.IsEnabled="True"
-                     TextChanged="EditorTextBox_TextChanged"
-                     TextWrapping="NoWrap"
-                     VerticalScrollBarVisibility="Auto">
-                <TextBox.ContextMenu>
-                    <ContextMenu Background="#F5F9FC"
-                                 BorderBrush="#A8CDE0"
-                                 BorderThickness="1"
-                                 Padding="4">
-                        <MenuItem Header="Undo" Command="ApplicationCommands.Undo"/>
-                        <MenuItem Header="Redo" Command="ApplicationCommands.Redo"/>
-                        <Separator/>
-                        <MenuItem Header="Cut" Command="ApplicationCommands.Cut"/>
-                        <MenuItem Header="Copy" Command="ApplicationCommands.Copy"/>
-                        <MenuItem Header="Paste" Command="ApplicationCommands.Paste"/>
-                        <Separator/>
-                        <MenuItem Header="Select All" Command="ApplicationCommands.SelectAll"/>
-                        <Separator/>
-                        <MenuItem x:Name="ContextWordWrapMenuItem"
-                                  Header="Word Wrap"
-                                  IsCheckable="True"
-                                  Click="WordWrapMenuItem_Click"/>
-                        <MenuItem x:Name="ContextMarkdownMenuItem"
-                                  Header="Markdown Preview"
-                                  InputGestureText="Ctrl+Shift+V"
-                                  IsCheckable="True"
-                                  Click="MarkdownMenuItem_Click"/>
-                    </ContextMenu>
-                </TextBox.ContextMenu>
-            </TextBox>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="190"/>
+                    <ColumnDefinition Width="1"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
 
-            <FlowDocumentScrollViewer x:Name="MarkdownPreview"
-                                      Background="White"
-                                      BorderThickness="0"
-                                      IsToolBarVisible="False"
-                                      Visibility="Collapsed"
-                                      VerticalScrollBarVisibility="Auto">
-                <FlowDocumentScrollViewer.ContextMenu>
-                    <ContextMenu Background="#F5F9FC"
-                                 BorderBrush="#A8CDE0"
-                                 BorderThickness="1"
-                                 Padding="4">
-                        <MenuItem Header="Copy" Command="ApplicationCommands.Copy"/>
-                        <Separator/>
-                        <MenuItem x:Name="PreviewMarkdownMenuItem"
-                                  Header="Markdown Preview"
-                                  InputGestureText="Ctrl+Shift+V"
-                                  IsCheckable="True"
-                                  Click="MarkdownMenuItem_Click"/>
-                    </ContextMenu>
-                </FlowDocumentScrollViewer.ContextMenu>
-            </FlowDocumentScrollViewer>
+                <Border Grid.Column="0"
+                        Background="#EFF7FB"
+                        CornerRadius="7,0,0,7"
+                        Padding="7">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top"
+                                   Margin="5,3,5,7"
+                                   Foreground="#66879A"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   Text="OPEN NOTES"/>
+
+                        <ListBox x:Name="OpenTabsList"
+                                 AllowDrop="True"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Drop="OpenTabsList_Drop"
+                                 HorizontalContentAlignment="Stretch"
+                                 PreviewMouseLeftButtonDown="OpenTabsList_PreviewMouseLeftButtonDown"
+                                 PreviewMouseMove="OpenTabsList_PreviewMouseMove"
+                                 SelectionChanged="OpenTabsList_SelectionChanged"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="Cursor" Value="Hand"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    <Setter Property="Margin" Value="0,0,0,3"/>
+                                    <Setter Property="Padding" Value="0"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="TabBackground"
+                                                        Background="{TemplateBinding Background}"
+                                                        CornerRadius="5"
+                                                        Padding="8,6">
+                                                    <ContentPresenter/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="TabBackground"
+                                                                Property="Background"
+                                                                Value="#E0F0F7"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="TabBackground"
+                                                                Property="Background"
+                                                                Value="#C9E5F2"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center"
+                                                   Foreground="#355A6E"
+                                                   FontSize="12"
+                                                   Text="{Binding TabLabel}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding FilePath}"/>
+                                        <Button Grid.Column="1"
+                                                Margin="7,0,0,0"
+                                                Padding="2,0"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Click="CloseTabButton_Click"
+                                                Content="×"
+                                                Cursor="Hand"
+                                                Foreground="#66879A"
+                                                FontSize="14"
+                                                ToolTip="Close tab"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </Border>
+
+                <Border Grid.Column="1" Background="#C9DFEC"/>
+
+                <Grid Grid.Column="2">
+                    <TextBox x:Name="EditorTextBox"
+                             Padding="12"
+                             AcceptsReturn="True"
+                             AcceptsTab="True"
+                             Background="White"
+                             BorderThickness="0"
+                             CaretBrush="#2C6E91"
+                             Foreground="#333333"
+                             FontFamily="Consolas"
+                             FontSize="14"
+                             HorizontalScrollBarVisibility="Auto"
+                             IsEnabled="False"
+                             SelectionBrush="#91C5DE"
+                             SpellCheck.IsEnabled="True"
+                             TextChanged="EditorTextBox_TextChanged"
+                             TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto">
+                        <TextBox.ContextMenu>
+                            <ContextMenu Background="#F5F9FC"
+                                         BorderBrush="#A8CDE0"
+                                         BorderThickness="1"
+                                         Padding="4">
+                                <MenuItem Header="Undo" Command="ApplicationCommands.Undo"/>
+                                <MenuItem Header="Redo" Command="ApplicationCommands.Redo"/>
+                                <Separator/>
+                                <MenuItem Header="Cut" Command="ApplicationCommands.Cut"/>
+                                <MenuItem Header="Copy" Command="ApplicationCommands.Copy"/>
+                                <MenuItem Header="Paste" Command="ApplicationCommands.Paste"/>
+                                <Separator/>
+                                <MenuItem Header="Select All" Command="ApplicationCommands.SelectAll"/>
+                                <Separator/>
+                                <MenuItem x:Name="ContextWordWrapMenuItem"
+                                          Header="Word Wrap"
+                                          IsCheckable="True"
+                                          Click="WordWrapMenuItem_Click"/>
+                                <MenuItem x:Name="ContextMarkdownMenuItem"
+                                          Header="Markdown Preview"
+                                          InputGestureText="Ctrl+Shift+V"
+                                          IsCheckable="True"
+                                          Click="MarkdownMenuItem_Click"/>
+                            </ContextMenu>
+                        </TextBox.ContextMenu>
+                    </TextBox>
+
+                    <FlowDocumentScrollViewer x:Name="MarkdownPreview"
+                                              Background="White"
+                                              BorderThickness="0"
+                                              IsToolBarVisible="False"
+                                              Visibility="Collapsed"
+                                              VerticalScrollBarVisibility="Auto">
+                        <FlowDocumentScrollViewer.ContextMenu>
+                            <ContextMenu Background="#F5F9FC"
+                                         BorderBrush="#A8CDE0"
+                                         BorderThickness="1"
+                                         Padding="4">
+                                <MenuItem Header="Copy" Command="ApplicationCommands.Copy"/>
+                                <Separator/>
+                                <MenuItem x:Name="PreviewMarkdownMenuItem"
+                                          Header="Markdown Preview"
+                                          InputGestureText="Ctrl+Shift+V"
+                                          IsCheckable="True"
+                                          Click="MarkdownMenuItem_Click"/>
+                            </ContextMenu>
+                        </FlowDocumentScrollViewer.ContextMenu>
+                    </FlowDocumentScrollViewer>
+                </Grid>
             </Grid>
         </Border>
     </DockPanel>
