@@ -154,6 +154,17 @@
                         </Grid>
                     </Button>
                     <Menu Background="Transparent" Foreground="#355A6E" FontSize="12">
+                        <MenuItem Header="File">
+                            <MenuItem Header="New Note"
+                                      InputGestureText="Ctrl+N"
+                                      Click="NewNoteButton_Click"/>
+                            <MenuItem Header="Save"
+                                      InputGestureText="Ctrl+S"
+                                      Click="SaveButton_Click"/>
+                            <Separator/>
+                            <MenuItem Header="Delete Note..."
+                                      Click="DeleteActiveNoteMenuItem_Click"/>
+                        </MenuItem>
                         <MenuItem Header="Edit">
                             <MenuItem Header="Undo"
                                       Command="ApplicationCommands.Undo"
@@ -313,6 +324,18 @@
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Grid>
+                                        <Grid.ContextMenu>
+                                            <ContextMenu Background="#F5F9FC"
+                                                         BorderBrush="#A8CDE0"
+                                                         BorderThickness="1"
+                                                         Padding="4">
+                                                <MenuItem Header="Close Tab"
+                                                          Click="CloseTabButton_Click"/>
+                                                <Separator/>
+                                                <MenuItem Header="Delete Note..."
+                                                          Click="DeleteTabNoteMenuItem_Click"/>
+                                            </ContextMenu>
+                                        </Grid.ContextMenu>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>

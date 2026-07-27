@@ -77,6 +77,7 @@ public partial class NoteEditorWindow : Window
     public bool IsDirty => _documents.Any(document => document.IsDirty);
     public bool IsWindowVisible => IsVisible;
     public event EventHandler? NewNoteRequested;
+    public event EventHandler<NoteDeleteRequestedEventArgs>? DeleteNoteRequested;
 
     public bool OpenNote(string filePath)
     {
@@ -200,8 +201,9 @@ public partial class NoteEditorWindow : Window
     public void NotifyFileRemoved(string filePath)
     {
         var document = FindDocument(filePath);
+        _recoveryService.DeleteDraft(filePath);
         if (document is not null)
-            RemoveDocument(document, deleteRecoveryDraft: true);
+            RemoveDocument(document, deleteRecoveryDraft: false);
     }
 
     public void NotifyDirectoryRemoved(string directoryPath)
@@ -770,6 +772,23 @@ public partial class NoteEditorWindow : Window
     private void RequestNewNote()
     {
         NewNoteRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void DeleteActiveNoteMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeDocument is not null)
+            RequestNoteDeletion(_activeDocument);
+    }
+
+    private void DeleteTabNoteMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { DataContext: OpenNoteDocument document })
+            RequestNoteDeletion(document);
+    }
+
+    private void RequestNoteDeletion(OpenNoteDocument document)
+    {
+        DeleteNoteRequested?.Invoke(this, new NoteDeleteRequestedEventArgs(document.FilePath));
     }
 
     private void OpenTabsList_SelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -139,6 +139,7 @@ public partial class MainWindow : Window {
         SearchBox.GotFocus += SearchBox_GotFocus;
         SearchBox.LostFocus += SearchBox_LostFocus;
         _noteEditor.NewNoteRequested += NoteEditor_NewNoteRequested;
+        _noteEditor.DeleteNoteRequested += NoteEditor_DeleteNoteRequested;
         _viewModel.PropertyChanged += OnViewModelFilterTextChanged;
     }
 
@@ -1291,21 +1292,57 @@ public partial class MainWindow : Window {
                 MessageBox.Show(error ?? "Failed to delete folder.", "Delete Failed", MessageBoxButton.OK, MessageBoxImage.Error);
             _viewModel.LoadNotes();
         } else {
-            try {
-                var containingDirectory = note.FullPath is null
-                    ? _fileService.CurrentDirectory
-                    : Path.GetDirectoryName(note.FullPath);
-                var filePath = note.FullPath ?? Path.Combine(containingDirectory!, note.FileName);
-                if (!_noteEditor.TryPrepareForFileRemoval(filePath))
-                    return;
+            var containingDirectory = note.FullPath is null
+                ? _fileService.CurrentDirectory
+                : Path.GetDirectoryName(note.FullPath);
+            var filePath = note.FullPath ?? Path.Combine(containingDirectory!, note.FileName);
+            DeleteNote(filePath, note.DisplayName, this);
+        }
+    }
 
-                if (_fileService.DeleteNote(note.FileName, containingDirectory))
-                    _noteEditor.NotifyFileRemoved(filePath);
-                // FileSystemWatcher triggers a debounced reload automatically.
-            } catch (Exception ex) {
-                MessageBox.Show($"Failed to delete note:\n{ex.Message}",
-                    "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+    private void NoteEditor_DeleteNoteRequested(
+        object? sender,
+        NoteDeleteRequestedEventArgs e) {
+        DeleteNote(
+            e.FilePath,
+            Path.GetFileNameWithoutExtension(e.FilePath),
+            _noteEditor);
+    }
+
+    private void DeleteNote(string filePath, string displayName, Window owner) {
+        var result = MessageBox.Show(
+            owner,
+            $"Delete '{displayName}'?\n\nThe note can be recovered from Deleted Notes for 14 days.",
+            "Delete Note",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes)
+            return;
+
+        if (!_noteEditor.TryPrepareForFileRemoval(filePath))
+            return;
+
+        try {
+            var containingDirectory = Path.GetDirectoryName(filePath);
+            if (_fileService.DeleteNote(Path.GetFileName(filePath), containingDirectory)) {
+                _noteEditor.NotifyFileRemoved(filePath);
+                _viewModel.LoadNotes();
+                return;
             }
+
+            MessageBox.Show(
+                owner,
+                "The note could not be deleted.",
+                "Delete Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        } catch (Exception ex) {
+            MessageBox.Show(
+                owner,
+                $"Failed to delete note:\n{ex.Message}",
+                "Delete Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
         }
     }
 
@@ -2006,6 +2043,7 @@ public partial class MainWindow : Window {
         SearchBox.GotFocus -= SearchBox_GotFocus;
         SearchBox.LostFocus -= SearchBox_LostFocus;
         _noteEditor.NewNoteRequested -= NoteEditor_NewNoteRequested;
+        _noteEditor.DeleteNoteRequested -= NoteEditor_DeleteNoteRequested;
         _viewModel.PropertyChanged -= OnViewModelFilterTextChanged;
 
         _viewModel.NotesLoaded -= OnNotesLoaded;
