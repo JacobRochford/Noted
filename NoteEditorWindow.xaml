@@ -88,6 +88,36 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="HeaderIconButton" TargetType="Button">
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="IconBackground"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="IconBackground" Property="Background" Value="#DCEEF6"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="IconBackground" Property="Background" Value="#C9E5F2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <DockPanel Background="#F5F9FC">
@@ -103,6 +133,26 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="ToggleTabsButton"
+                            Margin="0,0,4,0"
+                            Click="ToggleTabsButton_Click"
+                            Style="{StaticResource HeaderIconButton}"
+                            AutomationProperties.Name="Toggle tabs panel">
+                        <Grid Width="14" Height="14">
+                            <Border BorderBrush="#5F7480"
+                                    BorderThickness="1"
+                                    CornerRadius="1"/>
+                            <Rectangle x:Name="TabsPanelIconSidebar"
+                                       Width="4"
+                                       Margin="2"
+                                       HorizontalAlignment="Left"
+                                       Fill="#5BA8C8"/>
+                            <Border Width="1"
+                                    Margin="6,2,0,2"
+                                    HorizontalAlignment="Left"
+                                    Background="#A8CDE0"/>
+                        </Grid>
+                    </Button>
                     <Menu Background="Transparent" Foreground="#355A6E" FontSize="12">
                         <MenuItem Header="Edit">
                             <MenuItem Header="Undo"
@@ -141,6 +191,11 @@
                                       Header="Reopen Tabs on Startup"
                                       IsCheckable="True"
                                       Click="RestoreSessionMenuItem_Click"/>
+                            <MenuItem x:Name="TabsPanelMenuItem"
+                                      Header="Show Tabs"
+                                      InputGestureText="Ctrl+B"
+                                      IsCheckable="True"
+                                      Click="TabsPanelMenuItem_Click"/>
                         </MenuItem>
                     </Menu>
                     <TextBlock x:Name="DirtyStatusText"
@@ -172,12 +227,13 @@
                 CornerRadius="8">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="190"/>
-                    <ColumnDefinition Width="1"/>
+                    <ColumnDefinition x:Name="TabsColumn" Width="190"/>
+                    <ColumnDefinition x:Name="TabsSplitterColumn" Width="5"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0"
+                <Border x:Name="TabsPanel"
+                        Grid.Column="0"
                         Background="#EFF7FB"
                         CornerRadius="7,0,0,7"
                         Padding="7">
@@ -265,7 +321,14 @@
                     </DockPanel>
                 </Border>
 
-                <Border Grid.Column="1" Background="#C9DFEC"/>
+                <GridSplitter x:Name="TabsSplitter"
+                              Grid.Column="1"
+                              HorizontalAlignment="Stretch"
+                              Background="#C9DFEC"
+                              Cursor="SizeWE"
+                              DragCompleted="TabsSplitter_DragCompleted"
+                              ResizeBehavior="PreviousAndNext"
+                              ResizeDirection="Columns"/>
 
                 <Grid Grid.Column="2">
                     <TextBox x:Name="EditorTextBox"

@@ -48,6 +48,8 @@ public sealed record NoteEditorWindowState
 {
     public double Width { get; init; } = 900;
     public double Height { get; init; } = 650;
+    public double TabsPanelWidth { get; init; } = 190;
+    public bool IsTabsPanelCollapsed { get; init; }
 }
 
 /// Specifies where a timestamp should be placed in newly created notes.

@@ -4,6 +4,7 @@ using System.IO;
 using System.Security;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -15,6 +16,10 @@ namespace Noted;
 
 public partial class NoteEditorWindow : Window
 {
+    private const double DefaultTabsPanelWidth = 190;
+    private const double MinimumTabsPanelWidth = 88;
+    private const double MaximumTabsPanelWidth = 360;
+
     private readonly INoteContentService _contentService;
     private readonly IAppSettingsService _settingsService;
     private readonly INoteRecoveryService _recoveryService;
@@ -29,6 +34,8 @@ public partial class NoteEditorWindow : Window
     private bool _hasLoaded;
     private bool _isMarkdownPreviewEnabled;
     private bool _isPreparedForApplicationClose;
+    private double _tabsPanelWidth = DefaultTabsPanelWidth;
+    private bool _isTabsPanelCollapsed;
     private bool _suppressSessionSave;
 
     public NoteEditorWindow(
@@ -58,6 +65,9 @@ public partial class NoteEditorWindow : Window
         var windowState = _settingsService.LoadNoteEditorWindowState();
         Width = NormalizeWindowDimension(windowState.Width, MinWidth, 900);
         Height = NormalizeWindowDimension(windowState.Height, MinHeight, 650);
+        _tabsPanelWidth = NormalizeTabsPanelWidth(windowState.TabsPanelWidth);
+        _isTabsPanelCollapsed = windowState.IsTabsPanelCollapsed;
+        ApplyTabsPanelState();
         RestoreSessionMenuItem.IsChecked = _settingsService.LoadRestoreEditorSession();
         UpdateEditorState();
     }
@@ -711,12 +721,15 @@ public partial class NoteEditorWindow : Window
         var bounds = WindowState == WindowState.Normal
             ? new Rect(Left, Top, ActualWidth, ActualHeight)
             : RestoreBounds;
+        CaptureTabsPanelWidth();
         try
         {
             _settingsService.SaveNoteEditorWindowState(new NoteEditorWindowState
             {
                 Width = NormalizeWindowDimension(bounds.Width, MinWidth, 900),
-                Height = NormalizeWindowDimension(bounds.Height, MinHeight, 650)
+                Height = NormalizeWindowDimension(bounds.Height, MinHeight, 650),
+                TabsPanelWidth = _tabsPanelWidth,
+                IsTabsPanelCollapsed = _isTabsPanelCollapsed
             });
         }
         catch (SettingsPersistenceException ex)
@@ -846,6 +859,71 @@ public partial class NoteEditorWindow : Window
         }
     }
 
+    private void TabsPanelMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        SetTabsPanelCollapsed(sender is not MenuItem { IsChecked: true });
+    }
+
+    private void ToggleTabsButton_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleTabsPanel();
+    }
+
+    private void TabsSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        CaptureTabsPanelWidth();
+        SaveWindowSize();
+    }
+
+    private void ToggleTabsPanel()
+    {
+        SetTabsPanelCollapsed(!_isTabsPanelCollapsed);
+    }
+
+    private void SetTabsPanelCollapsed(bool collapsed)
+    {
+        if (collapsed)
+            CaptureTabsPanelWidth();
+
+        _isTabsPanelCollapsed = collapsed;
+        ApplyTabsPanelState();
+        SaveWindowSize();
+        FocusActiveSurface();
+    }
+
+    private void ApplyTabsPanelState()
+    {
+        TabsPanel.Visibility = _isTabsPanelCollapsed ? Visibility.Collapsed : Visibility.Visible;
+        TabsSplitter.Visibility = _isTabsPanelCollapsed ? Visibility.Collapsed : Visibility.Visible;
+        if (_isTabsPanelCollapsed)
+        {
+            TabsColumn.MinWidth = 0;
+            TabsColumn.MaxWidth = 0;
+            TabsColumn.Width = new GridLength(0);
+            TabsSplitterColumn.Width = new GridLength(0);
+        }
+        else
+        {
+            TabsColumn.MaxWidth = MaximumTabsPanelWidth;
+            TabsColumn.MinWidth = MinimumTabsPanelWidth;
+            TabsColumn.Width = new GridLength(_tabsPanelWidth);
+            TabsSplitterColumn.Width = new GridLength(5);
+        }
+        TabsPanelMenuItem.IsChecked = !_isTabsPanelCollapsed;
+        TabsPanelIconSidebar.Opacity = _isTabsPanelCollapsed ? 0.25 : 1;
+        ToggleTabsButton.ToolTip = _isTabsPanelCollapsed
+            ? "Show tabs (Ctrl+B)"
+            : "Hide tabs (Ctrl+B)";
+    }
+
+    private void CaptureTabsPanelWidth()
+    {
+        if (_isTabsPanelCollapsed || TabsColumn.ActualWidth <= 0)
+            return;
+
+        _tabsPanelWidth = NormalizeTabsPanelWidth(TabsColumn.ActualWidth);
+    }
+
     private void ToggleMarkdownPreview()
     {
         SetMarkdownPreviewEnabled(!_isMarkdownPreviewEnabled);
@@ -937,6 +1015,13 @@ public partial class NoteEditorWindow : Window
             return;
         }
 
+        if (e.Key == Key.B && modifiers == ModifierKeys.Control)
+        {
+            ToggleTabsPanel();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.W && modifiers == ModifierKeys.Control && _activeDocument is not null)
         {
             if (!_activeDocument.IsDirty || TryResolveDirtyDocuments([_activeDocument]))
@@ -1018,5 +1103,12 @@ public partial class NoteEditorWindow : Window
     private static double NormalizeWindowDimension(double value, double minimum, double fallback)
     {
         return double.IsFinite(value) && value >= minimum ? value : fallback;
+    }
+
+    private static double NormalizeTabsPanelWidth(double value)
+    {
+        return double.IsFinite(value)
+            ? Math.Clamp(value, MinimumTabsPanelWidth, MaximumTabsPanelWidth)
+            : DefaultTabsPanelWidth;
     }
 }
