@@ -179,6 +179,7 @@
                         <MenuItem Header="View">
                             <MenuItem x:Name="HeaderWordWrapMenuItem"
                                       Header="Word Wrap"
+                                      IsChecked="True"
                                       IsCheckable="True"
                                       Click="WordWrapMenuItem_Click"/>
                             <MenuItem x:Name="HeaderMarkdownMenuItem"
@@ -360,12 +361,12 @@
                              Foreground="#333333"
                              FontFamily="Consolas"
                              FontSize="14"
-                             HorizontalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Disabled"
                              IsEnabled="False"
                              SelectionBrush="#91C5DE"
                              SpellCheck.IsEnabled="True"
                              TextChanged="EditorTextBox_TextChanged"
-                             TextWrapping="NoWrap"
+                             TextWrapping="Wrap"
                              VerticalScrollBarVisibility="Auto">
                         <TextBox.ContextMenu>
                             <ContextMenu Background="#F5F9FC"
@@ -383,6 +384,7 @@
                                 <Separator/>
                                 <MenuItem x:Name="ContextWordWrapMenuItem"
                                           Header="Word Wrap"
+                                          IsChecked="True"
                                           IsCheckable="True"
                                           Click="WordWrapMenuItem_Click"/>
                                 <MenuItem x:Name="ContextMarkdownMenuItem"

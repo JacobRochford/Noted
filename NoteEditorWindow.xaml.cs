@@ -68,6 +68,7 @@ public partial class NoteEditorWindow : Window
         _tabsPanelWidth = NormalizeTabsPanelWidth(windowState.TabsPanelWidth);
         _isTabsPanelCollapsed = windowState.IsTabsPanelCollapsed;
         ApplyTabsPanelState();
+        SetWordWrapEnabled(windowState.WordWrapEnabled);
         RestoreSessionMenuItem.IsChecked = _settingsService.LoadRestoreEditorSession();
         UpdateEditorState();
     }
@@ -730,7 +731,8 @@ public partial class NoteEditorWindow : Window
                 Width = NormalizeWindowDimension(bounds.Width, MinWidth, 900),
                 Height = NormalizeWindowDimension(bounds.Height, MinHeight, 650),
                 TabsPanelWidth = _tabsPanelWidth,
-                IsTabsPanelCollapsed = _isTabsPanelCollapsed
+                IsTabsPanelCollapsed = _isTabsPanelCollapsed,
+                WordWrapEnabled = EditorTextBox.TextWrapping == TextWrapping.Wrap
             });
         }
         catch (SettingsPersistenceException ex)
@@ -840,7 +842,11 @@ public partial class NoteEditorWindow : Window
 
     private void WordWrapMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        var enabled = sender is MenuItem { IsChecked: true };
+        SetWordWrapEnabled(sender is MenuItem { IsChecked: true });
+    }
+
+    private void SetWordWrapEnabled(bool enabled)
+    {
         EditorTextBox.TextWrapping = enabled ? TextWrapping.Wrap : TextWrapping.NoWrap;
         EditorTextBox.HorizontalScrollBarVisibility = enabled
             ? ScrollBarVisibility.Disabled
