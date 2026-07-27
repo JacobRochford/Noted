@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Reflection;
 using System.Text.Json.Serialization;
 using System.Windows;
+using Noted;
 
 namespace Noted.Services;
 
@@ -47,7 +48,7 @@ public static class UpdateService
 
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                var result = MessageBox.Show(
+                var result = AppDialog.Show(
                     $"Noted. {release.TagName} is available.\n\nYou are running v{currentVersion}. Would you like to download the update?",
                     "Update Available",
                     MessageBoxButton.YesNo,

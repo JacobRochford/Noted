@@ -408,7 +408,7 @@ public partial class ScratchpadWindow : OverlayWindow
             return;
 
         _lastWarningMessage = error;
-        MessageBox.Show(
+        AppDialog.Show(
             error,
             "Scratchpad Save Failed",
             MessageBoxButton.OK,
@@ -641,7 +641,7 @@ public partial class ScratchpadWindow : OverlayWindow
     {
         var text = new TextRange(Editor.Document.ContentStart, Editor.Document.ContentEnd).Text.Trim();
         if (string.IsNullOrEmpty(text)) return;
-        var result = MessageBox.Show(
+        var result = AppDialog.Show(
             "Clear all scratchpad content?",
             "Clear Scratchpad",
             MessageBoxButton.YesNo,

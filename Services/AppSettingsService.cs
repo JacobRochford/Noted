@@ -280,6 +280,16 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { HideButtonHidesAll = hidesAll });
     }
 
+    public bool LoadConfirmNoteDeletion()
+    {
+        return LoadSetting(s => s.ConfirmNoteDeletion);
+    }
+
+    public void SaveConfirmNoteDeletion(bool confirm)
+    {
+        SaveSetting(s => s with { ConfirmNoteDeletion = confirm });
+    }
+
     public ScratchpadWindowState LoadScratchpadWindowState()
     {
         return LoadSetting(s => s.ScratchpadWindowState ?? new ScratchpadWindowState());
@@ -478,6 +488,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         public DictionaryWindowState? DictionaryWindowState { get; init; }
         [JsonPropertyName("HideButtonClosesAll")]
         public bool HideButtonHidesAll { get; init; } = true;
+        public bool ConfirmNoteDeletion { get; init; } = true;
         public ScratchpadWindowState? ScratchpadWindowState { get; init; }
         public NoteEditorWindowState? NoteEditorWindowState { get; init; }
         public bool RestoreEditorSession { get; init; } = true;

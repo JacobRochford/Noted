@@ -356,7 +356,7 @@ public partial class MainWindow : Window {
 
         if (warnings.Count > 0)
         {
-            MessageBox.Show(
+            AppDialog.Show(
                 string.Join("\n\n", warnings),
                 "Hotkey Registration Notice",
                 MessageBoxButton.OK,
@@ -549,6 +549,7 @@ public partial class MainWindow : Window {
             var showModified = _settingsService.LoadShowModifiedSubtitle();
             ShowModifiedSubtitleOption.IsChecked = showModified;
             _viewModel.ShowModifiedSubtitle = showModified;
+            ConfirmNoteDeletionOption.IsChecked = _settingsService.LoadConfirmNoteDeletion();
 
             // Load hotkey settings
             var (modifiers, key) = _settingsService.LoadGlobalHotkey();
@@ -780,7 +781,7 @@ public partial class MainWindow : Window {
             || string.IsNullOrWhiteSpace(selectedKey)
             || string.IsNullOrEmpty(builtHotkey))
         {
-            MessageBox.Show(
+            AppDialog.Show(
                 "Please select at least one modifier and a key.",
                 "Invalid Hotkey Selection",
                 MessageBoxButton.OK,
@@ -791,7 +792,7 @@ public partial class MainWindow : Window {
         var modifiers = string.Join("+", selectedModifiers);
         if (_globalHotkeysService is null)
         {
-            MessageBox.Show(
+            AppDialog.Show(
                 "The global hotkey service is unavailable. Restart Noted and try again.",
                 "Hotkey Update Failed",
                 MessageBoxButton.OK,
@@ -804,7 +805,7 @@ public partial class MainWindow : Window {
         if (!validation.Success || validation.Modifiers is null || validation.Key is null)
         {
             SynchronizeMainHotkeyControls(restoreEditorToActive: true);
-            MessageBox.Show(
+            AppDialog.Show(
                 validation.Description,
                 "Invalid Hotkey Selection",
                 MessageBoxButton.OK,
@@ -815,7 +816,7 @@ public partial class MainWindow : Window {
         if (_additionalMainHotkeyRegistration is not null)
         {
             UpdateCurrentHotkeyDisplay();
-            MessageBox.Show(
+            AppDialog.Show(
                 "Multiple Main hotkeys may still be active after an earlier rollback failure. " +
                 "Restart Noted before attempting another replacement.",
                 "Hotkey State Is Ambiguous",
@@ -839,7 +840,7 @@ public partial class MainWindow : Window {
             SynchronizeMainHotkeyControls(
                 restoreEditorToActive: !replacement.HasDualActiveRegistrations
                     && _mainHotkeyRegistration is not null);
-            MessageBox.Show(
+            AppDialog.Show(
                 replacement.Description,
                 replacement.HasDualActiveRegistrations
                     ? "Multiple Hotkeys May Be Active"
@@ -861,7 +862,7 @@ public partial class MainWindow : Window {
         }
         catch (Exception exception)
         {
-            MessageBox.Show(
+            AppDialog.Show(
                 $"The hotkey is active as {_mainHotkeyRegistration.Combination}, " +
                 $"but the setting could not be saved: {exception.Message}",
                 "Hotkey Active but Not Saved",
@@ -870,7 +871,7 @@ public partial class MainWindow : Window {
             return;
         }
 
-        MessageBox.Show(
+        AppDialog.Show(
             $"Global hotkey updated to: {_mainHotkeyRegistration.Combination}",
             "Hotkey Updated",
             MessageBoxButton.OK,
@@ -920,7 +921,7 @@ public partial class MainWindow : Window {
         }
 
         if (!result.Success || result.ActualEnabled is null || result.ActualEnabled != requestedState) {
-            MessageBox.Show(
+            AppDialog.Show(
                 result.Error ?? "Windows did not apply the requested startup setting.",
                 "Startup Setting Failed",
                 MessageBoxButton.OK,
@@ -1075,6 +1076,13 @@ public partial class MainWindow : Window {
         }
     }
 
+    private void ConfirmNoteDeletionOption_Changed(object sender, RoutedEventArgs e) {
+        if (_isUpdatingSettingsView)
+            return;
+
+        _settingsService.SaveConfirmNoteDeletion(ConfirmNoteDeletionOption.IsChecked == true);
+    }
+
     private void HideNotesPanelAndEditor() {
         try {
             HideNotesPanel();
@@ -1161,7 +1169,7 @@ public partial class MainWindow : Window {
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to copy note name:\n{ex.Message}",
+            AppDialog.Show($"Failed to copy note name:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -1184,7 +1192,7 @@ public partial class MainWindow : Window {
             // OnNotesLoaded fires synchronously above, so selection is already set.
             OpenCreatedNoteInEditor(filePath);
         } catch (Exception ex) {
-            MessageBox.Show(owner, $"Failed to create note:\n{ex.Message}",
+            AppDialog.Show(owner, $"Failed to create note:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -1199,7 +1207,7 @@ public partial class MainWindow : Window {
             _viewModel.LoadNotes(_fileService.GetNoteKey(filePath));
             OpenCreatedNoteInEditor(filePath);
         } catch (Exception ex) {
-            MessageBox.Show($"Failed to create quick note:\n{ex.Message}",
+            AppDialog.Show($"Failed to create quick note:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -1225,7 +1233,7 @@ public partial class MainWindow : Window {
                 return _fileService.CreateNote(dialog.NoteName);
             } catch (InvalidOperationException ex) {
                 attemptedName = dialog.NoteName;
-                MessageBox.Show(owner, ex.Message,
+                AppDialog.Show(owner, ex.Message,
                     "New Note Name", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
@@ -1278,7 +1286,7 @@ public partial class MainWindow : Window {
 
         if (note.IsFolder) {
             var msg = $"Delete folder '{note.DisplayName}' and all its contents?";
-            if (MessageBox.Show(msg, "Delete Folder", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            if (AppDialog.Show(msg, "Delete Folder", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
                 return;
 
             var folderPath = Path.Combine(_fileService.CurrentDirectory, note.FileName);
@@ -1289,7 +1297,7 @@ public partial class MainWindow : Window {
             if (success)
                 _noteEditor.NotifyDirectoryRemoved(folderPath);
             else
-                MessageBox.Show(error ?? "Failed to delete folder.", "Delete Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                AppDialog.Show(error ?? "Failed to delete folder.", "Delete Failed", MessageBoxButton.OK, MessageBoxImage.Error);
             _viewModel.LoadNotes();
         } else {
             var containingDirectory = note.FullPath is null
@@ -1310,14 +1318,21 @@ public partial class MainWindow : Window {
     }
 
     private void DeleteNote(string filePath, string displayName, Window owner) {
-        var result = MessageBox.Show(
-            owner,
-            $"Delete '{displayName}'?\n\nThe note can be recovered from Deleted Notes for 14 days.",
-            "Delete Note",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
-        if (result != MessageBoxResult.Yes)
-            return;
+        if (_settingsService.LoadConfirmNoteDeletion()) {
+            var confirmation = AppDialog.ShowWithSuppression(
+                owner,
+                $"Delete '{displayName}'?\n\nThe note will be kept in Deleted Notes for 14 days.",
+                "Delete Note",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                "Don't show this warning again");
+            if (confirmation.Result != MessageBoxResult.Yes)
+                return;
+            if (confirmation.DoNotShowAgain) {
+                _settingsService.SaveConfirmNoteDeletion(false);
+                ConfirmNoteDeletionOption.IsChecked = false;
+            }
+        }
 
         if (!_noteEditor.TryPrepareForFileRemoval(filePath))
             return;
@@ -1330,14 +1345,14 @@ public partial class MainWindow : Window {
                 return;
             }
 
-            MessageBox.Show(
+            AppDialog.Show(
                 owner,
                 "The note could not be deleted.",
                 "Delete Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         } catch (Exception ex) {
-            MessageBox.Show(
+            AppDialog.Show(
                 owner,
                 $"Failed to delete note:\n{ex.Message}",
                 "Delete Failed",
@@ -1402,7 +1417,7 @@ public partial class MainWindow : Window {
         if (string.IsNullOrWhiteSpace(folderName)) return;
         var (success, error) = _fileService.CreateFolder(folderName);
         if (!success) {
-            MessageBox.Show(error ?? "Failed to create folder.", "New Folder", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(error ?? "Failed to create folder.", "New Folder", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
         _viewModel.LoadNotes();
@@ -1450,7 +1465,7 @@ public partial class MainWindow : Window {
             UpdateNotesDirectoryDisplay();
             UpdateSettingsView();
         } catch (Exception ex) {
-            MessageBox.Show($"Failed to change notes folder:\n{ex.Message}",
+            AppDialog.Show($"Failed to change notes folder:\n{ex.Message}",
                 "Folder Change Failed", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -1646,7 +1661,7 @@ public partial class MainWindow : Window {
         var oldFolderPath = Path.Combine(_fileService.CurrentDirectory, folder.FileName);
         var (success, newFolderName, error) = _fileService.RenameFolder(folder.FileName, newName);
         if (!success) {
-            MessageBox.Show(error ?? "Rename failed.", "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            AppDialog.Show(error ?? "Rename failed.", "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
             return false;
         }
 
@@ -1672,7 +1687,7 @@ public partial class MainWindow : Window {
             containingDirectory);
         if (!success) {
             if (error is not null)
-                MessageBox.Show(error, "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                AppDialog.Show(error, "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
             return false;
         }
         var renamedFileName = newFileName ?? note.FileName;

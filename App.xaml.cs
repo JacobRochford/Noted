@@ -43,7 +43,7 @@ public partial class App : Application
 
             if (!isNewInstance)
             {
-                MessageBox.Show(
+                AppDialog.Show(
                     "Noted is already running.\n\nCheck your system tray to find the existing instance.",
                     "Noted Already Running",
                     MessageBoxButton.OK,
@@ -58,7 +58,7 @@ public partial class App : Application
         {
             // A mutex with this name exists in a different security context —
             // treat it as another instance already running.
-            MessageBox.Show(
+            AppDialog.Show(
                 "Noted is already running.\n\nCheck your system tray to find the existing instance.",
                 "Noted Already Running",
                 MessageBoxButton.OK,
@@ -136,7 +136,7 @@ public partial class App : Application
             {
                 if (!_scratchpadWindow.TryFlushPendingContent(out var error))
                 {
-                    MessageBox.Show(
+                    AppDialog.Show(
                         error ?? "Scratchpad content could not be saved before shutdown.",
                         "Scratchpad Save Failed",
                         MessageBoxButton.OK,
@@ -329,7 +329,7 @@ public partial class App : Application
                 return;
 
             _lastShutdownWarning = message;
-            MessageBox.Show(
+            AppDialog.Show(
                 $"Noted could not close because pending Scratchpad content was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
                 "Scratchpad Save Failed",
                 MessageBoxButton.OK,
@@ -349,7 +349,7 @@ public partial class App : Application
         if (e.Exception is SettingsPersistenceException)
         {
             e.Handled = true;
-            MessageBox.Show(
+            AppDialog.Show(
                 e.Exception.Message,
                 "Noted - Settings Error",
                 MessageBoxButton.OK,
@@ -404,7 +404,7 @@ public partial class App : Application
             ? exception.Message
             : $"{context}\n\n{exception.Message}";
 
-        MessageBox.Show(
+        AppDialog.Show(
             $"{message}\n\nNoted must close.",
             "Noted - Fatal Error",
             MessageBoxButton.OK,

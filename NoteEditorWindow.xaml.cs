@@ -613,16 +613,16 @@ public partial class NoteEditorWindow : Window
             "Yes saves the note. No discards its unsaved changes when the action completes. " +
             "Cancel keeps the note open.";
         return IsVisible
-            ? MessageBox.Show(this, message, "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning)
-            : MessageBox.Show(message, "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
+            ? AppDialog.Show(this, message, "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning)
+            : AppDialog.Show(message, "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
     }
 
     private void ShowError(string title, string message)
     {
         if (IsVisible)
-            MessageBox.Show(this, message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+            AppDialog.Show(this, message, title, MessageBoxButton.OK, MessageBoxImage.Error);
         else
-            MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Error);
+            AppDialog.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
     private void UpdateEditorState()
