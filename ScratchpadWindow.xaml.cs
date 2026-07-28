@@ -698,20 +698,20 @@ public partial class ScratchpadWindow : OverlayWindow
     private void FindNext()
     {
         if (string.IsNullOrEmpty(_viewModel.FindText)) return;
-        var start = _lastFindEnd ?? Editor.Document.ContentStart;
-        var hit = FindForward(_viewModel.FindText, start)
-                  ?? FindForward(_viewModel.FindText, Editor.Document.ContentStart); // wrap
-        if (hit != null)
-        {
-            Editor.Selection.Select(hit.Start, hit.End);
-            hit.Start.Paragraph?.BringIntoView();
-            _lastFindEnd = hit.End;
-            _viewModel.FindResultText = string.Empty;
-        }
-        else
+        var matches = FindAll(_viewModel.FindText);
+        if (matches.Count == 0)
         {
             _viewModel.FindResultText = "Not found";
+            return;
         }
+
+        var start = _lastFindEnd ?? Editor.Document.ContentStart;
+        var hit = matches.FirstOrDefault(match => match.Start.CompareTo(start) >= 0)
+                  ?? matches[0];
+        Editor.Selection.Select(hit.Start, hit.End);
+        hit.Start.Paragraph?.BringIntoView();
+        _lastFindEnd = hit.End;
+        _viewModel.FindResultText = string.Empty;
     }
 
     private void FindPrevious()
@@ -744,19 +744,16 @@ public partial class ScratchpadWindow : OverlayWindow
     private void ReplaceAllButton_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrEmpty(_viewModel.FindText)) return;
-        int count = 0;
-        TextPointer searchFrom = Editor.Document.ContentStart;
-        while (count < 10000)
+        var matches = FindAll(_viewModel.FindText);
+        for (var index = matches.Count - 1; index >= 0; index--)
         {
-            var hit = FindForward(_viewModel.FindText, searchFrom);
-            if (hit == null) break;
-            var range = new TextRange(hit.Start, hit.End);
-            range.Text = _viewModel.ReplaceText;
-            searchFrom = range.End;
-            count++;
+            matches[index].Text = _viewModel.ReplaceText;
         }
+
         _lastFindEnd = null;
-        _viewModel.FindResultText = count > 0 ? $"Replaced {count}" : "Not found";
+        _viewModel.FindResultText = matches.Count > 0
+            ? $"Replaced {matches.Count}"
+            : "Not found";
     }
 
     private void ClearFindState()
@@ -765,51 +762,73 @@ public partial class ScratchpadWindow : OverlayWindow
         _viewModel.FindResultText = string.Empty;
     }
 
-    // Searches forward from 'from'; returns the first match or null.
-    private static TextRange? FindForward(string search, TextPointer from)
-    {
-        var pos = from;
-        while (pos != null)
-        {
-            if (pos.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
-            {
-                var run = pos.GetTextInRun(LogicalDirection.Forward);
-                var idx = run.IndexOf(search, StringComparison.OrdinalIgnoreCase);
-                if (idx >= 0)
-                {
-                    var start = pos.GetPositionAtOffset(idx);
-                    var end = start?.GetPositionAtOffset(search.Length);
-                    if (start != null && end != null) return new TextRange(start, end);
-                }
-            }
-            pos = pos.GetNextContextPosition(LogicalDirection.Forward);
-        }
-        return null;
-    }
-
-    // Collects all matches in document order (used by FindPrevious for wrap-around).
     private List<TextRange> FindAll(string search)
     {
+        var snapshot = BuildSearchTextSnapshot();
         var results = new List<TextRange>();
-        var pos = Editor.Document.ContentStart;
-        while (pos != null)
+        var offset = 0;
+        while (offset <= snapshot.Text.Length - search.Length)
         {
-            if (pos.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text)
-            {
-                var run = pos.GetTextInRun(LogicalDirection.Forward);
-                int offset = 0;
-                while (true)
-                {
-                    var idx = run.IndexOf(search, offset, StringComparison.OrdinalIgnoreCase);
-                    if (idx < 0) break;
-                    var start = pos.GetPositionAtOffset(idx);
-                    var end = start?.GetPositionAtOffset(search.Length);
-                    if (start != null && end != null) results.Add(new TextRange(start, end));
-                    offset = idx + 1;
-                }
-            }
-            pos = pos.GetNextContextPosition(LogicalDirection.Forward);
+            var matchIndex = snapshot.Text.IndexOf(
+                search,
+                offset,
+                StringComparison.OrdinalIgnoreCase);
+            if (matchIndex < 0)
+                break;
+
+            results.Add(snapshot.CreateRange(matchIndex, search.Length));
+            offset = matchIndex + search.Length;
         }
         return results;
+    }
+
+    private SearchTextSnapshot BuildSearchTextSnapshot()
+    {
+        var text = new StringBuilder();
+        var characterStarts = new List<TextPointer>();
+        var characterEnds = new List<TextPointer>();
+        var position = Editor.Document.ContentStart.GetInsertionPosition(LogicalDirection.Forward);
+        while (position is not null && position.CompareTo(Editor.Document.ContentEnd) < 0)
+        {
+            var next = position.GetNextInsertionPosition(LogicalDirection.Forward);
+            if (next is null)
+                break;
+
+            var segment = new TextRange(position, next).Text;
+            foreach (var character in segment)
+            {
+                text.Append(character);
+                characterStarts.Add(position);
+                characterEnds.Add(next);
+            }
+            position = next;
+        }
+
+        return new SearchTextSnapshot(text.ToString(), characterStarts, characterEnds);
+    }
+
+    private sealed class SearchTextSnapshot
+    {
+        private readonly IReadOnlyList<TextPointer> _characterStarts;
+        private readonly IReadOnlyList<TextPointer> _characterEnds;
+
+        internal SearchTextSnapshot(
+            string text,
+            IReadOnlyList<TextPointer> characterStarts,
+            IReadOnlyList<TextPointer> characterEnds)
+        {
+            Text = text;
+            _characterStarts = characterStarts;
+            _characterEnds = characterEnds;
+        }
+
+        internal string Text { get; }
+
+        internal TextRange CreateRange(int startIndex, int length)
+        {
+            return new TextRange(
+                _characterStarts[startIndex],
+                _characterEnds[startIndex + length - 1]);
+        }
     }
 }
