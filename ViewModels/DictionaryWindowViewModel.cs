@@ -95,13 +95,14 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged
         SaveItems();
     }
 
-    public void AddItem()
+    public DictionaryItem AddItem()
     {
+        var newItem = new DictionaryItem { Word = "", Description = "" };
         _uiThreadInvoke(() =>
         {
-            var newItem = new DictionaryItem { Word = "", Description = "" };
             Items.Add(newItem);
         });
+        return newItem;
     }
 
     public void RemoveItem(DictionaryItem item)

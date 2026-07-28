@@ -45,7 +45,20 @@ public partial class DictionaryWindow : OverlayWindow
 
     private void AddButton_Click(object sender, RoutedEventArgs e)
     {
-        _viewModel.AddItem();
+        var item = _viewModel.AddItem();
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Input,
+            new Action(() =>
+            {
+                ItemsList.UpdateLayout();
+                if (ItemsList.ItemContainerGenerator.ContainerFromItem(item) is not DependencyObject container)
+                    return;
+
+                var wordBox = FindChild<TextBox>(container, "WordTextBox");
+                wordBox?.BringIntoView();
+                wordBox?.Focus();
+                wordBox?.SelectAll();
+            }));
     }
 
     private void HideButton_Click(object sender, RoutedEventArgs e)
