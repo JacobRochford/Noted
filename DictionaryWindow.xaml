@@ -32,6 +32,7 @@
                           Background="Transparent"
                           Opacity="0"
                           DragDelta="ResizeThumb_DragDelta"
+                          DragCompleted="ResizeThumb_DragCompleted"
                           Grid.Row="0"
                           Grid.RowSpan="3"
                           Panel.ZIndex="999"

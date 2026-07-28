@@ -94,6 +94,10 @@ public abstract class OverlayWindow : Window
             Width += e.HorizontalChange;
         if (Height + e.VerticalChange >= MinHeight)
             Height += e.VerticalChange;
+    }
+
+    protected void ResizeThumb_DragCompleted(object sender, DragCompletedEventArgs e)
+    {
         SaveWindowState();
     }
 

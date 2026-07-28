@@ -198,6 +198,7 @@
                           Width="16" Height="16"
                           Cursor="SizeNWSE" Background="Transparent" Opacity="0"
                           DragDelta="ResizeThumb_DragDelta"
+                          DragCompleted="ResizeThumb_DragCompleted"
                           Grid.RowSpan="5" Panel.ZIndex="999"/>
 
         <!-- ══ Row 0: Header bar (tabs + actions) ════════════════════ -->

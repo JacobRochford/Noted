@@ -97,6 +97,7 @@
                           Cursor="SizeNWSE"
                           Background="Transparent" Opacity="0"
                           DragDelta="ResizeThumb_DragDelta"
+                          DragCompleted="ResizeThumb_DragCompleted"
                           Panel.ZIndex="999"
                           Margin="0,0,-2,-2"/>
 
