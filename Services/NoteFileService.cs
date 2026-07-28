@@ -6,6 +6,7 @@ namespace Noted.Services;
 
 // handles all note/folder file ops, nav, and watcher
 public sealed class NoteFileService : INoteFileService {
+    private const string DeletedNoteTimestampFormat = "yyyy-MM-dd_HH-mm-ss_fff";
     private readonly IAppSettingsService _settingsService;
     private FileSystemWatcher? _watcher;
     private FileSystemWatcher? _directoryWatcher;
@@ -308,7 +309,7 @@ public sealed class NoteFileService : INoteFileService {
 
     // build unique deleted note path (timestamped, avoids collisions)
     private string BuildDeletedNotePath(string fileName) {
-        var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss_fff", CultureInfo.InvariantCulture);
+        var timestamp = DateTime.Now.ToString(DeletedNoteTimestampFormat, CultureInfo.InvariantCulture);
         var candidate = Path.Combine(DeletedNotesDirectory, $"{timestamp}__{fileName}");
         if (!File.Exists(candidate))
             return candidate;
@@ -330,13 +331,29 @@ public sealed class NoteFileService : INoteFileService {
         var cutoff = DateTime.Now - DeletedNoteRetention;
         foreach (var path in EnumerateNoteFiles(DeletedNotesDirectory)) {
             try {
-                var info = new FileInfo(path);
-                if (info.LastWriteTime < cutoff)
-                    info.Delete();
+                if (TryGetDeletionTime(path, out var deletedAt) && deletedAt < cutoff)
+                    File.Delete(path);
             } catch {
                 // ignore locked/in-use files
             }
         }
+    }
+
+    private static bool TryGetDeletionTime(string path, out DateTime deletedAt) {
+        var fileName = Path.GetFileName(path);
+        var separatorIndex = fileName.IndexOf("__", StringComparison.Ordinal);
+        if (separatorIndex < DeletedNoteTimestampFormat.Length) {
+            deletedAt = default;
+            return false;
+        }
+
+        var timestamp = fileName[..DeletedNoteTimestampFormat.Length];
+        return DateTime.TryParseExact(
+            timestamp,
+            DeletedNoteTimestampFormat,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeLocal,
+            out deletedAt);
     }
 
     // build unique note file name (timestamped, avoids collisions)
