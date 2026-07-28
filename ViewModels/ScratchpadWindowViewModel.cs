@@ -108,13 +108,19 @@ public sealed class ScratchpadWindowViewModel : INotifyPropertyChanged
 
     public void UpdateCounts(string plainText)
     {
-        CharCount = plainText.Replace("\r", string.Empty).TrimEnd('\n').Length;
-        LineCount = string.IsNullOrWhiteSpace(plainText)
+        var normalizedText = plainText
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n');
+        if (normalizedText.EndsWith('\n'))
+            normalizedText = normalizedText[..^1];
+
+        CharCount = normalizedText.Length;
+        LineCount = normalizedText.Length == 0
             ? 0
-            : plainText.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length;
-        WordCount = string.IsNullOrWhiteSpace(plainText)
+            : normalizedText.Count(character => character == '\n') + 1;
+        WordCount = string.IsNullOrWhiteSpace(normalizedText)
             ? 0
-            : plainText.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+            : normalizedText.Split(new[] { ' ', '\t', '\n' }, StringSplitOptions.RemoveEmptyEntries).Length;
     }
 
     public bool TrySaveWindowLayout(double left, double top, double width, double height)
