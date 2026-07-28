@@ -650,7 +650,11 @@
                                  VirtualizingStackPanel.ScrollUnit="Pixel"
                                  Margin="0,0,4,0">
                                 <ListBox.ContextMenu>
-                                    <ContextMenu>
+                                    <ContextMenu Style="{StaticResource NotedContextMenu}">
+                                        <ContextMenu.Resources>
+                                            <Style TargetType="MenuItem"
+                                                   BasedOn="{StaticResource NotedContextMenuItem}"/>
+                                        </ContextMenu.Resources>
                                         <MenuItem x:Name="OpenNoteMenuItem"
                                                   Header="Open"
                                                   Click="OpenSelectedNote_Click"
