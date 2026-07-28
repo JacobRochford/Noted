@@ -100,6 +100,7 @@ public partial class ScratchpadWindow : OverlayWindow
         _suppressFontSizeChange = true;
         FontSizeCombo.SelectedValue = _viewModel.FontSize;
         _suppressFontSizeChange = false;
+        Editor.FontSize = _viewModel.FontSize;
 
         IsVisibleChanged += ScratchpadWindow_IsVisibleChanged;
         Closed += ScratchpadWindow_Closed;
