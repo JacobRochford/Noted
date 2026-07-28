@@ -88,7 +88,9 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void DeleteItem_Click(object sender, RoutedEventArgs e)
     {
-        var item = GetItemFromSender(sender);
+        var item = sender is MenuItem menuItem
+            ? GetItemFromContextMenu(menuItem)
+            : GetItemFromSender(sender);
         if (item != null) _viewModel.RemoveItem(item);
     }
 
