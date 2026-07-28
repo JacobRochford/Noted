@@ -18,7 +18,7 @@ public partial class NewNoteNameDialog : Window {
     }
 
     private void CreateButton_Click(object sender, RoutedEventArgs e) {
-        DialogResult = true;
+        TryConfirm();
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) {
@@ -27,11 +27,23 @@ public partial class NewNoteNameDialog : Window {
 
     private void NoteNameTextBox_KeyDown(object sender, KeyEventArgs e) {
         if (e.Key == Key.Enter) {
-            DialogResult = true;
+            TryConfirm();
             e.Handled = true;
         } else if (e.Key == Key.Escape) {
             DialogResult = false;
             e.Handled = true;
         }
+    }
+
+    private void NoteNameTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) {
+        if (CreateButton is not null)
+            CreateButton.IsEnabled = !string.IsNullOrWhiteSpace(NoteNameTextBox.Text);
+    }
+
+    private void TryConfirm() {
+        if (string.IsNullOrWhiteSpace(NoteNameTextBox.Text))
+            return;
+
+        DialogResult = true;
     }
 }

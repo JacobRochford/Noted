@@ -81,6 +81,7 @@
              Grid.Row="1"
              MinWidth="260"
              Margin="0,0,0,4"
+             TextChanged="NoteNameTextBox_TextChanged"
              KeyDown="NoteNameTextBox_KeyDown"
              Style="{StaticResource RoundedTextBox}"/>
 
@@ -97,7 +98,8 @@
                     BorderBrush="#D1D5DB"
                     BorderThickness="1"
                     Style="{StaticResource RoundedButton}"/>
-            <Button Content="Create"
+            <Button x:Name="CreateButton"
+                    Content="Create"
                     Click="CreateButton_Click"
                     Background="#2C6E91"
                     Foreground="White"
