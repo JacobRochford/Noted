@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -9,6 +8,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Noted.Helpers;
 using Noted.Models;
 using Noted.Services;
 using Noted.ViewModels;
@@ -41,36 +41,6 @@ public partial class ScratchpadWindow : OverlayWindow
     private const double FallbackWidth = 450;
     private const double FallbackHeight = 500;
     private const double FallbackFontSize = 13;
-    private const double RecoveryMargin = 24;
-    private const uint MonitorDefaultToNull = 0;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativeRect
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MonitorInfo
-    {
-        public int Size;
-        public NativeRect Monitor;
-        public NativeRect Work;
-        public int Flags;
-    }
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr MonitorFromRect(ref NativeRect rectangle, uint flags);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo monitorInfo);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForSystem();
 
     public ScratchpadWindow(ScratchpadWindowViewModel viewModel)
     {
@@ -236,32 +206,15 @@ public partial class ScratchpadWindow : OverlayWindow
 
     private static ScratchpadWindowState NormalizeWindowState(ScratchpadWindowState state)
     {
-        var width = IsFinite(state.Width) && state.Width > 0 ? state.Width : FallbackWidth;
-        var height = IsFinite(state.Height) && state.Height > 0 ? state.Height : FallbackHeight;
-        width = Math.Max(MinimumWidth, width);
-        height = Math.Max(MinimumHeight, height);
-
-        var left = IsFinite(state.Left) ? state.Left : SystemParameters.WorkArea.Left + RecoveryMargin;
-        var top = IsFinite(state.Top) ? state.Top : SystemParameters.WorkArea.Top + RecoveryMargin;
-        var savedRectangle = new Rect(left, top, width, height);
-
-        var intersectsMonitor = TryGetMonitorWorkArea(savedRectangle, out var workArea);
-        if (!intersectsMonitor)
-        {
-            workArea = SystemParameters.WorkArea;
-            left = workArea.Left + RecoveryMargin;
-            top = workArea.Top + RecoveryMargin;
-        }
-
-        var maximumWidth = Math.Max(MinimumWidth, workArea.Width);
-        var maximumHeight = Math.Max(MinimumHeight, workArea.Height);
-        width = Math.Clamp(width, MinimumWidth, maximumWidth);
-        height = Math.Clamp(height, MinimumHeight, maximumHeight);
-
-        var maximumLeft = Math.Max(workArea.Left, workArea.Right - width);
-        var maximumTop = Math.Max(workArea.Top, workArea.Bottom - height);
-        left = Math.Clamp(left, workArea.Left, maximumLeft);
-        top = Math.Clamp(top, workArea.Top, maximumTop);
+        var bounds = WindowInterop.NormalizeWindowBounds(
+            state.Left,
+            state.Top,
+            state.Width,
+            state.Height,
+            MinimumWidth,
+            MinimumHeight,
+            FallbackWidth,
+            FallbackHeight);
 
         var opacity = IsFinite(state.Opacity) ? Math.Clamp(state.Opacity, 0, 1) : 0.88;
         var ghostModeOpacity = IsFinite(state.GhostModeOpacity)
@@ -273,65 +226,14 @@ public partial class ScratchpadWindow : OverlayWindow
 
         return state with
         {
-            Left = left,
-            Top = top,
-            Width = width,
-            Height = height,
+            Left = bounds.Left,
+            Top = bounds.Top,
+            Width = bounds.Width,
+            Height = bounds.Height,
             Opacity = opacity,
             GhostModeOpacity = ghostModeOpacity,
             FontSize = fontSize
         };
-    }
-
-    private static bool TryGetMonitorWorkArea(Rect rectangle, out Rect workArea)
-    {
-        workArea = default;
-
-        try
-        {
-            var scale = GetDpiForSystem() / 96d;
-            if (!IsFinite(scale) || scale <= 0)
-                scale = 1;
-
-            var nativeRectangle = new NativeRect
-            {
-                Left = ToNativeCoordinate(rectangle.Left, scale, roundDown: true),
-                Top = ToNativeCoordinate(rectangle.Top, scale, roundDown: true),
-                Right = ToNativeCoordinate(rectangle.Right, scale, roundDown: false),
-                Bottom = ToNativeCoordinate(rectangle.Bottom, scale, roundDown: false)
-            };
-
-            var monitor = MonitorFromRect(ref nativeRectangle, MonitorDefaultToNull);
-            if (monitor == IntPtr.Zero)
-                return false;
-
-            var monitorInfo = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
-            if (!GetMonitorInfo(monitor, ref monitorInfo))
-                return false;
-
-            var nativeWorkArea = monitorInfo.Work;
-            workArea = new Rect(
-                nativeWorkArea.Left / scale,
-                nativeWorkArea.Top / scale,
-                (nativeWorkArea.Right - nativeWorkArea.Left) / scale,
-                (nativeWorkArea.Bottom - nativeWorkArea.Top) / scale);
-            return workArea.Width > 0 && workArea.Height > 0;
-        }
-        catch (DllNotFoundException)
-        {
-            return false;
-        }
-        catch (EntryPointNotFoundException)
-        {
-            return false;
-        }
-    }
-
-    private static int ToNativeCoordinate(double value, double scale, bool roundDown)
-    {
-        var scaled = value * scale;
-        var rounded = roundDown ? Math.Floor(scaled) : Math.Ceiling(scaled);
-        return (int)Math.Clamp(rounded, int.MinValue, int.MaxValue);
     }
 
     private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);

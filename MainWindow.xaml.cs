@@ -1551,7 +1551,7 @@ public partial class MainWindow : Window {
                     var listBoxItem = FileList.ItemContainerGenerator.ContainerFromItem(note) as ListBoxItem;
                     var textBox = listBoxItem is null
                         ? null
-                        : FindVisualChild<TextBox>(listBoxItem);
+                        : VisualTreeHelpers.FindDescendant<TextBox>(listBoxItem);
                     if (textBox is null) {
                         RestoreNoActivateAfterInteraction();
                         return;
@@ -1641,7 +1641,7 @@ public partial class MainWindow : Window {
                 var listBoxItem = FileList.ItemContainerGenerator.ContainerFromItem(note) as ListBoxItem;
                 var renameTextBox = listBoxItem is null
                     ? null
-                    : FindVisualChild<TextBox>(listBoxItem);
+                    : VisualTreeHelpers.FindDescendant<TextBox>(listBoxItem);
                 if (renameTextBox is null) {
                     RestoreNoActivateAfterInteraction();
                     return;
@@ -1722,20 +1722,6 @@ public partial class MainWindow : Window {
         var openNoteKey = openFilePath is null ? null : _fileService.GetNoteKey(openFilePath);
         _viewModel.SelectedNoteKey = openNoteKey;
         FileList.SelectedItem = openNoteKey is null ? null : _viewModel.FindNote(openNoteKey);
-    }
-
-    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject {
-        if (parent == null) return null;
-
-        int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
-        for (int i = 0; i < childrenCount; i++) {
-            var child = VisualTreeHelper.GetChild(parent, i);
-            if (child is T typedChild) return typedChild;
-
-            var foundChild = FindVisualChild<T>(child);
-            if (foundChild != null) return foundChild;
-        }
-        return null;
     }
 
     private IntPtr TemporarilyAllowWindowActivation() {

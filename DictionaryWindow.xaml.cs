@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
+using Noted.Helpers;
 using Noted.Models;
 using Noted.Services;
 using Noted.ViewModels;
@@ -56,7 +57,7 @@ public partial class DictionaryWindow : OverlayWindow
                 if (ItemsList.ItemContainerGenerator.ContainerFromItem(item) is not DependencyObject container)
                     return;
 
-                var wordBox = FindChild<TextBox>(container, "WordTextBox");
+                var wordBox = VisualTreeHelpers.FindDescendant<TextBox>(container, "WordTextBox");
                 wordBox?.BringIntoView();
                 wordBox?.Focus();
                 wordBox?.SelectAll();
@@ -87,9 +88,9 @@ public partial class DictionaryWindow : OverlayWindow
         _descriptionExpandedState[item] = isExpanded;
 
         // Find the DataTemplate root border for this item
-        var container = FindAncestor<Border>(link);
+        var container = VisualTreeHelpers.FindAncestor<Border>(link);
         if (container != null) {
-            var descriptionBox = FindChild<TextBox>(container, "DescriptionBox");
+            var descriptionBox = VisualTreeHelpers.FindDescendant<TextBox>(container, "DescriptionBox");
             if (descriptionBox != null) {
                 descriptionBox.Visibility = isExpanded ? Visibility.Visible : Visibility.Collapsed;
                 if (isExpanded)
@@ -115,36 +116,4 @@ public partial class DictionaryWindow : OverlayWindow
         _settingsService.SaveDictionaryWindowState(newState);
     }
 
-    private static T? FindAncestor<T>(DependencyObject? child) where T : DependencyObject
-    {
-        DependencyObject? current = child;
-        while (current != null) {
-            if (current is T t)
-                return t;
-            // Prefer logical parent first (works well for Run/Hyperlink), then visual parent
-            current = LogicalTreeHelper.GetParent(current) ?? VisualTreeHelper.GetParent(current);
-        }
-        return null;
-    }
-
-    private static T? FindChild<T>(DependencyObject parent, string? childName = null) where T : DependencyObject
-    {
-        if (parent == null)
-            return null;
-        int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
-        for (int i = 0; i < childrenCount; i++) {
-            var child = VisualTreeHelper.GetChild(parent, i);
-            if (child is T tChild) {
-                if (string.IsNullOrEmpty(childName))
-                    return tChild;
-                if (child is FrameworkElement fe && fe.Name == childName)
-                    return tChild;
-            }
-
-            var found = FindChild<T>(child, childName);
-            if (found != null)
-                return found;
-        }
-        return null;
-    }
 }

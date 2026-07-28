@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Noted.Helpers;
 using Noted.Models;
 using Noted.Services;
 using Noted.ViewModels;
@@ -298,21 +299,9 @@ public partial class ChecklistWindow : OverlayWindow
         ItemsList.UpdateLayout();
         var container = ItemsList.ItemContainerGenerator.ContainerFromItem(item) as ListBoxItem;
         if (container == null) return;
-        var tb = FindVisualChild<TextBox>(container);
+        var tb = VisualTreeHelpers.FindDescendant<TextBox>(container);
         if (tb == null) return;
         tb.Focus();
         tb.CaretIndex = tb.Text?.Length ?? 0;
-    }
-
-    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
-    {
-        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, i);
-            if (child is T t) return t;
-            var found = FindVisualChild<T>(child);
-            if (found != null) return found;
-        }
-        return null;
     }
 }
