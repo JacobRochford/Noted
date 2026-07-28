@@ -75,32 +75,15 @@ public sealed class NoteRecoveryService : INoteRecoveryService
         if (!NoteFileExtensions.IsSupported(normalizedPath))
             throw new ArgumentException("Unsupported note file type.", nameof(filePath));
 
-        Directory.CreateDirectory(_recoveryDirectory);
         var draftFilePath = GetDraftFilePath(normalizedPath);
-        var temporaryPath = draftFilePath + ".tmp";
         var draft = new NoteRecoveryDraft(normalizedPath, content, DateTime.UtcNow);
 
-        try
-        {
-            var json = JsonSerializer.Serialize(draft);
-            File.WriteAllText(
-                temporaryPath,
-                json,
-                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        var json = JsonSerializer.Serialize(draft);
+        AtomicFileWriter.WriteAllText(draftFilePath, json);
 
-            if (File.Exists(draftFilePath))
-                File.Replace(temporaryPath, draftFilePath, destinationBackupFileName: null);
-            else
-                File.Move(temporaryPath, draftFilePath);
-
-            var legacyDraft = LoadDraftFile(_legacyDraftFilePath);
-            if (legacyDraft is not null && PathsEqual(legacyDraft.FilePath, normalizedPath))
-                TryDeleteFile(_legacyDraftFilePath);
-        }
-        finally
-        {
-            TryDeleteFile(temporaryPath);
-        }
+        var legacyDraft = LoadDraftFile(_legacyDraftFilePath);
+        if (legacyDraft is not null && PathsEqual(legacyDraft.FilePath, normalizedPath))
+            TryDeleteFile(_legacyDraftFilePath);
     }
 
     public void DeleteDraft(string filePath)

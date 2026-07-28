@@ -24,28 +24,7 @@ public sealed class NoteContentService : INoteContentService
         ArgumentNullException.ThrowIfNull(content);
 
         var validatedPath = ValidateNotePath(filePath);
-        var directory = Path.GetDirectoryName(validatedPath)!;
-        var temporaryPath = Path.Combine(
-            directory,
-            $".{Path.GetFileName(validatedPath)}.{Guid.NewGuid():N}.tmp");
-
-        try
-        {
-            Directory.CreateDirectory(directory);
-            File.WriteAllText(
-                temporaryPath,
-                content,
-                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-
-            if (File.Exists(validatedPath))
-                File.Replace(temporaryPath, validatedPath, destinationBackupFileName: null);
-            else
-                File.Move(temporaryPath, validatedPath);
-        }
-        finally
-        {
-            TryDeleteTemporaryFile(temporaryPath);
-        }
+        AtomicFileWriter.WriteAllText(validatedPath, content);
     }
 
     private string ValidateNotePath(string filePath)
@@ -73,16 +52,5 @@ public sealed class NoteContentService : INoteContentService
         }
 
         return fullPath;
-    }
-
-    private static void TryDeleteTemporaryFile(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
     }
 }

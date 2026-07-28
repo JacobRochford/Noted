@@ -47,24 +47,9 @@ public sealed class ScratchpadContentService : IScratchpadContentService
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        var directory = Path.GetDirectoryName(_contentFilePath)!;
-        var temporaryPath = Path.Combine(
-            directory,
-            $".{Path.GetFileName(_contentFilePath)}.{Guid.NewGuid():N}.tmp");
-
         try
         {
-            Directory.CreateDirectory(directory);
-            File.WriteAllText(
-                temporaryPath,
-                content,
-                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-
-            if (File.Exists(_contentFilePath))
-                File.Replace(temporaryPath, _contentFilePath, destinationBackupFileName: null);
-            else
-                File.Move(temporaryPath, _contentFilePath);
-
+            AtomicFileWriter.WriteAllText(_contentFilePath, content);
             return (true, null);
         }
         catch (IOException ex)
@@ -79,21 +64,5 @@ public sealed class ScratchpadContentService : IScratchpadContentService
         {
             return (false, ex.Message);
         }
-        finally
-        {
-            TryDeleteTemporaryFile(temporaryPath);
-        }
-    }
-
-    private static void TryDeleteTemporaryFile(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
-        catch (SecurityException) { }
     }
 }
