@@ -143,17 +143,16 @@ public sealed class NoteFileService : INoteFileService {
     public bool DeleteNote(string fileName, string? containingDirectory = null) {
         // move note to DeletedNotes (soft delete)
         var directory = ResolveNoteDirectory(containingDirectory);
-        if (directory is null)
-            return false;
-        var fullPath = Path.GetFullPath(Path.Combine(directory, fileName));
-        if (!IsPathWithinNotesDirectory(fullPath))
+        if (directory is null ||
+            !NoteFileExtensions.IsSupported(fileName) ||
+            !TryResolveChildPath(NotesDirectory, directory, fileName, out var fullPath))
             return false;
         if (!File.Exists(fullPath))
             return false;
 
         Directory.CreateDirectory(DeletedNotesDirectory);
 
-        var deletedPath = BuildDeletedNotePath(fileName);
+        var deletedPath = BuildDeletedNotePath(Path.GetFileName(fullPath));
         File.Move(fullPath, deletedPath);
         return true;
     }
@@ -190,16 +189,19 @@ public sealed class NoteFileService : INoteFileService {
         if (directory is null)
             return (false, "Access denied.");
 
-        var sourcePath = Path.GetFullPath(Path.Combine(directory, fileName));
-        if (!IsPathWithinNotesDirectory(sourcePath) ||
+        if (!NoteFileExtensions.IsSupported(fileName) ||
+            !TryResolveChildPath(NotesDirectory, directory, fileName, out var sourcePath) ||
             IsPathWithinArchiveDirectory(sourcePath) ||
             !File.Exists(sourcePath)) {
             return (false, "The note could not be found.");
         }
 
         var relativePath = Path.GetRelativePath(NotesDirectory, sourcePath);
-        var archivePath = Path.GetFullPath(Path.Combine(ArchivedNotesDirectory, relativePath));
-        if (!IsPathWithinArchiveDirectory(archivePath))
+        if (!TryResolveChildPath(
+                ArchivedNotesDirectory,
+                ArchivedNotesDirectory,
+                relativePath,
+                out var archivePath))
             return (false, "Access denied.");
         if (File.Exists(archivePath))
             return (false, "A note with the same path is already archived.");
@@ -218,11 +220,18 @@ public sealed class NoteFileService : INoteFileService {
         if (string.IsNullOrWhiteSpace(relativePath))
             return (false, "The archived note path is required.");
 
-        var sourcePath = Path.GetFullPath(Path.Combine(ArchivedNotesDirectory, relativePath));
-        var destinationPath = Path.GetFullPath(Path.Combine(NotesDirectory, relativePath));
-        if (!IsPathWithinArchiveDirectory(sourcePath) ||
-            !IsPathWithinNotesDirectory(destinationPath) ||
+        if (!TryResolveChildPath(
+                ArchivedNotesDirectory,
+                ArchivedNotesDirectory,
+                relativePath,
+                out var sourcePath) ||
+            !TryResolveChildPath(
+                NotesDirectory,
+                NotesDirectory,
+                relativePath,
+                out var destinationPath) ||
             IsPathWithinArchiveDirectory(destinationPath) ||
+            !NoteFileExtensions.IsSupported(sourcePath) ||
             !File.Exists(sourcePath)) {
             return (false, "The archived note could not be found.");
         }
@@ -248,8 +257,7 @@ public sealed class NoteFileService : INoteFileService {
         var directory = ResolveNoteDirectory(containingDirectory);
         if (directory is null)
             return (false, null, "Access denied.");
-        var oldPath = Path.GetFullPath(Path.Combine(directory, oldFileName));
-        if (!IsPathWithinNotesDirectory(oldPath))
+        if (!TryResolveChildPath(NotesDirectory, directory, oldFileName, out var oldPath))
             return (false, null, "Access denied.");
 
         var validatedFileName = ValidateAndSanitizeFileName(newDisplayName);
@@ -263,8 +271,7 @@ public sealed class NoteFileService : INoteFileService {
         var newFileName = validatedFileName + extension;
         if (newFileName == oldFileName) return (true, oldFileName, null);
 
-        var newPath = Path.GetFullPath(Path.Combine(directory, newFileName));
-        if (!IsPathWithinNotesDirectory(newPath))
+        if (!TryResolveChildPath(NotesDirectory, directory, newFileName, out var newPath))
             return (false, null, "Access denied.");
 
         try {
@@ -387,11 +394,7 @@ public sealed class NoteFileService : INoteFileService {
 
     // remove invalid chars, reserved names, and supported note extensions
     private static string? ValidateAndSanitizeFileName(string value) {
-        var sanitized = Path.GetInvalidFileNameChars().Aggregate(
-            value,
-            (current, c) => current.Replace(c.ToString(), "")
-        ).Trim().TrimEnd('.');
-
+        var sanitized = NormalizeBaseName(RemoveInvalidNameCharacters(value));
         if (string.IsNullOrWhiteSpace(sanitized))
             return null;
 
@@ -400,10 +403,7 @@ public sealed class NoteFileService : INoteFileService {
         if (extension is not null)
             sanitized = sanitized[..^extension.Length].TrimEnd();
 
-        if (string.IsNullOrWhiteSpace(sanitized) || ReservedFileNames.Contains(sanitized))
-            return null;
-
-        return sanitized;
+        return ValidateBaseName(sanitized);
     }
 
     // is this a generated note file name (timestamped)?
@@ -506,10 +506,11 @@ public sealed class NoteFileService : INoteFileService {
 
     // get supported notes in a subfolder, don't change nav state (Expand mode)
     public IReadOnlyList<NoteItem> GetNotesInSubfolder(string subfolderName) {
-        var subfolderPath = Path.GetFullPath(Path.Combine(NotesDirectory, subfolderName));
-        var root = Path.GetFullPath(NotesDirectory);
-        // block path traversal, don't let user escape root
-        if (!subfolderPath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        if (!TryResolveChildPath(
+                NotesDirectory,
+                NotesDirectory,
+                subfolderName,
+                out var subfolderPath))
             return Array.Empty<NoteItem>();
         if (!Directory.Exists(subfolderPath))
             return Array.Empty<NoteItem>();
@@ -543,11 +544,11 @@ public sealed class NoteFileService : INoteFileService {
 
     // go into a folder (blocks path traversal)
     public void NavigateTo(string folderName) {
-        var target = Path.GetFullPath(Path.Combine(CurrentDirectory, folderName));
-        var root = Path.GetFullPath(NotesDirectory);
-        // block path traversal, don't let user escape root
-        if (!target.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(target, root, StringComparison.OrdinalIgnoreCase))
+        if (!TryResolveChildPath(
+                NotesDirectory,
+                CurrentDirectory,
+                folderName,
+                out var target))
             return;
         if (IsPathWithinArchiveDirectory(target))
             return;
@@ -558,10 +559,10 @@ public sealed class NoteFileService : INoteFileService {
     public void NavigateUp() {
         if (!CanNavigateUp) return;
         var parent = Path.GetDirectoryName(CurrentDirectory);
-        var root = Path.GetFullPath(NotesDirectory);
-        var target = parent is null || !parent.StartsWith(root, StringComparison.OrdinalIgnoreCase)
-            ? NotesDirectory
-            : parent;
+        var target = parent is not null &&
+                     TryNormalizeContainedPath(NotesDirectory, parent, out var normalizedParent)
+            ? normalizedParent
+            : NotesDirectory;
         NavigateToDirectory(target, clearForwardHistory: true);
     }
 
@@ -583,12 +584,15 @@ public sealed class NoteFileService : INoteFileService {
 
     // create a new folder (sanitizes name, blocks traversal)
     public (bool Success, string? Error) CreateFolder(string folderName) {
-        var sanitized = ValidateAndSanitizeFolderName(folderName);
+        var sanitized = ValidateBaseName(RemoveInvalidNameCharacters(folderName));
         if (string.IsNullOrWhiteSpace(sanitized))
             return (false, "Invalid or reserved folder name.");
 
-        var target = Path.GetFullPath(Path.Combine(CurrentDirectory, sanitized));
-        if (!target.StartsWith(Path.GetFullPath(NotesDirectory), StringComparison.OrdinalIgnoreCase))
+        if (!TryResolveChildPath(
+                NotesDirectory,
+                CurrentDirectory,
+                sanitized,
+                out var target))
             return (false, "Access denied.");
         if (Directory.Exists(target))
             return (false, "A folder with that name already exists.");
@@ -603,17 +607,14 @@ public sealed class NoteFileService : INoteFileService {
 
     // rename a folder (sanitizes name, blocks traversal)
     public (bool Success, string? NewFolderName, string? Error) RenameFolder(string oldName, string newName) {
-        var sanitized = ValidateAndSanitizeFolderName(newName);
+        var sanitized = ValidateBaseName(RemoveInvalidNameCharacters(newName));
         if (string.IsNullOrWhiteSpace(sanitized))
             return (false, null, "Invalid or reserved folder name.");
         if (string.Equals(sanitized, oldName, StringComparison.OrdinalIgnoreCase))
             return (true, sanitized, null);
 
-        var root = Path.GetFullPath(NotesDirectory) + Path.DirectorySeparatorChar;
-        var oldPath = Path.GetFullPath(Path.Combine(CurrentDirectory, oldName));
-        var newPath = Path.GetFullPath(Path.Combine(CurrentDirectory, sanitized));
-
-        if (!oldPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        if (!TryResolveChildPath(NotesDirectory, CurrentDirectory, oldName, out var oldPath) ||
+            !TryResolveChildPath(NotesDirectory, CurrentDirectory, sanitized, out var newPath))
             return (false, null, "Access denied.");
         if (!Directory.Exists(oldPath))
             return (false, null, "Folder not found.");
@@ -630,10 +631,11 @@ public sealed class NoteFileService : INoteFileService {
 
     // delete a folder (blocks traversal)
     public (bool Success, string? Error) DeleteFolder(string folderName) {
-        var target = Path.GetFullPath(Path.Combine(CurrentDirectory, folderName));
-        var root = Path.GetFullPath(NotesDirectory) + Path.DirectorySeparatorChar;
-
-        if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        if (!TryResolveChildPath(
+                NotesDirectory,
+                CurrentDirectory,
+                folderName,
+                out var target))
             return (false, "Access denied.");
         if (!Directory.Exists(target))
             return (false, "Folder not found.");
@@ -646,17 +648,27 @@ public sealed class NoteFileService : INoteFileService {
         }
     }
 
-    // remove invalid chars, reserved names
-    private static string? ValidateAndSanitizeFolderName(string value) {
-        var sanitized = Path.GetInvalidFileNameChars().Aggregate(
+    private static string RemoveInvalidNameCharacters(string value) {
+        return Path.GetInvalidFileNameChars().Aggregate(
             value,
             (current, c) => current.Replace(c.ToString(), "")
-        ).Trim().TrimEnd('.');
+        );
+    }
 
-        if (string.IsNullOrWhiteSpace(sanitized) || ReservedFileNames.Contains(sanitized))
+    private static string? ValidateBaseName(string value) {
+        var sanitized = NormalizeBaseName(value);
+        if (string.IsNullOrWhiteSpace(sanitized))
+            return null;
+
+        var deviceName = sanitized.Split('.', 2)[0].TrimEnd();
+        if (ReservedFileNames.Contains(deviceName))
             return null;
 
         return sanitized;
+    }
+
+    private static string NormalizeBaseName(string value) {
+        return value.Trim().TrimEnd('.').TrimEnd();
     }
 
     // get initial notes dir (from settings or default)
@@ -669,8 +681,13 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     private string? ResolveNoteDirectory(string? containingDirectory) {
-        var directory = Path.GetFullPath(containingDirectory ?? CurrentDirectory);
-        return IsPathWithinNotesDirectory(directory) ? directory : null;
+        return TryNormalizeContainedPath(
+                   NotesDirectory,
+                   containingDirectory ?? CurrentDirectory,
+                   out var directory) &&
+               !IsPathWithinArchiveDirectory(directory)
+            ? directory
+            : null;
     }
 
     private bool IsPathWithinNotesDirectory(string path) {
@@ -682,10 +699,7 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     private static bool IsPathWithinDirectory(string path, string directory) {
-        var root = Path.GetFullPath(directory);
-        var candidate = Path.GetFullPath(path);
-        return PathsEqual(candidate, root)
-            || candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        return TryNormalizeContainedPath(directory, path, out _);
     }
 
     private static bool PathsEqual(string left, string right) {
@@ -693,6 +707,61 @@ public sealed class NoteFileService : INoteFileService {
             Path.GetFullPath(left),
             Path.GetFullPath(right),
             StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryResolveChildPath(
+        string rootDirectory,
+        string parentDirectory,
+        string childPath,
+        out string resolvedPath) {
+        resolvedPath = string.Empty;
+        if (!TryNormalizeContainedPath(rootDirectory, parentDirectory, out var normalizedParent))
+            return false;
+
+        try {
+            var candidate = Path.Combine(normalizedParent, childPath);
+            if (!TryNormalizeContainedPath(
+                    normalizedParent,
+                    candidate,
+                    out var normalizedChild,
+                    allowRoot: false))
+                return false;
+
+            return TryNormalizeContainedPath(rootDirectory, normalizedChild, out resolvedPath);
+        } catch (Exception ex) when (IsExpectedPathException(ex)) {
+            return false;
+        }
+    }
+
+    private static bool TryNormalizeContainedPath(
+        string rootDirectory,
+        string candidatePath,
+        out string normalizedPath,
+        bool allowRoot = true) {
+        normalizedPath = string.Empty;
+        try {
+            var normalizedRoot = Path.GetFullPath(rootDirectory);
+            normalizedPath = Path.GetFullPath(candidatePath);
+            if (PathsEqual(normalizedPath, normalizedRoot))
+                return allowRoot;
+
+            var rootWithSeparator = Path.EndsInDirectorySeparator(normalizedRoot)
+                ? normalizedRoot
+                : normalizedRoot + Path.DirectorySeparatorChar;
+            return normalizedPath.StartsWith(
+                rootWithSeparator,
+                StringComparison.OrdinalIgnoreCase);
+        } catch (Exception ex) when (IsExpectedPathException(ex)) {
+            normalizedPath = string.Empty;
+            return false;
+        }
+    }
+
+    private static bool IsExpectedPathException(Exception exception) {
+        return exception is ArgumentException or
+            NotSupportedException or
+            PathTooLongException or
+            System.Security.SecurityException;
     }
 
     private void DeleteEmptyArchiveDirectories(string? directory) {
@@ -718,33 +787,29 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     private void NavigateToDirectory(string target, bool clearForwardHistory) {
-        if (!Directory.Exists(target)
-            || string.Equals(target, CurrentDirectory, StringComparison.OrdinalIgnoreCase))
+        if (!TryNormalizeContainedPath(NotesDirectory, target, out var normalizedTarget) ||
+            IsPathWithinArchiveDirectory(normalizedTarget) ||
+            !Directory.Exists(normalizedTarget) ||
+            PathsEqual(normalizedTarget, CurrentDirectory))
             return;
 
         _backHistory.Push(CurrentDirectory);
-        CurrentDirectory = target;
+        CurrentDirectory = normalizedTarget;
 
         if (clearForwardHistory)
             _forwardHistory.Clear();
     }
 
     private bool TryPopValidHistoryEntry(Stack<string> history, out string target) {
-        var root = Path.GetFullPath(NotesDirectory);
-
         while (history.Count > 0) {
             var candidate = history.Pop();
-            if (!Directory.Exists(candidate))
+            if (!TryNormalizeContainedPath(NotesDirectory, candidate, out var fullCandidate) ||
+                IsPathWithinArchiveDirectory(fullCandidate) ||
+                !Directory.Exists(fullCandidate))
                 continue;
 
-            var fullCandidate = Path.GetFullPath(candidate);
-            if (IsPathWithinArchiveDirectory(fullCandidate))
-                continue;
-            if (string.Equals(fullCandidate, root, StringComparison.OrdinalIgnoreCase)
-                || fullCandidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) {
-                target = fullCandidate;
-                return true;
-            }
+            target = fullCandidate;
+            return true;
         }
 
         target = string.Empty;
