@@ -21,6 +21,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
     private ChecklistSortMode _sortMode = ChecklistSortMode.Manual;
     private bool _isSearchVisible;
     private bool _isRefreshing;
+    private bool _isBulkUpdating;
 
     // Source collection — canonical order
     public ObservableCollection<ChecklistItem> Items { get; } = new();
@@ -129,6 +130,8 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
             foreach (ChecklistItem item in e.OldItems)
                 item.PropertyChanged -= Item_PropertyChanged;
 
+        if (_isBulkUpdating) return;
+
         NotifyProgress();
         SaveItems();
         RefreshFilteredItems();
@@ -136,7 +139,9 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
 
     private void Item_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (_isRefreshing || e.PropertyName == nameof(ChecklistItem.IsExpanded)) return; // UI-only, don't save
+        if (_isRefreshing ||
+            _isBulkUpdating ||
+            e.PropertyName == nameof(ChecklistItem.IsExpanded)) return; // UI-only, don't save
 
         NotifyProgress();
         SaveItems();
@@ -271,13 +276,51 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
     {
         _uiThreadInvoke(() =>
         {
-            foreach (var item in Items.Where(i => i.IsChecked).ToList())
-                Items.Remove(item);
+            var completedItems = Items.Where(item => item.IsChecked).ToList();
+            if (completedItems.Count == 0) return;
+
+            RunBulkUpdate(() =>
+            {
+                foreach (var item in completedItems)
+                    Items.Remove(item);
+            });
         });
     }
 
-    public void CheckAll()   { foreach (var i in Items) i.IsChecked = true;  }
-    public void UncheckAll() { foreach (var i in Items) i.IsChecked = false; }
+    public void CheckAll() => SetAllChecked(true);
+    public void UncheckAll() => SetAllChecked(false);
+
+    private void SetAllChecked(bool isChecked)
+    {
+        _uiThreadInvoke(() =>
+        {
+            var changedItems = Items.Where(item => item.IsChecked != isChecked).ToList();
+            if (changedItems.Count == 0) return;
+
+            RunBulkUpdate(() =>
+            {
+                foreach (var item in changedItems)
+                    item.IsChecked = isChecked;
+            });
+        });
+    }
+
+    private void RunBulkUpdate(Action update)
+    {
+        _isBulkUpdating = true;
+        try
+        {
+            update();
+        }
+        finally
+        {
+            _isBulkUpdating = false;
+        }
+
+        NotifyProgress();
+        SaveItems();
+        RefreshFilteredItems();
+    }
 
     // --- Reorder ---
 
