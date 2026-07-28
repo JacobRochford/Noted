@@ -81,8 +81,8 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void AddButton_Click(object sender, RoutedEventArgs e)
     {
-        _viewModel.AddItem();
-        Dispatcher.BeginInvoke(() => FocusLastItem(),
+        var item = _viewModel.AddItem();
+        Dispatcher.BeginInvoke(() => FocusItem(item),
             System.Windows.Threading.DispatcherPriority.Input);
     }
 
@@ -162,6 +162,16 @@ public partial class ChecklistWindow : OverlayWindow
     private void MoveToBottom_Click(object sender, RoutedEventArgs e)
         => _viewModel.MoveToBottom(GetItemFromContextMenu(sender as MenuItem)!);
 
+    private void ItemContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu contextMenu) return;
+        foreach (var menuItem in contextMenu.Items.OfType<MenuItem>()
+                     .Where(item => Equals(item.Tag, "ManualReorder")))
+        {
+            menuItem.IsEnabled = _viewModel.CanManuallyReorder;
+        }
+    }
+
     private void Duplicate_Click(object sender, RoutedEventArgs e)
     {
         var item = GetItemFromContextMenu(sender as MenuItem);
@@ -183,12 +193,9 @@ public partial class ChecklistWindow : OverlayWindow
         if (e.Key == Key.Enter)
         {
             tb.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
-            _viewModel.InsertItemAfter(item);
-            Dispatcher.BeginInvoke(() =>
-            {
-                var idx = _viewModel.FilteredItems.IndexOf(item);
-                FocusItemAt(idx + 1);
-            }, System.Windows.Threading.DispatcherPriority.Input);
+            var newItem = _viewModel.InsertItemAfter(item);
+            Dispatcher.BeginInvoke(() => FocusItem(newItem),
+                System.Windows.Threading.DispatcherPriority.Input);
             e.Handled = true;
         }
         else if (e.Key == Key.Back && string.IsNullOrEmpty(tb.Text))
@@ -220,7 +227,9 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void DragHandle_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (sender is FrameworkElement fe && fe.DataContext is ChecklistItem item)
+        if (_viewModel.CanManuallyReorder &&
+            sender is FrameworkElement fe &&
+            fe.DataContext is ChecklistItem item)
         {
             _draggedItem = item;
             DragDrop.DoDragDrop(fe, item, DragDropEffects.Move);
@@ -231,13 +240,15 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void ItemsList_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = _draggedItem != null ? DragDropEffects.Move : DragDropEffects.None;
+        e.Effects = _viewModel.CanManuallyReorder && _draggedItem != null
+            ? DragDropEffects.Move
+            : DragDropEffects.None;
         e.Handled = true;
     }
 
     private void ItemsList_Drop(object sender, DragEventArgs e)
     {
-        if (_draggedItem == null) return;
+        if (!_viewModel.CanManuallyReorder || _draggedItem == null) return;
         var target = GetItemAtPoint(e.GetPosition(ItemsList));
         if (target != null && !ReferenceEquals(target, _draggedItem))
             _viewModel.MoveItem(_draggedItem, target);
@@ -275,16 +286,21 @@ public partial class ChecklistWindow : OverlayWindow
     private void FocusItemAt(int index)
     {
         if (index < 0 || index >= _viewModel.FilteredItems.Count) return;
-        ItemsList.ScrollIntoView(_viewModel.FilteredItems[index]);
-        var container = ItemsList.ItemContainerGenerator.ContainerFromIndex(index) as ListBoxItem;
+        FocusItem(_viewModel.FilteredItems[index]);
+    }
+
+    private void FocusItem(ChecklistItem? item)
+    {
+        if (item is null || !_viewModel.FilteredItems.Contains(item)) return;
+        ItemsList.ScrollIntoView(item);
+        ItemsList.UpdateLayout();
+        var container = ItemsList.ItemContainerGenerator.ContainerFromItem(item) as ListBoxItem;
         if (container == null) return;
         var tb = FindVisualChild<TextBox>(container);
         if (tb == null) return;
         tb.Focus();
         tb.CaretIndex = tb.Text?.Length ?? 0;
     }
-
-    private void FocusLastItem() => FocusItemAt(_viewModel.FilteredItems.Count - 1);
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
     {

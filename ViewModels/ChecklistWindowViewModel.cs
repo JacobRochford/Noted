@@ -53,8 +53,17 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
     public ChecklistSortMode SortMode
     {
         get => _sortMode;
-        set { if (_sortMode != value) { _sortMode = value; OnPropertyChanged(); RefreshFilteredItems(); } }
+        set
+        {
+            if (_sortMode == value) return;
+            _sortMode = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanManuallyReorder));
+            RefreshFilteredItems();
+        }
     }
+
+    public bool CanManuallyReorder => SortMode == ChecklistSortMode.Manual;
 
     public bool IsSearchVisible
     {
@@ -196,22 +205,48 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
 
     // --- CRUD ---
 
-    public void AddItem(int? afterIndex = null)
+    public ChecklistItem AddItem(ChecklistItem? anchor = null)
     {
+        var item = new ChecklistItem { CreatedAt = DateTime.Now };
         _uiThreadInvoke(() =>
         {
-            var item = new ChecklistItem { CreatedAt = DateTime.Now };
-            if (afterIndex.HasValue && afterIndex.Value < Items.Count)
-                Items.Insert(afterIndex.Value + 1, item);
+            PrepareViewForNewItem();
+
+            var anchorIndex = SortMode == ChecklistSortMode.Manual && anchor is not null
+                ? Items.IndexOf(anchor)
+                : -1;
+            if (anchorIndex >= 0)
+                Items.Insert(anchorIndex + 1, item);
             else
                 Items.Add(item);
         });
+        return item;
     }
 
-    public void InsertItemAfter(ChecklistItem anchor)
+    public ChecklistItem InsertItemAfter(ChecklistItem anchor)
     {
-        var idx = Items.IndexOf(anchor);
-        AddItem(idx >= 0 ? idx : null);
+        return AddItem(anchor);
+    }
+
+    private void PrepareViewForNewItem()
+    {
+        var refreshNeeded = false;
+        if (_filterMode == ChecklistFilterMode.Completed)
+        {
+            _filterMode = ChecklistFilterMode.Active;
+            OnPropertyChanged(nameof(FilterMode));
+            refreshNeeded = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            _searchQuery = "";
+            OnPropertyChanged(nameof(SearchQuery));
+            refreshNeeded = true;
+        }
+
+        if (refreshNeeded)
+            RefreshFilteredItems();
     }
 
     public void RemoveItem(ChecklistItem item) => _uiThreadInvoke(() => Items.Remove(item));
@@ -248,37 +283,43 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
 
     public void MoveItemUp(ChecklistItem item)
     {
-        var idx = Items.IndexOf(item);
-        if (idx > 0) { Items.Move(idx, idx - 1); SortMode = ChecklistSortMode.Manual; }
+        if (!CanManuallyReorder) return;
+        var visibleIndex = FilteredItems.IndexOf(item);
+        if (visibleIndex > 0)
+            MoveItem(item, FilteredItems[visibleIndex - 1]);
     }
 
     public void MoveItemDown(ChecklistItem item)
     {
-        var idx = Items.IndexOf(item);
-        if (idx >= 0 && idx < Items.Count - 1) { Items.Move(idx, idx + 1); SortMode = ChecklistSortMode.Manual; }
+        if (!CanManuallyReorder) return;
+        var visibleIndex = FilteredItems.IndexOf(item);
+        if (visibleIndex >= 0 && visibleIndex < FilteredItems.Count - 1)
+            MoveItem(item, FilteredItems[visibleIndex + 1]);
     }
 
     public void MoveToTop(ChecklistItem item)
     {
-        var idx = Items.IndexOf(item);
-        if (idx > 0) { Items.Move(idx, 0); SortMode = ChecklistSortMode.Manual; }
+        if (!CanManuallyReorder || FilteredItems.Count == 0) return;
+        var firstVisible = FilteredItems[0];
+        if (!ReferenceEquals(item, firstVisible))
+            MoveItem(item, firstVisible);
     }
 
     public void MoveToBottom(ChecklistItem item)
     {
-        var idx = Items.IndexOf(item);
-        if (idx >= 0 && idx < Items.Count - 1) { Items.Move(idx, Items.Count - 1); SortMode = ChecklistSortMode.Manual; }
+        if (!CanManuallyReorder || FilteredItems.Count == 0) return;
+        var lastVisible = FilteredItems[^1];
+        if (!ReferenceEquals(item, lastVisible))
+            MoveItem(item, lastVisible);
     }
 
     public void MoveItem(ChecklistItem source, ChecklistItem target)
     {
+        if (!CanManuallyReorder) return;
         var si = Items.IndexOf(source);
         var ti = Items.IndexOf(target);
         if (si >= 0 && ti >= 0 && si != ti)
-        {
             Items.Move(si, ti);
-            SortMode = ChecklistSortMode.Manual;
-        }
     }
 
     // --- Persistence ---

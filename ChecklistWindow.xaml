@@ -326,7 +326,7 @@
 
                         <!-- Context menu -->
                         <Grid.ContextMenu>
-                            <ContextMenu>
+                            <ContextMenu Opened="ItemContextMenu_Opened">
                                 <MenuItem Header="Set Priority">
                                     <MenuItem Header="🔴  High"   Tag="High"   Click="SetPriority_Click"/>
                                     <MenuItem Header="🟠  Medium" Tag="Medium" Click="SetPriority_Click"/>
@@ -335,10 +335,10 @@
                                     <MenuItem Header="◯  None"   Tag="None"   Click="SetPriority_Click"/>
                                 </MenuItem>
                                 <Separator/>
-                                <MenuItem Header="Move to Top"    Click="MoveToTop_Click"/>
-                                <MenuItem Header="Move Up"        Click="MoveUp_Click"/>
-                                <MenuItem Header="Move Down"      Click="MoveDown_Click"/>
-                                <MenuItem Header="Move to Bottom" Click="MoveToBottom_Click"/>
+                                <MenuItem Header="Move to Top"    Tag="ManualReorder" Click="MoveToTop_Click"/>
+                                <MenuItem Header="Move Up"        Tag="ManualReorder" Click="MoveUp_Click"/>
+                                <MenuItem Header="Move Down"      Tag="ManualReorder" Click="MoveDown_Click"/>
+                                <MenuItem Header="Move to Bottom" Tag="ManualReorder" Click="MoveToBottom_Click"/>
                                 <Separator/>
                                 <MenuItem Header="Duplicate"      Click="Duplicate_Click"/>
                                 <Separator/>
