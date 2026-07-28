@@ -19,21 +19,23 @@ public partial class ChecklistWindow : OverlayWindow
         InitializeComponent();
 
         _settingsService = settingsService;
-        _viewModel = new ChecklistWindowViewModel(settingsService, action => Dispatcher.Invoke(action));
-        DataContext = _viewModel;
-
         var state = _settingsService.LoadChecklistWindowState();
-        Left   = state.Left;
-        Top    = state.Top;
-        Width  = state.Width;
-        Height = state.Height;
+        RestoreWindowBounds(state.Left, state.Top, state.Width, state.Height);
 
+        _viewModel = new ChecklistWindowViewModel(
+            settingsService,
+            action => Dispatcher.Invoke(action),
+            state.GhostModeEnabled);
+        DataContext = _viewModel;
         InitializeOverlay(state.GhostModeEnabled, state.GhostModeOpacity, state.Opacity);
 
         _viewModel.PropertyChanged += (s, e) =>
         {
             if (e.PropertyName == nameof(ChecklistWindowViewModel.GhostModeEnabled))
+            {
                 ApplyGhostMode(_viewModel.GhostModeEnabled);
+                SaveWindowState();
+            }
         };
     }
 

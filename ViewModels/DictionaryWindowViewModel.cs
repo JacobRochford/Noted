@@ -10,23 +10,9 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged
 {
     private readonly IAppSettingsService _settingsService;
     private readonly Action<Action> _uiThreadInvoke;
-    private DictionaryWindowState _windowState;
     private bool _ghostModeEnabled;
 
     public ObservableCollection<DictionaryItem> Items { get; }
-
-    public DictionaryWindowState WindowState
-    {
-        get => _windowState;
-        set
-        {
-            if (_windowState != value)
-            {
-                _windowState = value;
-                OnPropertyChanged();
-            }
-        }
-    }
 
     public bool GhostModeEnabled
     {
@@ -37,20 +23,19 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged
             {
                 _ghostModeEnabled = value;
                 OnPropertyChanged();
-                SaveWindowState();
             }
         }
     }
 
-    public DictionaryWindowViewModel(IAppSettingsService settingsService, Action<Action> uiThreadInvoke)
+    public DictionaryWindowViewModel(
+        IAppSettingsService settingsService,
+        Action<Action> uiThreadInvoke,
+        bool ghostModeEnabled)
     {
         _settingsService = settingsService;
         _uiThreadInvoke = uiThreadInvoke;
         Items = new ObservableCollection<DictionaryItem>();
-
-        // Load window state
-        _windowState = _settingsService.LoadDictionaryWindowState();
-        _ghostModeEnabled = _windowState.GhostModeEnabled;
+        _ghostModeEnabled = ghostModeEnabled;
 
         // Load existing items
         var savedItems = _settingsService.LoadDictionaryItems();
@@ -117,12 +102,6 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged
     {
         var itemsData = Items.Select(i => new DictionaryItemData { Word = i.Word, Description = i.Description }).ToList();
         _settingsService.SaveDictionaryItems(itemsData);
-    }
-
-    public void SaveWindowState()
-    {
-        _windowState = _windowState with { GhostModeEnabled = _ghostModeEnabled };
-        _settingsService.SaveDictionaryWindowState(_windowState);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

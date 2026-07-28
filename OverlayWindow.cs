@@ -18,14 +18,31 @@ public abstract class OverlayWindow : Window
     protected void InitializeOverlay(bool ghostModeEnabled, double ghostModeOpacity, double defaultOpacity)
     {
         _ghostModeEnabled = ghostModeEnabled;
-        _ghostModeOpacity = ghostModeOpacity;
-        _defaultOpacity = defaultOpacity;
-        Opacity = ghostModeEnabled ? ghostModeOpacity : defaultOpacity;
+        _ghostModeOpacity = NormalizeOpacity(ghostModeOpacity, 0.25);
+        _defaultOpacity = NormalizeOpacity(defaultOpacity, 0.88);
+        Opacity = ghostModeEnabled ? _ghostModeOpacity : _defaultOpacity;
 
         Loaded += OnOverlayLoaded;
         Closing += OnOverlayClosing;
         MouseEnter += OnOverlayMouseEnter;
         MouseLeave += OnOverlayMouseLeave;
+    }
+
+    protected void RestoreWindowBounds(double left, double top, double width, double height)
+    {
+        var bounds = WindowInterop.NormalizeWindowBounds(
+            left,
+            top,
+            width,
+            height,
+            MinWidth,
+            MinHeight,
+            Width,
+            Height);
+        Left = bounds.Left;
+        Top = bounds.Top;
+        Width = bounds.Width;
+        Height = bounds.Height;
     }
 
     private void OnOverlayLoaded(object sender, RoutedEventArgs e)
@@ -91,6 +108,11 @@ public abstract class OverlayWindow : Window
         var animation = new DoubleAnimation(Opacity, opacity, TimeSpan.FromMilliseconds(300));
         BeginAnimation(OpacityProperty, animation);
     }
+
+    private static double NormalizeOpacity(double opacity, double fallback) =>
+        double.IsNaN(opacity) || double.IsInfinity(opacity)
+            ? fallback
+            : Math.Clamp(opacity, 0, 1);
 
     protected abstract void SaveWindowState();
 

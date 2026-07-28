@@ -21,25 +21,27 @@ public partial class DictionaryWindow : OverlayWindow
         InitializeComponent();
 
         _settingsService = settingsService;
-        _viewModel = new DictionaryWindowViewModel(settingsService, action => Dispatcher.Invoke(action));
-        DataContext = _viewModel;
-
-        // Load window state
         var windowState = _settingsService.LoadDictionaryWindowState();
+        RestoreWindowBounds(
+            windowState.Left,
+            windowState.Top,
+            windowState.Width,
+            windowState.Height);
 
-        // Apply saved window position and size
-        Left = windowState.Left;
-        Top = windowState.Top;
-        Width = windowState.Width;
-        Height = windowState.Height;
-
+        _viewModel = new DictionaryWindowViewModel(
+            settingsService,
+            action => Dispatcher.Invoke(action),
+            windowState.GhostModeEnabled);
+        DataContext = _viewModel;
         InitializeOverlay(windowState.GhostModeEnabled, windowState.GhostModeOpacity, windowState.Opacity);
 
-        // Subscribe to ghost mode changes
         _viewModel.PropertyChanged += (s, e) =>
         {
             if (e.PropertyName == nameof(DictionaryWindowViewModel.GhostModeEnabled))
+            {
                 ApplyGhostMode(_viewModel.GhostModeEnabled);
+                SaveWindowState();
+            }
         };
     }
 

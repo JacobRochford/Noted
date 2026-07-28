@@ -1,8 +1,29 @@
 using System.Runtime.InteropServices;
+using System.Windows;
 
 namespace Noted.Helpers;
 
 internal static class WindowInterop {
+    private const uint MONITOR_DEFAULTTONULL = 0;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        internal int Left;
+        internal int Top;
+        internal int Right;
+        internal int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        internal int Size;
+        internal NativeRect Monitor;
+        internal NativeRect Work;
+        internal int Flags;
+    }
+
     internal const int SW_HIDE = 0;
     internal const int SW_SHOW = 5;
 
@@ -42,6 +63,16 @@ internal static class WindowInterop {
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetProp(IntPtr hWnd, string lpString, IntPtr hData);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromRect(ref NativeRect rectangle, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo monitorInfo);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForSystem();
+
     internal static void StripNoActivate(IntPtr hwnd)
     {
         int style = GetWindowLong(hwnd, GWL_EXSTYLE);
@@ -61,4 +92,78 @@ internal static class WindowInterop {
         SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     }
+
+    internal static Rect NormalizeWindowBounds(
+        double left,
+        double top,
+        double width,
+        double height,
+        double minimumWidth,
+        double minimumHeight,
+        double fallbackWidth,
+        double fallbackHeight)
+    {
+        const double recoveryMargin = 24;
+
+        width = IsFinite(width) && width > 0 ? width : fallbackWidth;
+        height = IsFinite(height) && height > 0 ? height : fallbackHeight;
+        width = Math.Max(minimumWidth, width);
+        height = Math.Max(minimumHeight, height);
+        left = IsFinite(left) ? left : SystemParameters.WorkArea.Left + recoveryMargin;
+        top = IsFinite(top) ? top : SystemParameters.WorkArea.Top + recoveryMargin;
+
+        var savedBounds = new Rect(left, top, width, height);
+        if (!TryGetMonitorWorkArea(savedBounds, out var workArea))
+        {
+            workArea = SystemParameters.WorkArea;
+            left = workArea.Left + recoveryMargin;
+            top = workArea.Top + recoveryMargin;
+        }
+
+        width = Math.Clamp(width, minimumWidth, Math.Max(minimumWidth, workArea.Width));
+        height = Math.Clamp(height, minimumHeight, Math.Max(minimumHeight, workArea.Height));
+        left = Math.Clamp(left, workArea.Left, Math.Max(workArea.Left, workArea.Right - width));
+        top = Math.Clamp(top, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - height));
+        return new Rect(left, top, width, height);
+    }
+
+    private static bool TryGetMonitorWorkArea(Rect bounds, out Rect workArea)
+    {
+        workArea = default;
+        try
+        {
+            var scale = GetDpiForSystem() / 96d;
+            if (!IsFinite(scale) || scale <= 0)
+                scale = 1;
+
+            var nativeBounds = new NativeRect
+            {
+                Left = (int)Math.Floor(bounds.Left * scale),
+                Top = (int)Math.Floor(bounds.Top * scale),
+                Right = (int)Math.Ceiling(bounds.Right * scale),
+                Bottom = (int)Math.Ceiling(bounds.Bottom * scale)
+            };
+            var monitor = MonitorFromRect(ref nativeBounds, MONITOR_DEFAULTTONULL);
+            if (monitor == IntPtr.Zero)
+                return false;
+
+            var monitorInfo = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+            if (!GetMonitorInfo(monitor, ref monitorInfo))
+                return false;
+
+            workArea = new Rect(
+                monitorInfo.Work.Left / scale,
+                monitorInfo.Work.Top / scale,
+                (monitorInfo.Work.Right - monitorInfo.Work.Left) / scale,
+                (monitorInfo.Work.Bottom - monitorInfo.Work.Top) / scale);
+            return workArea.Width > 0 && workArea.Height > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsFinite(double value) =>
+        !double.IsNaN(value) && !double.IsInfinity(value);
 }

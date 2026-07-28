@@ -14,7 +14,6 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
 {
     private readonly IAppSettingsService _settingsService;
     private readonly Action<Action> _uiThreadInvoke;
-    private ChecklistWindowState _windowState;
     private bool _ghostModeEnabled;
     private string _searchQuery = "";
     private ChecklistFilterMode _filterMode = ChecklistFilterMode.All;
@@ -34,7 +33,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
     public bool GhostModeEnabled
     {
         get => _ghostModeEnabled;
-        set { if (_ghostModeEnabled != value) { _ghostModeEnabled = value; OnPropertyChanged(); SaveWindowState(); } }
+        set { if (_ghostModeEnabled != value) { _ghostModeEnabled = value; OnPropertyChanged(); } }
     }
 
     // --- Filter / search / sort ---
@@ -91,13 +90,14 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
 
     // --- Constructor ---
 
-    public ChecklistWindowViewModel(IAppSettingsService settingsService, Action<Action> uiThreadInvoke)
+    public ChecklistWindowViewModel(
+        IAppSettingsService settingsService,
+        Action<Action> uiThreadInvoke,
+        bool ghostModeEnabled)
     {
         _settingsService = settingsService;
         _uiThreadInvoke = uiThreadInvoke;
-
-        _windowState = _settingsService.LoadChecklistWindowState();
-        _ghostModeEnabled = _windowState.GhostModeEnabled;
+        _ghostModeEnabled = ghostModeEnabled;
 
         foreach (var d in _settingsService.LoadChecklistItems())
         {
@@ -379,12 +379,6 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
             CreatedAt = i.CreatedAt
         }).ToList();
         _settingsService.SaveChecklistItems(data);
-    }
-
-    public void SaveWindowState()
-    {
-        _windowState = _windowState with { GhostModeEnabled = _ghostModeEnabled };
-        _settingsService.SaveChecklistWindowState(_windowState);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
