@@ -21,6 +21,7 @@ public partial class App : Application
     private DictionaryWindow? _dictionaryWindow;
     private ScratchpadWindow? _scratchpadWindow;
     private readonly HashSet<MicroScratchpadWindow> _microScratchpadWindows = [];
+    private IMicroScratchpadRecoveryService? _microScratchpadRecoveryService;
     private bool _isShuttingDown;
     private string? _lastShutdownWarning;
     private int _fatalErrorShown;
@@ -77,6 +78,7 @@ public partial class App : Application
 
             var settings = new AppSettingsService();
             _settingsService = settings;
+            _microScratchpadRecoveryService = new MicroScratchpadRecoveryService(settings.StorageDirectory);
             var fileService = new NoteFileService(settings);
             startupFileService = fileService;
             var noteEditor = new NoteEditorWindow(
@@ -105,6 +107,7 @@ public partial class App : Application
 
             mainWindow.Show();
             noteEditor.RestoreEditorSession();
+            RestoreMicroScratchpadWindows();
             _ = UpdateService.CheckForUpdatesAsync();
         }
         catch (Exception ex)
@@ -160,6 +163,7 @@ public partial class App : Application
             _checklistWindow = null;
             _dictionaryWindow = null;
             _scratchpadWindow = null;
+            _microScratchpadRecoveryService = null;
         }
         finally
         {
@@ -278,7 +282,22 @@ public partial class App : Application
         if (_isShuttingDown)
             return;
 
-        var window = new MicroScratchpadWindow();
+        var recoveryService = _microScratchpadRecoveryService
+            ?? throw new InvalidOperationException("Micro Scratchpad recovery is not initialized.");
+        OpenMicroScratchpadWindow(new MicroScratchpadWindow(recoveryService));
+    }
+
+    private void RestoreMicroScratchpadWindows()
+    {
+        var recoveryService = _microScratchpadRecoveryService
+            ?? throw new InvalidOperationException("Micro Scratchpad recovery is not initialized.");
+
+        foreach (var draft in recoveryService.LoadDrafts())
+            OpenMicroScratchpadWindow(new MicroScratchpadWindow(recoveryService, draft));
+    }
+
+    private void OpenMicroScratchpadWindow(MicroScratchpadWindow window)
+    {
         window.Closed += MicroScratchpadWindow_Closed;
         _microScratchpadWindows.Add(window);
         window.Show();
@@ -298,6 +317,16 @@ public partial class App : Application
         foreach (var window in _microScratchpadWindows.ToArray())
         {
             window.Closed -= MicroScratchpadWindow_Closed;
+            if (!window.TryFlushPendingContent(out var error))
+            {
+                AppDialog.Show(
+                    error ?? "Micro Scratchpad recovery data could not be saved before shutdown.",
+                    "Micro Scratchpad Save Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+
+            window.KeepDraftOnClose();
             CloseExistingWindow(window, "micro scratchpad");
         }
 
@@ -321,6 +350,25 @@ public partial class App : Application
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
+        foreach (var microScratchpadWindow in _microScratchpadWindows)
+        {
+            if (microScratchpadWindow.TryFlushPendingContent(out var recoveryError))
+                continue;
+
+            e.Cancel = true;
+            var message = recoveryError ?? "Micro Scratchpad recovery data could not be saved.";
+            if (message == _lastShutdownWarning)
+                return;
+
+            _lastShutdownWarning = message;
+            AppDialog.Show(
+                $"Noted could not close because Micro Scratchpad recovery data was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
+                "Micro Scratchpad Save Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
         if (_scratchpadWindow is not null && !_scratchpadWindow.TryFlushPendingContent(out var error))
         {
             e.Cancel = true;
