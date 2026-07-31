@@ -369,7 +369,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
 
     public void SaveItems()
     {
-        var data = Items.Select(i => new ChecklistItemData
+        var data = Items.Select(i => new ChecklistItemState
         {
             Text      = i.Text,
             IsChecked = i.IsChecked,

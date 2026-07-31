@@ -100,7 +100,7 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged
 
     public void SaveItems()
     {
-        var itemsData = Items.Select(i => new DictionaryItemData { Word = i.Word, Description = i.Description }).ToList();
+        var itemsData = Items.Select(i => new DictionaryItemState { Word = i.Word, Description = i.Description }).ToList();
         _settingsService.SaveDictionaryItems(itemsData);
     }
 

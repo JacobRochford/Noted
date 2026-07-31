@@ -6,66 +6,6 @@ using Noted.Models;
 
 namespace Noted.Services;
 
-public sealed record ChecklistItemData
-{
-    public string? Text { get; init; }
-    public bool IsChecked { get; init; }
-    public ChecklistPriority Priority { get; init; } = ChecklistPriority.None;
-    public DateTime? DueDate { get; init; }
-    public string? Notes { get; init; }
-    public DateTime CreatedAt { get; init; } = DateTime.Now;
-}
-
-public sealed record ChecklistWindowState
-{
-    public double Left { get; init; } = 100;
-    public double Top { get; init; } = 100;
-    public double Width { get; init; } = 300;
-    public double Height { get; init; } = 400;
-    public double Opacity { get; init; } = 0.88;
-    public double GhostModeOpacity { get; init; } = 0.25;
-    public bool GhostModeEnabled { get; init; } = false;
-}
-
-public sealed record DictionaryItemData
-{
-    public string? Word { get; init; }
-    public string? Description { get; init; }
-}
-
-public sealed record DictionaryWindowState
-{
-    public double Left { get; init; } = 200;
-    public double Top { get; init; } = 150;
-    public double Width { get; init; } = 400;
-    public double Height { get; init; } = 500;
-    public double Opacity { get; init; } = 0.88;
-    public double GhostModeOpacity { get; init; } = 0.25;
-    public bool GhostModeEnabled { get; init; } = false;
-}
-
-public sealed record NoteEditorWindowState
-{
-    public double Width { get; init; } = 900;
-    public double Height { get; init; } = 650;
-    public double TabsPanelWidth { get; init; } = 190;
-    public bool IsTabsPanelCollapsed { get; init; }
-    public bool WordWrapEnabled { get; init; } = true;
-}
-
-/// Specifies where a timestamp should be placed in newly created notes.
-public enum NoteTimestampPlacement {
-    None,
-    Top,
-    Bottom
-}
-
-/// Controls how clicking a folder item navigates.
-public enum FolderNavigationMode {
-    DrillDown,  // replace list with folder's contents (default)
-    Expand      // expand/collapse inline within the root list
-}
-
 internal sealed class NewNoteModeJsonConverter : JsonConverter<NewNoteMode?> {
     public override bool HandleNull => true;
 
@@ -229,14 +169,14 @@ public sealed class AppSettingsService : IAppSettingsService {
     public FolderNavigationMode LoadFolderNavigationMode() => LoadSetting(s => s.FolderNavigationMode);
     public void SaveFolderNavigationMode(FolderNavigationMode mode) => SaveSetting(s => s with { FolderNavigationMode = mode });
 
-    public IReadOnlyList<ChecklistItemData> LoadChecklistItems()
+    public IReadOnlyList<ChecklistItemState> LoadChecklistItems()
     {
-        return LoadSetting(s => s.ChecklistItems ?? new List<ChecklistItemData>());
+        return LoadSetting(s => s.ChecklistItems ?? new List<ChecklistItemState>());
     }
 
-    public void SaveChecklistItems(IReadOnlyList<ChecklistItemData> items)
+    public void SaveChecklistItems(IReadOnlyList<ChecklistItemState> items)
     {
-        SaveSetting(s => s with { ChecklistItems = items?.ToList() ?? new List<ChecklistItemData>() });
+        SaveSetting(s => s with { ChecklistItems = items?.ToList() ?? new List<ChecklistItemState>() });
     }
 
     public ChecklistWindowState LoadChecklistWindowState()
@@ -249,14 +189,14 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { ChecklistWindowState = state });
     }
 
-    public IReadOnlyList<DictionaryItemData> LoadDictionaryItems()
+    public IReadOnlyList<DictionaryItemState> LoadDictionaryItems()
     {
-        return LoadSetting(s => s.DictionaryItems ?? new List<DictionaryItemData>());
+        return LoadSetting(s => s.DictionaryItems ?? new List<DictionaryItemState>());
     }
 
-    public void SaveDictionaryItems(IReadOnlyList<DictionaryItemData> items)
+    public void SaveDictionaryItems(IReadOnlyList<DictionaryItemState> items)
     {
-        SaveSetting(s => s with { DictionaryItems = items?.ToList() ?? new List<DictionaryItemData>() });
+        SaveSetting(s => s with { DictionaryItems = items?.ToList() ?? new List<DictionaryItemState>() });
     }
 
     public DictionaryWindowState LoadDictionaryWindowState()
@@ -481,9 +421,9 @@ public sealed class AppSettingsService : IAppSettingsService {
         public double GhostModeOpacity { get; init; } = 0.25;
         public double DefaultOpacity { get; init; } = 0.88;
         public FolderNavigationMode FolderNavigationMode { get; init; } = FolderNavigationMode.DrillDown;
-        public List<ChecklistItemData>? ChecklistItems { get; init; }
+        public List<ChecklistItemState>? ChecklistItems { get; init; }
         public ChecklistWindowState? ChecklistWindowState { get; init; }
-        public List<DictionaryItemData>? DictionaryItems { get; init; }
+        public List<DictionaryItemState>? DictionaryItems { get; init; }
         public DictionaryWindowState? DictionaryWindowState { get; init; }
         [JsonPropertyName("HideButtonClosesAll")]
         public bool HideButtonHidesAll { get; init; } = true;
