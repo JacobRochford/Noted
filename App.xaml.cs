@@ -78,14 +78,14 @@ public partial class App : Application
 
             var settings = new AppSettingsService();
             _settingsService = settings;
-            _microScratchpadRecoveryService = new MicroScratchpadRecoveryService(settings.StorageDirectory);
+            _microScratchpadRecoveryService = new MicroScratchpadRecoveryService(settings.AppDataDirectory);
             var fileService = new NoteFileService(settings);
             startupFileService = fileService;
             var noteEditor = new NoteEditorWindow(
                 new NoteContentService(() => fileService.NotesDirectory),
                 settings,
-                new NoteRecoveryService(settings.StorageDirectory),
-                new NoteEditorSessionService(settings.StorageDirectory));
+                new NoteRecoveryService(settings.AppDataDirectory),
+                new NoteEditorSessionService(settings.AppDataDirectory));
             startupNoteEditor = noteEditor;
             var mainWindow = new MainWindow(
                 settings,
@@ -225,7 +225,7 @@ public partial class App : Application
 
         var settings = _settingsService
             ?? throw new InvalidOperationException("Application settings are not initialized.");
-        var contentService = new ScratchpadContentService(settings.StorageDirectory);
+        var contentService = new ScratchpadContentService(settings.AppDataDirectory);
         var viewModel = new ScratchpadWindowViewModel(settings, contentService);
         var window = new ScratchpadWindow(viewModel);
         window.Closed += ScratchpadWindow_Closed;

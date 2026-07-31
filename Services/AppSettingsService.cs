@@ -104,22 +104,21 @@ public sealed class AppSettingsService : IAppSettingsService {
     private readonly string _settingsFilePath;
     private AppSettings? _cachedSettings;
 
-    /// Gets the directory where settings are stored.
-    public string StorageDirectory { get; }
+    public string AppDataDirectory { get; }
 
-    public AppSettingsService(string? storageDirectory = null) {
-        StorageDirectory = string.IsNullOrWhiteSpace(storageDirectory)
+    public AppSettingsService(string? appDataDirectory = null) {
+        AppDataDirectory = string.IsNullOrWhiteSpace(appDataDirectory)
             ? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Noted")
-            : Path.GetFullPath(storageDirectory);
-        _settingsFilePath = Path.Combine(StorageDirectory, "settings.json");
+            : Path.GetFullPath(appDataDirectory);
+        _settingsFilePath = Path.Combine(AppDataDirectory, "settings.json");
 
         try {
-            Directory.CreateDirectory(StorageDirectory);
+            Directory.CreateDirectory(AppDataDirectory);
         } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
             throw CreatePersistenceException(
-                $"Noted could not initialize its settings folder at '{StorageDirectory}'. "
+                $"Noted could not initialize its application data folder at '{AppDataDirectory}'. "
                 + "Check that the location exists and that you have permission to write to it, then restart Noted.",
                 ex);
         }

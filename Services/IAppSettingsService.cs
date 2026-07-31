@@ -3,7 +3,7 @@ using Noted.Models;
 namespace Noted.Services;
 
 public interface IAppSettingsService {
-    string StorageDirectory { get; }
+    string AppDataDirectory { get; }
     string? LoadNotesDirectory();
     void SaveNotesDirectory(string notesDirectory);
     IReadOnlyList<string> LoadPinnedNotes();

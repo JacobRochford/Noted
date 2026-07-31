@@ -44,7 +44,7 @@ public sealed class NoteFileService : INoteFileService {
 
     public NoteFileService(IAppSettingsService settingsService) {
         _settingsService = settingsService;
-        DeletedNotesDirectory = Path.Combine(_settingsService.StorageDirectory, "DeletedNotes");
+        DeletedNotesDirectory = Path.Combine(_settingsService.AppDataDirectory, "DeletedNotes");
         NotesDirectory = ResolveInitialNotesDirectory();
         CurrentDirectory = NotesDirectory;
         Directory.CreateDirectory(NotesDirectory);
