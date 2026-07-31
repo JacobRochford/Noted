@@ -79,7 +79,7 @@ public sealed class NoteRecoveryService : INoteRecoveryService
         var draft = new NoteRecoveryDraft(normalizedPath, content, DateTime.UtcNow);
 
         var json = JsonSerializer.Serialize(draft);
-        AtomicFileWriter.WriteAllText(draftFilePath, json);
+        FileWriter.WriteAllText(draftFilePath, json);
 
         var legacyDraft = LoadDraftFile(_legacyDraftFilePath);
         if (legacyDraft is not null && PathsEqual(legacyDraft.FilePath, normalizedPath))

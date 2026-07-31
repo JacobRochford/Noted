@@ -1,8 +1,8 @@
 using System.Runtime.InteropServices;
 
-namespace Noted.Helpers;
+namespace Noted.Services;
 
-internal sealed record DisplayMonitorInfo(
+internal sealed record DisplayInfo(
     string DeviceName,
     int WorkLeft,
     int WorkTop,
@@ -10,13 +10,13 @@ internal sealed record DisplayMonitorInfo(
     int WorkHeight,
     bool IsPrimary);
 
-internal static class DisplayMonitorService
+internal static class DisplayService
 {
     private const uint MonitorInfoPrimary = 0x00000001;
 
-    internal static IReadOnlyList<DisplayMonitorInfo> GetDisplays()
+    internal static IReadOnlyList<DisplayInfo> GetDisplays()
     {
-        var displays = new List<DisplayMonitorInfo>();
+        var displays = new List<DisplayInfo>();
         MonitorEnumProc callback = (monitor, _, _, _) =>
         {
             var info = new MonitorInfoEx
@@ -26,7 +26,7 @@ internal static class DisplayMonitorService
             if (!GetMonitorInfo(monitor, ref info))
                 return true;
 
-            displays.Add(new DisplayMonitorInfo(
+            displays.Add(new DisplayInfo(
                 info.DeviceName,
                 info.WorkArea.Left,
                 info.WorkArea.Top,

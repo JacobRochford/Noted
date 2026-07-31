@@ -600,7 +600,7 @@ public partial class MainWindow : Window {
 
     private void UpdatePreferredDisplayOptions()
     {
-        var screens = DisplayMonitorService.GetDisplays();
+        var screens = DisplayService.GetDisplays();
         var primary = screens.FirstOrDefault(screen => screen.IsPrimary)
             ?? screens.FirstOrDefault();
         var options = new List<DisplayOption>
@@ -675,9 +675,9 @@ public partial class MainWindow : Window {
         Canvas.SetTop(OverlayButton, workTop + workHeight - buttonHeight - 8);
     }
 
-    private DisplayMonitorInfo? ResolvePreferredDisplay()
+    private DisplayInfo? ResolvePreferredDisplay()
     {
-        var screens = DisplayMonitorService.GetDisplays();
+        var screens = DisplayService.GetDisplays();
         if (!string.IsNullOrWhiteSpace(_preferredDisplayDeviceName))
         {
             var preferred = screens.FirstOrDefault(screen =>

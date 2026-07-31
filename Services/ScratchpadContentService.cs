@@ -49,7 +49,7 @@ public sealed class ScratchpadContentService : IScratchpadContentService
 
         try
         {
-            AtomicFileWriter.WriteAllText(_contentFilePath, content);
+            FileWriter.WriteAllText(_contentFilePath, content);
             return (true, null);
         }
         catch (IOException ex)

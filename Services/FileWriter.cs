@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Noted.Services;
 
-internal static class AtomicFileWriter
+internal static class FileWriter
 {
     private static readonly Encoding Utf8WithoutBom =
         new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);

@@ -24,7 +24,7 @@ public sealed class NoteContentService : INoteContentService
         ArgumentNullException.ThrowIfNull(content);
 
         var validatedPath = ValidateNotePath(filePath);
-        AtomicFileWriter.WriteAllText(validatedPath, content);
+        FileWriter.WriteAllText(validatedPath, content);
     }
 
     private string ValidateNotePath(string filePath)

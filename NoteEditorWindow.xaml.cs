@@ -1011,7 +1011,7 @@ public partial class NoteEditorWindow : Window
 
     private void PositionOnPreferredDisplay()
     {
-        var screens = DisplayMonitorService.GetDisplays();
+        var screens = DisplayService.GetDisplays();
         var preferredDeviceName = _settingsService.LoadPreferredDisplayDeviceName();
         var screen = !string.IsNullOrWhiteSpace(preferredDeviceName)
             ? screens.FirstOrDefault(candidate =>

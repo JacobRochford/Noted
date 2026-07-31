@@ -38,7 +38,7 @@ public sealed class NoteEditorSessionService : INoteEditorSessionService
         ArgumentNullException.ThrowIfNull(session);
 
         var json = JsonSerializer.Serialize(session);
-        AtomicFileWriter.WriteAllText(_sessionFilePath, json);
+        FileWriter.WriteAllText(_sessionFilePath, json);
     }
 
     private static bool IsExpectedSessionException(Exception exception)
