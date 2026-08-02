@@ -292,8 +292,28 @@ public partial class App : Application
         var recoveryService = _microScratchpadRecoveryService
             ?? throw new InvalidOperationException("Micro Scratchpad recovery is not initialized.");
 
-        foreach (var draft in recoveryService.LoadDrafts())
+        var loadResult = recoveryService.LoadDrafts();
+        foreach (var draft in loadResult.Drafts)
             OpenMicroScratchpadWindow(new MicroScratchpadWindow(recoveryService, draft));
+
+        if (loadResult.Issues.Count == 0)
+            return;
+
+        const int maximumDisplayedIssues = 5;
+        var issueText = string.Join(
+            "\n\n",
+            loadResult.Issues
+                .Take(maximumDisplayedIssues)
+                .Select(issue => $"{Path.GetFileName(issue.FilePath)}: {issue.Message}"));
+        var remainingCount = loadResult.Issues.Count - maximumDisplayedIssues;
+        var remainingText = remainingCount > 0
+            ? $"\n\n{remainingCount} additional recovery issue(s) were not shown."
+            : string.Empty;
+        AppDialog.Show(
+            $"Some Micro Scratchpad recovery files need attention. No recoverable content was silently discarded.\n\n{issueText}{remainingText}",
+            "Micro Scratchpad Recovery",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     private void OpenMicroScratchpadWindow(MicroScratchpadWindow window)

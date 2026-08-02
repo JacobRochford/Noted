@@ -5,9 +5,17 @@ public sealed record MicroScratchpadRecoveryDraft(
     string Content,
     DateTime UpdatedUtc);
 
+public sealed record MicroScratchpadRecoveryIssue(
+    string FilePath,
+    string Message);
+
+public sealed record MicroScratchpadRecoveryLoadResult(
+    IReadOnlyList<MicroScratchpadRecoveryDraft> Drafts,
+    IReadOnlyList<MicroScratchpadRecoveryIssue> Issues);
+
 public interface IMicroScratchpadRecoveryService
 {
-    IReadOnlyList<MicroScratchpadRecoveryDraft> LoadDrafts();
+    MicroScratchpadRecoveryLoadResult LoadDrafts();
     void SaveDraft(Guid id, string content);
     void DeleteDraft(Guid id);
 }
