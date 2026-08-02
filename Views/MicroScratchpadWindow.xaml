@@ -12,17 +12,38 @@
         ShowInTaskbar="False"
         Topmost="True"
         Background="White">
-    <TextBox x:Name="Editor"
-             AcceptsReturn="True"
-             AcceptsTab="True"
-             TextWrapping="Wrap"
-             HorizontalScrollBarVisibility="Disabled"
-             VerticalScrollBarVisibility="Auto"
-             BorderThickness="0"
-             Padding="6"
-             Background="White"
-             Foreground="Black"
-             FontFamily="Segoe UI"
-             FontSize="13"
-             SpellCheck.IsEnabled="True"/>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBox x:Name="Editor"
+                 Grid.Row="0"
+                 AcceptsReturn="True"
+                 AcceptsTab="True"
+                 TextWrapping="Wrap"
+                 HorizontalScrollBarVisibility="Disabled"
+                 VerticalScrollBarVisibility="Auto"
+                 BorderThickness="0"
+                 Padding="6"
+                 Background="White"
+                 Foreground="Black"
+                 FontFamily="Segoe UI"
+                 FontSize="13"
+                 SpellCheck.IsEnabled="True"/>
+
+        <Border x:Name="PersistenceErrorPanel"
+                Grid.Row="1"
+                Padding="6,4"
+                Background="#FFF4E5"
+                BorderBrush="#E5A23B"
+                BorderThickness="0,1,0,0"
+                Visibility="Collapsed">
+            <TextBlock x:Name="PersistenceErrorText"
+                       Foreground="#7A3E00"
+                       FontSize="11"
+                       TextWrapping="Wrap"/>
+        </Border>
+    </Grid>
 </Window>
