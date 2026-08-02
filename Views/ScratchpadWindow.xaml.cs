@@ -17,8 +17,12 @@ namespace Noted;
 
 public partial class ScratchpadWindow : OverlayWindow
 {
+    // With a responsive UI thread and successful I/O, content waits at most two seconds before saving.
+    private static readonly TimeSpan ContentSaveQuietPeriod = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan ContentSaveMaximumDelay = TimeSpan.FromSeconds(2);
+
     private readonly ScratchpadWindowViewModel _viewModel;
-    private readonly DispatcherTimer _saveTimer;
+    private readonly SaveScheduler<long> _contentSaveScheduler;
     private readonly DispatcherTimer _windowStateSaveTimer;
     private TextPointer? _lastFindEnd;
     private bool _suppressFontSizeChange;
@@ -29,6 +33,7 @@ public partial class ScratchpadWindow : OverlayWindow
     private bool _isClosing;
     private bool _cleanupCompleted;
     private string? _lastWarningMessage;
+    private long _contentRevision;
 
     // Tracks currently selected colors for the toolbar indicator bars
     private Brush _activeTextColor = Brushes.Black;
@@ -60,8 +65,11 @@ public partial class ScratchpadWindow : OverlayWindow
 
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
 
-        _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-        _saveTimer.Tick += SaveTimer_Tick;
+        _contentSaveScheduler = new SaveScheduler<long>(
+            Dispatcher,
+            ContentSaveQuietPeriod,
+            ContentSaveMaximumDelay,
+            SaveContentRevision);
 
         _windowStateSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _windowStateSaveTimer.Tick += WindowStateSaveTimer_Tick;
@@ -83,25 +91,14 @@ public partial class ScratchpadWindow : OverlayWindow
 
     internal bool TryFlushPendingContent(out string? error)
     {
-        _saveTimer.Stop();
-
         if (!_isContentDirty)
         {
             error = null;
             return true;
         }
 
-        var content = SerializeEditorContent();
-        if (_viewModel.TrySaveContent(content))
-        {
-            _isContentDirty = false;
-            _lastWarningMessage = null;
-            error = null;
-            return true;
-        }
-
-        error = _viewModel.PersistenceError ?? "Scratchpad content could not be saved.";
-        return false;
+        _contentSaveScheduler.Schedule(_contentRevision);
+        return _contentSaveScheduler.TryFlush(out error);
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -246,10 +243,31 @@ public partial class ScratchpadWindow : OverlayWindow
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
-    private void SaveTimer_Tick(object? sender, EventArgs e)
+    private PersistenceSaveResult SaveContentRevision(long revision)
     {
-        if (!TryFlushPendingContent(out _))
-            return;
+        string content;
+        try
+        {
+            content = SerializeEditorContent();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+            var serializationError = $"Scratchpad content could not be prepared for saving: {ex.Message}";
+            _viewModel.ReportPersistenceError(serializationError);
+            return PersistenceSaveResult.Failed(serializationError);
+        }
+
+        if (!_viewModel.TrySaveContent(content))
+        {
+            return PersistenceSaveResult.Failed(
+                _viewModel.PersistenceError ?? "Scratchpad content could not be saved.");
+        }
+
+        if (revision == _contentRevision)
+            _isContentDirty = false;
+        _lastWarningMessage = null;
+        return PersistenceSaveResult.Succeeded();
     }
 
     private void WindowStateSaveTimer_Tick(object? sender, EventArgs e)
@@ -326,8 +344,7 @@ public partial class ScratchpadWindow : OverlayWindow
             return;
 
         _cleanupCompleted = true;
-        _saveTimer.Stop();
-        _saveTimer.Tick -= SaveTimer_Tick;
+        _contentSaveScheduler.Dispose();
         _windowStateSaveTimer.Stop();
         _windowStateSaveTimer.Tick -= WindowStateSaveTimer_Tick;
         _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
@@ -381,8 +398,7 @@ public partial class ScratchpadWindow : OverlayWindow
             return;
 
         _isContentDirty = true;
-        _saveTimer.Stop();
-        _saveTimer.Start();
+        _contentSaveScheduler.Schedule(checked(++_contentRevision));
     }
 
     private void Editor_SelectionChanged(object sender, RoutedEventArgs e) => UpdateToolbarState();
