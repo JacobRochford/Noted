@@ -32,12 +32,12 @@ public interface IAppSettingsService {
     void SaveDefaultOpacity(double opacity);
     FolderNavigationMode LoadFolderNavigationMode();
     void SaveFolderNavigationMode(FolderNavigationMode mode);
-    IReadOnlyList<ChecklistItemState> LoadChecklistItems();
-    void SaveChecklistItems(IReadOnlyList<ChecklistItemState> items);
+    IReadOnlyList<ChecklistItemState>? LoadLegacyChecklistItems();
+    void ClearLegacyChecklistItems();
     ChecklistWindowState LoadChecklistWindowState();
     void SaveChecklistWindowState(ChecklistWindowState state);
-    IReadOnlyList<DictionaryItemState> LoadDictionaryItems();
-    void SaveDictionaryItems(IReadOnlyList<DictionaryItemState> items);
+    IReadOnlyList<DictionaryItemState>? LoadLegacyDictionaryItems();
+    void ClearLegacyDictionaryItems();
     DictionaryWindowState LoadDictionaryWindowState();
     void SaveDictionaryWindowState(DictionaryWindowState state);
     bool LoadHideButtonHidesAll();

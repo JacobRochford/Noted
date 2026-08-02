@@ -504,6 +504,11 @@
                 <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="{Binding FooterText}" Foreground="#94A3B8" FontSize="11"
                                VerticalAlignment="Center"/>
+                    <TextBlock Text="⚠"
+                               FontSize="12" Foreground="#B35A00"
+                               Margin="8,0,0,0" VerticalAlignment="Center"
+                               Visibility="{Binding HasPersistenceError, Converter={StaticResource BoolToVisibility}}"
+                               ToolTip="{Binding PersistenceError}"/>
                     <Button Content="Clear done" Style="{StaticResource FooterLinkBtn}"
                             Click="ClearCompleted_Click" Margin="6,0,0,0"
                             Visibility="{Binding HasCompleted, Converter={StaticResource BoolToVisibility}}"

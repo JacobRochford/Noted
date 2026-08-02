@@ -189,7 +189,9 @@ public partial class App : Application
 
         var settings = _settingsService
             ?? throw new InvalidOperationException("Application settings are not initialized.");
-        var window = new ChecklistWindow(settings);
+        var window = new ChecklistWindow(
+            settings,
+            new ChecklistContentService(settings.AppDataDirectory, settings));
         window.Closed += ChecklistWindow_Closed;
         _checklistWindow = window;
         WindowManager.Checklist = window;
@@ -207,7 +209,9 @@ public partial class App : Application
 
         var settings = _settingsService
             ?? throw new InvalidOperationException("Application settings are not initialized.");
-        var window = new DictionaryWindow(settings);
+        var window = new DictionaryWindow(
+            settings,
+            new DictionaryContentService(settings.AppDataDirectory, settings));
         window.Closed += DictionaryWindow_Closed;
         _dictionaryWindow = window;
         WindowManager.Dictionary = window;

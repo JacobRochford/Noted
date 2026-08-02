@@ -15,6 +15,10 @@
         Top="150"
         MinWidth="300"
         MinHeight="350">
+    <noted:OverlayWindow.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+    </noted:OverlayWindow.Resources>
+
     <Grid Background="#FFFFFF" OpacityMask="White">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -45,7 +49,14 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="Dictionary" FontSize="14" FontWeight="SemiBold" Foreground="#333333" IsHitTestVisible="False"/>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock Text="Dictionary" FontSize="14" FontWeight="SemiBold" Foreground="#333333"/>
+                    <TextBlock Text="⚠"
+                               FontSize="12" Foreground="#B35A00"
+                               Margin="8,0,0,0" VerticalAlignment="Center"
+                               Visibility="{Binding HasPersistenceError, Converter={StaticResource BoolToVisibility}}"
+                               ToolTip="{Binding PersistenceError}"/>
+                </StackPanel>
                 <Button Grid.Column="1" x:Name="HideButton" Content="✕" Click="HideButton_Click"
                         Background="Transparent" BorderThickness="0" Foreground="#999999"
                         FontSize="14" Padding="4,0" Margin="8,0,0,0" VerticalAlignment="Center"
@@ -78,7 +89,7 @@
                                     <!-- Word -->
                                     <TextBox x:Name="WordTextBox"
                                        Grid.Column="0"
-                                       Text="{Binding Word, UpdateSourceTrigger=LostFocus}"
+                                       Text="{Binding Word, UpdateSourceTrigger=PropertyChanged}"
                                        Background="Transparent"
                                        BorderThickness="0"
                                        Padding="4,2"
@@ -104,7 +115,7 @@
                                 <!-- Collapsible description (keeps small min height) -->
                                 <TextBox x:Name="DescriptionBox"
                                      Grid.Row="1"
-                                     Text="{Binding Description, UpdateSourceTrigger=LostFocus}"
+                                     Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
                                      Background="#F8F8F8"
                                      BorderBrush="#E0E0E0"
                                      BorderThickness="1"

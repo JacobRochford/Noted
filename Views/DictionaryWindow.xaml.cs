@@ -1,13 +1,14 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
 using Noted.Helpers;
 using Noted.Models;
 using Noted.Services;
 using Noted.ViewModels;
-using System.Windows.Media;
 
 namespace Noted;
 
@@ -16,8 +17,11 @@ public partial class DictionaryWindow : OverlayWindow
     private readonly IAppSettingsService _settingsService;
     private readonly DictionaryWindowViewModel _viewModel;
     private readonly Dictionary<DictionaryItem, bool> _descriptionExpandedState = new();
+    private string? _lastPersistenceWarning;
 
-    public DictionaryWindow(IAppSettingsService settingsService)
+    public DictionaryWindow(
+        IAppSettingsService settingsService,
+        IDictionaryContentService contentService)
     {
         InitializeComponent();
 
@@ -30,7 +34,8 @@ public partial class DictionaryWindow : OverlayWindow
             windowState.Height);
 
         _viewModel = new DictionaryWindowViewModel(
-            settingsService,
+            contentService,
+            Dispatcher,
             action => Dispatcher.Invoke(action),
             windowState.GhostModeEnabled);
         DataContext = _viewModel;
@@ -43,7 +48,40 @@ public partial class DictionaryWindow : OverlayWindow
                 ApplyGhostMode(_viewModel.GhostModeEnabled);
                 SaveWindowState();
             }
+            else if (e.PropertyName == nameof(DictionaryWindowViewModel.PersistenceError) &&
+                     !_viewModel.HasPersistenceError)
+            {
+                _lastPersistenceWarning = null;
+            }
         };
+        IsVisibleChanged += DictionaryWindow_IsVisibleChanged;
+    }
+
+    internal bool TryFlushPendingContent(out string? error)
+    {
+        var success = _viewModel.TryFlushPendingItems(out error);
+        if (success && !_viewModel.HasPersistenceError)
+            _lastPersistenceWarning = null;
+        return success;
+    }
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (!TryFlushPendingContent(out var error))
+        {
+            e.Cancel = true;
+            ShowPersistenceWarningOnce(error);
+            return;
+        }
+
+        base.OnClosing(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        IsVisibleChanged -= DictionaryWindow_IsVisibleChanged;
+        _viewModel.Dispose();
+        base.OnClosed(e);
     }
 
     private void AddButton_Click(object sender, RoutedEventArgs e)
@@ -66,7 +104,40 @@ public partial class DictionaryWindow : OverlayWindow
 
     private void HideButton_Click(object sender, RoutedEventArgs e)
     {
+        if (!TryFlushPendingContent(out var error))
+        {
+            ShowPersistenceWarningOnce(error);
+            return;
+        }
+
+        ShowPersistenceWarningOnce(_viewModel.PersistenceError);
         HideWindow();
+    }
+
+    private void DictionaryWindow_IsVisibleChanged(
+        object sender,
+        DependencyPropertyChangedEventArgs e)
+    {
+        if (!IsVisible)
+        {
+            if (!TryFlushPendingContent(out var error))
+                ShowPersistenceWarningOnce(error);
+            else
+                ShowPersistenceWarningOnce(_viewModel.PersistenceError);
+        }
+    }
+
+    private void ShowPersistenceWarningOnce(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error) || error == _lastPersistenceWarning)
+            return;
+
+        _lastPersistenceWarning = error;
+        AppDialog.Show(
+            error,
+            "Dictionary Save Warning",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     private void DeleteButton_Click(object sender, RoutedEventArgs e)

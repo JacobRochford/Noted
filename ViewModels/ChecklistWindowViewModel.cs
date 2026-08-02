@@ -1,7 +1,10 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
+using System.Security;
+using System.Windows.Threading;
 using Noted.Models;
 using Noted.Services;
 
@@ -10,9 +13,13 @@ namespace Noted.ViewModels;
 public enum ChecklistFilterMode { All, Active, Completed }
 public enum ChecklistSortMode  { Manual, Priority, DueDate, Alphabetical }
 
-public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
+public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposable
 {
-    private readonly IAppSettingsService _settingsService;
+    private static readonly TimeSpan SaveQuietPeriod = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan SaveMaximumDelay = TimeSpan.FromSeconds(2);
+
+    private readonly IChecklistContentService _contentService;
+    private readonly SaveScheduler<IReadOnlyList<ChecklistItemState>> _saveScheduler;
     private readonly Action<Action> _uiThreadInvoke;
     private bool _ghostModeEnabled;
     private string _searchQuery = "";
@@ -21,6 +28,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
     private bool _isSearchVisible;
     private bool _isRefreshing;
     private bool _isBulkUpdating;
+    private string? _persistenceError;
 
     // Source collection — canonical order
     public ObservableCollection<ChecklistItem> Items { get; } = new();
@@ -71,6 +79,20 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
         set { if (_isSearchVisible != value) { _isSearchVisible = value; OnPropertyChanged(); } }
     }
 
+    public string? PersistenceError
+    {
+        get => _persistenceError;
+        private set
+        {
+            if (_persistenceError == value) return;
+            _persistenceError = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasPersistenceError));
+        }
+    }
+
+    public bool HasPersistenceError => !string.IsNullOrWhiteSpace(PersistenceError);
+
     // --- Progress / stats ---
 
     public int TotalCount     => Items.Count;
@@ -91,15 +113,26 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
     // --- Constructor ---
 
     public ChecklistWindowViewModel(
-        IAppSettingsService settingsService,
+        IChecklistContentService contentService,
+        Dispatcher dispatcher,
         Action<Action> uiThreadInvoke,
         bool ghostModeEnabled)
     {
-        _settingsService = settingsService;
+        ArgumentNullException.ThrowIfNull(contentService);
+        ArgumentNullException.ThrowIfNull(dispatcher);
+        ArgumentNullException.ThrowIfNull(uiThreadInvoke);
+        _contentService = contentService;
+        _saveScheduler = new SaveScheduler<IReadOnlyList<ChecklistItemState>>(
+            dispatcher,
+            SaveQuietPeriod,
+            SaveMaximumDelay,
+            SaveItemsSnapshot);
         _uiThreadInvoke = uiThreadInvoke;
         _ghostModeEnabled = ghostModeEnabled;
 
-        foreach (var d in _settingsService.LoadChecklistItems())
+        var loadResult = _contentService.LoadItems();
+        SetLoadIssues(loadResult.Issues);
+        foreach (var d in loadResult.Items)
         {
             var item = new ChecklistItem
             {
@@ -367,9 +400,27 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
 
     // --- Persistence ---
 
-    public void SaveItems()
+    public bool TryFlushPendingItems(out string? error)
     {
-        var data = Items.Select(i => new ChecklistItemState
+        return _saveScheduler.TryFlush(out error);
+    }
+
+    public void Dispose()
+    {
+        Items.CollectionChanged -= Items_CollectionChanged;
+        foreach (var item in Items)
+            item.PropertyChanged -= Item_PropertyChanged;
+        _saveScheduler.Dispose();
+    }
+
+    private void SaveItems()
+    {
+        _saveScheduler.Schedule(CreateItemsSnapshot());
+    }
+
+    private IReadOnlyList<ChecklistItemState> CreateItemsSnapshot()
+    {
+        return Items.Select(i => new ChecklistItemState
         {
             Text      = i.Text,
             IsChecked = i.IsChecked,
@@ -378,7 +429,40 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged
             Notes     = i.Notes,
             CreatedAt = i.CreatedAt
         }).ToList();
-        _settingsService.SaveChecklistItems(data);
+    }
+
+    private PersistenceSaveResult SaveItemsSnapshot(IReadOnlyList<ChecklistItemState> items)
+    {
+        try
+        {
+            var saveResult = _contentService.SaveItems(items);
+            PersistenceError = saveResult.Warning;
+            return PersistenceSaveResult.Succeeded();
+        }
+        catch (Exception ex) when (IsExpectedPersistenceException(ex))
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+            PersistenceError = $"Checklist content could not be saved: {ex.Message}";
+            return PersistenceSaveResult.Failed(PersistenceError);
+        }
+    }
+
+    private void SetLoadIssues(IReadOnlyList<ChecklistContentIssue> issues)
+    {
+        PersistenceError = issues.Count == 0
+            ? null
+            : string.Join(
+                " ",
+                issues.Select(issue => $"{Path.GetFileName(issue.FilePath)}: {issue.Message}"));
+    }
+
+    private static bool IsExpectedPersistenceException(Exception exception)
+    {
+        return exception is IOException or
+            UnauthorizedAccessException or
+            SecurityException or
+            ArgumentException or
+            NotSupportedException;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

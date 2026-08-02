@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -14,8 +15,11 @@ public partial class ChecklistWindow : OverlayWindow
     private readonly IAppSettingsService _settingsService;
     private readonly ChecklistWindowViewModel _viewModel;
     private ChecklistItem? _draggedItem;
+    private string? _lastPersistenceWarning;
 
-    public ChecklistWindow(IAppSettingsService settingsService)
+    public ChecklistWindow(
+        IAppSettingsService settingsService,
+        IChecklistContentService contentService)
     {
         InitializeComponent();
 
@@ -24,7 +28,8 @@ public partial class ChecklistWindow : OverlayWindow
         RestoreWindowBounds(state.Left, state.Top, state.Width, state.Height);
 
         _viewModel = new ChecklistWindowViewModel(
-            settingsService,
+            contentService,
+            Dispatcher,
             action => Dispatcher.Invoke(action),
             state.GhostModeEnabled);
         DataContext = _viewModel;
@@ -37,7 +42,40 @@ public partial class ChecklistWindow : OverlayWindow
                 ApplyGhostMode(_viewModel.GhostModeEnabled);
                 SaveWindowState();
             }
+            else if (e.PropertyName == nameof(ChecklistWindowViewModel.PersistenceError) &&
+                     !_viewModel.HasPersistenceError)
+            {
+                _lastPersistenceWarning = null;
+            }
         };
+        IsVisibleChanged += ChecklistWindow_IsVisibleChanged;
+    }
+
+    internal bool TryFlushPendingContent(out string? error)
+    {
+        var success = _viewModel.TryFlushPendingItems(out error);
+        if (success && !_viewModel.HasPersistenceError)
+            _lastPersistenceWarning = null;
+        return success;
+    }
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (!TryFlushPendingContent(out var error))
+        {
+            e.Cancel = true;
+            ShowPersistenceWarningOnce(error);
+            return;
+        }
+
+        base.OnClosing(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        IsVisibleChanged -= ChecklistWindow_IsVisibleChanged;
+        _viewModel.Dispose();
+        base.OnClosed(e);
     }
 
     protected override void OnTitleBarDoubleClick() => ToggleWindow();
@@ -58,7 +96,45 @@ public partial class ChecklistWindow : OverlayWindow
 
     // ── Title bar ─────────────────────────────────────────────────────────
 
-    private void HideButton_Click(object sender, RoutedEventArgs e) => HideWindow();
+    private void HideButton_Click(object sender, RoutedEventArgs e) => RequestHide();
+
+    private void RequestHide()
+    {
+        if (!TryFlushPendingContent(out var error))
+        {
+            ShowPersistenceWarningOnce(error);
+            return;
+        }
+
+        ShowPersistenceWarningOnce(_viewModel.PersistenceError);
+        HideWindow();
+    }
+
+    private void ChecklistWindow_IsVisibleChanged(
+        object sender,
+        DependencyPropertyChangedEventArgs e)
+    {
+        if (!IsVisible)
+        {
+            if (!TryFlushPendingContent(out var error))
+                ShowPersistenceWarningOnce(error);
+            else
+                ShowPersistenceWarningOnce(_viewModel.PersistenceError);
+        }
+    }
+
+    private void ShowPersistenceWarningOnce(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error) || error == _lastPersistenceWarning)
+            return;
+
+        _lastPersistenceWarning = error;
+        AppDialog.Show(
+            error,
+            "Checklist Save Warning",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+    }
 
     private void SearchToggle_Click(object sender, RoutedEventArgs e)
     {

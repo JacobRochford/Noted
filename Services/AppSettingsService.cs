@@ -169,14 +169,14 @@ public sealed class AppSettingsService : IAppSettingsService {
     public FolderNavigationMode LoadFolderNavigationMode() => LoadSetting(s => s.FolderNavigationMode);
     public void SaveFolderNavigationMode(FolderNavigationMode mode) => SaveSetting(s => s with { FolderNavigationMode = mode });
 
-    public IReadOnlyList<ChecklistItemState> LoadChecklistItems()
+    public IReadOnlyList<ChecklistItemState>? LoadLegacyChecklistItems()
     {
-        return LoadSetting(s => s.ChecklistItems ?? new List<ChecklistItemState>());
+        return LoadSetting(s => s.ChecklistItems?.ToList());
     }
 
-    public void SaveChecklistItems(IReadOnlyList<ChecklistItemState> items)
+    public void ClearLegacyChecklistItems()
     {
-        SaveSetting(s => s with { ChecklistItems = items?.ToList() ?? new List<ChecklistItemState>() });
+        SaveSetting(s => s with { ChecklistItems = null });
     }
 
     public ChecklistWindowState LoadChecklistWindowState()
@@ -189,14 +189,14 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { ChecklistWindowState = state });
     }
 
-    public IReadOnlyList<DictionaryItemState> LoadDictionaryItems()
+    public IReadOnlyList<DictionaryItemState>? LoadLegacyDictionaryItems()
     {
-        return LoadSetting(s => s.DictionaryItems ?? new List<DictionaryItemState>());
+        return LoadSetting(s => s.DictionaryItems?.ToList());
     }
 
-    public void SaveDictionaryItems(IReadOnlyList<DictionaryItemState> items)
+    public void ClearLegacyDictionaryItems()
     {
-        SaveSetting(s => s with { DictionaryItems = items?.ToList() ?? new List<DictionaryItemState>() });
+        SaveSetting(s => s with { DictionaryItems = null });
     }
 
     public DictionaryWindowState LoadDictionaryWindowState()
@@ -421,8 +421,10 @@ public sealed class AppSettingsService : IAppSettingsService {
         public double GhostModeOpacity { get; init; } = 0.25;
         public double DefaultOpacity { get; init; } = 0.88;
         public FolderNavigationMode FolderNavigationMode { get; init; } = FolderNavigationMode.DrillDown;
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<ChecklistItemState>? ChecklistItems { get; init; }
         public ChecklistWindowState? ChecklistWindowState { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<DictionaryItemState>? DictionaryItems { get; init; }
         public DictionaryWindowState? DictionaryWindowState { get; init; }
         [JsonPropertyName("HideButtonClosesAll")]
