@@ -5,12 +5,22 @@ public sealed record NoteRecoveryDraft(
     string Content,
     DateTime UpdatedUtc);
 
+public sealed record NoteRecoveryIssue(
+    string FilePath,
+    string Message);
+
+public sealed record NoteRecoveryDraftLoadResult(
+    NoteRecoveryDraft? Draft,
+    IReadOnlyList<NoteRecoveryIssue> Issues);
+
+public sealed record NoteRecoveryLoadResult(
+    IReadOnlyList<NoteRecoveryDraft> Drafts,
+    IReadOnlyList<NoteRecoveryIssue> Issues);
+
 public interface INoteRecoveryService
 {
-    NoteRecoveryDraft? LoadDraft();
-    NoteRecoveryDraft? LoadDraft(string filePath);
-    IReadOnlyList<NoteRecoveryDraft> LoadDrafts();
+    NoteRecoveryDraftLoadResult LoadDraft(string filePath);
+    NoteRecoveryLoadResult LoadDrafts();
     void SaveDraft(string filePath, string content);
     void DeleteDraft(string filePath);
-    void MoveDraft(string oldFilePath, string newFilePath);
 }

@@ -7,7 +7,6 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Threading;
 using Noted.Helpers;
 using Noted.Models;
 using Noted.Services;
@@ -24,7 +23,7 @@ public partial class NoteEditorWindow : Window
     private readonly IAppSettingsService _settingsService;
     private readonly INoteRecoveryService _recoveryService;
     private readonly INoteEditorSessionService _sessionService;
-    private readonly DispatcherTimer _recoverySaveTimer;
+    private readonly SaveScheduler<IReadOnlyList<RecoveryDraftSnapshot>> _recoverySaveScheduler;
     private readonly ObservableCollection<OpenNoteDocument> _documents = [];
     private readonly HashSet<OpenNoteDocument> _discardWhenPreparedActionCompletes = [];
     private OpenNoteDocument? _activeDocument;
@@ -37,6 +36,8 @@ public partial class NoteEditorWindow : Window
     private double _tabsPanelWidth = DefaultTabsPanelWidth;
     private bool _isTabsPanelCollapsed;
     private bool _suppressSessionSave;
+    private string? _recoveryOperationError;
+    private string? _sessionPersistenceError;
 
     public NoteEditorWindow(
         INoteContentService contentService,
@@ -53,13 +54,15 @@ public partial class NoteEditorWindow : Window
         _settingsService = settingsService;
         _recoveryService = recoveryService;
         _sessionService = sessionService;
-        _recoverySaveTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(750)
-        };
-        _recoverySaveTimer.Tick += RecoverySaveTimer_Tick;
 
         InitializeComponent();
+        _recoverySaveScheduler = new SaveScheduler<IReadOnlyList<RecoveryDraftSnapshot>>(
+            Dispatcher,
+            quietPeriod: TimeSpan.FromMilliseconds(750),
+            maximumDelay: TimeSpan.FromSeconds(2),
+            SaveRecoveryDraftSnapshots);
+        _recoverySaveScheduler.StateChanged += RecoverySaveScheduler_StateChanged;
+        Closed += Window_Closed;
         OpenTabsList.ItemsSource = _documents;
 
         var windowState = _settingsService.LoadNoteEditorWindowState();
@@ -92,11 +95,19 @@ public partial class NoteEditorWindow : Window
     public bool TryPrepareForClose()
     {
         CaptureActiveDocument();
-        FlushRecoveryDraft();
+        TryFlushRecoveryDraft(out _);
         if (!TryResolveDirtyDocuments(_documents))
             return false;
+        if (!SaveEditorSession())
+        {
+            ShowError(
+                "Unable to save editor session",
+                $"Noted could not close because the editor session was not saved.\n\n{_sessionPersistenceError}");
+            return false;
+        }
+        if (!TryDeletePreparedDiscardDrafts())
+            return false;
 
-        SaveEditorSession();
         _isPreparedForApplicationClose = true;
         return true;
     }
@@ -105,14 +116,18 @@ public partial class NoteEditorWindow : Window
     {
         _isPreparedForApplicationClose = false;
         _discardWhenPreparedActionCompletes.Clear();
+        ScheduleRecoveryDraftSave();
     }
 
     internal void RestoreEditorSession()
     {
-        var session = _settingsService.LoadRestoreEditorSession()
+        var sessionLoadResult = _settingsService.LoadRestoreEditorSession()
             ? _sessionService.Load()
-            : new NoteEditorSession();
-        var recoveredDrafts = _recoveryService.LoadDrafts()
+            : new NoteEditorSessionLoadResult(new NoteEditorSession(), []);
+        var recoveryLoadResult = _recoveryService.LoadDrafts();
+        var recoveryIssues = recoveryLoadResult.Issues.ToList();
+        var session = sessionLoadResult.Session;
+        var recoveredDrafts = recoveryLoadResult.Drafts
             .ToDictionary(draft => draft.FilePath, StringComparer.OrdinalIgnoreCase);
         var restoredPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -121,7 +136,7 @@ public partial class NoteEditorWindow : Window
         {
             foreach (var tabState in session.Tabs)
             {
-                if (TryRestoreDocument(tabState, recoveredDrafts, out var document) &&
+                if (TryRestoreDocument(tabState, recoveredDrafts, recoveryIssues, out var document) &&
                     restoredPaths.Add(document.FilePath))
                 {
                     _documents.Add(document);
@@ -131,7 +146,7 @@ public partial class NoteEditorWindow : Window
             foreach (var draft in recoveredDrafts.Values)
             {
                 if (restoredPaths.Contains(draft.FilePath) ||
-                    !TryRestoreDraftOnlyDocument(draft, out var document))
+                    !TryRestoreDraftOnlyDocument(draft, recoveryIssues, out var document))
                 {
                     continue;
                 }
@@ -140,21 +155,24 @@ public partial class NoteEditorWindow : Window
                 restoredPaths.Add(document.FilePath);
             }
 
-            if (_documents.Count == 0)
-                return;
-
-            var activeDocument = _documents.FirstOrDefault(document =>
-                    PathsEqual(document.FilePath, session.ActiveFilePath))
-                ?? _documents[0];
-            ActivateDocument(activeDocument);
-            ShowWindow();
+            if (_documents.Count > 0)
+            {
+                var activeDocument = _documents.FirstOrDefault(document =>
+                        PathsEqual(document.FilePath, session.ActiveFilePath))
+                    ?? _documents[0];
+                ActivateDocument(activeDocument);
+                ShowWindow();
+            }
         }
         finally
         {
             _suppressSessionSave = false;
         }
 
-        SaveEditorSession();
+        if (_documents.Count > 0)
+            SaveEditorSession();
+
+        ShowRecoveryIssues(recoveryIssues, sessionLoadResult.Issues);
     }
 
     public bool IsEditingFile(string filePath)
@@ -201,9 +219,18 @@ public partial class NoteEditorWindow : Window
     public void NotifyFileRemoved(string filePath)
     {
         var document = FindDocument(filePath);
-        _recoveryService.DeleteDraft(filePath);
         if (document is not null)
-            RemoveDocument(document, deleteRecoveryDraft: false);
+        {
+            if (!RemoveDocument(document, deleteRecoveryDraft: true))
+            {
+                document.IsMissing = true;
+                UpdateEditorState();
+            }
+            return;
+        }
+
+        if (!TryDeleteRecoveryDraft(filePath, out var error))
+            ShowRecoveryCleanupWarning(error!);
     }
 
     public void NotifyDirectoryRemoved(string directoryPath)
@@ -213,7 +240,11 @@ public partial class NoteEditorWindow : Window
             .Where(document => IsPathWithin(document.FilePath, normalizedDirectory))
             .ToList();
         foreach (var document in affectedDocuments)
-            RemoveDocument(document, deleteRecoveryDraft: true);
+        {
+            if (!RemoveDocument(document, deleteRecoveryDraft: true))
+                document.IsMissing = true;
+        }
+        UpdateEditorState();
     }
 
     public void NotifyFileRenamed(string oldFilePath, string newFilePath)
@@ -268,7 +299,8 @@ public partial class NoteEditorWindow : Window
         }
 
         _discardWhenPreparedActionCompletes.Clear();
-        ClearEditorSurface();
+        if (_documents.Count == 0)
+            ClearEditorSurface();
         SaveEditorSession();
     }
 
@@ -286,7 +318,7 @@ public partial class NoteEditorWindow : Window
     public void HideWindow()
     {
         CaptureActiveDocument();
-        FlushRecoveryDraft();
+        TryFlushRecoveryDraft(out _);
         SaveEditorSession();
         Hide();
     }
@@ -329,13 +361,15 @@ public partial class NoteEditorWindow : Window
         try
         {
             var persistedContent = _contentService.Load(normalizedPath);
-            var draft = _recoveryService.LoadDraft(normalizedPath);
+            var loadResult = _recoveryService.LoadDraft(normalizedPath);
+            var issues = loadResult.Issues.ToList();
+            var draft = loadResult.Draft;
             var recoveredContent = draft is not null &&
                                    !string.Equals(draft.Content, persistedContent, StringComparison.Ordinal)
                 ? draft.Content
                 : persistedContent;
             if (draft is not null && string.Equals(draft.Content, persistedContent, StringComparison.Ordinal))
-                _recoveryService.DeleteDraft(normalizedPath);
+                AddRecoveryCleanupIssue(normalizedPath, issues);
 
             var document = new OpenNoteDocument(
                 normalizedPath,
@@ -346,6 +380,7 @@ public partial class NoteEditorWindow : Window
             ActivateDocument(document);
             SaveEditorSession();
             ShowWindow();
+            ShowRecoveryIssues(issues, []);
             return true;
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
@@ -358,6 +393,7 @@ public partial class NoteEditorWindow : Window
     private bool TryRestoreDocument(
         NoteEditorTabState tabState,
         IReadOnlyDictionary<string, NoteRecoveryDraft> drafts,
+        ICollection<NoteRecoveryIssue> issues,
         out OpenNoteDocument document)
     {
         document = null!;
@@ -391,7 +427,7 @@ public partial class NoteEditorWindow : Window
                 ? draft.Content
                 : persistedContent;
             if (draft is not null && string.Equals(draft.Content, persistedContent, StringComparison.Ordinal))
-                _recoveryService.DeleteDraft(normalizedPath);
+                AddRecoveryCleanupIssue(normalizedPath, issues);
 
             document = new OpenNoteDocument(
                 normalizedPath,
@@ -412,6 +448,7 @@ public partial class NoteEditorWindow : Window
 
     private bool TryRestoreDraftOnlyDocument(
         NoteRecoveryDraft draft,
+        ICollection<NoteRecoveryIssue> issues,
         out OpenNoteDocument document)
     {
         document = null!;
@@ -432,7 +469,7 @@ public partial class NoteEditorWindow : Window
             var persistedContent = _contentService.Load(draft.FilePath);
             if (string.Equals(draft.Content, persistedContent, StringComparison.Ordinal))
             {
-                _recoveryService.DeleteDraft(draft.FilePath);
+                AddRecoveryCleanupIssue(draft.FilePath, issues);
                 return false;
             }
 
@@ -461,7 +498,7 @@ public partial class NoteEditorWindow : Window
         }
 
         CaptureActiveDocument();
-        FlushRecoveryDraft();
+        TryFlushRecoveryDraft(out _);
         _activeDocument = document;
 
         _isLoading = true;
@@ -534,7 +571,9 @@ public partial class NoteEditorWindow : Window
             document.SavedContent = document.Content;
             document.IsDirty = false;
             _discardWhenPreparedActionCompletes.Remove(document);
-            _recoveryService.DeleteDraft(document.FilePath);
+            RefreshScheduledRecoveryDrafts();
+            if (!TryDeleteRecoveryDraft(document.FilePath, out var cleanupError))
+                ShowRecoveryCleanupWarning(cleanupError!);
             if (ReferenceEquals(document, _activeDocument))
                 UpdateEditorState();
             return true;
@@ -546,17 +585,23 @@ public partial class NoteEditorWindow : Window
         }
     }
 
-    private void RemoveDocument(
+    private bool RemoveDocument(
         OpenNoteDocument document,
         bool deleteRecoveryDraft,
         bool saveSession = true)
     {
         var index = _documents.IndexOf(document);
-        if (deleteRecoveryDraft)
-            _recoveryService.DeleteDraft(document.FilePath);
+        if (deleteRecoveryDraft &&
+            !TryDeleteRecoveryDraft(document.FilePath, out var cleanupError))
+        {
+            ShowRecoveryCleanupWarning(cleanupError!);
+            if (document.IsDirty)
+                return false;
+        }
 
         _discardWhenPreparedActionCompletes.Remove(document);
         _documents.Remove(document);
+        RefreshScheduledRecoveryDrafts();
 
         if (ReferenceEquals(_activeDocument, document))
         {
@@ -572,11 +617,12 @@ public partial class NoteEditorWindow : Window
 
         if (saveSession)
             SaveEditorSession();
+        return true;
     }
 
     private void ClearEditorSurface()
     {
-        _recoverySaveTimer.Stop();
+        RefreshScheduledRecoveryDrafts();
         _activeDocument = null;
         _isLoading = true;
         EditorTextBox.Clear();
@@ -644,57 +690,80 @@ public partial class NoteEditorWindow : Window
 
     private void ScheduleRecoveryDraftSave()
     {
-        _recoverySaveTimer.Stop();
-        if (_activeDocument?.IsDirty == true)
+        RefreshScheduledRecoveryDrafts();
+        if (_activeDocument is { IsDirty: false } document)
+            TryDeleteRecoveryDraft(document.FilePath, out _);
+    }
+
+    private void RefreshScheduledRecoveryDrafts()
+    {
+        var snapshots = _documents
+            .Where(document => document.IsDirty)
+            .Select(document => new RecoveryDraftSnapshot(document.FilePath, document.Content))
+            .OrderBy(snapshot => snapshot.FilePath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (snapshots.Count == 0)
         {
-            _recoverySaveTimer.Start();
+            _recoverySaveScheduler.CancelPending();
             return;
         }
 
-        if (_activeDocument is not null)
-            _recoveryService.DeleteDraft(_activeDocument.FilePath);
+        _recoverySaveScheduler.Schedule(snapshots);
     }
 
-    private void RecoverySaveTimer_Tick(object? sender, EventArgs e)
+    private bool TryFlushRecoveryDraft(out string? error)
     {
-        _recoverySaveTimer.Stop();
-        FlushRecoveryDraft();
-    }
-
-    private void FlushRecoveryDraft()
-    {
-        _recoverySaveTimer.Stop();
         CaptureActiveDocument();
-        if (_activeDocument?.IsDirty != true)
-            return;
+        RefreshScheduledRecoveryDrafts();
+        return _recoverySaveScheduler.TryFlush(out error);
+    }
 
-        try
+    private PersistenceSaveResult SaveRecoveryDraftSnapshots(
+        IReadOnlyList<RecoveryDraftSnapshot> snapshots)
+    {
+        var failures = new List<string>();
+        foreach (var snapshot in snapshots)
         {
-            _recoveryService.SaveDraft(_activeDocument.FilePath, _activeDocument.Content);
+            try
+            {
+                _recoveryService.SaveDraft(snapshot.FilePath, snapshot.Content);
+            }
+            catch (Exception ex) when (IsExpectedFileException(ex))
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+                failures.Add($"'{Path.GetFileName(snapshot.FilePath)}': {ex.Message}");
+            }
         }
-        catch (Exception ex) when (IsExpectedFileException(ex))
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-        }
+
+        return failures.Count == 0
+            ? PersistenceSaveResult.Succeeded()
+            : PersistenceSaveResult.Failed(
+                $"Unsaved note recovery data could not be saved. {string.Join(" ", failures)}");
     }
 
     private void MoveRecoveryDraft(string oldFilePath, OpenNoteDocument document)
     {
+        RefreshScheduledRecoveryDrafts();
         try
         {
-            _recoveryService.MoveDraft(oldFilePath, document.FilePath);
             _recoveryService.SaveDraft(document.FilePath, document.Content);
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
             System.Diagnostics.Debug.WriteLine(ex);
+            _recoveryOperationError =
+                $"Recovery data for '{document.DisplayName}' could not be saved after the note was renamed: {ex.Message}";
+            UpdatePersistenceErrorState();
+            return;
         }
+
+        TryDeleteRecoveryDraft(oldFilePath, out _);
     }
 
-    private void SaveEditorSession()
+    private bool SaveEditorSession()
     {
         if (_suppressSessionSave)
-            return;
+            return true;
 
         CaptureActiveDocument();
         try
@@ -710,11 +779,122 @@ public partial class NoteEditorWindow : Window
                 }).ToList(),
                 ActiveFilePath = _activeDocument?.FilePath
             });
+            _sessionPersistenceError = null;
+            UpdatePersistenceErrorState();
+            return true;
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
             System.Diagnostics.Debug.WriteLine(ex);
+            _sessionPersistenceError = $"The note editor session could not be saved: {ex.Message}";
+            UpdatePersistenceErrorState();
+            return false;
         }
+    }
+
+    private bool TryDeletePreparedDiscardDrafts()
+    {
+        foreach (var document in _discardWhenPreparedActionCompletes.ToList())
+        {
+            if (TryDeleteRecoveryDraft(document.FilePath, out var error))
+                continue;
+
+            RefreshScheduledRecoveryDrafts();
+            _recoverySaveScheduler.TryFlush(out _);
+            ShowRecoveryCleanupWarning(error!);
+            return false;
+        }
+
+        _discardWhenPreparedActionCompletes.Clear();
+        _recoverySaveScheduler.CancelPending();
+        return true;
+    }
+
+    private bool TryDeleteRecoveryDraft(string filePath, out string? error)
+    {
+        try
+        {
+            _recoveryService.DeleteDraft(filePath);
+            _recoveryOperationError = null;
+            error = null;
+            UpdatePersistenceErrorState();
+            return true;
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+            error = $"Recovery data for '{Path.GetFileName(filePath)}' could not be removed: {ex.Message}";
+            _recoveryOperationError = error;
+            UpdatePersistenceErrorState();
+            return false;
+        }
+    }
+
+    private void AddRecoveryCleanupIssue(
+        string filePath,
+        ICollection<NoteRecoveryIssue> issues)
+    {
+        if (!TryDeleteRecoveryDraft(filePath, out var error))
+            issues.Add(new NoteRecoveryIssue(filePath, error!));
+    }
+
+    private void RecoverySaveScheduler_StateChanged(object? sender, EventArgs e)
+    {
+        UpdatePersistenceErrorState();
+    }
+
+    private void UpdatePersistenceErrorState()
+    {
+        var errors = new[]
+            {
+                _recoverySaveScheduler.LastError,
+                _recoveryOperationError,
+                _sessionPersistenceError
+            }
+            .Where(error => !string.IsNullOrWhiteSpace(error))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        PersistenceErrorText.Text = string.Join("\n", errors);
+        PersistenceErrorPanel.Visibility = errors.Count == 0
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
+    private void ShowRecoveryCleanupWarning(string message)
+    {
+        var fullMessage =
+            $"Noted could not remove note recovery data. The affected tab or recovery copy was kept so the unsaved text was not silently discarded.\n\n{message}";
+        if (IsVisible)
+            AppDialog.Show(this, fullMessage, "Recovery Cleanup Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+        else
+            AppDialog.Show(fullMessage, "Recovery Cleanup Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+
+    private void ShowRecoveryIssues(
+        IReadOnlyCollection<NoteRecoveryIssue> recoveryIssues,
+        IReadOnlyCollection<NoteEditorSessionIssue> sessionIssues)
+    {
+        var issues = recoveryIssues
+            .Select(issue => $"{Path.GetFileName(issue.FilePath)}: {issue.Message}")
+            .Concat(sessionIssues.Select(issue => $"{Path.GetFileName(issue.FilePath)}: {issue.Message}"))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (issues.Count == 0)
+            return;
+
+        const int maximumShownIssues = 5;
+        var issueText = string.Join("\n", issues.Take(maximumShownIssues));
+        var remainingCount = issues.Count - maximumShownIssues;
+        var remainingText = remainingCount > 0
+            ? $"\n\n{remainingCount} additional recovery issue(s) were not shown."
+            : string.Empty;
+        var message =
+            $"Some note editor recovery files need attention. No recoverable content was silently discarded.\n\n{issueText}{remainingText}";
+
+        if (IsVisible)
+            AppDialog.Show(this, message, "Note Editor Recovery", MessageBoxButton.OK, MessageBoxImage.Warning);
+        else
+            AppDialog.Show(message, "Note Editor Recovery", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
     private void SaveWindowSize()
@@ -1097,19 +1277,22 @@ public partial class NoteEditorWindow : Window
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
         SaveWindowSize();
-        CaptureActiveDocument();
-        FlushRecoveryDraft();
-        SaveEditorSession();
-
         if (_isPreparedForApplicationClose)
-        {
-            foreach (var document in _discardWhenPreparedActionCompletes)
-                _recoveryService.DeleteDraft(document.FilePath);
             return;
-        }
+
+        CaptureActiveDocument();
+        TryFlushRecoveryDraft(out _);
+        SaveEditorSession();
 
         e.Cancel = true;
         Hide();
+    }
+
+    private void Window_Closed(object? sender, EventArgs e)
+    {
+        _recoverySaveScheduler.StateChanged -= RecoverySaveScheduler_StateChanged;
+        _recoverySaveScheduler.Dispose();
+        Closed -= Window_Closed;
     }
 
     private static string NormalizePath(string path)
@@ -1154,4 +1337,6 @@ public partial class NoteEditorWindow : Window
             ? Math.Clamp(value, MinimumTabsPanelWidth, MaximumTabsPanelWidth)
             : DefaultTabsPanelWidth;
     }
+
+    private sealed record RecoveryDraftSnapshot(string FilePath, string Content);
 }

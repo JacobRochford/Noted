@@ -231,6 +231,19 @@
             </Grid>
         </Border>
 
+        <Border x:Name="PersistenceErrorPanel"
+                DockPanel.Dock="Bottom"
+                Padding="8,5"
+                Background="#FFF4E5"
+                BorderBrush="#E5A23B"
+                BorderThickness="0,1,0,0"
+                Visibility="Collapsed">
+            <TextBlock x:Name="PersistenceErrorText"
+                       Foreground="#7A3E00"
+                       FontSize="11"
+                       TextWrapping="Wrap"/>
+        </Border>
+
         <Border Margin="10"
                 Padding="1"
                 Background="White"

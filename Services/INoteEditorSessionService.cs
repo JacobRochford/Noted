@@ -14,8 +14,16 @@ public sealed record NoteEditorSession
     public string? ActiveFilePath { get; init; }
 }
 
+public sealed record NoteEditorSessionIssue(
+    string FilePath,
+    string Message);
+
+public sealed record NoteEditorSessionLoadResult(
+    NoteEditorSession Session,
+    IReadOnlyList<NoteEditorSessionIssue> Issues);
+
 public interface INoteEditorSessionService
 {
-    NoteEditorSession Load();
+    NoteEditorSessionLoadResult Load();
     void Save(NoteEditorSession session);
 }

@@ -7,8 +7,12 @@ namespace Noted.Services;
 
 public sealed class NoteRecoveryService : INoteRecoveryService
 {
+    private const string PrimaryFileSuffix = ".json";
+    private const string BackupFileSuffix = ".json.bak";
     private readonly string _recoveryDirectory;
     private readonly string _legacyDraftFilePath;
+    private readonly HashSet<string> _preserveBackupOnNextSave =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public NoteRecoveryService(string storageDirectory)
     {
@@ -17,36 +21,43 @@ public sealed class NoteRecoveryService : INoteRecoveryService
         _legacyDraftFilePath = Path.Combine(_recoveryDirectory, "editor-draft.json");
     }
 
-    public NoteRecoveryDraft? LoadDraft()
-    {
-        return LoadDrafts().LastOrDefault();
-    }
-
-    public NoteRecoveryDraft? LoadDraft(string filePath)
+    public NoteRecoveryDraftLoadResult LoadDraft(string filePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         var normalizedPath = Path.GetFullPath(filePath);
-        var draft = LoadDraftFile(GetDraftFilePath(normalizedPath));
+        var issues = new List<NoteRecoveryIssue>();
+        var primaryPath = GetDraftFilePath(normalizedPath);
+        var draft = LoadDraftPair(primaryPath, issues);
         if (draft is not null && PathsEqual(draft.FilePath, normalizedPath))
-            return draft;
+            return new NoteRecoveryDraftLoadResult(draft, issues);
 
-        var legacyDraft = LoadDraftFile(_legacyDraftFilePath);
-        return legacyDraft is not null && PathsEqual(legacyDraft.FilePath, normalizedPath)
-            ? legacyDraft
-            : null;
+        var legacyDraft = LoadDraftPair(_legacyDraftFilePath, issues);
+        return new NoteRecoveryDraftLoadResult(
+            legacyDraft is not null && PathsEqual(legacyDraft.FilePath, normalizedPath)
+                ? legacyDraft
+                : null,
+            issues);
     }
 
-    public IReadOnlyList<NoteRecoveryDraft> LoadDrafts()
+    public NoteRecoveryLoadResult LoadDrafts()
     {
         if (!Directory.Exists(_recoveryDirectory))
-            return Array.Empty<NoteRecoveryDraft>();
+            return new NoteRecoveryLoadResult([], []);
 
+        var drafts = new Dictionary<string, NoteRecoveryDraft>(StringComparer.OrdinalIgnoreCase);
+        var issues = new List<NoteRecoveryIssue>();
         try
         {
-            var drafts = new Dictionary<string, NoteRecoveryDraft>(StringComparer.OrdinalIgnoreCase);
-            foreach (var path in Directory.EnumerateFiles(_recoveryDirectory, "*.json"))
+            var primaryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in Directory.EnumerateFiles(_recoveryDirectory))
             {
-                var draft = LoadDraftFile(path);
+                if (TryGetPrimaryPath(path, out var primaryPath))
+                    primaryPaths.Add(primaryPath);
+            }
+
+            foreach (var primaryPath in primaryPaths)
+            {
+                var draft = LoadDraftPair(primaryPath, issues);
                 if (draft is not null &&
                     (!drafts.TryGetValue(draft.FilePath, out var existing) ||
                      draft.UpdatedUtc > existing.UpdatedUtc))
@@ -54,16 +65,18 @@ public sealed class NoteRecoveryService : INoteRecoveryService
                     drafts[draft.FilePath] = draft;
                 }
             }
-
-            return drafts.Values
-                .OrderBy(draft => draft.UpdatedUtc)
-                .ToList();
         }
         catch (Exception ex) when (IsExpectedRecoveryException(ex))
         {
             System.Diagnostics.Debug.WriteLine(ex);
-            return Array.Empty<NoteRecoveryDraft>();
+            issues.Add(new NoteRecoveryIssue(
+                _recoveryDirectory,
+                $"The note recovery folder could not be read: {ex.Message}"));
         }
+
+        return new NoteRecoveryLoadResult(
+            drafts.Values.OrderBy(draft => draft.UpdatedUtc).ToList(),
+            issues);
     }
 
     public void SaveDraft(string filePath, string content)
@@ -76,59 +89,215 @@ public sealed class NoteRecoveryService : INoteRecoveryService
             throw new ArgumentException("Unsupported note file type.", nameof(filePath));
 
         var draftFilePath = GetDraftFilePath(normalizedPath);
-        var draft = new NoteRecoveryDraft(normalizedPath, content, DateTime.UtcNow);
-
-        var json = JsonSerializer.Serialize(draft);
-        FileWriter.WriteAllText(draftFilePath, json);
-
-        var legacyDraft = LoadDraftFile(_legacyDraftFilePath);
-        if (legacyDraft is not null && PathsEqual(legacyDraft.FilePath, normalizedPath))
-            TryDeleteFile(_legacyDraftFilePath);
+        var preserveBackup = _preserveBackupOnNextSave.Contains(draftFilePath);
+        JsonFileStore.Write(
+            draftFilePath,
+            new NoteRecoveryDraft(normalizedPath, content, DateTime.UtcNow),
+            preserveBackup ? null : GetBackupFilePath(draftFilePath));
+        if (preserveBackup)
+            _preserveBackupOnNextSave.Remove(draftFilePath);
     }
 
     public void DeleteDraft(string filePath)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         var normalizedPath = Path.GetFullPath(filePath);
-        TryDeleteFile(GetDraftFilePath(normalizedPath));
+        var draftFilePath = GetDraftFilePath(normalizedPath);
+        var failures = new List<Exception>();
 
-        var legacyDraft = LoadDraftFile(_legacyDraftFilePath);
-        if (legacyDraft is not null && PathsEqual(legacyDraft.FilePath, normalizedPath))
-            TryDeleteFile(_legacyDraftFilePath);
+        DeleteRecoveryFamily(draftFilePath, failures);
+
+        var legacyDraft = ReadDraft(_legacyDraftFilePath);
+        if (legacyDraft.Draft is not null && PathsEqual(legacyDraft.Draft.FilePath, normalizedPath))
+            DeleteRecoveryFamily(_legacyDraftFilePath, failures);
+
+        if (failures.Count > 0)
+        {
+            var details = string.Join(
+                " ",
+                failures.Select(failure => failure.Message).Distinct(StringComparer.Ordinal));
+            throw new IOException(
+                $"One or more recovery files for '{Path.GetFileName(normalizedPath)}' could not be deleted. {details}",
+                new AggregateException(failures));
+        }
+
+        _preserveBackupOnNextSave.Remove(draftFilePath);
     }
 
-    public void MoveDraft(string oldFilePath, string newFilePath)
+    private NoteRecoveryDraft? LoadDraftPair(
+        string primaryPath,
+        ICollection<NoteRecoveryIssue> issues)
     {
-        var draft = LoadDraft(oldFilePath);
-        if (draft is null || !PathsEqual(draft.FilePath, oldFilePath))
-            return;
+        var primary = ReadDraft(primaryPath);
+        if (primary.Draft is not null)
+            return primary.Draft;
 
-        SaveDraft(newFilePath, draft.Content);
-        DeleteDraft(oldFilePath);
+        var backupPath = GetBackupFilePath(primaryPath);
+        var backup = ReadDraft(backupPath);
+        if (backup.Draft is not null)
+        {
+            var preservedPath = PreserveCorruptFile(primaryPath, primary.Status, issues);
+            if (primary.Status == JsonFileReadStatus.Unavailable ||
+                (primary.Status == JsonFileReadStatus.Corrupt && preservedPath is null))
+            {
+                _preserveBackupOnNextSave.Add(primaryPath);
+            }
+
+            issues.Add(new NoteRecoveryIssue(
+                primaryPath,
+                primary.Status == JsonFileReadStatus.Missing
+                    ? $"The recovery draft for '{Path.GetFileName(backup.Draft.FilePath)}' was restored from its backup because the primary file was missing."
+                    : $"The recovery draft for '{Path.GetFileName(backup.Draft.FilePath)}' was restored from its backup because the primary file could not be loaded."));
+            return backup.Draft;
+        }
+
+        PreserveCorruptFile(primaryPath, primary.Status, issues);
+        PreserveCorruptFile(backupPath, backup.Status, issues);
+
+        var failure = primary.Status != JsonFileReadStatus.Missing
+            ? primary
+            : backup;
+        if (failure.Status != JsonFileReadStatus.Missing)
+        {
+            issues.Add(new NoteRecoveryIssue(
+                failure.Path,
+                $"A note recovery draft could not be restored: {failure.Error ?? "the recovery file is invalid."}"));
+        }
+
+        return null;
     }
 
-    private NoteRecoveryDraft? LoadDraftFile(string path)
+    private DraftReadAttempt ReadDraft(string path)
     {
-        if (!File.Exists(path))
-            return null;
+        var result = JsonFileStore.Read<NoteRecoveryDraft>(path);
+        if (!result.Success)
+            return new DraftReadAttempt(path, result.Status, null, result.Error?.Message);
 
         try
         {
-            var json = File.ReadAllText(path, Encoding.UTF8);
-            var draft = JsonSerializer.Deserialize<NoteRecoveryDraft>(json);
-            if (draft is null ||
-                string.IsNullOrWhiteSpace(draft.FilePath) ||
+            var draft = result.Value!;
+            if (string.IsNullOrWhiteSpace(draft.FilePath) ||
                 !NoteFileExtensions.IsSupported(draft.FilePath))
             {
-                return null;
+                return new DraftReadAttempt(
+                    path,
+                    JsonFileReadStatus.Corrupt,
+                    null,
+                    "The recovery draft does not contain a supported note path.");
             }
 
-            return draft with { FilePath = Path.GetFullPath(draft.FilePath) };
+            var normalizedDraft = draft with { FilePath = Path.GetFullPath(draft.FilePath) };
+            var expectedPath = GetDraftFilePath(normalizedDraft.FilePath);
+            if (!PathsEqual(path, _legacyDraftFilePath) &&
+                !PathsEqual(path, GetBackupFilePath(_legacyDraftFilePath)) &&
+                !PathsEqual(path, expectedPath) &&
+                !PathsEqual(path, GetBackupFilePath(expectedPath)))
+            {
+                return new DraftReadAttempt(
+                    path,
+                    JsonFileReadStatus.Corrupt,
+                    null,
+                    "The note path inside the recovery draft does not match its file name.");
+            }
+
+            return new DraftReadAttempt(
+                path,
+                JsonFileReadStatus.Success,
+                normalizedDraft,
+                null);
+        }
+        catch (Exception ex) when (IsExpectedRecoveryException(ex))
+        {
+            return new DraftReadAttempt(path, JsonFileReadStatus.Corrupt, null, ex.Message);
+        }
+    }
+
+    private void DeleteRecoveryFamily(string primaryPath, ICollection<Exception> failures)
+    {
+        DeleteFile(primaryPath, failures);
+        DeleteFile(GetBackupFilePath(primaryPath), failures);
+
+        try
+        {
+            if (!Directory.Exists(_recoveryDirectory))
+                return;
+
+            foreach (var path in Directory.EnumerateFiles(
+                         _recoveryDirectory,
+                         $"{Path.GetFileName(primaryPath)}.corrupt-*"))
+            {
+                DeleteFile(path, failures);
+            }
+
+            foreach (var path in Directory.EnumerateFiles(
+                         _recoveryDirectory,
+                         $"{Path.GetFileName(GetBackupFilePath(primaryPath))}.corrupt-*"))
+            {
+                DeleteFile(path, failures);
+            }
+        }
+        catch (Exception ex) when (IsExpectedRecoveryException(ex))
+        {
+            failures.Add(ex);
+        }
+    }
+
+    private static string? PreserveCorruptFile(
+        string path,
+        JsonFileReadStatus status,
+        ICollection<NoteRecoveryIssue> issues)
+    {
+        if (status != JsonFileReadStatus.Corrupt || !File.Exists(path))
+            return null;
+
+        var preservedPath =
+            $"{path}.corrupt-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}";
+        try
+        {
+            File.Move(path, preservedPath);
+            issues.Add(new NoteRecoveryIssue(
+                path,
+                $"The corrupt note recovery file was preserved as '{Path.GetFileName(preservedPath)}'."));
+            return preservedPath;
         }
         catch (Exception ex) when (IsExpectedRecoveryException(ex))
         {
             System.Diagnostics.Debug.WriteLine(ex);
+            issues.Add(new NoteRecoveryIssue(
+                path,
+                $"The corrupt note recovery file could not be preserved under a new name: {ex.Message}"));
             return null;
         }
+    }
+
+    private static void DeleteFile(string path, ICollection<Exception> failures)
+    {
+        try
+        {
+            FileWriter.DeleteIfExists(path);
+        }
+        catch (Exception ex) when (IsExpectedRecoveryException(ex))
+        {
+            failures.Add(ex);
+        }
+    }
+
+    private static bool TryGetPrimaryPath(string path, out string primaryPath)
+    {
+        if (path.EndsWith(BackupFileSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            primaryPath = path[..^".bak".Length];
+            return true;
+        }
+
+        if (path.EndsWith(PrimaryFileSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            primaryPath = path;
+            return true;
+        }
+
+        primaryPath = string.Empty;
+        return false;
     }
 
     private string GetDraftFilePath(string filePath)
@@ -137,6 +306,9 @@ public sealed class NoteRecoveryService : INoteRecoveryService
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath)));
         return Path.Combine(_recoveryDirectory, $"{hash}.json");
     }
+
+    private static string GetBackupFilePath(string primaryPath) =>
+        $"{primaryPath}.bak";
 
     private static bool PathsEqual(string left, string right)
     {
@@ -156,16 +328,9 @@ public sealed class NoteRecoveryService : INoteRecoveryService
             NotSupportedException;
     }
 
-    private static void TryDeleteFile(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch (Exception ex) when (IsExpectedRecoveryException(ex))
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-        }
-    }
+    private sealed record DraftReadAttempt(
+        string Path,
+        JsonFileReadStatus Status,
+        NoteRecoveryDraft? Draft,
+        string? Error);
 }
