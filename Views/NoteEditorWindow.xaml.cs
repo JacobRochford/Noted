@@ -567,7 +567,30 @@ public partial class NoteEditorWindow : Window
 
         try
         {
-            _contentService.Save(document.FilePath, document.Content);
+            var persistedContent = _contentService.Load(document.FilePath);
+            if (!string.Equals(
+                    persistedContent,
+                    document.SavedContent,
+                    StringComparison.Ordinal))
+            {
+                if (!string.Equals(
+                        persistedContent,
+                        document.Content,
+                        StringComparison.Ordinal))
+                {
+                    ShowError(
+                        "Note changed outside Noted",
+                        $"'{document.DisplayName}' changed on disk after it was opened. " +
+                        "Noted did not overwrite the newer file. Copy your edits if needed, " +
+                        "then close and reopen the tab to load the current file.");
+                    return false;
+                }
+            }
+            else
+            {
+                _contentService.Save(document.FilePath, document.Content);
+            }
+
             document.SavedContent = document.Content;
             document.IsDirty = false;
             _discardWhenPreparedActionCompletes.Remove(document);
