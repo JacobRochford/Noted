@@ -20,6 +20,9 @@ public partial class App : Application
     private ChecklistWindow? _checklistWindow;
     private DictionaryWindow? _dictionaryWindow;
     private ScratchpadWindow? _scratchpadWindow;
+    private readonly ShutdownFlushCoordinator _shutdownFlushCoordinator = new();
+    private IDisposable? _checklistShutdownRegistration;
+    private IDisposable? _dictionaryShutdownRegistration;
     private readonly HashSet<MicroScratchpadWindow> _microScratchpadWindows = [];
     private IMicroScratchpadRecoveryService? _microScratchpadRecoveryService;
     private bool _isShuttingDown;
@@ -153,6 +156,11 @@ public partial class App : Application
             CloseExistingWindow(_noteEditorWindow, "note editor");
             CloseMicroScratchpadWindows();
 
+            _checklistShutdownRegistration?.Dispose();
+            _checklistShutdownRegistration = null;
+            _dictionaryShutdownRegistration?.Dispose();
+            _dictionaryShutdownRegistration = null;
+
             mainWindow?.CleanupResources();
             try { _fileService?.Dispose(); } catch (Exception ex) { Debug.WriteLine(ex); }
             WindowManager.ClearAll();
@@ -192,6 +200,16 @@ public partial class App : Application
         var window = new ChecklistWindow(
             settings,
             new ChecklistContentService(settings.AppDataDirectory, settings));
+        _checklistShutdownRegistration = _shutdownFlushCoordinator.Register(
+            "Checklist",
+            () =>
+            {
+                var success = window.TryFlushPendingContent(out var error);
+                return success
+                    ? PersistenceSaveResult.Succeeded()
+                    : PersistenceSaveResult.Failed(
+                        error ?? "Checklist content could not be saved before shutdown.");
+            });
         window.Closed += ChecklistWindow_Closed;
         _checklistWindow = window;
         WindowManager.Checklist = window;
@@ -212,6 +230,16 @@ public partial class App : Application
         var window = new DictionaryWindow(
             settings,
             new DictionaryContentService(settings.AppDataDirectory, settings));
+        _dictionaryShutdownRegistration = _shutdownFlushCoordinator.Register(
+            "Dictionary",
+            () =>
+            {
+                var success = window.TryFlushPendingContent(out var error);
+                return success
+                    ? PersistenceSaveResult.Succeeded()
+                    : PersistenceSaveResult.Failed(
+                        error ?? "Dictionary content could not be saved before shutdown.");
+            });
         window.Closed += DictionaryWindow_Closed;
         _dictionaryWindow = window;
         WindowManager.Dictionary = window;
@@ -247,6 +275,8 @@ public partial class App : Application
         if (!ReferenceEquals(_checklistWindow, window))
             return;
 
+        _checklistShutdownRegistration?.Dispose();
+        _checklistShutdownRegistration = null;
         _checklistWindow = null;
         if (ReferenceEquals(WindowManager.Checklist, window))
             WindowManager.Checklist = null;
@@ -261,6 +291,8 @@ public partial class App : Application
         if (!ReferenceEquals(_dictionaryWindow, window))
             return;
 
+        _dictionaryShutdownRegistration?.Dispose();
+        _dictionaryShutdownRegistration = null;
         _dictionaryWindow = null;
         if (ReferenceEquals(WindowManager.Dictionary, window))
             WindowManager.Dictionary = null;
@@ -404,6 +436,26 @@ public partial class App : Application
             AppDialog.Show(
                 $"Noted could not close because pending Scratchpad content was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
                 "Scratchpad Save Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var toolSaveFailures = _shutdownFlushCoordinator.FlushAll();
+        if (toolSaveFailures.Count > 0)
+        {
+            e.Cancel = true;
+            var message = string.Join(
+                "\n",
+                toolSaveFailures.Select(failure =>
+                    $"{failure.ParticipantName}: {failure.Error}"));
+            if (message == _lastShutdownWarning)
+                return;
+
+            _lastShutdownWarning = message;
+            AppDialog.Show(
+                $"Noted could not close because tool content was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
+                "Tool Save Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
