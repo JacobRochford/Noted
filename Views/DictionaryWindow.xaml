@@ -15,150 +15,281 @@
         Top="150"
         MinWidth="300"
         MinHeight="350">
+
     <noted:OverlayWindow.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+        <Style x:Key="ScrollBarThumbStyle" TargetType="Thumb">
+            <Setter Property="MinHeight" Value="20"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="#91C5DE" CornerRadius="3" Margin="1,2"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernScrollBar" TargetType="ScrollBar">
+            <Setter Property="Width" Value="7"/>
+            <Setter Property="MinWidth" Value="7"/>
+            <Setter Property="Background" Value="#E6F2F8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="3">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageUpCommand"
+                                                  Background="Transparent" BorderThickness="0" Opacity="0"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource ScrollBarThumbStyle}"/>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageDownCommand"
+                                                  Background="Transparent" BorderThickness="0" Opacity="0"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource ModernScrollBar}"/>
+
+        <Style x:Key="HeaderIconBtn" TargetType="Button">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#5F7480"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBackground"
+                                Background="{TemplateBinding Background}" CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#DCEEF6"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#C9E4F0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DetailsBtn" TargetType="Button" BasedOn="{StaticResource HeaderIconBtn}">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Content" Value="&#xE70F;"/>
+            <Setter Property="Foreground" Value="#78909C"/>
+        </Style>
+
+        <Style x:Key="PrimaryBtn" TargetType="Button">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="Background" Value="#5BA8C8"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBackground"
+                                Background="{TemplateBinding Background}" CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#4A97B7"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#3E839F"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DictionaryTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#314B5A"/>
+            <Setter Property="CaretBrush" Value="#2C6E91"/>
+            <Setter Property="Padding" Value="5,4"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
     </noted:OverlayWindow.Resources>
 
-    <Grid Background="#FFFFFF" OpacityMask="White">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <Grid Background="Transparent">
+        <Border Margin="1" Background="#F5F9FC" BorderBrush="#87CEEB"
+                BorderThickness="1" CornerRadius="8">
+            <Grid Margin="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-        <!-- Resize Thumb in bottom-right corner -->
-        <Primitives:Thumb x:Name="ResizeThumb"
-                          HorizontalAlignment="Right"
-                          VerticalAlignment="Bottom"
-                          Width="20"
-                          Height="20"
-                          Cursor="SizeNWSE"
-                          Background="Transparent"
-                          Opacity="0"
-                          DragDelta="ResizeThumb_DragDelta"
-                          DragCompleted="ResizeThumb_DragCompleted"
-                          Grid.Row="0"
-                          Grid.RowSpan="3"
-                          Panel.ZIndex="999"
-                          Margin="0,0,-2,-2"/>
+                <Border x:Name="TitleBar" Grid.Row="0" Background="Transparent"
+                        Padding="2,1,0,8" Cursor="SizeAll">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                    VerticalAlignment="Center" IsHitTestVisible="False">
+                            <TextBlock Text="Aa" Margin="0,0,8,0" Foreground="#5BA8C8"
+                                       FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <TextBlock Text="Dictionary" Foreground="#2C6E91"
+                                       FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="⚠" Margin="8,0,0,0" Foreground="#B35A00"
+                                       FontSize="12" VerticalAlignment="Center"
+                                       Visibility="{Binding HasPersistenceError, Converter={StaticResource BoolToVisibility}}"
+                                       ToolTip="{Binding PersistenceError}"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="&#xE711;"
+                                Style="{StaticResource HeaderIconBtn}"
+                                Click="HideButton_Click" ToolTip="Hide"/>
+                    </Grid>
+                </Border>
 
-        <!-- Title Bar -->
-        <Border x:Name="TitleBar" Grid.Row="0" Background="#F0F0F0" BorderBrush="#D0D0D0" BorderThickness="0,0,0,1" Padding="10,8" Cursor="Hand">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <TextBlock Text="Dictionary" FontSize="14" FontWeight="SemiBold" Foreground="#333333"/>
-                    <TextBlock Text="⚠"
-                               FontSize="12" Foreground="#B35A00"
-                               Margin="8,0,0,0" VerticalAlignment="Center"
-                               Visibility="{Binding HasPersistenceError, Converter={StaticResource BoolToVisibility}}"
-                               ToolTip="{Binding PersistenceError}"/>
-                </StackPanel>
-                <Button Grid.Column="1" x:Name="HideButton" Content="✕" Click="HideButton_Click"
-                        Background="Transparent" BorderThickness="0" Foreground="#999999"
-                        FontSize="14" Padding="4,0" Margin="8,0,0,0" VerticalAlignment="Center"
-                        HorizontalContentAlignment="Center" Width="20" Height="20" Cursor="Hand"/>
+                <Border Grid.Row="1" Background="White" BorderBrush="#C9DFEC"
+                        BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                    <Grid>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="ItemsList" ItemsSource="{Binding Items}" Padding="5">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,1" Padding="5,0,4,0" CornerRadius="6">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="#EFF7FB"/>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <Border.ContextMenu>
+                                                <ContextMenu Style="{StaticResource NotedContextMenu}"
+                                                             DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                                    <MenuItem Header="Delete entry" Foreground="#B84F4F"
+                                                              Style="{StaticResource NotedContextMenuItem}"
+                                                              Click="DeleteButton_Click"/>
+                                                </ContextMenu>
+                                            </Border.ContextMenu>
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+                                                <Grid Grid.Row="0" MinHeight="43">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="30"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBox x:Name="WordTextBox" Grid.Column="0"
+                                                             Style="{StaticResource DictionaryTextBox}"
+                                                             Text="{Binding Word, UpdateSourceTrigger=PropertyChanged}"
+                                                             FontSize="13" FontWeight="SemiBold"/>
+                                                    <Button Grid.Column="1" Style="{StaticResource DetailsBtn}"
+                                                            Tag="{Binding}" Click="DescriptionLink_Click"
+                                                            ToolTip="Edit definition"/>
+                                                </Grid>
+
+                                                <Border Grid.Row="1" Margin="5,0,5,7" Padding="10,8"
+                                                        Background="#F2F8FB" BorderBrush="#D8E9F1"
+                                                        BorderThickness="1" CornerRadius="6"
+                                                        Visibility="{Binding Visibility, ElementName=DescriptionBox}">
+                                                    <StackPanel>
+                                                        <TextBlock Text="DEFINITION" Margin="1,0,0,5"
+                                                                   Foreground="#6B8795" FontSize="10"
+                                                                   FontWeight="SemiBold"/>
+                                                        <TextBox x:Name="DescriptionBox"
+                                                                 Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                                                                 MinHeight="48" MaxHeight="130"
+                                                                 Padding="7,5" Background="White"
+                                                                 BorderBrush="#C9DFEC" BorderThickness="1"
+                                                                 Foreground="#355A6E" CaretBrush="#2C6E91"
+                                                                 FontSize="12" TextWrapping="Wrap"
+                                                                 AcceptsReturn="True"
+                                                                 VerticalScrollBarVisibility="Auto"
+                                                                 Visibility="Collapsed"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    IsHitTestVisible="False">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Items.Count}" Value="0">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <TextBlock Text="Aa" Foreground="#B8D5E2" FontSize="22"
+                                       FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                            <TextBlock Text="No entries yet" Margin="0,5,0,0"
+                                       Foreground="#8EA5B1" FontSize="12"
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="2" Margin="1,8,1,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding Items.Count, StringFormat={}{0} entries}"
+                               Foreground="#78909C" FontSize="11" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <CheckBox Content="Ghost" Margin="0,0,8,0"
+                                  IsChecked="{Binding GhostModeEnabled, Mode=TwoWay}"
+                                  Foreground="#78909C" FontSize="11" VerticalAlignment="Center"/>
+                        <Button Content="+ Add" Style="{StaticResource PrimaryBtn}"
+                                Click="AddButton_Click" ToolTip="Add entry"/>
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Border>
 
-        <!-- Items List -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <ItemsControl x:Name="ItemsList"
-                          ItemsSource="{Binding Items}"
-                          Padding="8">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Background="White" BorderBrush="#E8E8E8" BorderThickness="0,0,0,1" Padding="6" Margin="0,0,0,4">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-
-                                <!-- Top row: word | view | delete -->
-                                <Grid Grid.Row="0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-
-                                    <!-- Word -->
-                                    <TextBox x:Name="WordTextBox"
-                                       Grid.Column="0"
-                                       Text="{Binding Word, UpdateSourceTrigger=PropertyChanged}"
-                                       Background="Transparent"
-                                       BorderThickness="0"
-                                       Padding="4,2"
-                                       FontSize="13"
-                                       FontWeight="SemiBold"
-                                       Foreground="#333333"
-                                       VerticalAlignment="Center"/>
-
-                                    <!-- Small inline description toggle (right side) -->
-                                    <TextBlock Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                                        <Hyperlink Click="DescriptionLink_Click" Tag="{Binding}">
-                                          <Run Foreground="#0066CC" FontSize="12">Toggle Definition</Run>
-                                        </Hyperlink>
-                                    </TextBlock>
-
-                                    <!-- Delete -->
-                                    <Button Grid.Column="2" Content="✕" Click="DeleteButton_Click"
-                                      Background="Transparent" BorderThickness="0" Foreground="#999999"
-                                      FontSize="12" Padding="4,2" Margin="8,0,0,0" VerticalAlignment="Center"
-                                      HorizontalContentAlignment="Center" Width="22" Height="22"/>
-                                </Grid>
-
-                                <!-- Collapsible description (keeps small min height) -->
-                                <TextBox x:Name="DescriptionBox"
-                                     Grid.Row="1"
-                                     Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
-                                     Background="#F8F8F8"
-                                     BorderBrush="#E0E0E0"
-                                     BorderThickness="1"
-                                     Padding="6,4"
-                                     FontSize="12"
-                                     Foreground="#555555"
-                                     VerticalAlignment="Top"
-                                     MinHeight="40"
-                                     MaxHeight="120"
-                                     TextWrapping="Wrap"
-                                     AcceptsReturn="True"
-                                     Margin="0,6,0,0"
-                                     Visibility="Collapsed"/>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
-
-        <!-- Footer Buttons -->
-        <Border Grid.Row="2" Background="#F8F8F8" BorderBrush="#D0D0D0" BorderThickness="0,1,0,0" Padding="8">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <!-- Ghost Mode Toggle -->
-                <CheckBox Grid.Column="1" Content="Ghost" Margin="4,0" VerticalAlignment="Center"
-                          IsChecked="{Binding GhostModeEnabled, Mode=TwoWay}"/>
-
-                <!-- Add Button -->
-                <Button Grid.Column="2" Content="+ Add" Click="AddButton_Click"
-                        Background="#E8F4F8" BorderThickness="1" BorderBrush="#91C5DE" Foreground="#0066CC"
-                        Padding="8,4" Margin="4,0" FontSize="12" FontWeight="SemiBold" Cursor="Hand"/>
-
-                <!-- Resize Grip Indicator -->
-                <TextBlock Text="◢" Foreground="#D0D0D0" FontSize="10"
-                           HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                           Margin="0,0,2,1" IsHitTestVisible="False" Grid.ColumnSpan="3"/>
-            </Grid>
-        </Border>
+        <Primitives:Thumb x:Name="ResizeThumb" Width="18" Height="18"
+                          HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                          Background="Transparent" Cursor="SizeNWSE" Opacity="0"
+                          Panel.ZIndex="999" DragDelta="ResizeThumb_DragDelta"
+                          DragCompleted="ResizeThumb_DragCompleted"/>
+        <TextBlock Text="◢" Margin="0,0,4,3"
+                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                   Foreground="#B8CDD7" FontSize="9" IsHitTestVisible="False"
+                   Panel.ZIndex="998"/>
     </Grid>
 </noted:OverlayWindow>

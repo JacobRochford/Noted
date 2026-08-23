@@ -18,6 +18,8 @@ public partial class DictionaryWindow : OverlayWindow
     private readonly DictionaryWindowViewModel _viewModel;
     private readonly Dictionary<DictionaryItem, bool> _descriptionExpandedState = new();
     private string? _lastPersistenceWarning;
+    private bool _reopenOnStartup;
+    private bool _preserveOpenStateOnClose;
 
     public DictionaryWindow(
         IAppSettingsService settingsService,
@@ -27,6 +29,7 @@ public partial class DictionaryWindow : OverlayWindow
 
         _settingsService = settingsService;
         var windowState = _settingsService.LoadDictionaryWindowState();
+        _reopenOnStartup = windowState.ReopenOnStartup;
         RestoreWindowBounds(
             windowState.Left,
             windowState.Top,
@@ -74,6 +77,9 @@ public partial class DictionaryWindow : OverlayWindow
             return;
         }
 
+        if (!_preserveOpenStateOnClose)
+            _reopenOnStartup = false;
+
         base.OnClosing(e);
     }
 
@@ -118,6 +124,12 @@ public partial class DictionaryWindow : OverlayWindow
         object sender,
         DependencyPropertyChangedEventArgs e)
     {
+        if (!_preserveOpenStateOnClose)
+        {
+            _reopenOnStartup = IsWindowVisible;
+            SaveWindowState();
+        }
+
         if (!IsVisible)
         {
             if (!TryFlushPendingContent(out var error))
@@ -151,7 +163,7 @@ public partial class DictionaryWindow : OverlayWindow
 
     private void DescriptionLink_Click(object sender, RoutedEventArgs e)
     {
-        if (!(sender is Hyperlink link && link.Tag is DictionaryItem item))
+        if (sender is not FrameworkElement control || control.Tag is not DictionaryItem item)
             return;
 
         // Toggle stored expanded state
@@ -159,7 +171,7 @@ public partial class DictionaryWindow : OverlayWindow
         _descriptionExpandedState[item] = isExpanded;
 
         // Find the DataTemplate root border for this item
-        var container = VisualTreeHelpers.FindAncestor<Border>(link);
+        var container = VisualTreeHelpers.FindAncestor<Border>(control);
         if (container != null) {
             var descriptionBox = VisualTreeHelpers.FindDescendant<TextBox>(container, "DescriptionBox");
             if (descriptionBox != null) {
@@ -182,9 +194,17 @@ public partial class DictionaryWindow : OverlayWindow
             Height = Height,
             Opacity = _defaultOpacity,
             GhostModeOpacity = _ghostModeOpacity,
-            GhostModeEnabled = _ghostModeEnabled
+            GhostModeEnabled = _ghostModeEnabled,
+            ReopenOnStartup = _reopenOnStartup
         };
         _settingsService.SaveDictionaryWindowState(newState);
+    }
+
+    internal void PrepareForApplicationShutdown()
+    {
+        _reopenOnStartup = IsWindowVisible;
+        _preserveOpenStateOnClose = true;
+        SaveWindowState();
     }
 
 }
