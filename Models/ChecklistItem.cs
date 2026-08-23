@@ -16,6 +16,7 @@ public sealed class ChecklistItem : INotifyPropertyChanged
     private string _text = "";
     private bool _isChecked;
     private ChecklistPriority _priority = ChecklistPriority.None;
+    private string? _tabId;
     private DateTime? _dueDate;
     private string _notes = "";
     private bool _isExpanded;
@@ -38,6 +39,12 @@ public sealed class ChecklistItem : INotifyPropertyChanged
     {
         get => _priority;
         set { if (_priority != value) { _priority = value; OnPropertyChanged(); } }
+    }
+
+    public string? TabId
+    {
+        get => _tabId;
+        set { if (_tabId != value) { _tabId = value; OnPropertyChanged(); } }
     }
 
     public DateTime? DueDate

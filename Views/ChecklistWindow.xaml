@@ -3,7 +3,6 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:noted="clr-namespace:Noted"
         xmlns:h="clr-namespace:Noted.Helpers"
-        xmlns:vm="clr-namespace:Noted.ViewModels"
         xmlns:Primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         Title="Checklist"
         WindowStyle="None"
@@ -11,42 +10,86 @@
         Background="Transparent"
         ShowInTaskbar="False"
         Topmost="True"
-        Width="340"
-        Height="480"
-        MinWidth="280"
-        MinHeight="320">
+        Width="380"
+        Height="540"
+        MinWidth="320"
+        MinHeight="360">
 
     <noted:OverlayWindow.Resources>
-
-        <!-- Converters -->
-        <h:PriorityToColorConverter   x:Key="PriorityToColor"/>
-        <h:DueDateToTextConverter     x:Key="DueDateToText"/>
-        <h:DueDateToColorConverter    x:Key="DueDateToColor"/>
-        <h:EnumToBoolConverter        x:Key="EnumToBool"/>
-        <h:NullToVisibilityConverter  x:Key="NullToVisibility"/>
+        <h:PriorityToColorConverter x:Key="PriorityToColor"/>
+        <h:DueDateToTextConverter x:Key="DueDateToText"/>
+        <h:DueDateToColorConverter x:Key="DueDateToColor"/>
+        <h:NullToVisibilityConverter x:Key="NullToVisibility"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
-        <!-- Header icon button (sky blue pill, matches main app) -->
+        <Style x:Key="ScrollBarThumbStyle" TargetType="Thumb">
+            <Setter Property="MinHeight" Value="20"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="#91C5DE" CornerRadius="3" Margin="1,2"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernScrollBar" TargetType="ScrollBar">
+            <Setter Property="Width" Value="7"/>
+            <Setter Property="MinWidth" Value="7"/>
+            <Setter Property="Background" Value="#E6F2F8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="3">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageUpCommand"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  Opacity="0"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource ScrollBarThumbStyle}"/>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageDownCommand"
+                                                  Background="Transparent"
+                                                  BorderThickness="0"
+                                                  Opacity="0"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource ModernScrollBar}"/>
+
         <Style x:Key="HeaderIconBtn" TargetType="Button">
-            <Setter Property="Background"      Value="#87CEEB"/>
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground"      Value="White"/>
-            <Setter Property="FontSize"        Value="14"/>
-            <Setter Property="Padding"         Value="0"/>
-            <Setter Property="Cursor"          Value="Hand"/>
-            <Setter Property="Width"           Value="32"/>
-            <Setter Property="Height"          Value="32"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Foreground" Value="#5F7480"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="6"
-                                Padding="{TemplateBinding Padding}">
+                        <Border x:Name="ButtonBackground"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#5BB8D4"/>
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#DCEEF6"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#C9E4F0"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -54,62 +97,34 @@
             </Setter>
         </Style>
 
-        <!-- Filter tab RadioButton -->
         <Style x:Key="FilterTab" TargetType="RadioButton">
-            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0,0,0,2"/>
-            <Setter Property="BorderBrush"     Value="Transparent"/>
-            <Setter Property="Foreground"      Value="#64748B"/>
-            <Setter Property="Padding"         Value="10,6"/>
-            <Setter Property="FontSize"        Value="12"/>
-            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="Foreground" Value="#6B7F8A"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="11,7,11,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="TabBackground"
+                                Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter Property="BorderBrush" Value="#87CEEB"/>
-                                <Setter Property="Foreground"  Value="#87CEEB"/>
-                                <Setter Property="FontWeight"  Value="SemiBold"/>
-                            </Trigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Foreground" Value="#CBD5E1"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Small icon button used inside item rows -->
-        <Style x:Key="SmallIconBtn" TargetType="Button">
-            <Setter Property="Background"      Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground"      Value="#94A3B8"/>
-            <Setter Property="FontSize"        Value="11"/>
-            <Setter Property="Padding"         Value="2"/>
-            <Setter Property="Cursor"          Value="Hand"/>
-            <Setter Property="Width"           Value="22"/>
-            <Setter Property="Height"          Value="22"/>
-            <Setter Property="VerticalAlignment"   Value="Center"/>
-            <Setter Property="HorizontalAlignment" Value="Center"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="3"
+                                CornerRadius="4,4,0,0"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#E2E8F0"/>
-                                <Setter Property="Foreground" Value="#374151"/>
+                                <Setter TargetName="TabBackground" Property="Background" Value="#EAF5FA"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="BorderBrush" Value="#5BA8C8"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -117,63 +132,65 @@
             </Setter>
         </Style>
 
-        <!-- Delete button — red hover -->
-        <Style x:Key="DeleteBtn" TargetType="Button" BasedOn="{StaticResource SmallIconBtn}">
+        <Style x:Key="SmallIconBtn" TargetType="Button">
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#78909C"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBackground"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#DCEEF6"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DetailsBtn" TargetType="Button" BasedOn="{StaticResource SmallIconBtn}">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Content" Value="&#xE70F;"/>
             <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#FEE2E2"/>
-                    <Setter Property="Foreground" Value="#DC2626"/>
-                </Trigger>
+                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                    <Setter Property="Background" Value="#DCEEF6"/>
+                    <Setter Property="Foreground" Value="#2C6E91"/>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
 
-        <!-- Underline link button for footer -->
         <Style x:Key="FooterLinkBtn" TargetType="Button">
-            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground"      Value="#64748B"/>
-            <Setter Property="FontSize"        Value="11"/>
-            <Setter Property="Padding"         Value="4,2"/>
-            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="Foreground" Value="#6B7F8A"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="4,3"/>
+            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Padding="{TemplateBinding Padding}">
-                            <TextBlock x:Name="Txt"
-                                       Text="{TemplateBinding Content}"
-                                       TextDecorations="Underline"
-                                       Foreground="{TemplateBinding Foreground}"
-                                       FontSize="{TemplateBinding FontSize}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Txt" Property="Foreground" Value="#87CEEB"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Primary action button -->
-        <Style x:Key="PrimaryBtn" TargetType="Button">
-            <Setter Property="Background"      Value="#87CEEB"/>
-            <Setter Property="Foreground"      Value="White"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding"         Value="12,5"/>
-            <Setter Property="FontSize"        Value="12"/>
-            <Setter Property="FontWeight"      Value="SemiBold"/>
-            <Setter Property="Cursor"          Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="4"
+                        <Border x:Name="ButtonBackground"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#5BB8D4"/>
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#E5F2F8"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -181,362 +198,578 @@
             </Setter>
         </Style>
 
+        <Style x:Key="PrimaryBtn" TargetType="Button">
+            <Setter Property="Background" Value="#5BA8C8"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="11,6"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBackground"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#4A97B7"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#3E839F"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ChecklistBox" TargetType="CheckBox">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Border x:Name="Box" Width="18" Height="18"
+                                Background="White" BorderBrush="#9CB4C0"
+                                BorderThickness="1" CornerRadius="4">
+                            <TextBlock x:Name="CheckMark" Text="✓"
+                                       Foreground="White" FontSize="13" FontWeight="Bold"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Visibility="Collapsed"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Box" Property="BorderBrush" Value="#5BA8C8"/>
+                                <Setter TargetName="Box" Property="Background" Value="#EFF8FC"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Box" Property="Background" Value="#5BA8C8"/>
+                                <Setter TargetName="Box" Property="BorderBrush" Value="#5BA8C8"/>
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </noted:OverlayWindow.Resources>
 
-    <Grid Background="White">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>  <!-- 0: Controls bar -->
-            <RowDefinition Height="Auto"/>  <!-- 1: Search bar   -->
-            <RowDefinition Height="Auto"/>  <!-- 2: Progress bar -->
-            <RowDefinition Height="*"/>     <!-- 3: Items list   -->
-            <RowDefinition Height="Auto"/>  <!-- 4: Footer       -->
-        </Grid.RowDefinitions>
+    <Grid Background="Transparent">
+        <Border Margin="1" Background="#F5F9FC" BorderBrush="#87CEEB"
+                BorderThickness="1" CornerRadius="8">
+            <Grid Margin="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-        <!-- Resize thumb (invisible, bottom-right) -->
-        <Primitives:Thumb x:Name="ResizeThumb"
-                          HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                          Width="16" Height="16"
-                          Cursor="SizeNWSE" Background="Transparent" Opacity="0"
-                          DragDelta="ResizeThumb_DragDelta"
-                          DragCompleted="ResizeThumb_DragCompleted"
-                          Grid.RowSpan="5" Panel.ZIndex="999"/>
-
-        <!-- ══ Row 0: Header bar (tabs + actions) ════════════════════ -->
-        <Border x:Name="TitleBar" Grid.Row="0" Background="White"
-                BorderBrush="#D4EEF7" BorderThickness="0,0,0,1" Padding="10,8">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="✓" Foreground="#87CEEB" FontSize="13" FontWeight="Bold"
-                               VerticalAlignment="Center" Margin="2,0,8,0"/>
-                    <RadioButton Content="All"    GroupName="CL_Filter" Style="{StaticResource FilterTab}"
-                                 IsChecked="{Binding FilterMode, Converter={StaticResource EnumToBool},
-                                             ConverterParameter={x:Static vm:ChecklistFilterMode.All}, Mode=TwoWay}"/>
-                    <RadioButton Content="Active" GroupName="CL_Filter" Style="{StaticResource FilterTab}"
-                                 IsChecked="{Binding FilterMode, Converter={StaticResource EnumToBool},
-                                             ConverterParameter={x:Static vm:ChecklistFilterMode.Active}, Mode=TwoWay}"/>
-                    <RadioButton Content="Done"   GroupName="CL_Filter" Style="{StaticResource FilterTab}"
-                                 IsChecked="{Binding FilterMode, Converter={StaticResource EnumToBool},
-                                             ConverterParameter={x:Static vm:ChecklistFilterMode.Completed}, Mode=TwoWay}"/>
-                </StackPanel>
-
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <ComboBox SelectedValue="{Binding SortMode, Mode=TwoWay}" SelectedValuePath="Tag"
-                              Background="White" Foreground="#64748B" BorderBrush="#D4EEF7"
-                              FontSize="11" Padding="6,3" MinWidth="80" VerticalContentAlignment="Center"
-                              ToolTip="Sort items" Margin="0,0,6,0">
-                        <ComboBoxItem Content="Manual"   Tag="{x:Static vm:ChecklistSortMode.Manual}"/>
-                        <ComboBoxItem Content="Priority" Tag="{x:Static vm:ChecklistSortMode.Priority}"/>
-                        <ComboBoxItem Content="Due Date" Tag="{x:Static vm:ChecklistSortMode.DueDate}"/>
-                        <ComboBoxItem Content="A → Z"    Tag="{x:Static vm:ChecklistSortMode.Alphabetical}"/>
-                    </ComboBox>
-                    <Button Content="⌕" Style="{StaticResource HeaderIconBtn}"
-                            Click="SearchToggle_Click" ToolTip="Search (Ctrl+F)" Margin="0,0,4,0"/>
-                    <Button Content="—" Style="{StaticResource HeaderIconBtn}"
-                            Click="HideButton_Click" ToolTip="Hide"/>
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <!-- ══ Row 1: Search bar (collapsible) ═══════════════════════════ -->
-        <Border Grid.Row="1" Background="#F0F9FF" BorderBrush="#D4EEF7" BorderThickness="0,0,0,1" Padding="10,7"
-                Visibility="{Binding IsSearchVisible, Converter={StaticResource BoolToVisibility}}">
-            <Grid>
-                <TextBox x:Name="SearchBox"
-                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
-                         Background="White" BorderBrush="#87CEEB" BorderThickness="1"
-                         Foreground="#1E293B" CaretBrush="#1E293B"
-                         Padding="8,6" FontSize="12" VerticalContentAlignment="Center"
-                         KeyDown="SearchBox_KeyDown"/>
-                <TextBlock Text="Search items and notes…" Foreground="#94A3B8" FontSize="12"
-                           Margin="10,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
-                                    <Setter Property="Visibility" Value="Visible"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-            </Grid>
-        </Border>
-
-        <!-- ══ Row 2: Progress bar ════════════════════════════════════════ -->
-        <ProgressBar Grid.Row="2"
-                     Value="{Binding ProgressPercent, Mode=OneWay}" Maximum="100"
-                     Height="4" BorderThickness="0"
-                     Foreground="#87CEEB" Background="#E2E8F0"/>
-
-        <!-- ══ Row 3: Items list ══════════════════════════════════════════ -->
-        <ListBox x:Name="ItemsList" Grid.Row="3"
-                 ItemsSource="{Binding FilteredItems}"
-                 Background="White" BorderThickness="0"
-                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                 VirtualizingPanel.IsVirtualizing="False"
-                 AllowDrop="True"
-                 Drop="ItemsList_Drop"
-                 DragOver="ItemsList_DragOver">
-
-            <ListBox.Template>
-                <ControlTemplate TargetType="ListBox">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled"
-                                  Background="White">
-                        <ItemsPresenter/>
-                    </ScrollViewer>
-                </ControlTemplate>
-            </ListBox.Template>
-
-            <ListBox.ItemContainerStyle>
-                <Style TargetType="ListBoxItem">
-                    <Setter Property="Padding"                    Value="0"/>
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                    <Setter Property="FocusVisualStyle"           Value="{x:Null}"/>
-                    <Setter Property="Template">
-                        <Setter.Value>
-                            <ControlTemplate TargetType="ListBoxItem">
-                                <Border x:Name="Bd" Background="Transparent"
-                                        BorderBrush="#F1F5F9" BorderThickness="0,0,0,1">
-                                    <ContentPresenter/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="#F8FAFC"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Setter.Value>
-                    </Setter>
-                </Style>
-            </ListBox.ItemContainerStyle>
-
-            <ListBox.ItemTemplate>
-                <DataTemplate>
+                <Border x:Name="TitleBar" Grid.Row="0" Background="Transparent"
+                        Padding="2,1,0,8" Cursor="SizeAll">
                     <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                    VerticalAlignment="Center" IsHitTestVisible="False">
+                            <TextBlock Text="✓" Margin="0,0,7,0" Foreground="#5BA8C8"
+                                       FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <TextBlock Text="Checklist" Foreground="#2C6E91"
+                                       FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="⚠" Margin="8,0,0,0" Foreground="#B35A00"
+                                       FontSize="12" VerticalAlignment="Center"
+                                       Visibility="{Binding HasPersistenceError, Converter={StaticResource BoolToVisibility}}"
+                                       ToolTip="{Binding PersistenceError}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="&#xE721;" Style="{StaticResource HeaderIconBtn}"
+                                    Click="SearchToggle_Click" ToolTip="Search (Ctrl+F)"/>
+                            <Button Content="&#xE711;" Margin="3,0,0,0"
+                                    Style="{StaticResource HeaderIconBtn}"
+                                    Click="HideButton_Click" ToolTip="Hide"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
 
-                        <!-- Context menu -->
-                        <Grid.ContextMenu>
-                            <ContextMenu Opened="ItemContextMenu_Opened">
-                                <MenuItem Header="Set Priority">
-                                    <MenuItem Header="🔴  High"   Tag="High"   Click="SetPriority_Click"/>
-                                    <MenuItem Header="🟠  Medium" Tag="Medium" Click="SetPriority_Click"/>
-                                    <MenuItem Header="🟡  Low"    Tag="Low"    Click="SetPriority_Click"/>
-                                    <Separator/>
-                                    <MenuItem Header="◯  None"   Tag="None"   Click="SetPriority_Click"/>
-                                </MenuItem>
-                                <Separator/>
-                                <MenuItem Header="Move to Top"    Tag="ManualReorder" Click="MoveToTop_Click"/>
-                                <MenuItem Header="Move Up"        Tag="ManualReorder" Click="MoveUp_Click"/>
-                                <MenuItem Header="Move Down"      Tag="ManualReorder" Click="MoveDown_Click"/>
-                                <MenuItem Header="Move to Bottom" Tag="ManualReorder" Click="MoveToBottom_Click"/>
-                                <Separator/>
-                                <MenuItem Header="Duplicate"      Click="Duplicate_Click"/>
-                                <Separator/>
-                                <MenuItem Header="Delete"         Click="DeleteItem_Click"/>
-                            </ContextMenu>
-                        </Grid.ContextMenu>
+                <Border Grid.Row="1" Margin="0,0,0,7"
+                        BorderBrush="#D0E4EE" BorderThickness="0,0,0,1">
+                    <Border.ContextMenu>
+                        <ContextMenu Style="{StaticResource NotedContextMenu}"
+                                     Opened="TabBarContextMenu_Opened">
+                            <MenuItem Header="Show All tab" Tag="all"
+                                      Style="{StaticResource NotedContextMenuItem}"
+                                      Click="ShowDefaultTab_Click"/>
+                            <MenuItem Header="Show Urgent tab" Tag="urgent"
+                                      Style="{StaticResource NotedContextMenuItem}"
+                                      Click="ShowDefaultTab_Click"/>
+                            <MenuItem Header="Show Done tab" Tag="done"
+                                      Style="{StaticResource NotedContextMenuItem}"
+                                      Click="ShowDefaultTab_Click"/>
+                        </ContextMenu>
+                    </Border.ContextMenu>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <ScrollViewer x:Name="TabsScrollViewer"
+                                      Grid.Column="0"
+                                      HorizontalScrollBarVisibility="Hidden"
+                                      VerticalScrollBarVisibility="Disabled"
+                                      PanningMode="HorizontalOnly"
+                                      PreviewMouseWheel="TabsScrollViewer_PreviewMouseWheel">
+                            <ItemsControl ItemsSource="{Binding VisibleTabs}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <RadioButton GroupName="CL_Filter"
+                                                     Style="{StaticResource FilterTab}"
+                                                     IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                     Click="Tab_Click">
+                                            <RadioButton.Content>
+                                                <TextBlock Text="{Binding Name}"
+                                                           MaxWidth="100"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </RadioButton.Content>
+                                            <RadioButton.ContextMenu>
+                                                <ContextMenu Style="{StaticResource NotedContextMenu}"
+                                                             Opened="TabContextMenu_Opened">
+                                                    <MenuItem Header="Rename tab"
+                                                              Tag="Rename"
+                                                              Style="{StaticResource NotedContextMenuItem}"
+                                                              Click="RenameTab_Click"/>
+                                                    <MenuItem Header="Delete tab"
+                                                              Tag="Delete"
+                                                              Foreground="#B84F4F"
+                                                              Style="{StaticResource NotedContextMenuItem}"
+                                                              Click="DeleteTab_Click"/>
+                                                    <MenuItem Header="Hide tab"
+                                                              Tag="Hide"
+                                                              Style="{StaticResource NotedContextMenuItem}"
+                                                              Click="HideDefaultTab_Click"/>
+                                                    <Separator Tag="HiddenTabsSeparator"/>
+                                                    <MenuItem Header="Show All tab" Tag="Show:all"
+                                                              Style="{StaticResource NotedContextMenuItem}"
+                                                              Click="ShowDefaultTab_Click"/>
+                                                    <MenuItem Header="Show Urgent tab" Tag="Show:urgent"
+                                                              Style="{StaticResource NotedContextMenuItem}"
+                                                              Click="ShowDefaultTab_Click"/>
+                                                    <MenuItem Header="Show Done tab" Tag="Show:done"
+                                                              Style="{StaticResource NotedContextMenuItem}"
+                                                              Click="ShowDefaultTab_Click"/>
+                                                </ContextMenu>
+                                            </RadioButton.ContextMenu>
+                                        </RadioButton>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                        <Button x:Name="AddTabButton"
+                                Grid.Column="1"
+                                Content="&#xE710;"
+                                Margin="3,0,2,2"
+                                Style="{StaticResource SmallIconBtn}"
+                                FontFamily="Segoe MDL2 Assets"
+                                Click="AddTab_Click"
+                                ToolTip="New tab"/>
+                    </Grid>
+                </Border>
 
-                        <!-- ── Main item row ─────────────────────────────── -->
-                        <Grid Grid.Row="0" MinHeight="38">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="5"/>    <!-- Priority strip -->
-                                <ColumnDefinition Width="22"/>   <!-- Drag handle    -->
-                                <ColumnDefinition Width="30"/>   <!-- Checkbox       -->
-                                <ColumnDefinition Width="*"/>    <!-- Text input     -->
-                                <ColumnDefinition Width="Auto"/> <!-- Due date chip  -->
-                                <ColumnDefinition Width="22"/>   <!-- Expand toggle  -->
-                                <ColumnDefinition Width="22"/>   <!-- Delete         -->
-                            </Grid.ColumnDefinitions>
-
-                            <!-- Priority strip — click to cycle -->
-                            <Border Grid.Column="0"
-                                    Background="{Binding Priority, Converter={StaticResource PriorityToColor}}"
-                                    Cursor="Hand" ToolTip="Click to cycle priority"
-                                    MouseLeftButtonDown="PriorityStrip_MouseLeftButtonDown"/>
-
-                            <!-- Drag handle -->
-                            <TextBlock Grid.Column="1" Text="⠿" Foreground="#CBD5E1" FontSize="14"
-                                       VerticalAlignment="Center" HorizontalAlignment="Center"
-                                       Cursor="SizeAll" ToolTip="Drag to reorder"
-                                       MouseLeftButtonDown="DragHandle_MouseLeftButtonDown"/>
-
-                            <!-- Checkbox -->
-                            <CheckBox Grid.Column="2"
-                                      IsChecked="{Binding IsChecked, UpdateSourceTrigger=PropertyChanged}"
-                                      VerticalAlignment="Center" HorizontalAlignment="Center"/>
-
-                            <!-- Text input -->
-                            <TextBox Grid.Column="3"
-                                     Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=Explicit}"
-                                     Background="Transparent" BorderThickness="0"
-                                     Padding="4,2" FontSize="13"
-                                     VerticalAlignment="Center" VerticalContentAlignment="Center"
-                                     TextWrapping="NoWrap"
-                                     KeyDown="ItemTextBox_KeyDown"
-                                     GotFocus="ItemTextBox_GotFocus"
-                                     LostFocus="ItemTextBox_LostFocus">
-                                <TextBox.Style>
-                                    <Style TargetType="TextBox">
-                                        <Setter Property="Foreground" Value="#1E293B"/>
+                <Border Grid.Row="2" Margin="0,0,0,7" Padding="8,0"
+                        Background="White" BorderBrush="#A8CDE0" BorderThickness="1"
+                        CornerRadius="6"
+                        Visibility="{Binding IsSearchVisible, Converter={StaticResource BoolToVisibility}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="&#xE721;" Margin="0,0,6,0"
+                                   FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                   Foreground="#78909C" VerticalAlignment="Center"/>
+                        <Grid Grid.Column="1">
+                            <TextBox x:Name="SearchBox"
+                                     Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                     Padding="0,7" Background="Transparent" BorderThickness="0"
+                                     CaretBrush="#2C6E91" Foreground="#355A6E" FontSize="12"
+                                     VerticalContentAlignment="Center" KeyDown="SearchBox_KeyDown"/>
+                            <TextBlock Text="Search checklist..." Foreground="#8EA5B1"
+                                       FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsChecked}" Value="True">
-                                                <Setter Property="TextDecorations" Value="Strikethrough"/>
-                                                <Setter Property="Foreground"      Value="#94A3B8"/>
+                                            <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </TextBox.Style>
-                            </TextBox>
-
-                            <!-- Due date chip — hidden when null -->
-                            <Border Grid.Column="4"
-                                    Background="{Binding DueDate, Converter={StaticResource DueDateToColor}}"
-                                    Visibility="{Binding DueDate, Converter={StaticResource NullToVisibility}}"
-                                    CornerRadius="3" Padding="5,2" Margin="4,0"
-                                    VerticalAlignment="Center" Cursor="Hand"
-                                    ToolTip="Click to open details"
-                                    MouseLeftButtonDown="DueDateChip_MouseLeftButtonDown">
-                                <TextBlock Text="{Binding DueDate, Converter={StaticResource DueDateToText}}"
-                                           Foreground="White" FontSize="10" FontWeight="SemiBold"/>
-                            </Border>
-
-                            <!-- Expand / collapse toggle -->
-                            <Button Grid.Column="5"
-                                    Click="ExpandButton_Click" ToolTip="Notes / due date">
-                                <Button.Style>
-                                    <Style TargetType="Button" BasedOn="{StaticResource SmallIconBtn}">
-                                        <Setter Property="Content" Value="▶"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                                <Setter Property="Content"    Value="▼"/>
-                                                <Setter Property="Foreground" Value="#87CEEB"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-
-                            <!-- Delete -->
-                            <Button Grid.Column="6" Content="✕"
-                                    Style="{StaticResource DeleteBtn}"
-                                    Click="DeleteItem_Click" ToolTip="Delete item"/>
+                                </TextBlock.Style>
+                            </TextBlock>
                         </Grid>
+                    </Grid>
+                </Border>
 
-                        <!-- ── Expanded detail panel ─────────────────────── -->
-                        <Border Grid.Row="1" Background="#F8FAFC" Padding="57,7,8,10"
-                                BorderBrush="#E2E8F0" BorderThickness="0,1,0,0">
-                            <Border.Style>
-                                <Style TargetType="Border">
+                <ProgressBar Grid.Row="3" Height="3" Margin="1,0,1,7"
+                             Value="{Binding ProgressPercent, Mode=OneWay}" Maximum="100"
+                             Background="#E2EDF2" BorderThickness="0" Foreground="#5BA8C8"/>
+
+                <Border Grid.Row="4" Background="White" BorderBrush="#C9DFEC"
+                        BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                    <Grid>
+                        <ListBox x:Name="ItemsList" ItemsSource="{Binding FilteredItems}"
+                                 Padding="5" Background="Transparent" BorderThickness="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 VirtualizingPanel.IsVirtualizing="False" AllowDrop="True"
+                                 PreviewMouseLeftButtonDown="ItemsList_PreviewMouseLeftButtonDown"
+                                 PreviewMouseMove="ItemsList_PreviewMouseMove"
+                                 PreviewMouseLeftButtonUp="ItemsList_PreviewMouseLeftButtonUp"
+                                 PreviewDrop="ItemsList_Drop" PreviewDragOver="ItemsList_DragOver">
+                            <ListBox.Template>
+                                <ControlTemplate TargetType="ListBox">
+                                    <ScrollViewer Background="Transparent" VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </ControlTemplate>
+                            </ListBox.Template>
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Margin" Value="0,1"/>
+                                    <Setter Property="Padding" Value="0"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                    <Setter Property="Cursor" Value="Hand"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="RowBackground" Background="Transparent" CornerRadius="6">
+                                                    <ContentPresenter/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="RowBackground" Property="Background" Value="#EFF7FB"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="RowBackground" Property="Background" Value="#E5F2F8"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Background="Transparent">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ContextMenu>
+                                            <ContextMenu Style="{StaticResource NotedContextMenu}"
+                                                         Opened="ItemContextMenu_Opened">
+                                                <MenuItem Header="High priority" Tag="High"
+                                                          Style="{StaticResource NotedContextMenuItem}"
+                                                          Click="SetPriority_Click">
+                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="#D96868"/></MenuItem.Icon>
+                                                </MenuItem>
+                                                <MenuItem Header="Medium priority" Tag="Medium"
+                                                          Style="{StaticResource NotedContextMenuItem}"
+                                                          Click="SetPriority_Click">
+                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="#D6A64B"/></MenuItem.Icon>
+                                                </MenuItem>
+                                                <MenuItem Header="Low priority" Tag="Low"
+                                                          Style="{StaticResource NotedContextMenuItem}"
+                                                          Click="SetPriority_Click">
+                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="#5BA8C8"/></MenuItem.Icon>
+                                                </MenuItem>
+                                                <MenuItem Header="No priority" Tag="None"
+                                                          Style="{StaticResource NotedContextMenuItem}"
+                                                          Click="SetPriority_Click">
+                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="#C5D2D9"/></MenuItem.Icon>
+                                                </MenuItem>
+                                                <Separator Tag="MoveTabsSeparator"/>
+                                                <MenuItem Header="Move to top" Tag="ManualReorder"
+                                                          Style="{StaticResource NotedContextMenuItem}" Click="MoveToTop_Click"/>
+                                                <MenuItem Header="Move up" Tag="ManualReorder"
+                                                          Style="{StaticResource NotedContextMenuItem}" Click="MoveUp_Click"/>
+                                                <MenuItem Header="Move down" Tag="ManualReorder"
+                                                          Style="{StaticResource NotedContextMenuItem}" Click="MoveDown_Click"/>
+                                                <MenuItem Header="Move to bottom" Tag="ManualReorder"
+                                                          Style="{StaticResource NotedContextMenuItem}" Click="MoveToBottom_Click"/>
+                                                <Separator/>
+                                                <MenuItem Header="Duplicate item"
+                                                          Style="{StaticResource NotedContextMenuItem}" Click="Duplicate_Click"/>
+                                                <MenuItem Header="Delete item" Foreground="#B84F4F"
+                                                          Style="{StaticResource NotedContextMenuItem}" Click="DeleteItem_Click"/>
+                                            </ContextMenu>
+                                        </Grid.ContextMenu>
+
+                                        <Grid Grid.Row="0" MinHeight="40" Margin="5,0,4,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="20"/>
+                                                <ColumnDefinition Width="30"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="30"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Ellipse Grid.Column="0" Width="8" Height="8"
+                                                     Fill="{Binding Priority, Converter={StaticResource PriorityToColor}}"
+                                                     Cursor="Hand" ToolTip="Click to change priority"
+                                                     MouseLeftButtonDown="PriorityStrip_MouseLeftButtonDown"/>
+                                            <CheckBox Grid.Column="1" Style="{StaticResource ChecklistBox}"
+                                                      IsChecked="{Binding IsChecked, UpdateSourceTrigger=PropertyChanged}"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <TextBox x:Name="ItemTitleTextBox" Grid.Column="2"
+                                                     Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=Explicit}"
+                                                     Padding="4,3" Background="Transparent" BorderThickness="0"
+                                                     FontSize="13" TextWrapping="NoWrap" VerticalAlignment="Center"
+                                                     VerticalContentAlignment="Center" KeyDown="ItemTextBox_KeyDown"
+                                                     GotFocus="ItemTextBox_GotFocus" LostFocus="ItemTextBox_LostFocus">
+                                                <TextBox.Style>
+                                                    <Style TargetType="TextBox">
+                                                        <Setter Property="Foreground" Value="#314B5A"/>
+                                                        <Setter Property="Cursor" Value="Hand"/>
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                                <Setter Property="Cursor" Value="IBeam"/>
+                                                            </Trigger>
+                                                            <DataTrigger Binding="{Binding IsChecked}" Value="True">
+                                                                <Setter Property="TextDecorations" Value="Strikethrough"/>
+                                                                <Setter Property="Foreground" Value="#91A4AE"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBox.Style>
+                                            </TextBox>
+                                            <Border Grid.Column="3" Margin="5,0" Padding="6,3"
+                                                    Background="{Binding DueDate, Converter={StaticResource DueDateToColor}}"
+                                                    CornerRadius="4" Cursor="Hand" ToolTip="Edit details"
+                                                    Visibility="{Binding DueDate, Converter={StaticResource NullToVisibility}}"
+                                                    MouseLeftButtonDown="DueDateChip_MouseLeftButtonDown">
+                                                <TextBlock Text="{Binding DueDate, Converter={StaticResource DueDateToText}}"
+                                                           Foreground="White" FontSize="10" FontWeight="SemiBold"/>
+                                            </Border>
+                                            <Button Grid.Column="4" Style="{StaticResource DetailsBtn}"
+                                                    Click="ExpandButton_Click" ToolTip="Edit details"/>
+                                        </Grid>
+
+                                        <Border Grid.Row="1" Margin="31,0,5,6" Padding="12,10"
+                                                Background="#F2F8FB" BorderBrush="#D8E9F1"
+                                                BorderThickness="1" CornerRadius="6">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <StackPanel>
+                                                <TextBlock Text="NOTES" Margin="1,0,0,5"
+                                                           Foreground="#6B8795" FontSize="10" FontWeight="SemiBold"/>
+                                                <TextBox Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}"
+                                                         MinHeight="52" MaxHeight="120" Padding="8,6"
+                                                         AcceptsReturn="True" TextWrapping="Wrap" Background="White"
+                                                         BorderBrush="#C9DFEC" BorderThickness="1"
+                                                         Foreground="#355A6E" FontSize="12"
+                                                         VerticalScrollBarVisibility="Auto"/>
+                                                <Grid Margin="0,9,0,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="DUE" Margin="1,0,9,0"
+                                                               Foreground="#6B8795" FontSize="10" FontWeight="SemiBold"
+                                                               VerticalAlignment="Center"/>
+                                                    <DatePicker Grid.Column="1" Height="28"
+                                                                SelectedDate="{Binding DueDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                BorderBrush="#C9DFEC" FontSize="12"/>
+                                                    <Button Grid.Column="2" Content="&#xE711;" Margin="4,0,0,0"
+                                                            Style="{StaticResource SmallIconBtn}"
+                                                            FontFamily="Segoe MDL2 Assets"
+                                                            Click="ClearDueDate_Click" ToolTip="Clear due date"
+                                                            Visibility="{Binding DueDate, Converter={StaticResource NullToVisibility}}"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    IsHitTestVisible="False">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                        <DataTrigger Binding="{Binding FilteredItems.Count}" Value="0">
                                             <Setter Property="Visibility" Value="Visible"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </Border.Style>
-                            <StackPanel>
-
-                                <!-- Notes textarea -->
-                                <TextBox Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}"
-                                         AcceptsReturn="True" TextWrapping="Wrap"
-                                         MinHeight="48" MaxHeight="120"
-                                         Background="White" BorderBrush="#E2E8F0" BorderThickness="1"
-                                         Padding="7,5" FontSize="12" Foreground="#374151"
-                                         VerticalScrollBarVisibility="Auto">
-                                    <TextBox.Style>
-                                        <Style TargetType="TextBox">
-                                            <Style.Triggers>
-                                                <Trigger Property="IsFocused" Value="True">
-                                                    <Setter Property="BorderBrush" Value="#87CEEB"/>
-                                                </Trigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBox.Style>
-                                </TextBox>
-
-                                <!-- Due date row -->
-                                <Grid Margin="0,7,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="📅  Due:" Foreground="#6B7280"
-                                               FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <DatePicker Grid.Column="1"
-                                                SelectedDate="{Binding DueDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                FontSize="12" BorderBrush="#E2E8F0" Height="28"/>
-                                    <Button Grid.Column="2" Content="✕"
-                                            Style="{StaticResource SmallIconBtn}"
-                                            Click="ClearDueDate_Click" ToolTip="Clear due date"
-                                            Margin="4,0,0,0"
-                                            Visibility="{Binding DueDate, Converter={StaticResource NullToVisibility}}"/>
-                                </Grid>
-
-                            </StackPanel>
-                        </Border>
-
+                            </StackPanel.Style>
+                            <TextBlock Text="✓" Foreground="#B8D5E2" FontSize="24"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Margin="0,5,0,0"
+                                       Foreground="#8EA5B1" FontSize="12" HorizontalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="Nothing here"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasSelectedTab}" Value="False">
+                                                <Setter Property="Text" Value="Right-click the tab bar to show a tab"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
                     </Grid>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
+                </Border>
 
-        <!-- ══ Row 4: Footer ══════════════════════════════════════════════ -->
-        <Border Grid.Row="4" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0" Padding="10,7">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="{Binding FooterText}" Foreground="#94A3B8" FontSize="11"
-                               VerticalAlignment="Center"/>
-                    <TextBlock Text="⚠"
-                               FontSize="12" Foreground="#B35A00"
-                               Margin="8,0,0,0" VerticalAlignment="Center"
-                               Visibility="{Binding HasPersistenceError, Converter={StaticResource BoolToVisibility}}"
-                               ToolTip="{Binding PersistenceError}"/>
-                    <Button Content="Clear done" Style="{StaticResource FooterLinkBtn}"
-                            Click="ClearCompleted_Click" Margin="6,0,0,0"
-                            Visibility="{Binding HasCompleted, Converter={StaticResource BoolToVisibility}}"
-                            ToolTip="Remove all completed items"/>
-                    <Button Content="Check all" Style="{StaticResource FooterLinkBtn}"
-                            Click="CheckAll_Click" Margin="4,0,0,0"
-                            ToolTip="Mark all as done"/>
-                    <Button Content="Uncheck all" Style="{StaticResource FooterLinkBtn}"
-                            Click="UncheckAll_Click" Margin="4,0,0,0"
-                            Visibility="{Binding HasCompleted, Converter={StaticResource BoolToVisibility}}"
-                            ToolTip="Unmark all completed"/>
-                </WrapPanel>
-
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <CheckBox Content="Ghost" VerticalAlignment="Center" Margin="0,0,8,0"
-                              IsChecked="{Binding GhostModeEnabled, Mode=TwoWay}"
-                              Foreground="#94A3B8" FontSize="11"/>
-                    <Button Content="+ Add" Style="{StaticResource PrimaryBtn}"
-                            Click="AddButton_Click" ToolTip="Add item (Enter in last item)"/>
-                </StackPanel>
+                <Grid Grid.Row="5" Margin="1,8,1,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding FooterText}" Margin="0,0,4,0"
+                                   Foreground="#78909C" FontSize="11" VerticalAlignment="Center"/>
+                        <Button Content="Clear done" Margin="2,0,0,0"
+                                Style="{StaticResource FooterLinkBtn}" Click="ClearCompleted_Click"
+                                ToolTip="Remove all completed items"
+                                Visibility="{Binding HasCompleted, Converter={StaticResource BoolToVisibility}}"/>
+                        <Button Content="Check all" Margin="2,0,0,0"
+                                Style="{StaticResource FooterLinkBtn}" Click="CheckAll_Click"
+                                ToolTip="Mark all items as done"/>
+                        <Button Content="Uncheck all" Margin="2,0,0,0"
+                                Style="{StaticResource FooterLinkBtn}" Click="UncheckAll_Click"
+                                ToolTip="Unmark completed items"
+                                Visibility="{Binding HasCompleted, Converter={StaticResource BoolToVisibility}}"/>
+                    </WrapPanel>
+                    <StackPanel Grid.Column="1" Margin="8,0,0,0"
+                                Orientation="Horizontal" VerticalAlignment="Center">
+                        <CheckBox Content="Ghost" Margin="0,0,8,0"
+                                  IsChecked="{Binding GhostModeEnabled, Mode=TwoWay}"
+                                  Foreground="#78909C" FontSize="11" VerticalAlignment="Center"/>
+                        <Button Content="+ Add" Style="{StaticResource PrimaryBtn}"
+                                IsEnabled="{Binding CanAddItem}"
+                                Click="AddButton_Click" ToolTip="Add item"/>
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Border>
 
-        <!-- Bottom-right resize corner indicator -->
-        <TextBlock Text="◢" Foreground="#CBD5E1" FontSize="9"
-                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                   Margin="0,0,3,2" IsHitTestVisible="False"
-                   Grid.Row="4" Panel.ZIndex="998"/>
+        <Popup x:Name="DragPreviewPopup"
+               Placement="Relative"
+               PlacementTarget="{Binding ElementName=ItemsList}"
+               AllowsTransparency="True"
+               IsHitTestVisible="False"
+               StaysOpen="True">
+            <Border x:Name="DragPreviewBorder"
+                    MinWidth="160"
+                    Height="40"
+                    Padding="8,0"
+                    Background="White"
+                    BorderBrush="#5BA8C8"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Opacity="0.92">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="10" ShadowDepth="2"
+                                      Opacity="0.18" Color="#000000"/>
+                </Border.Effect>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="18"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Ellipse Grid.Column="0" Width="8" Height="8"
+                             Fill="{Binding Priority, Converter={StaticResource PriorityToColor}}"
+                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="{Binding Text}"
+                               Margin="6,0,0,0" Foreground="#314B5A"
+                               FontSize="13" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+        </Popup>
 
+        <Popup x:Name="TabNamePopup"
+               Placement="Bottom"
+               AllowsTransparency="True"
+               PopupAnimation="Fade"
+               StaysOpen="False">
+            <Border Padding="10"
+                    Background="#F5F9FC"
+                    BorderBrush="#87CEEB"
+                    BorderThickness="1"
+                    CornerRadius="7">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="12" ShadowDepth="3"
+                                      Opacity="0.2" Color="#000000"/>
+                </Border.Effect>
+                <StackPanel Width="190">
+                    <TextBlock x:Name="TabNamePrompt"
+                               Text="New tab"
+                               Margin="1,0,0,6"
+                               Foreground="#2C6E91"
+                               FontSize="12"
+                               FontWeight="SemiBold"/>
+                    <TextBox x:Name="TabNameTextBox"
+                             MaxLength="30"
+                             Padding="7,5"
+                             Background="White"
+                             BorderBrush="#A8CDE0"
+                             BorderThickness="1"
+                             Foreground="#355A6E"
+                             FontSize="12"
+                             KeyDown="TabNameTextBox_KeyDown"/>
+                    <StackPanel Margin="0,8,0,0"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right">
+                        <Button Content="Cancel"
+                                Margin="0,0,5,0"
+                                Style="{StaticResource FooterLinkBtn}"
+                                Click="CancelTabName_Click"/>
+                        <Button x:Name="ConfirmTabNameButton"
+                                Content="Add"
+                                Style="{StaticResource PrimaryBtn}"
+                                Click="ConfirmTabName_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <Primitives:Thumb x:Name="ResizeThumb" Width="18" Height="18"
+                          HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                          Background="Transparent" Cursor="SizeNWSE" Opacity="0"
+                          Panel.ZIndex="999" DragDelta="ResizeThumb_DragDelta"
+                          DragCompleted="ResizeThumb_DragCompleted"/>
+        <TextBlock Text="◢" Margin="0,0,4,3"
+                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                   Foreground="#B8CDD7" FontSize="9" IsHitTestVisible="False"
+                   Panel.ZIndex="998"/>
     </Grid>
 </noted:OverlayWindow>

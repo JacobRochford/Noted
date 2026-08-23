@@ -9,4 +9,5 @@ public sealed record ChecklistWindowState
     public double Opacity { get; init; } = 0.88;
     public double GhostModeOpacity { get; init; } = 0.25;
     public bool GhostModeEnabled { get; init; } = false;
+    public bool ReopenOnStartup { get; init; }
 }

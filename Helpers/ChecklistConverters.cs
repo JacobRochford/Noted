@@ -36,9 +36,9 @@ public sealed class DueDateToColorConverter : IValueConverter
     {
         if (value is not DateTime date) return new SolidColorBrush(Colors.Transparent);
         var today = DateTime.Today;
-        if (date.Date < today)  return new SolidColorBrush(Color.FromRgb(239, 68,  68));  // red  (overdue)
-        if (date.Date == today) return new SolidColorBrush(Color.FromRgb(249, 115, 22));  // orange (today)
-        return new SolidColorBrush(Color.FromRgb(99, 102, 241));                           // indigo (future)
+        if (date.Date < today)  return new SolidColorBrush(Color.FromRgb(190, 82,  82));
+        if (date.Date == today) return new SolidColorBrush(Color.FromRgb(190, 139, 60));
+        return new SolidColorBrush(Color.FromRgb(91, 142, 168));
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

@@ -14,8 +14,15 @@ public partial class ChecklistWindow : OverlayWindow
 {
     private readonly IAppSettingsService _settingsService;
     private readonly ChecklistWindowViewModel _viewModel;
+    private Point _dragStartPoint;
+    private ChecklistItem? _pendingDragItem;
+    private ListBoxItem? _pendingDragContainer;
     private ChecklistItem? _draggedItem;
+    private ListBoxItem? _draggedContainer;
+    private ChecklistTab? _tabBeingRenamed;
     private string? _lastPersistenceWarning;
+    private bool _reopenOnStartup;
+    private bool _preserveOpenStateOnClose;
 
     public ChecklistWindow(
         IAppSettingsService settingsService,
@@ -25,6 +32,7 @@ public partial class ChecklistWindow : OverlayWindow
 
         _settingsService = settingsService;
         var state = _settingsService.LoadChecklistWindowState();
+        _reopenOnStartup = state.ReopenOnStartup;
         RestoreWindowBounds(state.Left, state.Top, state.Width, state.Height);
 
         _viewModel = new ChecklistWindowViewModel(
@@ -68,6 +76,9 @@ public partial class ChecklistWindow : OverlayWindow
             return;
         }
 
+        if (!_preserveOpenStateOnClose)
+            _reopenOnStartup = false;
+
         base.OnClosing(e);
     }
 
@@ -90,8 +101,16 @@ public partial class ChecklistWindow : OverlayWindow
             Height          = Height,
             Opacity         = _defaultOpacity,
             GhostModeOpacity = _ghostModeOpacity,
-            GhostModeEnabled = _ghostModeEnabled
+            GhostModeEnabled = _ghostModeEnabled,
+            ReopenOnStartup = _reopenOnStartup
         });
+    }
+
+    internal void PrepareForApplicationShutdown()
+    {
+        _reopenOnStartup = IsWindowVisible;
+        _preserveOpenStateOnClose = true;
+        SaveWindowState();
     }
 
     // ── Title bar ─────────────────────────────────────────────────────────
@@ -114,6 +133,12 @@ public partial class ChecklistWindow : OverlayWindow
         object sender,
         DependencyPropertyChangedEventArgs e)
     {
+        if (!_preserveOpenStateOnClose)
+        {
+            _reopenOnStartup = IsWindowVisible;
+            SaveWindowState();
+        }
+
         if (!IsVisible)
         {
             if (!TryFlushPendingContent(out var error))
@@ -154,6 +179,181 @@ public partial class ChecklistWindow : OverlayWindow
             _viewModel.SearchQuery = "";
             e.Handled = true;
         }
+    }
+
+    // ── Tabs ──────────────────────────────────────────────────────────────
+
+    private void Tab_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ChecklistTab tab })
+            _viewModel.SelectTab(tab);
+    }
+
+    private void AddTab_Click(object sender, RoutedEventArgs e)
+        => OpenTabNamePopup(null, AddTabButton);
+
+    private void RenameTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem) return;
+        var tab = GetTabFromContextMenu(menuItem);
+        var target = GetContextMenu(menuItem)?.PlacementTarget as UIElement ?? AddTabButton;
+        if (tab?.CanDelete == true)
+            OpenTabNamePopup(tab, target);
+    }
+
+    private void DeleteTab_Click(object sender, RoutedEventArgs e)
+    {
+        var tab = GetTabFromContextMenu(sender as MenuItem);
+        if (tab?.CanDelete != true) return;
+
+        var result = AppDialog.Show(
+            this,
+            $"Delete the '{tab.Name}' tab? Its tasks will remain available in All.",
+            "Delete Checklist Tab",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (result != MessageBoxResult.Yes) return;
+
+        if (!_viewModel.TryDeleteTab(tab))
+            ShowPersistenceWarningOnce(_viewModel.PersistenceError);
+    }
+
+    private void HideDefaultTab_Click(object sender, RoutedEventArgs e)
+    {
+        var tab = GetTabFromContextMenu(sender as MenuItem);
+        if (tab?.IsSystem != true) return;
+        if (!_viewModel.SetDefaultTabVisibility(tab.Id, false))
+            ShowPersistenceWarningOnce(_viewModel.PersistenceError);
+    }
+
+    private void ShowDefaultTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem) return;
+        var id = menuItem.Tag?.ToString() ?? "";
+        if (id.StartsWith("Show:", StringComparison.Ordinal))
+            id = id[5..];
+        if (!_viewModel.SetDefaultTabVisibility(id, true))
+            ShowPersistenceWarningOnce(_viewModel.PersistenceError);
+    }
+
+    private void TabContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu contextMenu) return;
+        var tab = (contextMenu.PlacementTarget as FrameworkElement)?.DataContext as ChecklistTab;
+        var hasHiddenDefault = _viewModel.Tabs.Any(item => item.IsSystem && !item.IsVisible);
+
+        foreach (var element in contextMenu.Items.OfType<FrameworkElement>())
+        {
+            var tag = element.Tag?.ToString();
+            if (tag == "Rename" || tag == "Delete")
+                element.Visibility = tab?.CanDelete == true ? Visibility.Visible : Visibility.Collapsed;
+            else if (tag == "Hide")
+                element.Visibility = tab?.IsSystem == true ? Visibility.Visible : Visibility.Collapsed;
+            else if (tag == "HiddenTabsSeparator")
+                element.Visibility = hasHiddenDefault ? Visibility.Visible : Visibility.Collapsed;
+            else if (element is MenuItem menuItem && tag?.StartsWith("Show:", StringComparison.Ordinal) == true)
+                UpdateShowDefaultMenuItem(menuItem, tag[5..], collapseWhenVisible: true);
+        }
+    }
+
+    private void TabBarContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu contextMenu) return;
+        foreach (var menuItem in contextMenu.Items.OfType<MenuItem>())
+            UpdateShowDefaultMenuItem(menuItem, menuItem.Tag?.ToString() ?? "", collapseWhenVisible: false);
+    }
+
+    private void UpdateShowDefaultMenuItem(MenuItem menuItem, string id, bool collapseWhenVisible)
+    {
+        var tab = _viewModel.FindTab(id);
+        if (tab is null)
+        {
+            menuItem.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        menuItem.Visibility = collapseWhenVisible && tab.IsVisible
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        menuItem.IsEnabled = !tab.IsVisible;
+        menuItem.Header = tab.IsVisible ? $"{tab.Name} tab is shown" : $"Show {tab.Name} tab";
+    }
+
+    private void TabsScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (TabsScrollViewer.ExtentWidth <= TabsScrollViewer.ViewportWidth) return;
+        TabsScrollViewer.ScrollToHorizontalOffset(
+            TabsScrollViewer.HorizontalOffset - e.Delta);
+        e.Handled = true;
+    }
+
+    private void OpenTabNamePopup(ChecklistTab? tab, UIElement placementTarget)
+    {
+        _tabBeingRenamed = tab;
+        TabNamePrompt.Text = tab is null ? "New tab" : "Rename tab";
+        TabNamePrompt.Foreground = new SolidColorBrush(Color.FromRgb(44, 110, 145));
+        TabNameTextBox.Text = tab?.Name ?? "";
+        ConfirmTabNameButton.Content = tab is null ? "Add" : "Save";
+        TabNamePopup.PlacementTarget = placementTarget;
+        TabNamePopup.IsOpen = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            TabNameTextBox.Focus();
+            TabNameTextBox.SelectAll();
+        }, System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void ConfirmTabName_Click(object sender, RoutedEventArgs e)
+        => TryCommitTabName();
+
+    private void CancelTabName_Click(object sender, RoutedEventArgs e)
+        => CloseTabNamePopup();
+
+    private void TabNameTextBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            TryCommitTabName();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CloseTabNamePopup();
+            e.Handled = true;
+        }
+    }
+
+    private void TryCommitTabName()
+    {
+        var name = TabNameTextBox.Text.Trim();
+        if (!_viewModel.IsTabNameAvailable(name, _tabBeingRenamed))
+        {
+            TabNamePrompt.Text = string.IsNullOrWhiteSpace(name)
+                ? "Enter a tab name"
+                : "That tab name is already in use";
+            TabNamePrompt.Foreground = new SolidColorBrush(Color.FromRgb(184, 79, 79));
+            return;
+        }
+
+        var saved = _tabBeingRenamed is null
+            ? _viewModel.TryCreateTab(name, out _)
+            : _viewModel.TryRenameTab(_tabBeingRenamed, name);
+        if (!saved)
+        {
+            TabNamePrompt.Text = "The tab could not be saved";
+            TabNamePrompt.Foreground = new SolidColorBrush(Color.FromRgb(184, 79, 79));
+            ShowPersistenceWarningOnce(_viewModel.PersistenceError);
+            return;
+        }
+
+        CloseTabNamePopup();
+        TabsScrollViewer.ScrollToRightEnd();
+    }
+
+    private void CloseTabNamePopup()
+    {
+        TabNamePopup.IsOpen = false;
+        _tabBeingRenamed = null;
     }
 
     // ── Add / delete ──────────────────────────────────────────────────────
@@ -244,6 +444,7 @@ public partial class ChecklistWindow : OverlayWindow
     private void ItemContextMenu_Opened(object sender, RoutedEventArgs e)
     {
         if (sender is not ContextMenu contextMenu) return;
+        AddMoveToTabItems(contextMenu);
         foreach (var menuItem in contextMenu.Items.OfType<MenuItem>()
                      .Where(item => Equals(item.Tag, "ManualReorder")))
         {
@@ -304,21 +505,63 @@ public partial class ChecklistWindow : OverlayWindow
 
     // ── Drag-drop reordering ─────────────────────────────────────────────
 
-    private void DragHandle_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void ItemsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (_viewModel.CanManuallyReorder &&
-            sender is FrameworkElement fe &&
-            fe.DataContext is ChecklistItem item)
+        ClearPendingDrag();
+        if (!_viewModel.CanManuallyReorder ||
+            VisualTreeHelpers.FindAncestor<TextBox>(e.OriginalSource as DependencyObject) is not
+                { Name: "ItemTitleTextBox", DataContext: ChecklistItem item } textBox)
+            return;
+
+        var container = VisualTreeHelpers.FindAncestor<ListBoxItem>(textBox);
+        if (container is null) return;
+
+        _dragStartPoint = e.GetPosition(ItemsList);
+        _pendingDragItem = item;
+        _pendingDragContainer = container;
+    }
+
+    private void ItemsList_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed ||
+            _pendingDragItem is null ||
+            _pendingDragContainer is null)
         {
-            _draggedItem = item;
-            DragDrop.DoDragDrop(fe, item, DragDropEffects.Move);
+            if (e.LeftButton != MouseButtonState.Pressed)
+                ClearPendingDrag();
+            return;
+        }
+
+        var currentPoint = e.GetPosition(ItemsList);
+        if (Math.Abs(currentPoint.X - _dragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(currentPoint.Y - _dragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        _draggedItem = _pendingDragItem;
+        _draggedContainer = _pendingDragContainer;
+        ClearPendingDrag();
+
+        try
+        {
+            ShowDragPreview(_draggedItem, _draggedContainer);
+            DragDrop.DoDragDrop(ItemsList, _draggedItem, DragDropEffects.Move);
+        }
+        finally
+        {
+            HideDragPreview();
+            _draggedContainer = null;
             _draggedItem = null;
         }
+
         e.Handled = true;
     }
 
+    private void ItemsList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        => ClearPendingDrag();
+
     private void ItemsList_DragOver(object sender, DragEventArgs e)
     {
+        UpdateDragPreviewPosition(e.GetPosition(ItemsList));
         e.Effects = _viewModel.CanManuallyReorder && _draggedItem != null
             ? DragDropEffects.Move
             : DragDropEffects.None;
@@ -327,10 +570,18 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void ItemsList_Drop(object sender, DragEventArgs e)
     {
-        if (!_viewModel.CanManuallyReorder || _draggedItem == null) return;
-        var target = GetItemAtPoint(e.GetPosition(ItemsList));
-        if (target != null && !ReferenceEquals(target, _draggedItem))
-            _viewModel.MoveItem(_draggedItem, target);
+        if (!_viewModel.CanManuallyReorder || _draggedItem == null)
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
+        var dropTarget = GetDropTarget(e.GetPosition(ItemsList));
+        if (dropTarget is { } target && !ReferenceEquals(target.Item, _draggedItem))
+            _viewModel.MoveItem(_draggedItem, target.Item, target.PlaceAfter);
+
+        e.Effects = DragDropEffects.Move;
         e.Handled = true;
     }
 
@@ -351,15 +602,79 @@ public partial class ChecklistWindow : OverlayWindow
         return null;
     }
 
-    private ChecklistItem? GetItemAtPoint(Point point)
+    private static ChecklistTab? GetTabFromContextMenu(MenuItem? menuItem)
+        => (GetContextMenu(menuItem)?.PlacementTarget as FrameworkElement)?.DataContext as ChecklistTab;
+
+    private static ContextMenu? GetContextMenu(MenuItem? menuItem)
     {
-        var element = ItemsList.InputHitTest(point) as DependencyObject;
-        while (element != null)
+        if (menuItem is null) return null;
+        DependencyObject? current = menuItem;
+        while (current is not null)
         {
-            if (element is ListBoxItem lbi) return lbi.DataContext as ChecklistItem;
-            element = VisualTreeHelper.GetParent(element);
+            if (current is ContextMenu contextMenu) return contextMenu;
+            current = LogicalTreeHelper.GetParent(current);
         }
         return null;
+    }
+
+    private (ChecklistItem Item, bool PlaceAfter)? GetDropTarget(Point point)
+    {
+        ChecklistItem? lastItem = null;
+        foreach (var item in _viewModel.FilteredItems)
+        {
+            if (ItemsList.ItemContainerGenerator.ContainerFromItem(item) is not ListBoxItem container)
+                continue;
+
+            lastItem = item;
+            var top = container.TranslatePoint(new Point(0, 0), ItemsList).Y;
+            if (point.Y < top + (container.ActualHeight / 2))
+                return (item, false);
+        }
+
+        return lastItem is null ? null : (lastItem, true);
+    }
+
+    private void ClearPendingDrag()
+    {
+        _pendingDragItem = null;
+        _pendingDragContainer = null;
+    }
+
+    private void ShowDragPreview(ChecklistItem item, ListBoxItem? container)
+    {
+        if (container is null || container.ActualWidth <= 0 || container.ActualHeight <= 0)
+            return;
+
+        DragPreviewPopup.DataContext = item;
+        DragPreviewBorder.Width = Math.Max(160, ItemsList.ActualWidth - 14);
+        DragPreviewPopup.IsOpen = true;
+        UpdateDragPreviewPosition(Mouse.GetPosition(ItemsList));
+        container.Opacity = 0.35;
+    }
+
+    private void UpdateDragPreviewPosition(Point pointer)
+    {
+        if (!DragPreviewPopup.IsOpen) return;
+        const double pointerGap = 12;
+        var previewHeight = DragPreviewBorder.ActualHeight > 0
+            ? DragPreviewBorder.ActualHeight
+            : DragPreviewBorder.Height;
+        var availableHeight = Math.Max(0, ItemsList.ActualHeight - previewHeight);
+        var previewTop = pointer.Y + pointerGap;
+        if (previewTop + previewHeight > ItemsList.ActualHeight)
+            previewTop = pointer.Y - previewHeight - pointerGap;
+
+        DragPreviewPopup.HorizontalOffset = 7;
+        DragPreviewPopup.VerticalOffset = Math.Clamp(previewTop, 0, availableHeight);
+    }
+
+    private void HideDragPreview()
+    {
+        if (_draggedContainer is not null)
+            _draggedContainer.Opacity = 1;
+
+        DragPreviewPopup.IsOpen = false;
+        DragPreviewPopup.DataContext = null;
     }
 
     private void FocusItemAt(int index)
@@ -380,4 +695,64 @@ public partial class ChecklistWindow : OverlayWindow
         tb.Focus();
         tb.CaretIndex = tb.Text?.Length ?? 0;
     }
+
+    private void AddMoveToTabItems(ContextMenu contextMenu)
+    {
+        foreach (var existing in contextMenu.Items.OfType<MenuItem>()
+                     .Where(item => item.Tag is MoveToTabCommand)
+                     .ToList())
+        {
+            contextMenu.Items.Remove(existing);
+        }
+
+        var separator = contextMenu.Items.OfType<Separator>()
+            .FirstOrDefault(item => Equals(item.Tag, "MoveTabsSeparator"));
+        var item = (contextMenu.PlacementTarget as FrameworkElement)?.DataContext as ChecklistItem;
+        if (separator is null || item is null) return;
+
+        var customTabs = _viewModel.CustomTabs.OrderBy(tab => tab.Order).ToList();
+        separator.Visibility = customTabs.Count > 0 || item.TabId is not null
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        if (separator.Visibility != Visibility.Visible) return;
+
+        var insertionIndex = contextMenu.Items.IndexOf(separator);
+        AddMoveToTabMenuItem(contextMenu, insertionIndex++, item, null, "All");
+        foreach (var tab in customTabs)
+            AddMoveToTabMenuItem(contextMenu, insertionIndex++, item, tab.Id, tab.Name);
+    }
+
+    private void AddMoveToTabMenuItem(
+        ContextMenu contextMenu,
+        int index,
+        ChecklistItem item,
+        string? tabId,
+        string tabName)
+    {
+        var menuItem = new MenuItem
+        {
+            Header = $"Move to {tabName}",
+            Tag = new MoveToTabCommand(tabId),
+            IsEnabled = !string.Equals(item.TabId, tabId, StringComparison.Ordinal),
+            Style = FindResource("NotedContextMenuItem") as Style,
+            Icon = new TextBlock
+            {
+                Text = "↪",
+                Foreground = new SolidColorBrush(Color.FromRgb(91, 168, 200)),
+                FontSize = 12
+            }
+        };
+        menuItem.Click += MoveItemToTab_Click;
+        contextMenu.Items.Insert(index, menuItem);
+    }
+
+    private void MoveItemToTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: MoveToTabCommand command } menuItem) return;
+        var item = GetItemFromContextMenu(menuItem);
+        if (item is not null)
+            _viewModel.MoveItemToTab(item, command.TabId);
+    }
+
+    private sealed record MoveToTabCommand(string? TabId);
 }

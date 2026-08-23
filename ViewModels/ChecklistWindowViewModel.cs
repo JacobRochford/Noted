@@ -10,7 +10,6 @@ using Noted.Services;
 
 namespace Noted.ViewModels;
 
-public enum ChecklistFilterMode { All, Active, Completed }
 public enum ChecklistSortMode  { Manual, Priority, DueDate, Alphabetical }
 
 public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposable
@@ -23,7 +22,8 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
     private readonly Action<Action> _uiThreadInvoke;
     private bool _ghostModeEnabled;
     private string _searchQuery = "";
-    private ChecklistFilterMode _filterMode = ChecklistFilterMode.All;
+    private ChecklistTab? _selectedTab;
+    private int _nextCustomTabOrder = 100;
     private ChecklistSortMode _sortMode = ChecklistSortMode.Manual;
     private bool _isSearchVisible;
     private bool _isRefreshing;
@@ -35,6 +35,8 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
 
     // Filtered + sorted view shown to the ListBox
     public ObservableCollection<ChecklistItem> FilteredItems { get; } = new();
+    public ObservableCollection<ChecklistTab> Tabs { get; } = new();
+    public ObservableCollection<ChecklistTab> VisibleTabs { get; } = new();
 
     // --- Window state ---
 
@@ -52,11 +54,30 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
         set { if (_searchQuery != value) { _searchQuery = value; OnPropertyChanged(); RefreshFilteredItems(); } }
     }
 
-    public ChecklistFilterMode FilterMode
+    public ChecklistTab? SelectedTab
     {
-        get => _filterMode;
-        set { if (_filterMode != value) { _filterMode = value; OnPropertyChanged(); RefreshFilteredItems(); } }
+        get => _selectedTab;
+        private set
+        {
+            if (ReferenceEquals(_selectedTab, value)) return;
+            if (_selectedTab is not null) _selectedTab.IsSelected = false;
+            _selectedTab = value;
+            if (_selectedTab is not null) _selectedTab.IsSelected = true;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasSelectedTab));
+            OnPropertyChanged(nameof(CanAddItem));
+            RefreshFilteredItems();
+        }
     }
+
+    public bool HasSelectedTab => SelectedTab is not null;
+
+    public bool CanAddItem => SelectedTab is not null &&
+        (SelectedTab.Kind != ChecklistTabKind.Done ||
+         VisibleTabs.Any(tab => tab.Kind != ChecklistTabKind.Done));
+
+    public IEnumerable<ChecklistTab> CustomTabs =>
+        Tabs.Where(tab => tab.Kind == ChecklistTabKind.Custom);
 
     public ChecklistSortMode SortMode
     {
@@ -132,13 +153,17 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
 
         var loadResult = _contentService.LoadItems();
         SetLoadIssues(loadResult.Issues);
+        InitializeTabs(loadResult.Tabs);
+        var customTabsById = CustomTabs.ToDictionary(tab => tab.Id, StringComparer.OrdinalIgnoreCase);
         foreach (var d in loadResult.Items)
         {
+            customTabsById.TryGetValue(d.TabId ?? "", out var assignedTab);
             var item = new ChecklistItem
             {
                 Text      = d.Text ?? "",
                 IsChecked = d.IsChecked,
                 Priority  = d.Priority,
+                TabId     = assignedTab?.Id,
                 DueDate   = d.DueDate,
                 Notes     = d.Notes ?? "",
                 CreatedAt = d.CreatedAt == default ? DateTime.Now : d.CreatedAt
@@ -149,6 +174,227 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
 
         Items.CollectionChanged += Items_CollectionChanged;
         RefreshFilteredItems();
+    }
+
+    // --- Tabs ---
+
+    private void InitializeTabs(IReadOnlyList<ChecklistTabState> states)
+    {
+        AddSystemTab(
+            states.FirstOrDefault(state => state.Kind == ChecklistTabKind.All),
+            ChecklistTab.AllId,
+            "All",
+            ChecklistTabKind.All,
+            0);
+        AddSystemTab(
+            states.FirstOrDefault(state => state.Kind == ChecklistTabKind.Urgent),
+            ChecklistTab.UrgentId,
+            "Urgent",
+            ChecklistTabKind.Urgent,
+            1);
+
+        var usedIds = new HashSet<string>(
+            Tabs.Select(tab => tab.Id),
+            StringComparer.OrdinalIgnoreCase);
+        var usedNames = new HashSet<string>(
+            Tabs.Select(tab => tab.Name),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var state in states
+                     .Where(state => state.Kind == ChecklistTabKind.Custom)
+                     .OrderBy(state => state.Order))
+        {
+            var id = state.Id?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(id) || !usedIds.Add(id))
+            {
+                do
+                {
+                    id = Guid.NewGuid().ToString("N");
+                }
+                while (!usedIds.Add(id));
+            }
+
+            var name = MakeUniqueTabName(NormalizeTabName(state.Name), usedNames);
+
+            var order = Math.Max(100, state.Order);
+            Tabs.Add(new ChecklistTab(
+                id,
+                name,
+                ChecklistTabKind.Custom,
+                isVisible: true,
+                order));
+            _nextCustomTabOrder = Math.Max(_nextCustomTabOrder, order + 1);
+        }
+
+        AddSystemTab(
+            states.FirstOrDefault(state => state.Kind == ChecklistTabKind.Done),
+            ChecklistTab.DoneId,
+            "Done",
+            ChecklistTabKind.Done,
+            int.MaxValue);
+
+        RefreshVisibleTabs();
+        SelectedTab = VisibleTabs.FirstOrDefault();
+    }
+
+    private void AddSystemTab(
+        ChecklistTabState? state,
+        string id,
+        string name,
+        ChecklistTabKind kind,
+        int order)
+    {
+        Tabs.Add(new ChecklistTab(
+            id,
+            name,
+            kind,
+            state?.IsVisible ?? true,
+            order));
+    }
+
+    public void SelectTab(ChecklistTab? tab)
+    {
+        if (tab is null || !tab.IsVisible || !Tabs.Contains(tab)) return;
+        SelectedTab = tab;
+    }
+
+    public ChecklistTab? FindTab(string id) =>
+        Tabs.FirstOrDefault(tab => string.Equals(tab.Id, id, StringComparison.Ordinal));
+
+    public bool SetDefaultTabVisibility(string id, bool isVisible)
+    {
+        var tab = FindTab(id);
+        if (tab is null || !tab.IsSystem || tab.IsVisible == isVisible)
+            return tab is not null;
+
+        tab.IsVisible = isVisible;
+        if (!TrySaveTabs())
+        {
+            tab.IsVisible = !isVisible;
+            return false;
+        }
+
+        RefreshVisibleTabs();
+        return true;
+    }
+
+    public bool TryCreateTab(string name, out ChecklistTab? createdTab)
+    {
+        createdTab = null;
+        var normalizedName = NormalizeTabName(name);
+        if (!IsTabNameAvailable(normalizedName, null))
+            return false;
+
+        var tab = new ChecklistTab(
+            Guid.NewGuid().ToString("N"),
+            normalizedName,
+            ChecklistTabKind.Custom,
+            isVisible: true,
+            _nextCustomTabOrder++);
+        Tabs.Add(tab);
+        if (!TrySaveTabs())
+        {
+            Tabs.Remove(tab);
+            _nextCustomTabOrder--;
+            return false;
+        }
+
+        RefreshVisibleTabs();
+        SelectTab(tab);
+        createdTab = tab;
+        return true;
+    }
+
+    public bool TryRenameTab(ChecklistTab tab, string name)
+    {
+        if (!tab.CanDelete || !Tabs.Contains(tab)) return false;
+        var normalizedName = NormalizeTabName(name);
+        if (!IsTabNameAvailable(normalizedName, tab)) return false;
+
+        var previousName = tab.Name;
+        tab.Name = normalizedName;
+        if (TrySaveTabs()) return true;
+
+        tab.Name = previousName;
+        return false;
+    }
+
+    public bool TryDeleteTab(ChecklistTab tab)
+    {
+        if (!tab.CanDelete || !Tabs.Contains(tab)) return false;
+
+        var index = Tabs.IndexOf(tab);
+        Tabs.Remove(tab);
+        if (!TrySaveTabs())
+        {
+            Tabs.Insert(index, tab);
+            return false;
+        }
+
+        RunBulkUpdate(() =>
+        {
+            foreach (var item in Items.Where(item => item.TabId == tab.Id))
+                item.TabId = null;
+        });
+        RefreshVisibleTabs();
+        return true;
+    }
+
+    public void MoveItemToTab(ChecklistItem item, string? tabId)
+    {
+        if (!Items.Contains(item)) return;
+        var validTabId = tabId is not null &&
+                         CustomTabs.Any(tab => tab.Id == tabId)
+            ? tabId
+            : null;
+        item.TabId = validTabId;
+    }
+
+    public bool IsTabNameAvailable(string name, ChecklistTab? existingTab)
+    {
+        var normalizedName = NormalizeTabName(name);
+        return !string.IsNullOrWhiteSpace(normalizedName) &&
+               !Tabs.Any(tab =>
+                   !ReferenceEquals(tab, existingTab) &&
+                   string.Equals(tab.Name, normalizedName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string NormalizeTabName(string? name)
+    {
+        var normalized = name?.Trim() ?? "";
+        return normalized.Length <= 30 ? normalized : normalized[..30].TrimEnd();
+    }
+
+    private static string MakeUniqueTabName(string name, ISet<string> usedNames)
+    {
+        var baseName = string.IsNullOrWhiteSpace(name) ? "Tab" : name;
+        var candidate = baseName;
+        var suffix = 2;
+        while (!usedNames.Add(candidate))
+        {
+            var suffixText = $" ({suffix++})";
+            var prefixLength = Math.Max(1, 30 - suffixText.Length);
+            candidate = $"{baseName[..Math.Min(baseName.Length, prefixLength)].TrimEnd()}{suffixText}";
+        }
+        return candidate;
+    }
+
+    private void RefreshVisibleTabs()
+    {
+        var previousSelection = SelectedTab;
+        VisibleTabs.Clear();
+        foreach (var tab in Tabs.Where(tab => tab.IsVisible).OrderBy(tab => tab.Order))
+            VisibleTabs.Add(tab);
+
+        if (previousSelection is not null && VisibleTabs.Contains(previousSelection))
+        {
+            SelectedTab = previousSelection;
+        }
+        else
+        {
+            SelectedTab = VisibleTabs.FirstOrDefault();
+        }
+
+        OnPropertyChanged(nameof(CanAddItem));
     }
 
     // --- Collection / item change handlers ---
@@ -205,11 +451,15 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
                     i.Text.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) ||
                     i.Notes.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase));
 
-            source = FilterMode switch
+            source = SelectedTab?.Kind switch
             {
-                ChecklistFilterMode.Active    => source.Where(i => !i.IsChecked),
-                ChecklistFilterMode.Completed => source.Where(i =>  i.IsChecked),
-                _                             => source
+                ChecklistTabKind.All => source.Where(item => !item.IsChecked),
+                ChecklistTabKind.Urgent => source.Where(
+                    item => !item.IsChecked && item.Priority == ChecklistPriority.High),
+                ChecklistTabKind.Done => source.Where(item => item.IsChecked),
+                ChecklistTabKind.Custom => source.Where(
+                    item => !item.IsChecked && item.TabId == SelectedTab.Id),
+                _ => Enumerable.Empty<ChecklistItem>()
             };
 
             source = SortMode switch
@@ -243,36 +493,58 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
 
     // --- CRUD ---
 
-    public ChecklistItem AddItem(ChecklistItem? anchor = null)
+    public ChecklistItem? AddItem(ChecklistItem? anchor = null)
     {
-        var item = new ChecklistItem { CreatedAt = DateTime.Now };
+        ChecklistItem? item = null;
         _uiThreadInvoke(() =>
         {
-            PrepareViewForNewItem();
+            var creationTab = GetCreationTab();
+            if (creationTab is null) return;
+
+            PrepareViewForNewItem(creationTab);
+            item = new ChecklistItem
+            {
+                CreatedAt = DateTime.Now,
+                Priority = creationTab.Kind == ChecklistTabKind.Urgent
+                    ? ChecklistPriority.High
+                    : ChecklistPriority.None,
+                TabId = creationTab.Kind == ChecklistTabKind.Custom
+                    ? creationTab.Id
+                    : null
+            };
 
             var anchorIndex = SortMode == ChecklistSortMode.Manual && anchor is not null
                 ? Items.IndexOf(anchor)
                 : -1;
             if (anchorIndex >= 0)
-                Items.Insert(anchorIndex + 1, item);
+                Items.Insert(anchorIndex + 1, item!);
             else
-                Items.Add(item);
+                Items.Add(item!);
         });
         return item;
     }
 
-    public ChecklistItem InsertItemAfter(ChecklistItem anchor)
+    public ChecklistItem? InsertItemAfter(ChecklistItem anchor)
     {
         return AddItem(anchor);
     }
 
-    private void PrepareViewForNewItem()
+    private ChecklistTab? GetCreationTab()
+    {
+        if (SelectedTab?.Kind != ChecklistTabKind.Done)
+            return SelectedTab;
+
+        return VisibleTabs.FirstOrDefault(tab => tab.Kind == ChecklistTabKind.All) ??
+               VisibleTabs.FirstOrDefault(tab => tab.Kind == ChecklistTabKind.Custom) ??
+               VisibleTabs.FirstOrDefault(tab => tab.Kind == ChecklistTabKind.Urgent);
+    }
+
+    private void PrepareViewForNewItem(ChecklistTab creationTab)
     {
         var refreshNeeded = false;
-        if (_filterMode == ChecklistFilterMode.Completed)
+        if (!ReferenceEquals(SelectedTab, creationTab))
         {
-            _filterMode = ChecklistFilterMode.Active;
-            OnPropertyChanged(nameof(FilterMode));
+            SelectedTab = creationTab;
             refreshNeeded = true;
         }
 
@@ -296,6 +568,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
         {
             Text      = item.Text,
             Priority  = item.Priority,
+            TabId     = item.TabId,
             DueDate   = item.DueDate,
             Notes     = item.Notes,
             CreatedAt = DateTime.Now
@@ -327,7 +600,9 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
     {
         _uiThreadInvoke(() =>
         {
-            var changedItems = Items.Where(item => item.IsChecked != isChecked).ToList();
+            var changedItems = FilteredItems
+                .Where(item => item.IsChecked != isChecked)
+                .ToList();
             if (changedItems.Count == 0) return;
 
             RunBulkUpdate(() =>
@@ -398,6 +673,22 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
             Items.Move(si, ti);
     }
 
+    public void MoveItem(ChecklistItem source, ChecklistItem target, bool placeAfter)
+    {
+        if (!CanManuallyReorder) return;
+        var sourceIndex = Items.IndexOf(source);
+        var targetIndex = Items.IndexOf(target);
+        if (sourceIndex < 0 || targetIndex < 0 || sourceIndex == targetIndex) return;
+
+        var newIndex = placeAfter
+            ? sourceIndex < targetIndex ? targetIndex : targetIndex + 1
+            : sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+        newIndex = Math.Clamp(newIndex, 0, Items.Count - 1);
+
+        if (newIndex != sourceIndex)
+            Items.Move(sourceIndex, newIndex);
+    }
+
     // --- Persistence ---
 
     public bool TryFlushPendingItems(out string? error)
@@ -425,10 +716,39 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
             Text      = i.Text,
             IsChecked = i.IsChecked,
             Priority  = i.Priority,
+            TabId     = i.TabId,
             DueDate   = i.DueDate,
             Notes     = i.Notes,
             CreatedAt = i.CreatedAt
         }).ToList();
+    }
+
+    private IReadOnlyList<ChecklistTabState> CreateTabsSnapshot()
+    {
+        return Tabs.Select(tab => new ChecklistTabState
+        {
+            Id = tab.Id,
+            Name = tab.Name,
+            Kind = tab.Kind,
+            IsVisible = tab.IsVisible,
+            Order = tab.Order
+        }).ToList();
+    }
+
+    private bool TrySaveTabs()
+    {
+        try
+        {
+            var saveResult = _contentService.SaveTabs(CreateTabsSnapshot());
+            PersistenceError = saveResult.Warning;
+            return true;
+        }
+        catch (Exception ex) when (IsExpectedPersistenceException(ex))
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+            PersistenceError = $"Checklist tabs could not be saved: {ex.Message}";
+            return false;
+        }
     }
 
     private PersistenceSaveResult SaveItemsSnapshot(IReadOnlyList<ChecklistItemState> items)

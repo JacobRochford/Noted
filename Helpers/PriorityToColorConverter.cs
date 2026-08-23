@@ -14,13 +14,13 @@ public sealed class PriorityToColorConverter : IValueConverter
         {
             return priority switch
             {
-                ChecklistPriority.High => new SolidColorBrush(Color.FromRgb(239, 68, 68)),    // Red
-                ChecklistPriority.Medium => new SolidColorBrush(Color.FromRgb(249, 115, 22)), // Orange
-                ChecklistPriority.Low => new SolidColorBrush(Color.FromRgb(234, 179, 8)),     // Yellow
-                _ => new SolidColorBrush(Color.FromRgb(229, 231, 235))                        // Light Gray
+                ChecklistPriority.High => new SolidColorBrush(Color.FromRgb(217, 104, 104)),
+                ChecklistPriority.Medium => new SolidColorBrush(Color.FromRgb(214, 166, 75)),
+                ChecklistPriority.Low => new SolidColorBrush(Color.FromRgb(91, 168, 200)),
+                _ => new SolidColorBrush(Color.FromRgb(197, 210, 217))
             };
         }
-        return new SolidColorBrush(Color.FromRgb(229, 231, 235));
+        return new SolidColorBrush(Color.FromRgb(197, 210, 217));
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
