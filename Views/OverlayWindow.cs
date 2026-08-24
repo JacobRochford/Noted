@@ -28,6 +28,12 @@ public abstract class OverlayWindow : Window
         MouseLeave += OnOverlayMouseLeave;
     }
 
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        WindowInterop.EnsureToolWindow(new WindowInteropHelper(this).Handle);
+    }
+
     protected void RestoreWindowBounds(double left, double top, double width, double height)
     {
         var bounds = WindowInterop.NormalizeWindowBounds(

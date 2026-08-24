@@ -85,6 +85,15 @@ internal static class WindowInterop {
         SetWindowLong(hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE);
     }
 
+    internal static void EnsureToolWindow(IntPtr hwnd)
+    {
+        int style = GetWindowLong(hwnd, GWL_EXSTYLE);
+        if ((style & WS_EX_TOOLWINDOW) != 0)
+            return;
+
+        SetWindowLong(hwnd, GWL_EXSTYLE, style | WS_EX_TOOLWINDOW);
+    }
+
     internal static void RemoveMinimizeAndMaximizeBoxes(IntPtr hwnd)
     {
         int style = GetWindowLong(hwnd, GWL_STYLE);
