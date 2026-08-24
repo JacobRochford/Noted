@@ -1,14 +1,12 @@
 using System.ComponentModel;
 using System.IO;
 using System.Windows;
-using System.Windows.Interop;
 using System.Windows.Threading;
-using Noted.Helpers;
 using Noted.Services;
 
 namespace Noted;
 
-public partial class MicroScratchpadWindow : Window
+public partial class MicroScratchpadWindow : OverlayWindow
 {
     private readonly IMicroScratchpadRecoveryService _recoveryService;
     private readonly Guid _draftId;
@@ -25,6 +23,10 @@ public partial class MicroScratchpadWindow : Window
         _draftId = draft?.Id ?? Guid.NewGuid();
 
         InitializeComponent();
+        InitializeOverlay(
+            ghostModeEnabled: false,
+            ghostModeOpacity: 1,
+            defaultOpacity: 1);
         Title = $"Micro Scratchpad [{GetShortId(_draftId)}]";
         Editor.Text = draft?.Content ?? string.Empty;
         _saveScheduler = new SaveScheduler<string>(
@@ -34,7 +36,6 @@ public partial class MicroScratchpadWindow : Window
             SaveDraftSnapshot);
         _saveScheduler.StateChanged += SaveScheduler_StateChanged;
         Editor.TextChanged += Editor_TextChanged;
-        SourceInitialized += MicroScratchpadWindow_SourceInitialized;
         Loaded += MicroScratchpadWindow_Loaded;
         Closing += MicroScratchpadWindow_Closing;
         Closed += MicroScratchpadWindow_Closed;
@@ -57,9 +58,23 @@ public partial class MicroScratchpadWindow : Window
         return _saveScheduler.TryFlush(out error);
     }
 
-    private void MicroScratchpadWindow_SourceInitialized(object? sender, EventArgs e)
+    protected override void SaveWindowState()
     {
-        WindowInterop.RemoveMinimizeAndMaximizeBoxes(new WindowInteropHelper(this).Handle);
+    }
+
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryFlushPendingContent(out var error))
+        {
+            AppDialog.Show(
+                error ?? "Micro Scratchpad recovery data could not be saved.",
+                "Micro Scratchpad Save Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        HideWindow();
     }
 
     private void MicroScratchpadWindow_Loaded(object sender, RoutedEventArgs e)
@@ -101,26 +116,15 @@ public partial class MicroScratchpadWindow : Window
         if (_keepDraftOnClose)
             return;
 
-        _saveScheduler.CancelPending();
-        try
-        {
-            _recoveryService.DeleteDraft(_draftId);
-        }
-        catch (Exception ex) when (IsExpectedRecoveryException(ex))
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-            e.Cancel = true;
-            _saveScheduler.Schedule(Editor.Text);
-            var contentWasSaved = _saveScheduler.TryFlush(out var saveError);
-            var saveFailureDetail = contentWasSaved
-                ? string.Empty
-                : $"\n\nThe current text also could not be recovery-saved:\n{saveError}";
-            AppDialog.Show(
-                $"The Micro Scratchpad could not be closed because its recovery data could not be removed.\n\n{ex.Message}{saveFailureDetail}",
-                "Micro Scratchpad Close Failed",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-        }
+        if (_saveScheduler.TryFlush(out var error))
+            return;
+
+        e.Cancel = true;
+        AppDialog.Show(
+            error ?? "Micro Scratchpad recovery data could not be saved.",
+            "Micro Scratchpad Save Failed",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     private void MicroScratchpadWindow_Closed(object? sender, EventArgs e)
@@ -128,7 +132,6 @@ public partial class MicroScratchpadWindow : Window
         _saveScheduler.StateChanged -= SaveScheduler_StateChanged;
         _saveScheduler.Dispose();
         Editor.TextChanged -= Editor_TextChanged;
-        SourceInitialized -= MicroScratchpadWindow_SourceInitialized;
         Loaded -= MicroScratchpadWindow_Loaded;
         Closing -= MicroScratchpadWindow_Closing;
         Closed -= MicroScratchpadWindow_Closed;

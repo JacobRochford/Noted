@@ -325,6 +325,13 @@ public partial class App : Application
         if (_isShuttingDown)
             return;
 
+        var hiddenWindow = _microScratchpadWindows.FirstOrDefault(window => !window.IsWindowVisible);
+        if (hiddenWindow is not null)
+        {
+            hiddenWindow.ShowWindow();
+            return;
+        }
+
         var recoveryService = _microScratchpadRecoveryService
             ?? throw new InvalidOperationException("Micro Scratchpad recovery is not initialized.");
         OpenMicroScratchpadWindow(new MicroScratchpadWindow(recoveryService));
