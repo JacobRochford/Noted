@@ -123,9 +123,21 @@ public sealed class ScratchpadWindowViewModel : INotifyPropertyChanged
             : normalizedText.Split(new[] { ' ', '\t', '\n' }, StringSplitOptions.RemoveEmptyEntries).Length;
     }
 
-    public bool TrySaveWindowLayout(double left, double top, double width, double height)
+    public bool TrySaveWindowLayout(
+        double left,
+        double top,
+        double width,
+        double height,
+        bool? reopenOnStartup = null)
     {
-        _windowState = _windowState with { Left = left, Top = top, Width = width, Height = height };
+        _windowState = _windowState with
+        {
+            Left = left,
+            Top = top,
+            Width = width,
+            Height = height,
+            ReopenOnStartup = reopenOnStartup ?? _windowState.ReopenOnStartup
+        };
         return TrySaveWindowState();
     }
 

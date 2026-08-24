@@ -11,4 +11,5 @@ public sealed record ScratchpadWindowState
     public bool GhostModeEnabled { get; init; }
     public bool WordWrapEnabled { get; init; } = true;
     public double FontSize { get; init; } = 13;
+    public bool ReopenOnStartup { get; init; }
 }

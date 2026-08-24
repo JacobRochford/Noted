@@ -32,6 +32,8 @@ public partial class ScratchpadWindow : OverlayWindow
     private bool _isWindowStateDirty;
     private bool _isClosing;
     private bool _cleanupCompleted;
+    private bool _reopenOnStartup;
+    private bool _preserveOpenStateOnClose;
     private string? _lastWarningMessage;
     private long _contentRevision;
 
@@ -54,6 +56,7 @@ public partial class ScratchpadWindow : OverlayWindow
         _viewModel = viewModel;
         var state = NormalizeWindowState(_viewModel.InitialWindowState);
         _viewModel.ApplyNormalizedWindowState(state);
+        _reopenOnStartup = state.ReopenOnStartup;
         DataContext = _viewModel;
 
         Left = state.Left;
@@ -108,6 +111,12 @@ public partial class ScratchpadWindow : OverlayWindow
             e.Cancel = true;
             ShowPersistenceWarningOnce(error);
             return;
+        }
+
+        if (!_preserveOpenStateOnClose)
+        {
+            _reopenOnStartup = false;
+            _isWindowStateDirty = true;
         }
 
         if (!TryFlushPendingWindowState(out var stateError))
@@ -286,7 +295,7 @@ public partial class ScratchpadWindow : OverlayWindow
             return true;
         }
 
-        if (_viewModel.TrySaveWindowLayout(Left, Top, Width, Height))
+        if (_viewModel.TrySaveWindowLayout(Left, Top, Width, Height, _reopenOnStartup))
         {
             _isWindowStateDirty = false;
             error = null;
@@ -299,14 +308,28 @@ public partial class ScratchpadWindow : OverlayWindow
 
     private void ScratchpadWindow_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (IsVisible)
-            return;
+        if (!_preserveOpenStateOnClose)
+        {
+            _reopenOnStartup = IsWindowVisible;
+            _isWindowStateDirty = true;
+            if (!TryFlushPendingWindowState(out var visibilityStateError))
+                ShowPersistenceWarningOnce(visibilityStateError);
+        }
 
-        if (_isContentDirty && !TryFlushPendingContent(out var contentError))
+        if (!IsVisible && _isContentDirty && !TryFlushPendingContent(out var contentError))
             ShowPersistenceWarningOnce(contentError);
 
-        if (_isWindowStateDirty && !TryFlushPendingWindowState(out var stateError))
+        if (!IsVisible && _isWindowStateDirty && !TryFlushPendingWindowState(out var stateError))
             ShowPersistenceWarningOnce(stateError);
+    }
+
+    internal void PrepareForApplicationShutdown()
+    {
+        _reopenOnStartup = IsWindowVisible;
+        _preserveOpenStateOnClose = true;
+        _isWindowStateDirty = true;
+        if (!TryFlushPendingWindowState(out var error))
+            ShowPersistenceWarningOnce(error);
     }
 
     private void RequestHide()
@@ -502,6 +525,9 @@ public partial class ScratchpadWindow : OverlayWindow
     private void ShowColorPopup(Button anchor, (string Name, Brush Brush)[] colors, Action<Brush> onSelected)
     {
         var menu = new ContextMenu();
+        if (TryFindResource("NotedContextMenu") is Style menuStyle)
+            menu.Style = menuStyle;
+
         foreach (var (name, brush) in colors)
         {
             var swatch = new Border
@@ -519,6 +545,8 @@ public partial class ScratchpadWindow : OverlayWindow
             row.Children.Add(label);
 
             var item = new MenuItem { Header = row };
+            if (TryFindResource("NotedContextMenuItem") is Style itemStyle)
+                item.Style = itemStyle;
             var captured = brush;
             item.Click += (_, _) => onSelected(captured);
             menu.Items.Add(item);

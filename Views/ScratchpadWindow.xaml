@@ -19,29 +19,142 @@
     <noted:OverlayWindow.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
-        <Style x:Key="ToolbarBtn" TargetType="Button">
+        <Style x:Key="ScrollBarThumbStyle" TargetType="Thumb">
+            <Setter Property="MinHeight" Value="20"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="#91C5DE" CornerRadius="3" Margin="1,2"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="HorizontalScrollBarThumbStyle" TargetType="Thumb">
+            <Setter Property="MinWidth" Value="20"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="#91C5DE" CornerRadius="3" Margin="2,1"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ModernScrollBar" TargetType="ScrollBar">
+            <Setter Property="Width" Value="7"/>
+            <Setter Property="MinWidth" Value="7"/>
+            <Setter Property="Background" Value="#E6F2F8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="3">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageUpCommand"
+                                                  Background="Transparent" BorderThickness="0" Opacity="0"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource ScrollBarThumbStyle}"/>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageDownCommand"
+                                                  Background="Transparent" BorderThickness="0" Opacity="0"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Width" Value="Auto"/>
+                    <Setter Property="MinWidth" Value="0"/>
+                    <Setter Property="Height" Value="7"/>
+                    <Setter Property="MinHeight" Value="7"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ScrollBar">
+                                <Border Background="{TemplateBinding Background}" CornerRadius="3">
+                                    <Track x:Name="PART_Track" Orientation="Horizontal">
+                                        <Track.DecreaseRepeatButton>
+                                            <RepeatButton Command="ScrollBar.PageLeftCommand"
+                                                          Background="Transparent" BorderThickness="0" Opacity="0"/>
+                                        </Track.DecreaseRepeatButton>
+                                        <Track.Thumb>
+                                            <Thumb Style="{StaticResource HorizontalScrollBarThumbStyle}"/>
+                                        </Track.Thumb>
+                                        <Track.IncreaseRepeatButton>
+                                            <RepeatButton Command="ScrollBar.PageRightCommand"
+                                                          Background="Transparent" BorderThickness="0" Opacity="0"/>
+                                        </Track.IncreaseRepeatButton>
+                                    </Track>
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource ModernScrollBar}"/>
+
+        <Style x:Key="HeaderIconBtn" TargetType="Button">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#444444"/>
+            <Setter Property="Foreground" Value="#5F7480"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Padding" Value="5,2"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="MinWidth" Value="26"/>
-            <Setter Property="Height" Value="24"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="bg" Background="{TemplateBinding Background}"
-                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="ButtonBackground"
+                                Background="{TemplateBinding Background}" CornerRadius="5">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#DFF0FA"/>
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#DCEEF6"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#C4E2F2"/>
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#C9E4F0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ToolbarBtn" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#4F6875"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="27"/>
+            <Setter Property="Height" Value="27"/>
+            <Setter Property="Margin" Value="1"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBackground"
+                                Background="{TemplateBinding Background}" CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#DCEEF6"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#C9E4F0"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -52,285 +165,251 @@
         <Style x:Key="ToggleBtn" TargetType="ToggleButton">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#444444"/>
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#4F6875"/>
+            <Setter Property="FontSize" Value="12"/>
             <Setter Property="Padding" Value="5,2"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="MinWidth" Value="26"/>
-            <Setter Property="Height" Value="24"/>
+            <Setter Property="MinWidth" Value="27"/>
+            <Setter Property="Height" Value="27"/>
+            <Setter Property="Margin" Value="1"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="bg" Background="{TemplateBinding Background}"
-                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="ButtonBackground"
+                                Background="{TemplateBinding Background}" CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#DFF0FA"/>
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#DCEEF6"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#BCD8F0"/>
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#C9E4F0"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="FindInput" TargetType="TextBox">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="7,4"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#A8CDE0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="#355A6E"/>
+            <Setter Property="CaretBrush" Value="#2C6E91"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
     </noted:OverlayWindow.Resources>
 
-    <Grid Background="#FFFFFF">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <Grid Background="Transparent">
+        <Border Margin="1" Background="#F5F9FC" BorderBrush="#87CEEB"
+                BorderThickness="1" CornerRadius="8">
+            <Grid Margin="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-        <!-- Resize thumb (bottom-right corner) -->
-        <Primitives:Thumb x:Name="ResizeThumb"
-                          Grid.Row="0" Grid.RowSpan="5"
-                          HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                          Width="20" Height="20"
-                          Cursor="SizeNWSE"
-                          Background="Transparent" Opacity="0"
-                          DragDelta="ResizeThumb_DragDelta"
-                          DragCompleted="ResizeThumb_DragCompleted"
-                          Panel.ZIndex="999"
-                          Margin="0,0,-2,-2"/>
+                <Border x:Name="TitleBar" Grid.Row="0" Background="Transparent"
+                        Padding="2,1,0,8" Cursor="SizeAll">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                    VerticalAlignment="Center" IsHitTestVisible="False">
+                            <TextBlock Text="✎" Margin="0,0,7,0" Foreground="#5BA8C8"
+                                       FontSize="15" VerticalAlignment="Center"/>
+                            <TextBlock Text="Scratchpad" Foreground="#2C6E91"
+                                       FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="⚠" Margin="8,0,0,0" Foreground="#B35A00"
+                                       FontSize="12" VerticalAlignment="Center"
+                                       Visibility="{Binding HasPersistenceError, Converter={StaticResource BoolToVis}}"
+                                       ToolTip="{Binding PersistenceError}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="&#xE721;" Style="{StaticResource HeaderIconBtn}"
+                                    Click="FindButton_Click" ToolTip="Find and replace (Ctrl+F)"/>
+                            <Button Content="&#xE921;" Margin="3,0,0,0"
+                                    Style="{StaticResource HeaderIconBtn}"
+                                    Click="HideButton_Click" ToolTip="Hide"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
 
-        <!-- Title bar -->
-        <Border x:Name="TitleBar"
-                Grid.Row="0"
-                Background="#E8F4F8"
-                BorderBrush="#87CEEB"
-                BorderThickness="0,0,0,1"
-                Padding="10,7"
-                Cursor="Hand">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" IsHitTestVisible="False">
-                    <TextBlock Text="✏" FontSize="13" Foreground="#2C6E91" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <TextBlock Text="Scratchpad" FontSize="14" FontWeight="SemiBold" Foreground="#2C6E91"/>
-                </StackPanel>
-                <Button x:Name="HideButton" Grid.Column="1"
-                        Content="✕" Click="HideButton_Click"
-                        Background="Transparent" BorderThickness="0"
-                        Foreground="#999999" FontSize="14"
-                        Padding="4,0" Margin="8,0,0,0"
-                        VerticalAlignment="Center" HorizontalContentAlignment="Center"
-                        Width="20" Height="20" Cursor="Hand"/>
-            </Grid>
-        </Border>
+                <Border Grid.Row="1" Margin="0,0,0,7" Padding="8"
+                        Background="#F2F8FB" BorderBrush="#C9DFEC"
+                        BorderThickness="1" CornerRadius="7"
+                        Visibility="{Binding IsFindBarVisible, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="FindBox" Grid.Column="0"
+                                     Style="{StaticResource FindInput}"
+                                     Text="{Binding FindText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     KeyDown="FindBox_KeyDown"/>
+                            <Button Grid.Column="1" Content="↑" Style="{StaticResource ToolbarBtn}"
+                                    Click="FindPrevButton_Click" ToolTip="Previous (Shift+Enter)"
+                                    Margin="4,0,0,0"/>
+                            <Button Grid.Column="2" Content="↓" Style="{StaticResource ToolbarBtn}"
+                                    Click="FindNextButton_Click" ToolTip="Next (Enter)"/>
+                            <TextBlock Grid.Column="3" Text="{Binding FindResultText}"
+                                       Foreground="#78909C" FontSize="11"
+                                       VerticalAlignment="Center" Margin="6,0"/>
+                            <Button Grid.Column="4" Content="×" Style="{StaticResource ToolbarBtn}"
+                                    Click="CloseFindBar_Click" ToolTip="Close (Escape)"/>
+                        </Grid>
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Style="{StaticResource FindInput}"
+                                     Text="{Binding ReplaceText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Replace with"/>
+                            <Button Grid.Column="1" Content="Replace" Style="{StaticResource ToolbarBtn}"
+                                    Click="ReplaceButton_Click" Margin="4,0,1,0" Padding="8,2"/>
+                            <Button Grid.Column="2" Content="Replace all" Style="{StaticResource ToolbarBtn}"
+                                    Click="ReplaceAllButton_Click" Padding="8,2"
+                                    ToolTip="Replace all occurrences"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
 
-        <!-- Find / Replace bar (collapsible) -->
-        <Border Grid.Row="1"
-                Background="#EEF6FB"
-                BorderBrush="#C8E4F0"
-                BorderThickness="0,0,0,1"
-                Padding="8,6"
-                Visibility="{Binding IsFindBarVisible, Converter={StaticResource BoolToVis}}">
-            <StackPanel>
-                <!-- Find row -->
-                <Grid>
+                <Border Grid.Row="2" Margin="0,0,0,7" Padding="5"
+                        Background="White" BorderBrush="#C9DFEC"
+                        BorderThickness="1" CornerRadius="7">
+                    <WrapPanel Orientation="Horizontal">
+                        <ToggleButton x:Name="BoldButton" Style="{StaticResource ToggleBtn}"
+                                      FontWeight="Bold" Content="B"
+                                      Click="BoldButton_Click" ToolTip="Bold (Ctrl+B)"/>
+                        <ToggleButton x:Name="ItalicButton" Style="{StaticResource ToggleBtn}"
+                                      FontStyle="Italic" Content="I"
+                                      Click="ItalicButton_Click" ToolTip="Italic (Ctrl+I)"/>
+                        <ToggleButton x:Name="UnderlineButton" Style="{StaticResource ToggleBtn}"
+                                      Click="UnderlineButton_Click" ToolTip="Underline (Ctrl+U)">
+                            <TextBlock Text="U" TextDecorations="Underline"/>
+                        </ToggleButton>
+                        <ToggleButton x:Name="StrikeButton" Style="{StaticResource ToggleBtn}"
+                                      Click="StrikeButton_Click" ToolTip="Strikethrough">
+                            <TextBlock Text="S" TextDecorations="Strikethrough"/>
+                        </ToggleButton>
+
+                        <Border Width="1" Height="19" Background="#D0E4EE" Margin="5,5"/>
+
+                        <ComboBox x:Name="FontSizeCombo" Width="54" Height="27" Margin="1"
+                                  Padding="3,0" Background="White" BorderBrush="#B8D4E1"
+                                  Foreground="#4F6875" FontSize="11"
+                                  VerticalContentAlignment="Center"
+                                  SelectionChanged="FontSizeCombo_SelectionChanged"
+                                  ToolTip="Font size"/>
+
+                        <Border Width="1" Height="19" Background="#D0E4EE" Margin="5,5"/>
+
+                        <Button Style="{StaticResource ToolbarBtn}"
+                                Click="TextColorButton_Click" ToolTip="Text color">
+                            <StackPanel>
+                                <TextBlock Text="A" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                <Border x:Name="TextColorBar" Height="3" Width="14"
+                                        Background="#CC3333" CornerRadius="1"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource ToolbarBtn}"
+                                Click="HighlightButton_Click" ToolTip="Highlight">
+                            <StackPanel>
+                                <TextBlock Text="H" HorizontalAlignment="Center"/>
+                                <Border x:Name="HighlightColorBar" Height="3" Width="14"
+                                        Background="Yellow" CornerRadius="1"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Border Width="1" Height="19" Background="#D0E4EE" Margin="5,5"/>
+
+                        <Button Style="{StaticResource ToolbarBtn}" Content="↶"
+                                Click="UndoButton_Click" ToolTip="Undo (Ctrl+Z)" FontSize="15"/>
+                        <Button Style="{StaticResource ToolbarBtn}" Content="↷"
+                                Click="RedoButton_Click" ToolTip="Redo (Ctrl+Y)" FontSize="15"/>
+                        <Button Style="{StaticResource ToolbarBtn}" Content="⏱"
+                                Click="InsertTimestampButton_Click" ToolTip="Insert timestamp"/>
+
+                        <Border Width="1" Height="19" Background="#D0E4EE" Margin="5,5"/>
+
+                        <ToggleButton x:Name="WordWrapButton" Style="{StaticResource ToggleBtn}"
+                                      IsChecked="{Binding WordWrapEnabled, Mode=TwoWay}"
+                                      ToolTip="Toggle word wrap" Content="↵"/>
+                        <Button Style="{StaticResource ToolbarBtn}" Content="⧉"
+                                Click="CopyAllButton_Click" ToolTip="Copy all text" FontSize="14"/>
+                        <Button Style="{StaticResource ToolbarBtn}" Content="⌫"
+                                Click="ClearButton_Click" ToolTip="Clear all" FontSize="14"/>
+                    </WrapPanel>
+                </Border>
+
+                <Border Grid.Row="3" Background="White" BorderBrush="#C9DFEC"
+                        BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                    <RichTextBox x:Name="Editor"
+                                 Background="White" Foreground="#263E4C"
+                                 BorderThickness="0" Padding="11,9"
+                                 FontFamily="Segoe UI" FontSize="13"
+                                 CaretBrush="#2C6E91"
+                                 VerticalScrollBarVisibility="Auto"
+                                 AcceptsReturn="True" AcceptsTab="True"
+                                 SpellCheck.IsEnabled="True"
+                                 TextChanged="Editor_TextChanged"
+                                 SelectionChanged="Editor_SelectionChanged"
+                                 PreviewKeyDown="Editor_PreviewKeyDown"/>
+                </Border>
+
+                <Grid Grid.Row="4" Margin="1,8,1,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBox x:Name="FindBox"
-                             Grid.Column="0"
-                             Text="{Binding FindText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             FontSize="12" Padding="4,3"
-                             BorderBrush="#A8CDE0" BorderThickness="1"
-                             Background="White" VerticalContentAlignment="Center"
-                             KeyDown="FindBox_KeyDown"/>
-                    <Button Grid.Column="1" Content="▲" Style="{StaticResource ToolbarBtn}"
-                            Click="FindPrevButton_Click" ToolTip="Previous (Shift+Enter)"
-                            Margin="3,0,0,0" FontSize="10"/>
-                    <Button Grid.Column="2" Content="▼" Style="{StaticResource ToolbarBtn}"
-                            Click="FindNextButton_Click" ToolTip="Next (Enter)"
-                            Margin="2,0,0,0" FontSize="10"/>
-                    <TextBlock Grid.Column="3"
-                               Text="{Binding FindResultText}"
-                               FontSize="11" Foreground="#888888"
-                               VerticalAlignment="Center" Margin="6,0"/>
-                    <Button Grid.Column="4" Content="✕" Style="{StaticResource ToolbarBtn}"
-                            Click="CloseFindBar_Click" Foreground="#999999" FontSize="11"
-                            ToolTip="Close (Escape)"/>
-                </Grid>
-                <!-- Replace row -->
-                <Grid Margin="0,5,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox Grid.Column="0"
-                             Text="{Binding ReplaceText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             FontSize="12" Padding="4,3"
-                             BorderBrush="#A8CDE0" BorderThickness="1"
-                             Background="White" VerticalContentAlignment="Center"
-                             ToolTip="Replace with"/>
-                    <Button Grid.Column="1" Content="Replace" Style="{StaticResource ToolbarBtn}"
-                            Click="ReplaceButton_Click" Margin="4,0,0,0"
-                            FontSize="11" Padding="8,3"/>
-                    <Button Grid.Column="2" Content="Replace All" Style="{StaticResource ToolbarBtn}"
-                            Click="ReplaceAllButton_Click" Margin="3,0,0,0"
-                            FontSize="11" Padding="8,3" ToolTip="Replace all occurrences"/>
-                </Grid>
-            </StackPanel>
-        </Border>
-
-        <!-- Formatting toolbar -->
-        <Border Grid.Row="2"
-                Background="#F0F8FC"
-                BorderBrush="#C8E4F0"
-                BorderThickness="0,0,0,1"
-                Padding="6,4">
-            <StackPanel Orientation="Horizontal">
-                <!-- Text formatting -->
-                <ToggleButton x:Name="BoldButton" Style="{StaticResource ToggleBtn}"
-                              FontWeight="Bold" Content="B"
-                              Click="BoldButton_Click" ToolTip="Bold (Ctrl+B)"/>
-                <ToggleButton x:Name="ItalicButton" Style="{StaticResource ToggleBtn}"
-                              FontStyle="Italic" Content="I" Margin="2,0,0,0"
-                              Click="ItalicButton_Click" ToolTip="Italic (Ctrl+I)"/>
-                <ToggleButton x:Name="UnderlineButton" Style="{StaticResource ToggleBtn}"
-                              Margin="2,0,0,0"
-                              Click="UnderlineButton_Click" ToolTip="Underline (Ctrl+U)">
-                    <TextBlock Text="U" TextDecorations="Underline"/>
-                </ToggleButton>
-                <ToggleButton x:Name="StrikeButton" Style="{StaticResource ToggleBtn}"
-                              Margin="2,0,0,0"
-                              Click="StrikeButton_Click" ToolTip="Strikethrough">
-                    <TextBlock Text="S" TextDecorations="Strikethrough"/>
-                </ToggleButton>
-
-                <Border Width="1" Background="#C8E4F0" Margin="5,2"/>
-
-                <!-- Font size -->
-                <ComboBox x:Name="FontSizeCombo"
-                          Width="54" Height="24" FontSize="11"
-                          VerticalContentAlignment="Center"
-                          SelectionChanged="FontSizeCombo_SelectionChanged"
-                          ToolTip="Font size"/>
-
-                <Border Width="1" Background="#C8E4F0" Margin="5,2"/>
-
-                <!-- Text color -->
-                <Button Style="{StaticResource ToolbarBtn}"
-                        Click="TextColorButton_Click" ToolTip="Text color" Margin="0,0,2,0">
-                    <StackPanel>
-                        <TextBlock Text="A" FontWeight="Bold" HorizontalAlignment="Center" FontSize="12"/>
-                        <Border x:Name="TextColorBar" Height="3" Width="14" Background="#CC3333" CornerRadius="1"/>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Foreground="#78909C" FontSize="11">
+                            <Run Text="Words "/>
+                            <Run Text="{Binding WordCount, Mode=OneWay}" Foreground="#2C6E91" FontWeight="SemiBold"/>
+                            <Run Text="   Characters "/>
+                            <Run Text="{Binding CharCount, Mode=OneWay}" Foreground="#2C6E91" FontWeight="SemiBold"/>
+                            <Run Text="   Lines "/>
+                            <Run Text="{Binding LineCount, Mode=OneWay}" Foreground="#2C6E91" FontWeight="SemiBold"/>
+                        </TextBlock>
+                        <TextBlock Text="{Binding FindResultText}" Margin="12,0,0,0"
+                                   Foreground="#78909C" FontSize="11" VerticalAlignment="Center"/>
                     </StackPanel>
-                </Button>
-                <!-- Highlight -->
-                <Button Style="{StaticResource ToolbarBtn}"
-                        Click="HighlightButton_Click" ToolTip="Highlight" Margin="0,0,2,0">
-                    <StackPanel>
-                        <TextBlock Text="H" HorizontalAlignment="Center" FontSize="12"/>
-                        <Border x:Name="HighlightColorBar" Height="3" Width="14" Background="Yellow" CornerRadius="1"/>
-                    </StackPanel>
-                </Button>
-
-                <Border Width="1" Background="#C8E4F0" Margin="5,2"/>
-
-                <!-- Undo / Redo -->
-                <Button Style="{StaticResource ToolbarBtn}" Content="↩"
-                        Click="UndoButton_Click" ToolTip="Undo (Ctrl+Z)" FontSize="14"/>
-                <Button Style="{StaticResource ToolbarBtn}" Content="↪"
-                        Click="RedoButton_Click" ToolTip="Redo (Ctrl+Y)" FontSize="14" Margin="2,0,0,0"/>
-
-                <Border Width="1" Background="#C8E4F0" Margin="5,2"/>
-
-                <!-- Find -->
-                <Button Style="{StaticResource ToolbarBtn}" Content="⌕"
-                        Click="FindButton_Click" ToolTip="Find &amp; Replace (Ctrl+F)" FontSize="15"/>
-
-                <!-- Insert timestamp -->
-                <Button Style="{StaticResource ToolbarBtn}" Content="⏱"
-                        Click="InsertTimestampButton_Click" ToolTip="Insert timestamp" FontSize="13" Margin="2,0,0,0"/>
-
-                <Border Width="1" Background="#C8E4F0" Margin="5,2"/>
-
-                <!-- Word wrap toggle -->
-                <ToggleButton x:Name="WordWrapButton" Style="{StaticResource ToggleBtn}"
-                              IsChecked="{Binding WordWrapEnabled, Mode=TwoWay}"
-                              ToolTip="Toggle word wrap" Content="⏎" Margin="0,0,2,0"/>
-
-                <!-- Copy all -->
-                <Button Style="{StaticResource ToolbarBtn}" Content="⎘"
-                        Click="CopyAllButton_Click" ToolTip="Copy all text" FontSize="13" Margin="0,0,2,0"/>
-
-                <!-- Clear -->
-                <Button Style="{StaticResource ToolbarBtn}" Content="⌫"
-                        Click="ClearButton_Click" ToolTip="Clear all" FontSize="13"/>
-            </StackPanel>
-        </Border>
-
-        <!-- Editor -->
-        <RichTextBox x:Name="Editor"
-                     Grid.Row="3"
-                     Background="White"
-                     Foreground="#222222"
-                     BorderThickness="0"
-                     Padding="10,8"
-                     FontFamily="Segoe UI"
-                     FontSize="13"
-                     VerticalScrollBarVisibility="Auto"
-                     AcceptsReturn="True"
-                     AcceptsTab="True"
-                     SpellCheck.IsEnabled="True"
-                     TextChanged="Editor_TextChanged"
-                     SelectionChanged="Editor_SelectionChanged"
-                     PreviewKeyDown="Editor_PreviewKeyDown"/>
-
-        <!-- Status bar -->
-        <Border Grid.Row="4"
-                Background="#EEF6FB"
-                BorderBrush="#C8E4F0"
-                BorderThickness="0,1,0,0"
-                Padding="8,4">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock FontSize="11" Foreground="#777777">
-                        <Run Text="W:"/>
-                        <Run Text="{Binding WordCount, Mode=OneWay}" Foreground="#2C6E91" FontWeight="SemiBold"/>
-                        <Run Text="  C:"/>
-                        <Run Text="{Binding CharCount, Mode=OneWay}" Foreground="#2C6E91" FontWeight="SemiBold"/>
-                        <Run Text="  L:"/>
-                        <Run Text="{Binding LineCount, Mode=OneWay}" Foreground="#2C6E91" FontWeight="SemiBold"/>
-                    </TextBlock>
-                    <TextBlock Text="{Binding FindResultText}"
-                               FontSize="11" Foreground="#888888"
-                               Margin="12,0,0,0" VerticalAlignment="Center"/>
-                    <TextBlock Text="⚠"
-                               FontSize="12" Foreground="#B35A00"
-                               Margin="12,0,0,0" VerticalAlignment="Center"
-                               Visibility="{Binding HasPersistenceError, Converter={StaticResource BoolToVis}}"
-                               ToolTip="{Binding PersistenceError}"/>
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <CheckBox Content="Ghost" FontSize="11" VerticalAlignment="Center"
+                    <CheckBox Grid.Column="1" Content="Ghost"
                               IsChecked="{Binding GhostModeEnabled, Mode=TwoWay}"
-                              Margin="0,0,6,0"/>
-                    <TextBlock Text="◢" Foreground="#D0D0D0" FontSize="10"
-                               VerticalAlignment="Bottom" IsHitTestVisible="False"/>
-                </StackPanel>
+                              Foreground="#78909C" FontSize="11" VerticalAlignment="Center"/>
+                </Grid>
             </Grid>
         </Border>
+
+        <Primitives:Thumb x:Name="ResizeThumb" Width="18" Height="18"
+                          HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                          Background="Transparent" Cursor="SizeNWSE" Opacity="0"
+                          Panel.ZIndex="999" DragDelta="ResizeThumb_DragDelta"
+                          DragCompleted="ResizeThumb_DragCompleted"/>
+        <TextBlock Text="◢" Margin="0,0,4,3"
+                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                   Foreground="#B8CDD7" FontSize="9" IsHitTestVisible="False"
+                   Panel.ZIndex="998"/>
     </Grid>
 </noted:OverlayWindow>
