@@ -109,6 +109,13 @@ public partial class App : Application
             WindowManager.Editor = noteEditor;
 
             mainWindow.Show();
+            if (settings.LoadChecklistWindowState().ReopenOnStartup)
+                WindowManager.ShowChecklistPanel();
+            if (settings.LoadDictionaryWindowState().ReopenOnStartup)
+                WindowManager.ShowDictionaryPanel();
+            if (settings.LoadScratchpadWindowState().ReopenOnStartup)
+                WindowManager.ShowScratchpadPanel();
+
             noteEditor.RestoreEditorSession();
             RestoreMicroScratchpadWindows();
             _ = UpdateService.CheckForUpdatesAsync();
@@ -463,7 +470,14 @@ public partial class App : Application
 
         _lastShutdownWarning = null;
         if (_noteEditorWindow is not null && !_noteEditorWindow.TryPrepareForClose())
+        {
             e.Cancel = true;
+            return;
+        }
+
+        _checklistWindow?.PrepareForApplicationShutdown();
+        _dictionaryWindow?.PrepareForApplicationShutdown();
+        _scratchpadWindow?.PrepareForApplicationShutdown();
     }
 
     // Expected settings failures are recoverable after actionable feedback.
