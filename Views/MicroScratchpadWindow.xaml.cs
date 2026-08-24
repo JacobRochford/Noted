@@ -9,7 +9,6 @@ namespace Noted;
 public partial class MicroScratchpadWindow : OverlayWindow
 {
     private readonly IMicroScratchpadRecoveryService _recoveryService;
-    private readonly Guid _draftId;
     private readonly SaveScheduler<string> _saveScheduler;
     private bool _keepDraftOnClose;
 
@@ -20,14 +19,12 @@ public partial class MicroScratchpadWindow : OverlayWindow
         ArgumentNullException.ThrowIfNull(recoveryService);
 
         _recoveryService = recoveryService;
-        _draftId = draft?.Id ?? Guid.NewGuid();
 
         InitializeComponent();
         InitializeOverlay(
             ghostModeEnabled: false,
             ghostModeOpacity: 1,
             defaultOpacity: 1);
-        Title = $"Micro Scratchpad [{GetShortId(_draftId)}]";
         Editor.Text = draft?.Content ?? string.Empty;
         _saveScheduler = new SaveScheduler<string>(
             Dispatcher,
@@ -91,7 +88,7 @@ public partial class MicroScratchpadWindow : OverlayWindow
     {
         try
         {
-            _recoveryService.SaveDraft(_draftId, content);
+            _recoveryService.SaveDraft(content);
             return PersistenceSaveResult.Succeeded();
         }
         catch (Exception ex) when (IsExpectedRecoveryException(ex))
@@ -116,15 +113,19 @@ public partial class MicroScratchpadWindow : OverlayWindow
         if (_keepDraftOnClose)
             return;
 
-        if (_saveScheduler.TryFlush(out var error))
+        if (!_saveScheduler.TryFlush(out var error))
+        {
+            e.Cancel = true;
+            AppDialog.Show(
+                error ?? "Micro Scratchpad recovery data could not be saved.",
+                "Micro Scratchpad Save Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
             return;
+        }
 
         e.Cancel = true;
-        AppDialog.Show(
-            error ?? "Micro Scratchpad recovery data could not be saved.",
-            "Micro Scratchpad Save Failed",
-            MessageBoxButton.OK,
-            MessageBoxImage.Warning);
+        HideWindow();
     }
 
     private void MicroScratchpadWindow_Closed(object? sender, EventArgs e)
@@ -146,6 +147,4 @@ public partial class MicroScratchpadWindow : OverlayWindow
             NotSupportedException;
     }
 
-    private static string GetShortId(Guid id) =>
-        id.ToString("N")[..8].ToUpperInvariant();
 }

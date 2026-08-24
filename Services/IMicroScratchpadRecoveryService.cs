@@ -10,12 +10,11 @@ public sealed record MicroScratchpadRecoveryIssue(
     string Message);
 
 public sealed record MicroScratchpadRecoveryLoadResult(
-    IReadOnlyList<MicroScratchpadRecoveryDraft> Drafts,
+    MicroScratchpadRecoveryDraft? Draft,
     IReadOnlyList<MicroScratchpadRecoveryIssue> Issues);
 
 public interface IMicroScratchpadRecoveryService
 {
-    MicroScratchpadRecoveryLoadResult LoadDrafts();
-    void SaveDraft(Guid id, string content);
-    void DeleteDraft(Guid id);
+    MicroScratchpadRecoveryLoadResult LoadDraft();
+    void SaveDraft(string content);
 }

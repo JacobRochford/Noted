@@ -23,7 +23,7 @@ public partial class App : Application
     private readonly ShutdownFlushCoordinator _shutdownFlushCoordinator = new();
     private IDisposable? _checklistShutdownRegistration;
     private IDisposable? _dictionaryShutdownRegistration;
-    private readonly HashSet<MicroScratchpadWindow> _microScratchpadWindows = [];
+    private MicroScratchpadWindow? _microScratchpadWindow;
     private IMicroScratchpadRecoveryService? _microScratchpadRecoveryService;
     private bool _isShuttingDown;
     private string? _lastShutdownWarning;
@@ -105,7 +105,7 @@ public partial class App : Application
             WindowManager.ChecklistProvider = GetOrCreateChecklistWindow;
             WindowManager.DictionaryProvider = GetOrCreateDictionaryWindow;
             WindowManager.ScratchpadProvider = GetOrCreateScratchpadWindow;
-            WindowManager.MicroScratchpadProvider = OpenMicroScratchpadWindow;
+            WindowManager.MicroScratchpadProvider = GetOrCreateMicroScratchpadWindow;
             WindowManager.Editor = noteEditor;
 
             mainWindow.Show();
@@ -117,7 +117,7 @@ public partial class App : Application
                 WindowManager.ShowScratchpadPanel();
 
             noteEditor.RestoreEditorSession();
-            RestoreMicroScratchpadWindows();
+            RestoreMicroScratchpadWindow();
             _ = UpdateService.CheckForUpdatesAsync();
         }
         catch (Exception ex)
@@ -161,7 +161,7 @@ public partial class App : Application
             CloseExistingWindow(_dictionaryWindow, "Dictionary");
             CloseExistingWindow(_scratchpadWindow, "Scratchpad");
             CloseExistingWindow(_noteEditorWindow, "note editor");
-            CloseMicroScratchpadWindows();
+            CloseMicroScratchpadWindow();
 
             _checklistShutdownRegistration?.Dispose();
             _checklistShutdownRegistration = null;
@@ -178,6 +178,7 @@ public partial class App : Application
             _checklistWindow = null;
             _dictionaryWindow = null;
             _scratchpadWindow = null;
+            _microScratchpadWindow = null;
             _microScratchpadRecoveryService = null;
         }
         finally
@@ -319,32 +320,31 @@ public partial class App : Application
             WindowManager.Scratchpad = null;
     }
 
-    private void OpenMicroScratchpadWindow()
+    private MicroScratchpadWindow? GetOrCreateMicroScratchpadWindow()
     {
         Dispatcher.VerifyAccess();
         if (_isShuttingDown)
-            return;
+            return _microScratchpadWindow;
 
-        var hiddenWindow = _microScratchpadWindows.FirstOrDefault(window => !window.IsWindowVisible);
-        if (hiddenWindow is not null)
-        {
-            hiddenWindow.ShowWindow();
-            return;
-        }
+        if (_microScratchpadWindow is not null)
+            return _microScratchpadWindow;
 
         var recoveryService = _microScratchpadRecoveryService
             ?? throw new InvalidOperationException("Micro Scratchpad recovery is not initialized.");
-        OpenMicroScratchpadWindow(new MicroScratchpadWindow(recoveryService));
+        return CreateMicroScratchpadWindow(recoveryService, null);
     }
 
-    private void RestoreMicroScratchpadWindows()
+    private void RestoreMicroScratchpadWindow()
     {
         var recoveryService = _microScratchpadRecoveryService
             ?? throw new InvalidOperationException("Micro Scratchpad recovery is not initialized.");
 
-        var loadResult = recoveryService.LoadDrafts();
-        foreach (var draft in loadResult.Drafts)
-            OpenMicroScratchpadWindow(new MicroScratchpadWindow(recoveryService, draft));
+        var loadResult = recoveryService.LoadDraft();
+        if (loadResult.Draft is not null)
+        {
+            var window = CreateMicroScratchpadWindow(recoveryService, loadResult.Draft);
+            window.Show();
+        }
 
         if (loadResult.Issues.Count == 0)
             return;
@@ -366,11 +366,15 @@ public partial class App : Application
             MessageBoxImage.Warning);
     }
 
-    private void OpenMicroScratchpadWindow(MicroScratchpadWindow window)
+    private MicroScratchpadWindow CreateMicroScratchpadWindow(
+        IMicroScratchpadRecoveryService recoveryService,
+        MicroScratchpadRecoveryDraft? draft)
     {
+        var window = new MicroScratchpadWindow(recoveryService, draft);
         window.Closed += MicroScratchpadWindow_Closed;
-        _microScratchpadWindows.Add(window);
-        window.Show();
+        _microScratchpadWindow = window;
+        WindowManager.MicroScratchpad = window;
+        return window;
     }
 
     private void MicroScratchpadWindow_Closed(object? sender, EventArgs e)
@@ -379,28 +383,35 @@ public partial class App : Application
             return;
 
         window.Closed -= MicroScratchpadWindow_Closed;
-        _microScratchpadWindows.Remove(window);
+        if (!ReferenceEquals(_microScratchpadWindow, window))
+            return;
+
+        _microScratchpadWindow = null;
+        if (ReferenceEquals(WindowManager.MicroScratchpad, window))
+            WindowManager.MicroScratchpad = null;
     }
 
-    private void CloseMicroScratchpadWindows()
+    private void CloseMicroScratchpadWindow()
     {
-        foreach (var window in _microScratchpadWindows.ToArray())
-        {
-            window.Closed -= MicroScratchpadWindow_Closed;
-            if (!window.TryFlushPendingContent(out var error))
-            {
-                AppDialog.Show(
-                    error ?? "Micro Scratchpad recovery data could not be saved before shutdown.",
-                    "Micro Scratchpad Save Failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-            }
+        var window = _microScratchpadWindow;
+        if (window is null)
+            return;
 
-            window.KeepDraftOnClose();
-            CloseExistingWindow(window, "micro scratchpad");
+        window.Closed -= MicroScratchpadWindow_Closed;
+        if (!window.TryFlushPendingContent(out var error))
+        {
+            AppDialog.Show(
+                error ?? "Micro Scratchpad recovery data could not be saved before shutdown.",
+                "Micro Scratchpad Save Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
         }
 
-        _microScratchpadWindows.Clear();
+        window.KeepDraftOnClose();
+        CloseExistingWindow(window, "micro scratchpad");
+        _microScratchpadWindow = null;
+        if (ReferenceEquals(WindowManager.MicroScratchpad, window))
+            WindowManager.MicroScratchpad = null;
     }
 
     private static void CloseExistingWindow(Window? window, string name)
@@ -420,11 +431,9 @@ public partial class App : Application
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
-        foreach (var microScratchpadWindow in _microScratchpadWindows)
+        if (_microScratchpadWindow is not null &&
+            !_microScratchpadWindow.TryFlushPendingContent(out var recoveryError))
         {
-            if (microScratchpadWindow.TryFlushPendingContent(out var recoveryError))
-                continue;
-
             e.Cancel = true;
             var message = recoveryError ?? "Micro Scratchpad recovery data could not be saved.";
             if (message == _lastShutdownWarning)

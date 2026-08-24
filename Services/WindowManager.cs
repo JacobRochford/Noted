@@ -7,18 +7,20 @@
         public static ChecklistWindow? Checklist { get; set; }
         public static DictionaryWindow? Dictionary { get; set; }
         public static ScratchpadWindow? Scratchpad { get; set; }
+        public static MicroScratchpadWindow? MicroScratchpad { get; set; }
         public static NoteEditorWindow? Editor { get; set; }
 
         internal static Func<ChecklistWindow?>? ChecklistProvider { get; set; }
         internal static Func<DictionaryWindow?>? DictionaryProvider { get; set; }
         internal static Func<ScratchpadWindow?>? ScratchpadProvider { get; set; }
-        internal static Action? MicroScratchpadProvider { get; set; }
+        internal static Func<MicroScratchpadWindow?>? MicroScratchpadProvider { get; set; }
 
         public static bool AnyWindowVisible()
             => (Main?.IsNotesPanelVisible == true)
             || (Checklist?.IsWindowVisible == true)
             || (Dictionary?.IsWindowVisible == true)
             || (Scratchpad?.IsWindowVisible == true)
+            || (MicroScratchpad?.IsWindowVisible == true)
             || (Editor?.IsWindowVisible == true);
 
         public static void HideAll()
@@ -27,6 +29,7 @@
             Checklist?.HideWindow();
             Dictionary?.HideWindow();
             Scratchpad?.HideWindow();
+            MicroScratchpad?.HideWindow();
             Editor?.HideWindow();
         }
 
@@ -40,6 +43,7 @@
         public static void HideChecklist() => Checklist?.HideWindow();
         public static void HideDictionary() => Dictionary?.HideWindow();
         public static void HideScratchpad() => Scratchpad?.HideWindow();
+        public static void HideMicroScratchpad() => MicroScratchpad?.HideWindow();
         public static void HideEditor() => Editor?.HideWindow();
 
         public static void ShowChecklistPanel()
@@ -72,7 +76,15 @@
             window.ShowWindow();
         }
 
-        public static void OpenMicroScratchpad() => MicroScratchpadProvider?.Invoke();
+        public static void ShowMicroScratchpad()
+        {
+            var window = MicroScratchpad ?? MicroScratchpadProvider?.Invoke();
+            if (window is null)
+                return;
+
+            MicroScratchpad = window;
+            window.ShowWindow();
+        }
 
         public static void ToggleWorkspaceVisibility()
         {
@@ -106,12 +118,21 @@
                 ShowScratchpadPanel();
         }
 
+        public static void ToggleMicroScratchpad()
+        {
+            if (MicroScratchpad?.IsWindowVisible == true)
+                HideMicroScratchpad();
+            else
+                ShowMicroScratchpad();
+        }
+
         public static void ClearAll()
         {
             Main = null;
             Checklist = null;
             Dictionary = null;
             Scratchpad = null;
+            MicroScratchpad = null;
             Editor = null;
             ChecklistProvider = null;
             DictionaryProvider = null;

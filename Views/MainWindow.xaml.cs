@@ -1147,7 +1147,7 @@ public partial class MainWindow : Window {
 
     private void MicroScratchpadButton_Click(object sender, RoutedEventArgs e)
     {
-        WindowManager.OpenMicroScratchpad();
+        WindowManager.ToggleMicroScratchpad();
     }
 
     private void CopyNoteName_Click(object sender, RoutedEventArgs e)
