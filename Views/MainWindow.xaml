@@ -373,7 +373,7 @@
                                 Foreground="White" Cursor="Hand"
                                 Padding="8,4" Margin="0,0,6,0"
                                 MinWidth="0"
-                                ToolTip="New micro scratchpad">
+                                ToolTip="Show or hide Mini Pad">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <Border x:Name="bg" Background="#5BA8C8"

@@ -1,6 +1,6 @@
 # Noted.
 
-Noted is a Windows-only .NET 9 WPF utility app. It has a floating Notes button, organizes `.txt`, `.md`, and `.markdown` files in folders, and includes a tabbed editor with recovery and Markdown preview. It also includes Checklist, Dictionary, Scratchpad, and Micro Scratchpad.
+Noted is a Windows-only .NET 9 WPF utility app. It has a floating Notes button, organizes `.txt`, `.md`, and `.markdown` files in folders, and includes a tabbed editor with recovery and Markdown preview. It also includes Checklist, Dictionary, Scratchpad, and Mini Pad.
 
 ## Notes and folders
 
@@ -31,7 +31,7 @@ Choose how new notes are created:
 - **Checklist** saves checklist items locally.
 - **Dictionary** saves terms and definitions locally.
 - **Scratchpad** is a lightweight rich-text editor that saves its contents locally before it is hidden or closed.
-- **Micro Scratchpad** opens separate plain-text windows. They save recovery copies locally and reopen after the app exits or crashes, unless you close them yourself.
+- **Mini Pad** opens one compact plain-text window. It saves a recovery copy locally and reopens after the app exits or crashes.
 
 ## Hotkeys and visibility
 
@@ -43,9 +43,9 @@ Default global hotkeys:
 | Toggle Checklist | `Alt+C` |
 | Toggle Dictionary | `Alt+D` |
 
-The workspace hotkey hides Notes, Checklist, Dictionary, Scratchpad, and the editor when any of them are visible. If they are all hidden, it shows Notes. Micro Scratchpads are not affected.
+The workspace hotkey hides Notes, Checklist, Dictionary, Scratchpad, Mini Pad, and the editor when any of them are visible. If they are all hidden, it shows Notes.
 
-By default, the Notes List's Hide button will also hide editor, Checklist, Dictionary, Scratchpad, Micro Scratchpad, and can be adjusted in the settings. 
+By default, the Notes List's Hide button will also hide editor, Checklist, Dictionary, Scratchpad, Mini Pad, and can be adjusted in the settings.
 Clicking outside Notes or pressing `Esc` hides Notes and the editor. 
 
 
@@ -101,7 +101,7 @@ There is no automated test project yet. Run `dotnet build` to check compilation.
 3. Create a note with Prompt, Quick, or Both, depending on your setting.
 4. Select a note, then press `Enter` or choose **Open** to open it in the built-in editor.
 5. Use folders, search, rename, and delete actions to organize notes.
-6. Open Checklist, Dictionary, Scratchpad, or Micro Scratchpad from the Notes toolbar when needed.
+6. Open Checklist, Dictionary, Scratchpad, or Mini Pad from the Notes toolbar when needed.
 
 ## Limitations
 

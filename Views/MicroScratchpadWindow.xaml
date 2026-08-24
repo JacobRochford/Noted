@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:noted="clr-namespace:Noted"
         xmlns:Primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
-        Title="Micro Scratchpad"
+        Title="Mini Pad"
         Width="320"
         Height="240"
         MinWidth="200"
@@ -125,7 +125,7 @@
                                        Foreground="#5BA8C8"
                                        FontSize="15"
                                        VerticalAlignment="Center"/>
-                            <TextBlock Text="Micro Scratchpad"
+                            <TextBlock Text="Mini Pad"
                                        Foreground="#2C6E91"
                                        FontSize="16"
                                        FontWeight="SemiBold"

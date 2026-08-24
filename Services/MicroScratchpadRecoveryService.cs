@@ -77,8 +77,8 @@ public sealed class MicroScratchpadRecoveryService : IMicroScratchpadRecoverySer
             issues.Add(new MicroScratchpadRecoveryIssue(
                 primaryPath,
                 primary.Status == JsonFileReadStatus.Missing
-                    ? $"Micro Scratchpad {GetShortId(id)} was restored from its backup because the primary file was missing."
-                    : $"Micro Scratchpad {GetShortId(id)} was restored from its backup because the primary file could not be loaded."));
+                    ? $"Mini Pad {GetShortId(id)} was restored from its backup because the primary file was missing."
+                    : $"Mini Pad {GetShortId(id)} was restored from its backup because the primary file could not be loaded."));
             return;
         }
 
@@ -92,7 +92,7 @@ public sealed class MicroScratchpadRecoveryService : IMicroScratchpadRecoverySer
         {
             issues.Add(new MicroScratchpadRecoveryIssue(
                 failure.Path,
-                $"Micro Scratchpad {GetShortId(id)} could not be restored: {failure.Error ?? "the recovery file is invalid."}"));
+                $"Mini Pad {GetShortId(id)} could not be restored: {failure.Error ?? "the recovery file is invalid."}"));
         }
     }
 

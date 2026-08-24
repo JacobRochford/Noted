@@ -64,8 +64,8 @@ public partial class MicroScratchpadWindow : OverlayWindow
         if (!TryFlushPendingContent(out var error))
         {
             AppDialog.Show(
-                error ?? "Micro Scratchpad recovery data could not be saved.",
-                "Micro Scratchpad Save Failed",
+                error ?? "Mini Pad recovery data could not be saved.",
+                "Mini Pad Save Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
@@ -95,7 +95,7 @@ public partial class MicroScratchpadWindow : OverlayWindow
         {
             System.Diagnostics.Debug.WriteLine(ex);
             return PersistenceSaveResult.Failed(
-                $"Micro Scratchpad recovery data could not be saved: {ex.Message}");
+                $"Mini Pad recovery data could not be saved: {ex.Message}");
         }
     }
 
@@ -117,8 +117,8 @@ public partial class MicroScratchpadWindow : OverlayWindow
         {
             e.Cancel = true;
             AppDialog.Show(
-                error ?? "Micro Scratchpad recovery data could not be saved.",
-                "Micro Scratchpad Save Failed",
+                error ?? "Mini Pad recovery data could not be saved.",
+                "Mini Pad Save Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;

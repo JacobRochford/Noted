@@ -330,14 +330,14 @@ public partial class App : Application
             return _microScratchpadWindow;
 
         var recoveryService = _microScratchpadRecoveryService
-            ?? throw new InvalidOperationException("Micro Scratchpad recovery is not initialized.");
+            ?? throw new InvalidOperationException("Mini Pad recovery is not initialized.");
         return CreateMicroScratchpadWindow(recoveryService, null);
     }
 
     private void RestoreMicroScratchpadWindow()
     {
         var recoveryService = _microScratchpadRecoveryService
-            ?? throw new InvalidOperationException("Micro Scratchpad recovery is not initialized.");
+            ?? throw new InvalidOperationException("Mini Pad recovery is not initialized.");
 
         var loadResult = recoveryService.LoadDraft();
         if (loadResult.Draft is not null)
@@ -360,8 +360,8 @@ public partial class App : Application
             ? $"\n\n{remainingCount} additional recovery issue(s) were not shown."
             : string.Empty;
         AppDialog.Show(
-            $"Some Micro Scratchpad recovery files need attention. No recoverable content was silently discarded.\n\n{issueText}{remainingText}",
-            "Micro Scratchpad Recovery",
+            $"Some Mini Pad recovery files need attention. No recoverable content was silently discarded.\n\n{issueText}{remainingText}",
+            "Mini Pad Recovery",
             MessageBoxButton.OK,
             MessageBoxImage.Warning);
     }
@@ -401,14 +401,14 @@ public partial class App : Application
         if (!window.TryFlushPendingContent(out var error))
         {
             AppDialog.Show(
-                error ?? "Micro Scratchpad recovery data could not be saved before shutdown.",
-                "Micro Scratchpad Save Failed",
+                error ?? "Mini Pad recovery data could not be saved before shutdown.",
+                "Mini Pad Save Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
 
         window.KeepDraftOnClose();
-        CloseExistingWindow(window, "micro scratchpad");
+        CloseExistingWindow(window, "Mini Pad");
         _microScratchpadWindow = null;
         if (ReferenceEquals(WindowManager.MicroScratchpad, window))
             WindowManager.MicroScratchpad = null;
@@ -435,14 +435,14 @@ public partial class App : Application
             !_microScratchpadWindow.TryFlushPendingContent(out var recoveryError))
         {
             e.Cancel = true;
-            var message = recoveryError ?? "Micro Scratchpad recovery data could not be saved.";
+            var message = recoveryError ?? "Mini Pad recovery data could not be saved.";
             if (message == _lastShutdownWarning)
                 return;
 
             _lastShutdownWarning = message;
             AppDialog.Show(
-                $"Noted could not close because Micro Scratchpad recovery data was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
-                "Micro Scratchpad Save Failed",
+                $"Noted could not close because Mini Pad recovery data was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
+                "Mini Pad Save Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
