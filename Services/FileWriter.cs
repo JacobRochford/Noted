@@ -4,12 +4,18 @@ using System.Text;
 
 namespace Noted.Services;
 
+internal readonly record struct FileWriteResult(
+    bool FileUpdated,
+    bool BackupUpdated,
+    string? PreservedBackupPath,
+    string? Warning);
+
 internal static class FileWriter
 {
     private static readonly Encoding Utf8WithoutBom =
         new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
-    internal static void WriteAllText(
+    internal static FileWriteResult WriteAllText(
         string destinationPath,
         string content,
         string? backupPath = null)
@@ -32,15 +38,19 @@ internal static class FileWriter
 
             if (File.Exists(fullDestinationPath))
             {
-                if (fullBackupPath is not null)
-                    DeleteIfExists(fullBackupPath);
+                if (fullBackupPath is null)
+                {
+                    File.Replace(temporaryPath, fullDestinationPath, null);
+                    return new FileWriteResult(true, false, null, null);
+                }
 
-                File.Replace(temporaryPath, fullDestinationPath, fullBackupPath);
+                var rollbackPath = CreateRollbackPath(fullBackupPath);
+                File.Replace(temporaryPath, fullDestinationPath, rollbackPath);
+                return UpdateBackupFromRollback(rollbackPath, fullBackupPath);
             }
-            else
-            {
-                File.Move(temporaryPath, fullDestinationPath);
-            }
+
+            File.Move(temporaryPath, fullDestinationPath);
+            return new FileWriteResult(true, false, null, null);
         }
         finally
         {
@@ -77,6 +87,38 @@ internal static class FileWriter
         return fullBackupPath;
     }
 
+    private static string CreateRollbackPath(string backupPath) =>
+        $"{backupPath}.pending-{Guid.NewGuid():N}";
+
+    private static FileWriteResult UpdateBackupFromRollback(
+        string rollbackPath,
+        string backupPath)
+    {
+        try
+        {
+            if (File.Exists(backupPath))
+                File.Replace(rollbackPath, backupPath, null);
+            else
+                File.Move(rollbackPath, backupPath);
+
+            return new FileWriteResult(true, true, null, null);
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            var preservedPath = File.Exists(rollbackPath)
+                ? rollbackPath
+                : null;
+            var preservationMessage = preservedPath is not null
+                ? $" The previous file remains available at '{preservedPath}'."
+                : " The previous file could not be confirmed at the rollback path.";
+            var warning =
+                $"The destination file was saved, but its rolling backup could not be updated: {ex.Message}" +
+                preservationMessage;
+            System.Diagnostics.Debug.WriteLine(warning);
+            return new FileWriteResult(true, false, preservedPath, warning);
+        }
+    }
+
     private static void WriteTemporaryFile(string path, string content)
     {
         using var stream = new FileStream(
@@ -106,5 +148,14 @@ internal static class FileWriter
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
         catch (SecurityException) { }
+    }
+
+    private static bool IsExpectedFileException(Exception exception)
+    {
+        return exception is IOException or
+            UnauthorizedAccessException or
+            SecurityException or
+            ArgumentException or
+            NotSupportedException;
     }
 }
