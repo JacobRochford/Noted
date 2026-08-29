@@ -430,6 +430,10 @@
                                           InputGestureText="Ctrl+Shift+V"
                                           IsCheckable="True"
                                           Click="MarkdownMenuItem_Click"/>
+                                <Separator/>
+                                <MenuItem Header="Delete Note..."
+                                          Foreground="#B84F4F"
+                                          Click="DeleteActiveNoteMenuItem_Click"/>
                             </ContextMenu>
                         </TextBox.ContextMenu>
                     </TextBox>
@@ -452,6 +456,10 @@
                                           InputGestureText="Ctrl+Shift+V"
                                           IsCheckable="True"
                                           Click="MarkdownMenuItem_Click"/>
+                                <Separator/>
+                                <MenuItem Header="Delete Note..."
+                                          Foreground="#B84F4F"
+                                          Click="DeleteActiveNoteMenuItem_Click"/>
                             </ContextMenu>
                         </FlowDocumentScrollViewer.ContextMenu>
                     </FlowDocumentScrollViewer>
