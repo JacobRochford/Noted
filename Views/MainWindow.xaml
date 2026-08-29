@@ -60,6 +60,106 @@
         <!-- Apply modern scrollbar style globally -->
         <Style TargetType="ScrollBar" BasedOn="{StaticResource ModernScrollBar}"/>
 
+
+        <!-- Main launcher/header button styles -->
+        <Style x:Key="PrimaryHeaderButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Padding" Value="11,0"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bg"
+                                Background="#5BA8C8"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#3F86A4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="HeaderChromeButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Foreground" Value="#617A8A"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bg"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#E1EEF5"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#D2E5EF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ToolLauncherButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="Padding" Value="5,0"/>
+            <Setter Property="Foreground" Value="#355A6E"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bg"
+                                Background="#ECF5FA"
+                                BorderBrush="#C7DEE9"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#DCEEF8"/>
+                                <Setter TargetName="bg" Property="BorderBrush" Value="#9FC8DB"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#CBE4F1"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Tray context menu styles -->
         <Style x:Key="TrayContextMenuStyle" TargetType="ContextMenu">
             <Setter Property="Background" Value="#F5F9FC"/>
@@ -157,276 +257,163 @@
                 <DockPanel>
                 <!-- Header bar -->
                 <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <Border x:Name="NotesPanelDragHandle"
-                        Grid.Column="0"
-                        Background="Transparent"
-                        Focusable="True"
-                        Cursor="SizeAll"
-                        Padding="0,4,8,4">
-                        <Grid>
-                            <TextBlock x:Name="HeaderText"
-                                       Text="{Binding DisplayHeaderText, Mode=OneWay}"
-                                       FontSize="16" FontWeight="SemiBold"
-                                       Foreground="#2C6E91"
-                                       VerticalAlignment="Center"
-                                       Cursor="Hand"
-                                       FocusVisualStyle="{x:Null}"
-                                       ToolTip="Double-click to set a custom header"
-                                       Visibility="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthToHeaderVisibilityConverter}}"
-                                       MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"/>
-                            <TextBox x:Name="HeaderTextEdit"
-                                     FontSize="16" FontWeight="SemiBold"
-                                     Text="{Binding HeaderTextEdit, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     Foreground="#2C6E91"
-                                     VerticalAlignment="Center"
-                                     Visibility="Collapsed"
-                                     MinWidth="80"
-                                     FocusVisualStyle="{x:Null}"
-                                     ToolTip="Enter or click away to save"
-                                     LostFocus="HeaderEditBox_LostFocus"
-                                     KeyDown="HeaderEditBox_KeyDown"/>
-                        </Grid>
-                    </Border>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                    <StackPanel Grid.Column="1"
-                                Orientation="Horizontal"
-                                HorizontalAlignment="Right"
-                                Margin="8,0,0,0">
+                    <!-- Title + primary/app-level actions -->
+                    <Grid Grid.Row="0" Margin="0,0,0,7">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border x:Name="NotesPanelDragHandle"
+                                Grid.Column="0"
+                                Background="Transparent"
+                                Focusable="True"
+                                Cursor="SizeAll"
+                                Padding="0,3,8,3">
+                            <Grid>
+                                <TextBlock x:Name="HeaderText"
+                                           Text="{Binding DisplayHeaderText, Mode=OneWay}"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           Foreground="#2C6E91"
+                                           VerticalAlignment="Center"
+                                           Cursor="Hand"
+                                           FocusVisualStyle="{x:Null}"
+                                           ToolTip="Double-click to set a custom header"
+                                           Visibility="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthToHeaderVisibilityConverter}}"
+                                           MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"/>
+                                <TextBox x:Name="HeaderTextEdit"
+                                         FontSize="16"
+                                         FontWeight="SemiBold"
+                                         Text="{Binding HeaderTextEdit, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Foreground="#2C6E91"
+                                         VerticalAlignment="Center"
+                                         Visibility="Collapsed"
+                                         MinWidth="80"
+                                         FocusVisualStyle="{x:Null}"
+                                         ToolTip="Enter or click away to save"
+                                         LostFocus="HeaderEditBox_LostFocus"
+                                         KeyDown="HeaderEditBox_KeyDown"/>
+                            </Grid>
+                        </Border>
+
                         <Button x:Name="NewNoteButton"
-                                Content="➕"
+                                Grid.Column="1"
+                                Content="+ New"
                                 Click="NewNoteButton_Click"
-                                FontSize="15" FontWeight="SemiBold"
-                                Foreground="White" Cursor="Hand"
-                                Padding="10,4" Margin="0,0,6,0"
-                                MinWidth="0">
+                                Margin="0,0,6,0"
+                                ToolTip="Create a new note">
                             <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                <Style TargetType="Button" BasedOn="{StaticResource PrimaryHeaderButtonStyle}">
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
-                                            <Setter Property="Content">
-                                                <Setter.Value>
-                                                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE710;" FontSize="18"/>
-                                                </Setter.Value>
-                                            </Setter>
-                                            <Setter Property="Padding" Value="10,4"/>
+                                            <Setter Property="Content" Value="+"/>
+                                            <Setter Property="Width" Value="30"/>
+                                            <Setter Property="Padding" Value="0"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="bg" Background="#5BA8C8"
-                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                          VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
                         </Button>
+
                         <Button x:Name="QuickNoteButton"
-                                Content="⚡"
+                                Grid.Column="2"
+                                Content="Quick"
                                 Click="QuickNoteButton_Click"
-                                FontSize="15" FontWeight="SemiBold"
-                                Foreground="White" Cursor="Hand"
-                                Padding="8,4" Margin="0,0,6,0"
-                                MinWidth="0"
+                                Margin="0,0,6,0"
                                 ToolTip="Create a quick note">
                             <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                <Style TargetType="Button" BasedOn="{StaticResource PrimaryHeaderButtonStyle}">
                                     <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
+                                            <Setter Property="Content" Value="⚡"/>
+                                            <Setter Property="Width" Value="30"/>
+                                            <Setter Property="Padding" Value="0"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
                                 </Style>
                             </Button.Style>
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="bg" Background="#5BA8C8"
-                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                          VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
                         </Button>
+
                         <Button x:Name="SettingsButton"
-                                Content="⚙"
+                                Grid.Column="3"
                                 Click="SettingsButton_Click"
-                                FontSize="12" FontWeight="SemiBold"
-                                Foreground="White" Cursor="Hand"
+                                Style="{StaticResource HeaderChromeButtonStyle}"
+                                Margin="0,0,3,0"
                                 ToolTip="Settings"
-                                Padding="10,4" Margin="0,0,6,0"
-                                MinWidth="0">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
-                                            <Setter Property="Content">
-                                                <Setter.Value>
-                                                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE713;" FontSize="18"/>
-                                                </Setter.Value>
-                                            </Setter>
-                                            <Setter Property="Padding" Value="10,4"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="bg" Background="#617A8A"
-                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                          VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="bg" Property="Background" Value="#516774"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
+                                AutomationProperties.Name="Settings">
+                            <TextBlock FontFamily="Segoe MDL2 Assets"
+                                       Text="&#xE713;"
+                                       FontSize="16"/>
                         </Button>
-                        <Button x:Name="ChecklistButton"
-                                Content="✓"
-                                Click="ChecklistButton_Click"
-                                FontSize="12" FontWeight="SemiBold"
-                                Foreground="White" Cursor="Hand"
-                                Padding="8,4" Margin="0,0,6,0"
-                                MinWidth="0"
-                                ToolTip="Toggle Checklist">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="bg" Background="#5BA8C8"
-                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                          VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-                        <Button x:Name="DictionaryButton"
-                                Content="📚"
-                                Click="DictionaryButton_Click"
-                                FontSize="12" FontWeight="SemiBold"
-                                Foreground="White" Cursor="Hand"
-                                Padding="8,4" Margin="0,0,6,0"
-                                MinWidth="0"
-                                ToolTip="Toggle Dictionary">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="bg" Background="#5BA8C8"
-                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                          VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-                        <Button x:Name="ScratchpadButton"
-                                Content="✏"
-                                Click="ScratchpadButton_Click"
-                                FontSize="12" FontWeight="SemiBold"
-                                Foreground="White" Cursor="Hand"
-                                Padding="8,4" Margin="0,0,6,0"
-                                MinWidth="0"
-                                ToolTip="Toggle Scratchpad">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="bg" Background="#5BA8C8"
-                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                          VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
-                        <Button x:Name="MicroScratchpadButton"
-                                Content="▤"
-                                Click="MicroScratchpadButton_Click"
-                                FontSize="13" FontWeight="SemiBold"
-                                Foreground="White" Cursor="Hand"
-                                Padding="8,4" Margin="0,0,6,0"
-                                MinWidth="0"
-                                ToolTip="Show or hide Mini Pad">
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="bg" Background="#5BA8C8"
-                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                          VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
-                        </Button>
+
                         <Button x:Name="MinimizeNotesButton"
-                                Content="✕"
+                                Grid.Column="4"
                                 Click="MinimizeNotesButton_Click"
-                                FontSize="12" FontWeight="SemiBold"
-                                Foreground="White" Cursor="Hand"
-                                Padding="10,4"
-                                Margin="0,0,0,0"
-                                MinWidth="0">
+                                Style="{StaticResource HeaderChromeButtonStyle}"
+                                ToolTip="Hide Notes"
+                                AutomationProperties.Name="Hide Notes">
+                            <TextBlock FontFamily="Segoe MDL2 Assets"
+                                       Text="&#xE711;"
+                                       FontSize="15"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- Utility menu is visually separated from note actions above. -->
+                    <UniformGrid x:Name="UtilityMenu" Grid.Row="1" Columns="4">
+                        <Button x:Name="ChecklistButton"
+                                Click="ChecklistButton_Click"
+                                Style="{StaticResource ToolLauncherButtonStyle}"
+                                ToolTip="Toggle Checklist">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="✓" FontSize="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Checklist" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="DictionaryButton"
+                                Click="DictionaryButton_Click"
+                                Style="{StaticResource ToolLauncherButtonStyle}"
+                                ToolTip="Toggle Dictionary">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="Aa" FontWeight="Bold" FontSize="10" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Dictionary" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="ScratchpadButton"
+                                Click="ScratchpadButton_Click"
+                                Style="{StaticResource ToolLauncherButtonStyle}"
+                                ToolTip="Toggle Scratchpad">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="✎" FontSize="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Scratchpad" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="MicroScratchpadButton"
+                                Click="MicroScratchpadButton_Click"
+                                ToolTip="Show or hide Mini Pad">
                             <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
-                                            <Setter Property="Content">
-                                                <Setter.Value>
-                                                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE711;" FontSize="18"/>
-                                                </Setter.Value>
-                                            </Setter>
-                                            <Setter Property="Padding" Value="10,4"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
+                                <Style TargetType="Button" BasedOn="{StaticResource ToolLauncherButtonStyle}">
+                                    <Setter Property="Margin" Value="0"/>
                                 </Style>
                             </Button.Style>
-                            <Button.Template>
-                                <ControlTemplate TargetType="Button">
-                                    <Border x:Name="bg" Background="#6C86A0"
-                                            CornerRadius="5" Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                          VerticalAlignment="Center"/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="bg" Property="Background" Value="#5B748D"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Button.Template>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="▤" FontSize="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Mini Pad" VerticalAlignment="Center"/>
+                            </StackPanel>
                         </Button>
-                    </StackPanel>
+                    </UniformGrid>
                 </Grid>
 
                 <!-- Separator -->
@@ -948,7 +935,7 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
-                                <TextBlock Text="User Settings"
+                                <TextBlock Text="Settings"
                                            Grid.Column="0"
                                            FontSize="15"
                                            FontWeight="SemiBold"
@@ -1141,7 +1128,7 @@
                                                FontWeight="SemiBold"
                                                Foreground="#355A6E"
                                                Margin="0,0,0,8"/>
-                                    <TextBlock Text="Choose whether Hide also hides all auxiliary windows"
+                                    <TextBlock Text="Choose whether Hide also hides all other windows"
                                                FontSize="11"
                                                Foreground="#5F7480"
                                                TextWrapping="Wrap"
@@ -1161,7 +1148,7 @@
                                             Checked="HideButtonHidesAllOption_Changed"
                                             Unchecked="HideButtonHidesAllOption_Changed"
                                             HorizontalAlignment="Stretch">
-                                        <TextBlock Text="Hide auxiliary windows when hiding notes"
+                                        <TextBlock Text="Hide other windows when hiding notes"
                                                TextWrapping="Wrap"
                                                VerticalAlignment="Center"/>
                                     </CheckBox>

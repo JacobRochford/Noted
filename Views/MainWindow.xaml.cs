@@ -519,7 +519,7 @@ public partial class MainWindow : Window {
     private void SetSettingsViewVisible(bool setVisible) {
         NotesListView.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
         SettingsView.Visibility = setVisible ? Visibility.Visible : Visibility.Collapsed;
-        SettingsButton.Content = setVisible ? "📖" : "⚙";
+        UtilityMenu.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
         HeaderText.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
         _viewModel.IsSettingsVisible = setVisible;
         UpdateNotesDirectoryDisplay();
