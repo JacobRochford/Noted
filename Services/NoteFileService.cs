@@ -317,14 +317,14 @@ public sealed class NoteFileService : INoteFileService {
     // build unique deleted note path (timestamped, avoids collisions)
     private string BuildDeletedNotePath(string fileName) {
         var timestamp = DateTime.Now.ToString(DeletedNoteTimestampFormat, CultureInfo.InvariantCulture);
-        var candidate = Path.Combine(DeletedNotesDirectory, $"{timestamp}__{fileName}");
-        if (!File.Exists(candidate))
-            return candidate;
+        var pathToTry = Path.Combine(DeletedNotesDirectory, $"{timestamp}__{fileName}");
+        if (!File.Exists(pathToTry))
+            return pathToTry;
 
         for (int suffix = 1; suffix <= 99; suffix++) {
-            candidate = Path.Combine(DeletedNotesDirectory, $"{timestamp}_{suffix:00}__{fileName}");
-            if (!File.Exists(candidate))
-                return candidate;
+            pathToTry = Path.Combine(DeletedNotesDirectory, $"{timestamp}_{suffix:00}__{fileName}");
+            if (!File.Exists(pathToTry))
+                return pathToTry;
         }
 
         return Path.Combine(DeletedNotesDirectory, $"{timestamp}_{Guid.NewGuid():N}__{fileName}");
@@ -366,14 +366,14 @@ public sealed class NoteFileService : INoteFileService {
     // build unique note file name (timestamped, avoids collisions)
     private string BuildUniqueFileName(DateTime timestamp) {
         var baseName = $"{timestamp:yyyy-MM-dd_HH-mm-ss}";
-        var candidate = baseName + ".txt";
-        if (!File.Exists(Path.Combine(CurrentDirectory, candidate)))
-            return candidate;
+        var fileNameToTry = baseName + ".txt";
+        if (!File.Exists(Path.Combine(CurrentDirectory, fileNameToTry)))
+            return fileNameToTry;
 
         for (int suffix = 1; suffix <= 99; suffix++) {
-            candidate = $"{baseName}_{suffix:00}.txt";
-            if (!File.Exists(Path.Combine(CurrentDirectory, candidate)))
-                return candidate;
+            fileNameToTry = $"{baseName}_{suffix:00}.txt";
+            if (!File.Exists(Path.Combine(CurrentDirectory, fileNameToTry)))
+                return fileNameToTry;
         }
 
         return $"{baseName}_{Guid.NewGuid():N}.txt";
@@ -385,11 +385,11 @@ public sealed class NoteFileService : INoteFileService {
         if (string.IsNullOrWhiteSpace(validatedFileName))
             throw new InvalidOperationException("Invalid or reserved file name.");
 
-        var candidate = validatedFileName + ".txt";
-        if (File.Exists(Path.Combine(CurrentDirectory, candidate)))
+        var fileName = validatedFileName + ".txt";
+        if (File.Exists(Path.Combine(CurrentDirectory, fileName)))
             throw new InvalidOperationException("A file with that name already exists.");
 
-        return candidate;
+        return fileName;
     }
 
     // remove invalid chars, reserved names, and supported note extensions
@@ -399,7 +399,8 @@ public sealed class NoteFileService : INoteFileService {
             return null;
 
         var extension = NoteFileExtensions.Supported
-            .FirstOrDefault(candidate => sanitized.EndsWith(candidate, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(supportedExtension =>
+                sanitized.EndsWith(supportedExtension, StringComparison.OrdinalIgnoreCase));
         if (extension is not null)
             sanitized = sanitized[..^extension.Length].TrimEnd();
 
@@ -719,10 +720,10 @@ public sealed class NoteFileService : INoteFileService {
             return false;
 
         try {
-            var candidate = Path.Combine(normalizedParent, childPath);
+            var combinedPath = Path.Combine(normalizedParent, childPath);
             if (!TryNormalizeContainedPath(
                     normalizedParent,
-                    candidate,
+                    combinedPath,
                     out var normalizedChild,
                     allowRoot: false))
                 return false;
@@ -735,13 +736,13 @@ public sealed class NoteFileService : INoteFileService {
 
     private static bool TryNormalizeContainedPath(
         string rootDirectory,
-        string candidatePath,
+        string pathToCheck,
         out string normalizedPath,
         bool allowRoot = true) {
         normalizedPath = string.Empty;
         try {
             var normalizedRoot = Path.GetFullPath(rootDirectory);
-            normalizedPath = Path.GetFullPath(candidatePath);
+            normalizedPath = Path.GetFullPath(pathToCheck);
             if (PathsEqual(normalizedPath, normalizedRoot))
                 return allowRoot;
 
@@ -802,13 +803,13 @@ public sealed class NoteFileService : INoteFileService {
 
     private bool TryPopValidHistoryEntry(Stack<string> history, out string target) {
         while (history.Count > 0) {
-            var candidate = history.Pop();
-            if (!TryNormalizeContainedPath(NotesDirectory, candidate, out var fullCandidate) ||
-                IsPathWithinArchiveDirectory(fullCandidate) ||
-                !Directory.Exists(fullCandidate))
+            var historyPath = history.Pop();
+            if (!TryNormalizeContainedPath(NotesDirectory, historyPath, out var fullPath) ||
+                IsPathWithinArchiveDirectory(fullPath) ||
+                !Directory.Exists(fullPath))
                 continue;
 
-            target = fullCandidate;
+            target = fullPath;
             return true;
         }
 

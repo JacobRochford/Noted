@@ -1217,13 +1217,13 @@ public partial class NoteEditorWindow : Window
         var screens = DisplayService.GetDisplays();
         var preferredDeviceName = _settingsService.LoadPreferredDisplayDeviceName();
         var screen = !string.IsNullOrWhiteSpace(preferredDeviceName)
-            ? screens.FirstOrDefault(candidate =>
+            ? screens.FirstOrDefault(screenToCheck =>
                 string.Equals(
-                    candidate.DeviceName,
+                    screenToCheck.DeviceName,
                     preferredDeviceName,
                     StringComparison.OrdinalIgnoreCase))
             : null;
-        screen ??= screens.FirstOrDefault(candidate => candidate.IsPrimary)
+        screen ??= screens.FirstOrDefault(screenToCheck => screenToCheck.IsPrimary)
             ?? screens.FirstOrDefault();
         if (screen is null)
             return;

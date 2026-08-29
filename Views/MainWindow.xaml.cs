@@ -381,7 +381,7 @@ public partial class MainWindow : Window {
                 $"{featureName} hotkey could not be registered because the hotkey service is unavailable.");
         }
 
-        var candidates = new List<(string Modifiers, string Key)>
+        var hotkeyOptions = new List<(string Modifiers, string Key)>
         {
             (requestedModifiers, requestedKey),
             (defaultFallbackModifiers, defaultFallbackKey),
@@ -403,10 +403,10 @@ public partial class MainWindow : Window {
         var requestedDisplay = requestedValidation.Combination
             ?? $"{requestedModifiers}+{requestedKey}";
 
-        for (var index = 0; index < candidates.Count; index++)
+        for (var index = 0; index < hotkeyOptions.Count; index++)
         {
-            var candidate = candidates[index];
-            var validation = _globalHotkeysService.Validate(candidate.Modifiers, candidate.Key);
+            var option = hotkeyOptions[index];
+            var validation = _globalHotkeysService.Validate(option.Modifiers, option.Key);
             if (!validation.Success
                 || validation.Modifiers is null
                 || validation.Key is null

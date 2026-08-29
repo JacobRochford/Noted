@@ -30,7 +30,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
     private bool _isBulkUpdating;
     private string? _persistenceError;
 
-    // Source collection — canonical order
+    // Source collection in saved order
     public ObservableCollection<ChecklistItem> Items { get; } = new();
 
     // Filtered + sorted view shown to the ListBox
@@ -367,15 +367,15 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
     private static string MakeUniqueTabName(string name, ISet<string> usedNames)
     {
         var baseName = string.IsNullOrWhiteSpace(name) ? "Tab" : name;
-        var candidate = baseName;
+        var nameToTry = baseName;
         var suffix = 2;
-        while (!usedNames.Add(candidate))
+        while (!usedNames.Add(nameToTry))
         {
             var suffixText = $" ({suffix++})";
             var prefixLength = Math.Max(1, 30 - suffixText.Length);
-            candidate = $"{baseName[..Math.Min(baseName.Length, prefixLength)].TrimEnd()}{suffixText}";
+            nameToTry = $"{baseName[..Math.Min(baseName.Length, prefixLength)].TrimEnd()}{suffixText}";
         }
-        return candidate;
+        return nameToTry;
     }
 
     private void RefreshVisibleTabs()

@@ -47,11 +47,11 @@ internal sealed record HotkeyReplacementResult(
     bool NoChange,
     HotkeyRegistration? ActiveRegistration,
     HotkeyRegistration? AdditionalActiveRegistration,
-    HotkeyRegistrationResult? CandidateResult,
+    HotkeyRegistrationResult? NewRegistrationResult,
     bool RollbackAttempted,
     bool RollbackSucceeded,
     int? PreviousUnregisterError,
-    int? CandidateRollbackError,
+    int? NewRegistrationRollbackError,
     string Description)
 {
     public bool HasDualActiveRegistrations =>
@@ -278,8 +278,8 @@ public sealed class GlobalHotkeysService : IDisposable
 
         if (!TryNormalize(modifiers, key, out var normalized, out var validationError))
         {
-            var failedCandidate = RegistrationFailure(validationError, modifiers, key);
-            return ReplacementCandidateFailure(currentOwned?.Registration, failedCandidate);
+            var failedRegistration = RegistrationFailure(validationError, modifiers, key);
+            return ReplacementFailure(currentOwned?.Registration, failedRegistration);
         }
 
         if (currentOwned is not null && currentOwned.Combination == normalized.Combination)
@@ -297,23 +297,23 @@ public sealed class GlobalHotkeysService : IDisposable
                 string.Empty);
         }
 
-        var candidateResult = Register(
+        var newRegistrationResult = Register(
             featureName,
             normalized.Modifiers,
             normalized.Key,
             callback);
-        if (!candidateResult.Success || candidateResult.Registration is null)
-            return ReplacementCandidateFailure(currentOwned?.Registration, candidateResult);
+        if (!newRegistrationResult.Success || newRegistrationResult.Registration is null)
+            return ReplacementFailure(currentOwned?.Registration, newRegistrationResult);
 
-        var candidate = candidateResult.Registration;
+        var newRegistration = newRegistrationResult.Registration;
         if (currentOwned is null)
         {
             return new HotkeyReplacementResult(
                 true,
                 false,
-                candidate,
+                newRegistration,
                 null,
-                candidateResult,
+                newRegistrationResult,
                 false,
                 false,
                 null,
@@ -327,9 +327,9 @@ public sealed class GlobalHotkeysService : IDisposable
             return new HotkeyReplacementResult(
                 true,
                 false,
-                candidate,
+                newRegistration,
                 null,
-                candidateResult,
+                newRegistrationResult,
                 false,
                 false,
                 null,
@@ -337,15 +337,15 @@ public sealed class GlobalHotkeysService : IDisposable
                 string.Empty);
         }
 
-        var candidateRollback = Unregister(candidate.Id);
-        if (candidateRollback.Success)
+        var newRegistrationRollback = Unregister(newRegistration.Id);
+        if (newRegistrationRollback.Success)
         {
             return new HotkeyReplacementResult(
                 false,
                 false,
                 currentOwned.Registration,
                 null,
-                candidateResult,
+                newRegistrationResult,
                 true,
                 true,
                 previousUnregistration.NativeError,
@@ -357,13 +357,13 @@ public sealed class GlobalHotkeysService : IDisposable
             false,
             false,
             currentOwned.Registration,
-            candidate,
-            candidateResult,
+            newRegistration,
+            newRegistrationResult,
             true,
             false,
             previousUnregistration.NativeError,
-            candidateRollback.NativeError,
-            $"The previous {featureName} hotkey and candidate hotkey could not be released. Both {currentOwned.Registration.Combination} and {candidate.Combination} may remain active until Noted exits. Previous release: {previousUnregistration.Description} Candidate rollback: {candidateRollback.Description}");
+            newRegistrationRollback.NativeError,
+            $"The previous {featureName} hotkey and new hotkey could not be released. Both {currentOwned.Registration.Combination} and {newRegistration.Combination} may remain active until Noted exits. Previous release: {previousUnregistration.Description} New registration rollback: {newRegistrationRollback.Description}");
     }
 
     internal HotkeyUnregistrationResult Unregister(int id)
@@ -515,21 +515,21 @@ public sealed class GlobalHotkeysService : IDisposable
             description);
     }
 
-    private static HotkeyReplacementResult ReplacementCandidateFailure(
+    private static HotkeyReplacementResult ReplacementFailure(
         HotkeyRegistration? activeRegistration,
-        HotkeyRegistrationResult candidateResult)
+        HotkeyRegistrationResult newRegistrationResult)
     {
         return new HotkeyReplacementResult(
             false,
             false,
             activeRegistration,
             null,
-            candidateResult,
+            newRegistrationResult,
             false,
             false,
             null,
             null,
-            candidateResult.Description);
+            newRegistrationResult.Description);
     }
 
     private static string DescribeNativeFailure(string context, int nativeError)
@@ -596,15 +596,15 @@ public sealed class GlobalHotkeysService : IDisposable
         if (!TryNormalizeKey(keyText, out var normalizedKey, out var virtualKey, out error))
             return false;
 
-        var canonicalModifiers = new List<string>(4);
-        if ((modifierFlags & MOD_CONTROL) != 0) canonicalModifiers.Add("Ctrl");
-        if ((modifierFlags & MOD_ALT) != 0) canonicalModifiers.Add("Alt");
-        if ((modifierFlags & MOD_SHIFT) != 0) canonicalModifiers.Add("Shift");
-        if ((modifierFlags & MOD_WIN) != 0) canonicalModifiers.Add("Win");
+        var orderedModifiers = new List<string>(4);
+        if ((modifierFlags & MOD_CONTROL) != 0) orderedModifiers.Add("Ctrl");
+        if ((modifierFlags & MOD_ALT) != 0) orderedModifiers.Add("Alt");
+        if ((modifierFlags & MOD_SHIFT) != 0) orderedModifiers.Add("Shift");
+        if ((modifierFlags & MOD_WIN) != 0) orderedModifiers.Add("Win");
 
         normalized = new NormalizedHotkey(
             new HotkeyCombination(modifierFlags, virtualKey),
-            string.Join("+", canonicalModifiers),
+            string.Join("+", orderedModifiers),
             normalizedKey);
         error = string.Empty;
         return true;
