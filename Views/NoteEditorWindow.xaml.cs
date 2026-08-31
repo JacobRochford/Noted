@@ -38,6 +38,7 @@ public partial class NoteEditorWindow : Window
     private bool _suppressSessionSave;
     private string? _recoveryOperationError;
     private string? _sessionPersistenceError;
+    private string? _noteSaveWarning;
 
     public NoteEditorWindow(
         INoteContentService contentService,
@@ -585,10 +586,14 @@ public partial class NoteEditorWindow : Window
                         "then close and reopen the tab to load the current file.");
                     return false;
                 }
+
+                _noteSaveWarning = null;
             }
             else
             {
-                _contentService.Save(document.FilePath, document.Content);
+                _noteSaveWarning = _contentService.Save(
+                    document.FilePath,
+                    document.Content);
             }
 
             document.SavedContent = document.Content;
@@ -745,11 +750,14 @@ public partial class NoteEditorWindow : Window
         IReadOnlyList<RecoveryDraftSnapshot> snapshots)
     {
         var failures = new List<string>();
+        var warnings = new List<string>();
         foreach (var snapshot in snapshots)
         {
             try
             {
-                _recoveryService.SaveDraft(snapshot.FilePath, snapshot.Content);
+                var warning = _recoveryService.SaveDraft(snapshot.FilePath, snapshot.Content);
+                if (!string.IsNullOrWhiteSpace(warning))
+                    warnings.Add($"'{Path.GetFileName(snapshot.FilePath)}': {warning}");
             }
             catch (Exception ex) when (IsExpectedFileException(ex))
             {
@@ -758,18 +766,23 @@ public partial class NoteEditorWindow : Window
             }
         }
 
+        var warningMessage = warnings.Count == 0
+            ? null
+            : $"Some note recovery backups could not be updated. {string.Join(" ", warnings)}";
         return failures.Count == 0
-            ? PersistenceSaveResult.Succeeded()
+            ? PersistenceSaveResult.Succeeded(warningMessage)
             : PersistenceSaveResult.Failed(
-                $"Unsaved note recovery data could not be saved. {string.Join(" ", failures)}");
+                $"Unsaved note recovery data could not be saved. {string.Join(" ", failures)}",
+                warningMessage);
     }
 
     private void MoveRecoveryDraft(string oldFilePath, OpenNoteDocument document)
     {
         RefreshScheduledRecoveryDrafts();
+        string? warning;
         try
         {
-            _recoveryService.SaveDraft(document.FilePath, document.Content);
+            warning = _recoveryService.SaveDraft(document.FilePath, document.Content);
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
@@ -780,7 +793,11 @@ public partial class NoteEditorWindow : Window
             return;
         }
 
-        TryDeleteRecoveryDraft(oldFilePath, out _);
+        if (TryDeleteRecoveryDraft(oldFilePath, out _))
+        {
+            _recoveryOperationError = warning;
+            UpdatePersistenceErrorState();
+        }
     }
 
     private bool SaveEditorSession()
@@ -791,7 +808,7 @@ public partial class NoteEditorWindow : Window
         CaptureActiveDocument();
         try
         {
-            _sessionService.Save(new NoteEditorSession
+            var warning = _sessionService.Save(new NoteEditorSession
             {
                 Tabs = _documents.Select(document => new NoteEditorTabState
                 {
@@ -802,7 +819,7 @@ public partial class NoteEditorWindow : Window
                 }).ToList(),
                 ActiveFilePath = _activeDocument?.FilePath
             });
-            _sessionPersistenceError = null;
+            _sessionPersistenceError = warning;
             UpdatePersistenceErrorState();
             return true;
         }
@@ -871,8 +888,10 @@ public partial class NoteEditorWindow : Window
         var errors = new[]
             {
                 _recoverySaveScheduler.LastError,
+                _recoverySaveScheduler.LastWarning,
                 _recoveryOperationError,
-                _sessionPersistenceError
+                _sessionPersistenceError,
+                _noteSaveWarning
             }
             .Where(error => !string.IsNullOrWhiteSpace(error))
             .Distinct(StringComparer.Ordinal)
