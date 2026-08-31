@@ -70,19 +70,23 @@ public sealed class DictionaryContentService : IDictionaryContentService
                 "Dictionary content cannot be saved because the legacy settings copy could not be checked. Resolve the reported settings error and restart Noted before retrying.");
         }
 
-        _fileStore.Write(items);
+        var warnings = new List<string>();
+        var backupWarning = _fileStore.Write(items);
+        if (!string.IsNullOrWhiteSpace(backupWarning))
+            warnings.Add(backupWarning);
         try
         {
             var legacyItems = _settingsService.LoadLegacyDictionaryItems();
             if (legacyItems is not null)
                 _settingsService.ClearLegacyDictionaryItems();
-            return new DictionaryContentSaveResult(null);
+            return new DictionaryContentSaveResult(JoinWarnings(warnings));
         }
         catch (SettingsPersistenceException ex)
         {
             System.Diagnostics.Debug.WriteLine(ex);
-            return new DictionaryContentSaveResult(
+            warnings.Add(
                 $"Dictionary content was saved, but its old settings copy could not be removed: {ex.Message}");
+            return new DictionaryContentSaveResult(JoinWarnings(warnings));
         }
     }
 
@@ -134,4 +138,9 @@ public sealed class DictionaryContentService : IDictionaryContentService
             ArgumentException or
             NotSupportedException;
     }
+
+    private static string? JoinWarnings(IReadOnlyCollection<string> warnings) =>
+        warnings.Count == 0
+            ? null
+            : string.Join(" ", warnings.Distinct(StringComparer.Ordinal));
 }

@@ -78,27 +78,30 @@ public sealed class ChecklistContentService : IChecklistContentService
                 "Checklist content cannot be saved because the legacy settings copy could not be checked. Resolve the reported settings error and restart Noted before retrying.");
         }
 
-        _itemStore.Write(items);
+        var warnings = new List<string>();
+        var backupWarning = _itemStore.Write(items);
+        if (!string.IsNullOrWhiteSpace(backupWarning))
+            warnings.Add(backupWarning);
         try
         {
             var legacyItems = _settingsService.LoadLegacyChecklistItems();
             if (legacyItems is not null)
                 _settingsService.ClearLegacyChecklistItems();
-            return new ChecklistContentSaveResult(null);
+            return new ChecklistContentSaveResult(JoinWarnings(warnings));
         }
         catch (SettingsPersistenceException ex)
         {
             System.Diagnostics.Debug.WriteLine(ex);
-            return new ChecklistContentSaveResult(
+            warnings.Add(
                 $"Checklist content was saved, but its old settings copy could not be removed: {ex.Message}");
+            return new ChecklistContentSaveResult(JoinWarnings(warnings));
         }
     }
 
     public ChecklistContentSaveResult SaveTabs(IReadOnlyList<ChecklistTabState> tabs)
     {
         ArgumentNullException.ThrowIfNull(tabs);
-        _tabStore.Write(tabs);
-        return new ChecklistContentSaveResult(null);
+        return new ChecklistContentSaveResult(_tabStore.Write(tabs));
     }
 
     private bool TryLoadLegacyItems(
@@ -149,4 +152,9 @@ public sealed class ChecklistContentService : IChecklistContentService
             ArgumentException or
             NotSupportedException;
     }
+
+    private static string? JoinWarnings(IReadOnlyCollection<string> warnings) =>
+        warnings.Count == 0
+            ? null
+            : string.Join(" ", warnings.Distinct(StringComparer.Ordinal));
 }
