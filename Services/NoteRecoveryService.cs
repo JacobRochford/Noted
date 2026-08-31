@@ -13,6 +13,8 @@ public sealed class NoteRecoveryService : INoteRecoveryService
     private readonly string _legacyDraftFilePath;
     private readonly HashSet<string> _preserveBackupOnNextSave =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _writesBlocked =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public NoteRecoveryService(string storageDirectory)
     {
@@ -79,7 +81,7 @@ public sealed class NoteRecoveryService : INoteRecoveryService
             issues);
     }
 
-    public void SaveDraft(string filePath, string content)
+    public string? SaveDraft(string filePath, string content)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentNullException.ThrowIfNull(content);
@@ -89,13 +91,38 @@ public sealed class NoteRecoveryService : INoteRecoveryService
             throw new ArgumentException("Unsupported note file type.", nameof(filePath));
 
         var draftFilePath = GetDraftFilePath(normalizedPath);
+        if (_writesBlocked.Contains(draftFilePath))
+        {
+            throw new IOException(
+                $"Recovery data for '{Path.GetFileName(normalizedPath)}' cannot be saved because an existing recovery file could not be read or preserved. Resolve the reported file error and restart Noted before retrying.");
+        }
+
+        var existing = ReadDraft(draftFilePath).Draft;
+        if (existing is not null &&
+            PathsEqual(existing.FilePath, normalizedPath) &&
+            string.Equals(existing.Content, content, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
         var preserveBackup = _preserveBackupOnNextSave.Contains(draftFilePath);
-        JsonFileStore.Write(
-            draftFilePath,
-            new NoteRecoveryDraft(normalizedPath, content, DateTime.UtcNow),
-            preserveBackup ? null : GetBackupFilePath(draftFilePath));
+        FileWriteResult writeResult;
+        try
+        {
+            writeResult = JsonFileStore.Write(
+                draftFilePath,
+                new NoteRecoveryDraft(normalizedPath, content, DateTime.UtcNow),
+                preserveBackup ? null : GetBackupFilePath(draftFilePath));
+        }
+        catch (FileVerificationException)
+        {
+            _writesBlocked.Add(draftFilePath);
+            throw;
+        }
+
         if (preserveBackup)
             _preserveBackupOnNextSave.Remove(draftFilePath);
+        return writeResult.Warning;
     }
 
     public void DeleteDraft(string filePath)
@@ -122,6 +149,7 @@ public sealed class NoteRecoveryService : INoteRecoveryService
         }
 
         _preserveBackupOnNextSave.Remove(draftFilePath);
+        _writesBlocked.Remove(draftFilePath);
     }
 
     private NoteRecoveryDraft? LoadDraftPair(
@@ -151,8 +179,15 @@ public sealed class NoteRecoveryService : INoteRecoveryService
             return backup.Draft;
         }
 
-        PreserveCorruptFile(primaryPath, primary.Status, issues);
-        PreserveCorruptFile(backupPath, backup.Status, issues);
+        var primaryPreserved = PreserveCorruptFile(primaryPath, primary.Status, issues);
+        var backupPreserved = PreserveCorruptFile(backupPath, backup.Status, issues);
+        if (primary.Status == JsonFileReadStatus.Unavailable ||
+            backup.Status == JsonFileReadStatus.Unavailable ||
+            (primary.Status == JsonFileReadStatus.Corrupt && primaryPreserved is null) ||
+            (backup.Status == JsonFileReadStatus.Corrupt && backupPreserved is null))
+        {
+            _writesBlocked.Add(primaryPath);
+        }
 
         var failure = primary.Status != JsonFileReadStatus.Missing
             ? primary
@@ -167,11 +202,11 @@ public sealed class NoteRecoveryService : INoteRecoveryService
         return null;
     }
 
-    private DraftReadAttempt ReadDraft(string path)
+    private DraftReadResult ReadDraft(string path)
     {
         var result = JsonFileStore.Read<NoteRecoveryDraft>(path);
         if (!result.Success)
-            return new DraftReadAttempt(path, result.Status, null, result.Error?.Message);
+            return new DraftReadResult(path, result.Status, null, result.Error?.Message);
 
         try
         {
@@ -179,7 +214,7 @@ public sealed class NoteRecoveryService : INoteRecoveryService
             if (string.IsNullOrWhiteSpace(draft.FilePath) ||
                 !NoteFileExtensions.IsSupported(draft.FilePath))
             {
-                return new DraftReadAttempt(
+                return new DraftReadResult(
                     path,
                     JsonFileReadStatus.Corrupt,
                     null,
@@ -193,14 +228,14 @@ public sealed class NoteRecoveryService : INoteRecoveryService
                 !PathsEqual(path, expectedPath) &&
                 !PathsEqual(path, GetBackupFilePath(expectedPath)))
             {
-                return new DraftReadAttempt(
+                return new DraftReadResult(
                     path,
                     JsonFileReadStatus.Corrupt,
                     null,
                     "The note path inside the recovery draft does not match its file name.");
             }
 
-            return new DraftReadAttempt(
+            return new DraftReadResult(
                 path,
                 JsonFileReadStatus.Success,
                 normalizedDraft,
@@ -208,7 +243,7 @@ public sealed class NoteRecoveryService : INoteRecoveryService
         }
         catch (Exception ex) when (IsExpectedRecoveryException(ex))
         {
-            return new DraftReadAttempt(path, JsonFileReadStatus.Corrupt, null, ex.Message);
+            return new DraftReadResult(path, JsonFileReadStatus.Corrupt, null, ex.Message);
         }
     }
 
@@ -328,7 +363,7 @@ public sealed class NoteRecoveryService : INoteRecoveryService
             NotSupportedException;
     }
 
-    private sealed record DraftReadAttempt(
+    private sealed record DraftReadResult(
         string Path,
         JsonFileReadStatus Status,
         NoteRecoveryDraft? Draft,

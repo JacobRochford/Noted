@@ -21,6 +21,6 @@ public interface INoteRecoveryService
 {
     NoteRecoveryDraftLoadResult LoadDraft(string filePath);
     NoteRecoveryLoadResult LoadDrafts();
-    void SaveDraft(string filePath, string content);
+    string? SaveDraft(string filePath, string content);
     void DeleteDraft(string filePath);
 }
