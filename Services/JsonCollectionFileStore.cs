@@ -76,7 +76,7 @@ internal sealed class JsonCollectionFileStore<TItem>
         return new JsonCollectionFileLoadResult<TItem>(null, issues);
     }
 
-    internal void Write(IReadOnlyList<TItem> items)
+    internal string? Write(IReadOnlyList<TItem> items)
     {
         ArgumentNullException.ThrowIfNull(items);
         if (_writesBlocked)
@@ -85,39 +85,52 @@ internal sealed class JsonCollectionFileStore<TItem>
                 $"{_contentName} cannot be saved because an existing content file could not be read or preserved. Resolve the reported file error and restart Noted before retrying.");
         }
 
-        JsonFileStore.Write(
-            _primaryFilePath,
-            items.ToList(),
-            _preserveBackupOnNextSave ? null : _backupFilePath);
+        FileWriteResult writeResult;
+        try
+        {
+            writeResult = JsonFileStore.Write(
+                _primaryFilePath,
+                items.ToList(),
+                _preserveBackupOnNextSave ? null : _backupFilePath);
+        }
+        catch (FileVerificationException)
+        {
+            _writesBlocked = true;
+            throw;
+        }
+
+        var verification = ReadItems(_primaryFilePath);
+        if (verification.Items is null)
+        {
+            _writesBlocked = true;
+            throw new FileVerificationException(
+                $"{_contentName} was written but could not be verified: {verification.Error ?? "the new file could not be read."}");
+        }
+
         _preserveBackupOnNextSave = false;
+        return writeResult.Warning;
     }
 
     internal void WriteAndVerify(IReadOnlyList<TItem> items)
     {
         Write(items);
-        var verification = ReadItems(_primaryFilePath);
-        if (verification.Items is null)
-        {
-            throw new IOException(
-                $"{_contentName} was written but could not be verified: {verification.Error ?? "the new file could not be read."}");
-        }
     }
 
-    private static ItemReadAttempt ReadItems(string path)
+    private static ItemReadResult ReadItems(string path)
     {
         var result = JsonFileStore.Read<List<TItem>>(path);
         if (!result.Success)
-            return new ItemReadAttempt(path, result.Status, null, result.Error?.Message);
+            return new ItemReadResult(path, result.Status, null, result.Error?.Message);
         if (result.Value!.Any(item => item is null))
         {
-            return new ItemReadAttempt(
+            return new ItemReadResult(
                 path,
                 JsonFileReadStatus.Corrupt,
                 null,
                 "The content file contains an empty item.");
         }
 
-        return new ItemReadAttempt(path, JsonFileReadStatus.Success, result.Value, null);
+        return new ItemReadResult(path, JsonFileReadStatus.Success, result.Value, null);
     }
 
     private static string? PreserveCorruptFile(
@@ -158,7 +171,7 @@ internal sealed class JsonCollectionFileStore<TItem>
             NotSupportedException;
     }
 
-    private sealed record ItemReadAttempt(
+    private sealed record ItemReadResult(
         string Path,
         JsonFileReadStatus Status,
         IReadOnlyList<TItem>? Items,

@@ -21,6 +21,14 @@ internal sealed record JsonFileReadResult<T>(
     internal bool Success => Status == JsonFileReadStatus.Success;
 }
 
+internal sealed class FileVerificationException : IOException
+{
+    internal FileVerificationException(string message, Exception? innerException = null)
+        : base(message, innerException)
+    {
+    }
+}
+
 internal static class JsonFileStore
 {
     internal static JsonFileReadResult<T> Read<T>(
@@ -61,7 +69,7 @@ internal static class JsonFileStore
         }
     }
 
-    internal static void Write<T>(
+    internal static FileWriteResult Write<T>(
         string path,
         T value,
         string? backupPath = null,
@@ -71,7 +79,35 @@ internal static class JsonFileStore
         ArgumentNullException.ThrowIfNull(value);
 
         var json = JsonSerializer.Serialize(value, options);
-        FileWriter.WriteAllText(path, json, backupPath);
+        var writeResult = FileWriter.WriteAllText(path, json, backupPath);
+
+        string persistedJson;
+        try
+        {
+            persistedJson = File.ReadAllText(Path.GetFullPath(path), Encoding.UTF8);
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            throw new FileVerificationException(
+                $"The JSON file at '{path}' was written but could not be read back for verification.",
+                ex);
+        }
+
+        if (!string.Equals(persistedJson, json, StringComparison.Ordinal))
+        {
+            throw new FileVerificationException(
+                $"The JSON file at '{path}' did not match the data that was written.");
+        }
+
+        var verification = Read<T>(path, options);
+        if (!verification.Success)
+        {
+            throw new FileVerificationException(
+                $"The JSON file at '{path}' was written but could not be validated.",
+                verification.Error);
+        }
+
+        return writeResult;
     }
 
     private static bool IsExpectedFileException(Exception exception)
