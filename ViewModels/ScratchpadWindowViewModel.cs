@@ -96,6 +96,8 @@ public sealed class ScratchpadWindowViewModel : INotifyPropertyChanged
 
         if (!loadResult.Success)
             SetContentPersistenceError($"Scratchpad content could not be loaded: {loadResult.Error}");
+        else if (!string.IsNullOrWhiteSpace(loadResult.Warning))
+            SetContentPersistenceError(loadResult.Warning);
     }
 
     public void ApplyNormalizedWindowState(ScratchpadWindowState state)
@@ -150,7 +152,7 @@ public sealed class ScratchpadWindowViewModel : INotifyPropertyChanged
             return false;
         }
 
-        SetContentPersistenceError(null);
+        SetContentPersistenceError(result.Warning);
         return true;
     }
 
