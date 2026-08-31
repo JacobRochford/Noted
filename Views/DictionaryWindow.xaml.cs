@@ -16,7 +16,7 @@ public partial class DictionaryWindow : OverlayWindow
 {
     private readonly IAppSettingsService _settingsService;
     private readonly DictionaryWindowViewModel _viewModel;
-    private readonly Dictionary<DictionaryItem, bool> _descriptionExpandedState = new();
+    private readonly Dictionary<DictionaryItem, bool> _definitionExpandedState = new();
     private string? _lastPersistenceWarning;
     private bool _reopenOnStartup;
     private bool _preserveOpenStateOnClose;
@@ -152,32 +152,32 @@ public partial class DictionaryWindow : OverlayWindow
             MessageBoxImage.Warning);
     }
 
-    private void DeleteButton_Click(object sender, RoutedEventArgs e)
+    private void DeleteWordMenuItem_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement fe && fe.DataContext is DictionaryItem item)
         {
-            _descriptionExpandedState.Remove(item);
+            _definitionExpandedState.Remove(item);
             _viewModel.RemoveItem(item);
         }
     }
 
-    private void DescriptionLink_Click(object sender, RoutedEventArgs e)
+    private void EditDefinitionButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement control || control.Tag is not DictionaryItem item)
             return;
 
         // Toggle stored expanded state
-        var isExpanded = !_descriptionExpandedState.TryGetValue(item, out var expanded) ? true : !expanded;
-        _descriptionExpandedState[item] = isExpanded;
+        var isExpanded = !_definitionExpandedState.TryGetValue(item, out var expanded) ? true : !expanded;
+        _definitionExpandedState[item] = isExpanded;
 
         // Find the DataTemplate root border for this item
         var container = VisualTreeHelpers.FindAncestor<Border>(control);
         if (container != null) {
-            var descriptionBox = VisualTreeHelpers.FindDescendant<TextBox>(container, "DescriptionBox");
-            if (descriptionBox != null) {
-                descriptionBox.Visibility = isExpanded ? Visibility.Visible : Visibility.Collapsed;
+            var definitionBox = VisualTreeHelpers.FindDescendant<TextBox>(container, "DefinitionBox");
+            if (definitionBox != null) {
+                definitionBox.Visibility = isExpanded ? Visibility.Visible : Visibility.Collapsed;
                 if (isExpanded)
-                    descriptionBox.Focus();
+                    definitionBox.Focus();
             }
         }
 

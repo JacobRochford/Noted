@@ -89,7 +89,7 @@
             </Setter>
         </Style>
 
-        <Style x:Key="DetailsBtn" TargetType="Button" BasedOn="{StaticResource HeaderIconBtn}">
+        <Style x:Key="DetailsButtonStyle" TargetType="Button" BasedOn="{StaticResource HeaderIconBtn}">
             <Setter Property="Width" Value="28"/>
             <Setter Property="Height" Value="28"/>
             <Setter Property="Content" Value="&#xE70F;"/>
@@ -192,9 +192,9 @@
                                             <Border.ContextMenu>
                                                 <ContextMenu Style="{StaticResource NotedContextMenu}"
                                                              DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                                                    <MenuItem Header="Delete entry" Foreground="#B84F4F"
+                                                    <MenuItem Header="Delete word" Foreground="#B84F4F"
                                                               Style="{StaticResource NotedContextMenuItem}"
-                                                              Click="DeleteButton_Click"/>
+                                                              Click="DeleteWordMenuItem_Click"/>
                                                 </ContextMenu>
                                             </Border.ContextMenu>
                                             <Grid>
@@ -211,21 +211,21 @@
                                                              Style="{StaticResource DictionaryTextBox}"
                                                              Text="{Binding Word, UpdateSourceTrigger=PropertyChanged}"
                                                              FontSize="13" FontWeight="SemiBold"/>
-                                                    <Button Grid.Column="1" Style="{StaticResource DetailsBtn}"
-                                                            Tag="{Binding}" Click="DescriptionLink_Click"
+                                                    <Button Grid.Column="1" Style="{StaticResource DetailsButtonStyle}"
+                                                            Tag="{Binding}" Click="EditDefinitionButton_Click"
                                                             ToolTip="Edit definition"/>
                                                 </Grid>
 
                                                 <Border Grid.Row="1" Margin="5,0,5,7" Padding="10,8"
                                                         Background="#F2F8FB" BorderBrush="#D8E9F1"
                                                         BorderThickness="1" CornerRadius="6"
-                                                        Visibility="{Binding Visibility, ElementName=DescriptionBox}">
+                                                        Visibility="{Binding Visibility, ElementName=DefinitionBox}">
                                                     <StackPanel>
                                                         <TextBlock Text="DEFINITION" Margin="1,0,0,5"
                                                                    Foreground="#6B8795" FontSize="10"
                                                                    FontWeight="SemiBold"/>
-                                                        <TextBox x:Name="DescriptionBox"
-                                                                 Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                                                        <TextBox x:Name="DefinitionBox"
+                                                                 Text="{Binding Definition, UpdateSourceTrigger=PropertyChanged}"
                                                                  MinHeight="48" MaxHeight="130"
                                                                  Padding="7,5" Background="White"
                                                                  BorderBrush="#C9DFEC" BorderThickness="1"

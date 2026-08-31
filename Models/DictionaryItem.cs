@@ -6,7 +6,7 @@ namespace Noted.Models;
 public sealed class DictionaryItem : INotifyPropertyChanged
 {
     private string _word = "";
-    private string _description = "";
+    private string _definition = "";
 
     public string Word
     {
@@ -21,14 +21,14 @@ public sealed class DictionaryItem : INotifyPropertyChanged
         }
     }
 
-    public string Description
+    public string Definition
     {
-        get => _description;
+        get => _definition;
         set
         {
-            if (_description != value)
+            if (_definition != value)
             {
-                _description = value;
+                _definition = value;
                 OnPropertyChanged();
             }
         }

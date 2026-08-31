@@ -76,7 +76,7 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposa
             Items.Add(new DictionaryItem
             {
                 Word = item.Word ?? "",
-                Description = item.Description ?? ""
+                Definition = item.Description ?? ""
             });
         }
 
@@ -96,7 +96,7 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposa
 
     public DictionaryItem AddItem()
     {
-        var newItem = new DictionaryItem { Word = "", Description = "" };
+        var newItem = new DictionaryItem { Word = "", Definition = "" };
         _uiThreadInvoke(() =>
         {
             Items.Add(newItem);
@@ -148,7 +148,7 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposa
             .Select(item => new DictionaryItemState
             {
                 Word = item.Word,
-                Description = item.Description
+                Description = item.Definition
             })
             .ToList());
     }
