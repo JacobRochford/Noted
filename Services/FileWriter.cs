@@ -23,6 +23,33 @@ internal static class FileWriter
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
         ArgumentNullException.ThrowIfNull(content);
 
+        return WriteFile(
+            destinationPath,
+            backupPath,
+            temporaryPath => WriteTemporaryTextFile(temporaryPath, content));
+    }
+
+    internal static FileWriteResult WriteAllBytes(
+        string destinationPath,
+        byte[] content,
+        string? backupPath = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+        ArgumentNullException.ThrowIfNull(content);
+
+        return WriteFile(
+            destinationPath,
+            backupPath,
+            temporaryPath => WriteTemporaryByteFile(temporaryPath, content));
+    }
+
+    private static FileWriteResult WriteFile(
+        string destinationPath,
+        string? backupPath,
+        Action<string> writeTemporaryFile)
+    {
+        ArgumentNullException.ThrowIfNull(writeTemporaryFile);
+
         var fullDestinationPath = Path.GetFullPath(destinationPath);
         var directory = Path.GetDirectoryName(fullDestinationPath)
             ?? throw new ArgumentException("The destination must have a parent directory.", nameof(destinationPath));
@@ -34,7 +61,7 @@ internal static class FileWriter
         try
         {
             Directory.CreateDirectory(directory);
-            WriteTemporaryFile(temporaryPath, content);
+            writeTemporaryFile(temporaryPath);
 
             if (File.Exists(fullDestinationPath))
             {
@@ -119,7 +146,7 @@ internal static class FileWriter
         }
     }
 
-    private static void WriteTemporaryFile(string path, string content)
+    private static void WriteTemporaryTextFile(string path, string content)
     {
         using var stream = new FileStream(
             path,
@@ -135,6 +162,19 @@ internal static class FileWriter
             leaveOpen: true);
         writer.Write(content);
         writer.Flush();
+        stream.Flush(flushToDisk: true);
+    }
+
+    private static void WriteTemporaryByteFile(string path, byte[] content)
+    {
+        using var stream = new FileStream(
+            path,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 4096,
+            FileOptions.WriteThrough);
+        stream.Write(content);
         stream.Flush(flushToDisk: true);
     }
 

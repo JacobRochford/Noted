@@ -19,6 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="tests\Noted.Tests\**\*.cs" />
+    <InternalsVisibleTo Include="Noted.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Resource Include="Resources/notes.ico" />
   </ItemGroup>
 </Project>
