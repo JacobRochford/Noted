@@ -1,6 +1,6 @@
 # Noted.
 
-Noted is a Windows-only .NET 9 WPF utility app. It has a floating Notes button, organizes `.txt`, `.md`, and `.markdown` files in folders, and includes a tabbed editor with recovery and Markdown preview. It also includes Checklist, Dictionary, Scratchpad, and Mini Pad.
+Noted is a Windows-only .NET 9 WPF utility app. It has a floating Notes button, organizes `.txt`, `.md`, and `.markdown` files in folders, and includes a tabbed editor with recovery and Markdown preview. It also includes Checklist, Dictionary, Scratchpad, and MiniPad.
 
 ## Notes and folders
 
@@ -31,21 +31,21 @@ Choose how new notes are created:
 - **Checklist** saves checklist items locally.
 - **Dictionary** saves terms and definitions locally.
 - **Scratchpad** is a lightweight rich-text editor that saves its contents locally before it is hidden or closed.
-- **Mini Pad** opens one compact plain-text window. It saves a recovery copy locally and reopens after the app exits or crashes.
+- **MiniPad** opens one compact plain-text window. It saves its content locally and restores its previous visibility on startup.
 
 ## Hotkeys and visibility
 
-Default global hotkeys:
+Default hotkeys:
 
 | Action | Hotkey |
 | --- | --- |
-| Toggle Main Workspace | `Ctrl+Shift+Space` |
-| Toggle Checklist | `Alt+C` |
-| Toggle Dictionary | `Alt+D` |
+| Show or hide Noted | `Ctrl+Shift+Space` |
+| Show or hide Checklist | `Alt+C` |
+| Show or hide Dictionary | `Alt+D` |
 
-The workspace hotkey hides Notes, Checklist, Dictionary, Scratchpad, Mini Pad, and the editor when any of them are visible. If they are all hidden, it shows Notes.
+The Notes hotkey hides Notes, Checklist, Dictionary, Scratchpad, MiniPad, and the editor together. Pressing it again restores the same windows that were visible before they were hidden.
 
-By default, the Notes List's Hide button will also hide editor, Checklist, Dictionary, Scratchpad, Mini Pad, and can be adjusted in the settings.
+By default, the Notes List's Hide button also hides the editor, Checklist, Dictionary, Scratchpad, and MiniPad. This can be changed in Settings.
 Clicking outside Notes or pressing `Esc` hides Notes and the editor. 
 
 
@@ -65,13 +65,13 @@ Settings include:
 - how new notes are created and whether they include a timestamp
 - modified-time subtitles and deletion confirmation
 - inline or drill-down folders
-- global hotkeys
+- Notes, Checklist, and Dictionary hotkeys
 - whether Noted starts with Windows
-- whether the Notes Hide button also hides the other tool windows
+- whether the Notes Hide button also hides the other windows
 - whether the previous editor session reopens
 - display choice, ghost mode, and opacity
 
-Noted stores its settings, tool window layouts, editor session, Scratchpad content, and recovery data under `%LocalAppData%\Noted`. Notes stay in the folder you choose.
+Noted stores its settings, window layouts, editor session, Scratchpad content, recovery data, and local backups under `%LocalAppData%\Noted`. Notes stay in the folder you choose.
 
 ## Requirements
 
@@ -92,7 +92,13 @@ You can also open `Noted.sln` in Visual Studio 2022 17.12 or later.
 
 ## Testing
 
-There is no automated test project yet. Run `dotnet build` to check compilation. Test UI and window behavior manually on Windows.
+Run the focused service tests with:
+
+```powershell
+dotnet test tests/Noted.Tests/Noted.Tests.csproj
+```
+
+The project currently has 69 automated tests. UI and window behavior still require manual testing on Windows.
 
 ## Basic use
 
@@ -101,13 +107,13 @@ There is no automated test project yet. Run `dotnet build` to check compilation.
 3. Create a note with Prompt, Quick, or Both, depending on your setting.
 4. Select a note, then press `Enter` or choose **Open** to open it in the built-in editor.
 5. Use folders, search, rename, and delete actions to organize notes.
-6. Open Checklist, Dictionary, Scratchpad, or Mini Pad from the Notes toolbar when needed.
+6. Open Checklist, Dictionary, Scratchpad, or MiniPad from the utility menu when needed.
 
 ## Limitations
 
 - Noted only runs on Windows because it uses WPF and Win32 APIs.
 - Only `.txt`, `.md`, and `.markdown` files can be used as notes.
-- Settings and recovery data are stored locally. Noted has no built-in cloud sync or backup.
+- Settings, recovery data, and backups are local to the same computer. Noted has no cloud sync or off-device backup.
 
 ## License
 
