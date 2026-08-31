@@ -102,7 +102,10 @@ public sealed class NoteFileService : INoteFileService {
             ? BuildUniqueFileName(now)
             : BuildRequestedFileName(requestedName);
         var fullPath = Path.Combine(CurrentDirectory, filename);
-        File.WriteAllText(fullPath, BuildNewNoteContent(now, _settingsService.LoadTimestampPlacement()));
+        var content = BuildNewNoteContent(now, _settingsService.LoadTimestampPlacement());
+        FileWriter.WriteAllText(fullPath, content);
+        if (!string.Equals(File.ReadAllText(fullPath), content, StringComparison.Ordinal))
+            throw new IOException("The new note was created but could not be verified.");
         return filename;
     }
 
