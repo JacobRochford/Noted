@@ -16,7 +16,7 @@ public sealed class ScratchpadWindowViewModel : INotifyPropertyChanged
     private bool _wordWrapEnabled;
     private double _fontSize;
     private int _wordCount;
-    private int _charCount;
+    private int _characterCount;
     private int _lineCount;
     private string _findText = string.Empty;
     private string _replaceText = string.Empty;
@@ -66,7 +66,7 @@ public sealed class ScratchpadWindowViewModel : INotifyPropertyChanged
     }
 
     public int WordCount { get => _wordCount; set { _wordCount = value; OnPropertyChanged(); } }
-    public int CharCount { get => _charCount; set { _charCount = value; OnPropertyChanged(); } }
+    public int CharacterCount { get => _characterCount; set { _characterCount = value; OnPropertyChanged(); } }
     public int LineCount { get => _lineCount; set { _lineCount = value; OnPropertyChanged(); } }
     public string FindText { get => _findText; set { _findText = value; OnPropertyChanged(); } }
     public string ReplaceText { get => _replaceText; set { _replaceText = value; OnPropertyChanged(); } }
@@ -116,7 +116,7 @@ public sealed class ScratchpadWindowViewModel : INotifyPropertyChanged
         if (normalizedText.EndsWith('\n'))
             normalizedText = normalizedText[..^1];
 
-        CharCount = normalizedText.Length;
+        CharacterCount = normalizedText.Length;
         LineCount = normalizedText.Length == 0
             ? 0
             : normalizedText.Count(character => character == '\n') + 1;

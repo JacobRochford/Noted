@@ -395,7 +395,7 @@ public partial class ScratchpadWindow : OverlayWindow
 
         var deco = sel.GetPropertyValue(Inline.TextDecorationsProperty) as TextDecorationCollection;
         UnderlineButton.IsChecked = deco?.Any(d => d.Location == TextDecorationLocation.Underline) == true;
-        StrikeButton.IsChecked = deco?.Any(d => d.Location == TextDecorationLocation.Strikethrough) == true;
+        StrikethroughButton.IsChecked = deco?.Any(d => d.Location == TextDecorationLocation.Strikethrough) == true;
 
         var size = sel.GetPropertyValue(TextElement.FontSizeProperty);
         if (size != DependencyProperty.UnsetValue)
@@ -455,7 +455,7 @@ public partial class ScratchpadWindow : OverlayWindow
         Editor.Focus();
     }
 
-    private void StrikeButton_Click(object sender, RoutedEventArgs e)
+    private void StrikethroughButton_Click(object sender, RoutedEventArgs e)
     {
         var sel = Editor.Selection;
         if (sel.IsEmpty) return;
@@ -639,7 +639,7 @@ public partial class ScratchpadWindow : OverlayWindow
     }
 
     private void FindNextButton_Click(object sender, RoutedEventArgs e) => FindNext();
-    private void FindPrevButton_Click(object sender, RoutedEventArgs e) => FindPrevious();
+    private void FindPreviousButton_Click(object sender, RoutedEventArgs e) => FindPrevious();
 
     private void FindNext()
     {

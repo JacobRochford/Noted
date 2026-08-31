@@ -242,7 +242,7 @@
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                             <Button Content="&#xE721;" Style="{StaticResource HeaderIconBtn}"
                                     Click="FindButton_Click" ToolTip="Find and replace (Ctrl+F)"/>
-                            <Button Content="&#xE921;" Margin="3,0,0,0"
+                            <Button Content="&#xE711;" Margin="3,0,0,0"
                                     Style="{StaticResource HeaderIconBtn}"
                                     Click="HideButton_Click" ToolTip="Hide"/>
                         </StackPanel>
@@ -267,7 +267,7 @@
                                      Text="{Binding FindText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      KeyDown="FindBox_KeyDown"/>
                             <Button Grid.Column="1" Content="↑" Style="{StaticResource ToolbarBtn}"
-                                    Click="FindPrevButton_Click" ToolTip="Previous (Shift+Enter)"
+                                    Click="FindPreviousButton_Click" ToolTip="Previous (Shift+Enter)"
                                     Margin="4,0,0,0"/>
                             <Button Grid.Column="2" Content="↓" Style="{StaticResource ToolbarBtn}"
                                     Click="FindNextButton_Click" ToolTip="Next (Enter)"/>
@@ -309,8 +309,8 @@
                                       Click="UnderlineButton_Click" ToolTip="Underline (Ctrl+U)">
                             <TextBlock Text="U" TextDecorations="Underline"/>
                         </ToggleButton>
-                        <ToggleButton x:Name="StrikeButton" Style="{StaticResource ToggleBtn}"
-                                      Click="StrikeButton_Click" ToolTip="Strikethrough">
+                        <ToggleButton x:Name="StrikethroughButton" Style="{StaticResource ToggleBtn}"
+                                      Click="StrikethroughButton_Click" ToolTip="Strikethrough">
                             <TextBlock Text="S" TextDecorations="Strikethrough"/>
                         </ToggleButton>
 
@@ -388,7 +388,7 @@
                             <Run Text="Words "/>
                             <Run Text="{Binding WordCount, Mode=OneWay}" Foreground="#2C6E91" FontWeight="SemiBold"/>
                             <Run Text="   Characters "/>
-                            <Run Text="{Binding CharCount, Mode=OneWay}" Foreground="#2C6E91" FontWeight="SemiBold"/>
+                            <Run Text="{Binding CharacterCount, Mode=OneWay}" Foreground="#2C6E91" FontWeight="SemiBold"/>
                             <Run Text="   Lines "/>
                             <Run Text="{Binding LineCount, Mode=OneWay}" Foreground="#2C6E91" FontWeight="SemiBold"/>
                         </TextBlock>
