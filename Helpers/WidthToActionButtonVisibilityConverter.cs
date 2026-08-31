@@ -10,7 +10,7 @@ public class WidthToActionButtonVisibilityConverter : IValueConverter
     private const double DeleteButtonHideWidth = 270;
     private const double RenameButtonHideWidth = 250;
 
-    // param: "delete" or "rename"
+    // Converter parameter: "delete" or "rename".
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is double width && parameter is string which)

@@ -4,8 +4,7 @@ using System.Windows.Data;
 
 namespace Noted.Helpers;
 
-// Treeview indent workaround, WPF doesn't let you set it
-// Used for the tree view node's indent depth level, since WPF's built-in TreeView doesn't allow customizing the indentation amount
+// Allows the tree view indentation width to be styled.
 public sealed class IndentLevelToMarginConverter : IValueConverter {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) {
         if (value is int level && level > 0)
