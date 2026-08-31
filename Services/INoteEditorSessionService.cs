@@ -25,5 +25,5 @@ public sealed record NoteEditorSessionLoadResult(
 public interface INoteEditorSessionService
 {
     NoteEditorSessionLoadResult Load();
-    void Save(NoteEditorSession session);
+    string? Save(NoteEditorSession session);
 }
