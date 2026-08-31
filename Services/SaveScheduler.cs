@@ -3,14 +3,18 @@ using System.Windows.Threading;
 
 namespace Noted.Services;
 
-internal readonly record struct PersistenceSaveResult(bool Success, string? Error)
+internal readonly record struct PersistenceSaveResult(
+    bool Success,
+    string? Error,
+    string? Warning)
 {
-    internal static PersistenceSaveResult Succeeded() => new(true, null);
+    internal static PersistenceSaveResult Succeeded(string? warning = null) =>
+        new(true, null, warning);
 
-    internal static PersistenceSaveResult Failed(string error)
+    internal static PersistenceSaveResult Failed(string error, string? warning = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(error);
-        return new PersistenceSaveResult(false, error);
+        return new PersistenceSaveResult(false, error, warning);
     }
 }
 
@@ -56,6 +60,8 @@ internal sealed class SaveScheduler<TSnapshot> : IDisposable
 
     internal string? LastError { get; private set; }
 
+    internal string? LastWarning { get; private set; }
+
     internal long LastSavedRevision { get; private set; }
 
     internal event EventHandler? StateChanged;
@@ -95,6 +101,7 @@ internal sealed class SaveScheduler<TSnapshot> : IDisposable
         {
             LastSavedRevision = revision;
             LastError = null;
+            LastWarning = result.Warning;
             if (_pendingRevision == revision)
             {
                 _pendingSnapshot = default;
@@ -109,6 +116,7 @@ internal sealed class SaveScheduler<TSnapshot> : IDisposable
         LastError = string.IsNullOrWhiteSpace(result.Error)
             ? "The pending data could not be saved."
             : result.Error;
+        LastWarning = result.Warning;
         error = LastError;
 
         if (_pendingRevision == revision)
@@ -130,6 +138,7 @@ internal sealed class SaveScheduler<TSnapshot> : IDisposable
         _pendingSnapshot = default;
         _hasPendingSnapshot = false;
         LastError = null;
+        LastWarning = null;
         OnStateChanged();
     }
 
