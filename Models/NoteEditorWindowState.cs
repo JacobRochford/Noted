@@ -7,4 +7,5 @@ public sealed record NoteEditorWindowState
     public double TabsPanelWidth { get; init; } = 190;
     public bool IsTabsPanelCollapsed { get; init; }
     public bool WordWrapEnabled { get; init; } = true;
+    public bool ReopenOnStartup { get; init; }
 }

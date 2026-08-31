@@ -38,7 +38,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
     public ObservableCollection<ChecklistTab> Tabs { get; } = new();
     public ObservableCollection<ChecklistTab> VisibleTabs { get; } = new();
 
-    // --- Window state ---
+    // Window state
 
     public bool GhostModeEnabled
     {
@@ -46,7 +46,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
         set { if (_ghostModeEnabled != value) { _ghostModeEnabled = value; OnPropertyChanged(); } }
     }
 
-    // --- Filter / search / sort ---
+    // Filter / search / sort
 
     public string SearchQuery
     {
@@ -113,8 +113,9 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
     }
 
     public bool HasPersistenceError => !string.IsNullOrWhiteSpace(PersistenceError);
+    internal bool RecoveryIssuesFoundThisRun { get; }
 
-    // --- Progress / stats ---
+    // Progress / stats
 
     public int TotalCount     => Items.Count;
     public int CompletedCount => Items.Count(i => i.IsChecked);
@@ -131,7 +132,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
         _ => $"{RemainingCount} items remaining"
     };
 
-    // --- Constructor ---
+    // Constructor
 
     public ChecklistWindowViewModel(
         IChecklistContentService contentService,
@@ -152,6 +153,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
         _ghostModeEnabled = ghostModeEnabled;
 
         var loadResult = _contentService.LoadItems();
+        RecoveryIssuesFoundThisRun = loadResult.Issues.Count > 0;
         SetLoadIssues(loadResult.Issues);
         InitializeTabs(loadResult.Tabs);
         var customTabsById = CustomTabs.ToDictionary(tab => tab.Id, StringComparer.OrdinalIgnoreCase);
@@ -176,7 +178,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
         RefreshFilteredItems();
     }
 
-    // --- Tabs ---
+    // Tabs
 
     private void InitializeTabs(IReadOnlyList<ChecklistTabState> states)
     {
@@ -397,7 +399,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
         OnPropertyChanged(nameof(CanAddItem));
     }
 
-    // --- Collection / item change handlers ---
+    // Collection / item change handlers
 
     private void Items_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -438,7 +440,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
         OnPropertyChanged(nameof(FooterText));
     }
 
-    // --- Filtering / sorting ---
+    // Filtering / sorting
 
     public void RefreshFilteredItems()
     {
@@ -473,7 +475,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
 
             var result = source.ToList();
 
-            // In-place sync to minimise ListBox re-renders
+            // In-place sync to minimize ListBox re-renders
             for (int i = 0; i < result.Count; i++)
             {
                 if (i < FilteredItems.Count)
@@ -491,7 +493,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
         } finally { _isRefreshing = false; }
     }
 
-    // --- CRUD ---
+    // CRUD
 
     public ChecklistItem? AddItem(ChecklistItem? anchor = null)
     {
@@ -576,7 +578,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
         Items.Insert(idx >= 0 ? idx + 1 : Items.Count, dup);
     }
 
-    // --- Bulk operations ---
+    // Bulk operations
 
     public void ClearCompleted()
     {
@@ -630,7 +632,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
         RefreshFilteredItems();
     }
 
-    // --- Reorder ---
+    // Reorder
 
     public void MoveItemUp(ChecklistItem item)
     {
@@ -689,7 +691,7 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
             Items.Move(sourceIndex, newIndex);
     }
 
-    // --- Persistence ---
+    // Persistence
 
     public bool TryFlushPendingItems(out string? error)
     {

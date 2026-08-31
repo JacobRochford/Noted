@@ -2,23 +2,31 @@ using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
+using Noted.Models;
 using Noted.Services;
 
 namespace Noted;
 
-public partial class MicroScratchpadWindow : OverlayWindow
+public partial class MiniPadWindow : OverlayWindow
 {
-    private readonly IMicroScratchpadRecoveryService _recoveryService;
+    private readonly IMiniPadRecoveryService _recoveryService;
+    private readonly IAppSettingsService _settingsService;
     private readonly SaveScheduler<string> _saveScheduler;
     private bool _keepDraftOnClose;
+    private bool _preserveOpenStateOnClose;
+    private bool _reopenOnStartup;
 
-    public MicroScratchpadWindow(
-        IMicroScratchpadRecoveryService recoveryService,
-        MicroScratchpadRecoveryDraft? draft = null)
+    public MiniPadWindow(
+        IMiniPadRecoveryService recoveryService,
+        IAppSettingsService settingsService,
+        MiniPadRecoveryDraft? draft = null)
     {
         ArgumentNullException.ThrowIfNull(recoveryService);
+        ArgumentNullException.ThrowIfNull(settingsService);
 
         _recoveryService = recoveryService;
+        _settingsService = settingsService;
+        _reopenOnStartup = settingsService.LoadMiniPadWindowState().ReopenOnStartup;
 
         InitializeComponent();
         InitializeOverlay(
@@ -33,9 +41,10 @@ public partial class MicroScratchpadWindow : OverlayWindow
             SaveDraftSnapshot);
         _saveScheduler.StateChanged += SaveScheduler_StateChanged;
         Editor.TextChanged += Editor_TextChanged;
-        Loaded += MicroScratchpadWindow_Loaded;
-        Closing += MicroScratchpadWindow_Closing;
-        Closed += MicroScratchpadWindow_Closed;
+        Loaded += MiniPadWindow_Loaded;
+        IsVisibleChanged += MiniPadWindow_IsVisibleChanged;
+        Closing += MiniPadWindow_Closing;
+        Closed += MiniPadWindow_Closed;
 
         if (draft is null)
         {
@@ -49,32 +58,59 @@ public partial class MicroScratchpadWindow : OverlayWindow
         _keepDraftOnClose = true;
     }
 
+    internal void PrepareForApplicationShutdown()
+    {
+        _reopenOnStartup = IsWindowVisible || IsHiddenTogether;
+        _preserveOpenStateOnClose = true;
+        SaveWindowState();
+    }
+
     public bool TryFlushPendingContent(out string? error)
     {
         _saveScheduler.Schedule(Editor.Text);
         return _saveScheduler.TryFlush(out error);
     }
 
+    internal string? BackupBlockingIssue =>
+        _saveScheduler.LastError ?? _saveScheduler.LastWarning;
+
     protected override void SaveWindowState()
     {
+        _settingsService.SaveMiniPadWindowState(new MiniPadWindowState
+        {
+            ReopenOnStartup = _reopenOnStartup
+        });
     }
 
-    private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+    private void HideButton_Click(object sender, RoutedEventArgs e)
     {
         if (!TryFlushPendingContent(out var error))
         {
             AppDialog.Show(
-                error ?? "Mini Pad recovery data could not be saved.",
-                "Mini Pad Save Failed",
+                error ?? "MiniPad recovery data could not be saved.",
+                "MiniPad Save Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
         }
 
+        _reopenOnStartup = false;
+        SaveWindowState();
         HideWindow();
     }
 
-    private void MicroScratchpadWindow_Loaded(object sender, RoutedEventArgs e)
+    private void MiniPadWindow_IsVisibleChanged(
+        object sender,
+        DependencyPropertyChangedEventArgs e)
+    {
+        if (_preserveOpenStateOnClose || IsChangingGroupVisibility)
+            return;
+
+        _reopenOnStartup = IsWindowVisible;
+        SaveWindowState();
+    }
+
+    private void MiniPadWindow_Loaded(object sender, RoutedEventArgs e)
     {
         Dispatcher.BeginInvoke(DispatcherPriority.Input, Editor.Focus);
     }
@@ -88,27 +124,27 @@ public partial class MicroScratchpadWindow : OverlayWindow
     {
         try
         {
-            _recoveryService.SaveDraft(content);
-            return PersistenceSaveResult.Succeeded();
+            var warning = _recoveryService.SaveDraft(content);
+            return PersistenceSaveResult.Succeeded(warning);
         }
         catch (Exception ex) when (IsExpectedRecoveryException(ex))
         {
             System.Diagnostics.Debug.WriteLine(ex);
             return PersistenceSaveResult.Failed(
-                $"Mini Pad recovery data could not be saved: {ex.Message}");
+                $"MiniPad recovery data could not be saved: {ex.Message}");
         }
     }
 
     private void SaveScheduler_StateChanged(object? sender, EventArgs e)
     {
-        var error = _saveScheduler.LastError;
-        PersistenceErrorText.Text = error ?? string.Empty;
-        PersistenceErrorPanel.Visibility = string.IsNullOrWhiteSpace(error)
+        var message = _saveScheduler.LastError ?? _saveScheduler.LastWarning;
+        PersistenceErrorText.Text = message ?? string.Empty;
+        PersistenceErrorPanel.Visibility = string.IsNullOrWhiteSpace(message)
             ? Visibility.Collapsed
             : Visibility.Visible;
     }
 
-    private void MicroScratchpadWindow_Closing(object? sender, CancelEventArgs e)
+    private void MiniPadWindow_Closing(object? sender, CancelEventArgs e)
     {
         if (_keepDraftOnClose)
             return;
@@ -117,25 +153,32 @@ public partial class MicroScratchpadWindow : OverlayWindow
         {
             e.Cancel = true;
             AppDialog.Show(
-                error ?? "Mini Pad recovery data could not be saved.",
-                "Mini Pad Save Failed",
+                error ?? "MiniPad recovery data could not be saved.",
+                "MiniPad Save Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
+        }
+
+        if (!_preserveOpenStateOnClose)
+        {
+            _reopenOnStartup = false;
+            SaveWindowState();
         }
 
         e.Cancel = true;
         HideWindow();
     }
 
-    private void MicroScratchpadWindow_Closed(object? sender, EventArgs e)
+    private void MiniPadWindow_Closed(object? sender, EventArgs e)
     {
         _saveScheduler.StateChanged -= SaveScheduler_StateChanged;
         _saveScheduler.Dispose();
         Editor.TextChanged -= Editor_TextChanged;
-        Loaded -= MicroScratchpadWindow_Loaded;
-        Closing -= MicroScratchpadWindow_Closing;
-        Closed -= MicroScratchpadWindow_Closed;
+        Loaded -= MiniPadWindow_Loaded;
+        IsVisibleChanged -= MiniPadWindow_IsVisibleChanged;
+        Closing -= MiniPadWindow_Closing;
+        Closed -= MiniPadWindow_Closed;
     }
 
     private static bool IsExpectedRecoveryException(Exception exception)

@@ -4,8 +4,7 @@ using Microsoft.Win32;
 
 namespace Noted.Services;
 
-// handles Windows run-on-startup registry entry
-public sealed class StartupService : IStartupService {
+public sealed class RunOnStartupService : IRunOnStartupService {
     private const string RunKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
     private const string AppName = "Noted";
 
@@ -14,7 +13,6 @@ public sealed class StartupService : IStartupService {
             using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: false);
             var stored = key?.GetValue(AppName) as string;
             if (string.IsNullOrEmpty(stored)) return false;
-            // strip quotes, compare path
             return string.Equals(stored.Trim('"'), ExecutablePath, StringComparison.OrdinalIgnoreCase);
         }
     }
@@ -26,7 +24,7 @@ public sealed class StartupService : IStartupService {
                 return BuildFailureResult("The Windows startup registry key could not be opened for writing.");
 
             if (enabled)
-                key.SetValue(AppName, $"\"{ExecutablePath}\""); // always quote path
+                key.SetValue(AppName, $"\"{ExecutablePath}\"");
             else
                 key.DeleteValue(AppName, throwOnMissingValue: false);
         } catch (Exception ex) when (IsExpectedRegistryException(ex)) {
@@ -64,7 +62,6 @@ public sealed class StartupService : IStartupService {
     private static bool IsExpectedRegistryException(Exception ex) =>
         ex is UnauthorizedAccessException or SecurityException or IOException;
 
-    // get real exe path for Run key (works on .NET 6+ and fallback)
     private static string ExecutablePath =>
         Environment.ProcessPath
         ?? System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName

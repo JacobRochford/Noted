@@ -49,6 +49,7 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposa
     }
 
     public bool HasPersistenceError => !string.IsNullOrWhiteSpace(PersistenceError);
+    internal bool RecoveryIssuesFoundThisRun { get; }
 
     public DictionaryWindowViewModel(
         IDictionaryContentService contentService,
@@ -70,6 +71,7 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposa
         _ghostModeEnabled = ghostModeEnabled;
 
         var loadResult = _contentService.LoadItems();
+        RecoveryIssuesFoundThisRun = loadResult.Issues.Count > 0;
         SetLoadIssues(loadResult.Issues);
         foreach (var item in loadResult.Items)
         {

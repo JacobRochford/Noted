@@ -67,6 +67,9 @@ public partial class ChecklistWindow : OverlayWindow
         return success;
     }
 
+    internal string? BackupBlockingIssue => _viewModel.PersistenceError;
+    internal bool RecoveryBlocksBackup => _viewModel.RecoveryIssuesFoundThisRun;
+
     protected override void OnClosing(CancelEventArgs e)
     {
         if (!TryFlushPendingContent(out var error))
@@ -108,12 +111,12 @@ public partial class ChecklistWindow : OverlayWindow
 
     internal void PrepareForApplicationShutdown()
     {
-        _reopenOnStartup = IsWindowVisible;
+        _reopenOnStartup = IsWindowVisible || IsHiddenTogether;
         _preserveOpenStateOnClose = true;
         SaveWindowState();
     }
 
-    // ── Title bar ─────────────────────────────────────────────────────────
+    // Title bar
 
     private void HideButton_Click(object sender, RoutedEventArgs e) => RequestHide();
 
@@ -133,7 +136,7 @@ public partial class ChecklistWindow : OverlayWindow
         object sender,
         DependencyPropertyChangedEventArgs e)
     {
-        if (!_preserveOpenStateOnClose)
+        if (!_preserveOpenStateOnClose && !IsChangingGroupVisibility)
         {
             _reopenOnStartup = IsWindowVisible;
             SaveWindowState();
@@ -181,7 +184,7 @@ public partial class ChecklistWindow : OverlayWindow
         }
     }
 
-    // ── Tabs ──────────────────────────────────────────────────────────────
+    // Tabs
 
     private void Tab_Click(object sender, RoutedEventArgs e)
     {
@@ -356,7 +359,7 @@ public partial class ChecklistWindow : OverlayWindow
         _tabBeingRenamed = null;
     }
 
-    // ── Add / delete ──────────────────────────────────────────────────────
+    // Add / delete
 
     private void AddButton_Click(object sender, RoutedEventArgs e)
     {
@@ -365,7 +368,7 @@ public partial class ChecklistWindow : OverlayWindow
             System.Windows.Threading.DispatcherPriority.Input);
     }
 
-    private void DeleteItem_Click(object sender, RoutedEventArgs e)
+    private void DeleteItemMenuItem_Click(object sender, RoutedEventArgs e)
     {
         var item = sender is MenuItem menuItem
             ? GetItemFromContextMenu(menuItem)
@@ -373,7 +376,7 @@ public partial class ChecklistWindow : OverlayWindow
         if (item != null) _viewModel.RemoveItem(item);
     }
 
-    // ── Expand / collapse ─────────────────────────────────────────────────
+    // Expand / collapse
 
     private void ExpandButton_Click(object sender, RoutedEventArgs e)
     {
@@ -388,7 +391,7 @@ public partial class ChecklistWindow : OverlayWindow
         e.Handled = true;
     }
 
-    // ── Due date ──────────────────────────────────────────────────────────
+    // Due date
 
     private void ClearDueDate_Click(object sender, RoutedEventArgs e)
     {
@@ -396,9 +399,9 @@ public partial class ChecklistWindow : OverlayWindow
         if (item != null) item.DueDate = null;
     }
 
-    // ── Priority ──────────────────────────────────────────────────────────
+    // Priority
 
-    private void PriorityStrip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void PriorityDot_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         var item = GetItemFromSender(sender);
         if (item == null) return;
@@ -427,7 +430,7 @@ public partial class ChecklistWindow : OverlayWindow
         };
     }
 
-    // ── Context menu reorder / duplicate ──────────────────────────────────
+    // Context menu reorder / duplicate
 
     private void MoveToTop_Click(object sender, RoutedEventArgs e)
         => _viewModel.MoveToTop(GetItemFromContextMenu(sender as MenuItem)!);
@@ -452,19 +455,19 @@ public partial class ChecklistWindow : OverlayWindow
         }
     }
 
-    private void Duplicate_Click(object sender, RoutedEventArgs e)
+    private void DuplicateItemMenuItem_Click(object sender, RoutedEventArgs e)
     {
         var item = GetItemFromContextMenu(sender as MenuItem);
         if (item != null) _viewModel.DuplicateItem(item);
     }
 
-    // ── Bulk actions ──────────────────────────────────────────────────────
+    // Bulk actions
 
     private void ClearCompleted_Click(object sender, RoutedEventArgs e) => _viewModel.ClearCompleted();
     private void CheckAll_Click(object sender, RoutedEventArgs e)       => _viewModel.CheckAll();
     private void UncheckAll_Click(object sender, RoutedEventArgs e)     => _viewModel.UncheckAll();
 
-    // ── Keyboard navigation ───────────────────────────────────────────────
+    // Keyboard navigation
 
     private void ItemTextBox_KeyDown(object sender, KeyEventArgs e)
     {
@@ -503,7 +506,7 @@ public partial class ChecklistWindow : OverlayWindow
         (sender as TextBox)?.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
     }
 
-    // ── Drag-drop reordering ─────────────────────────────────────────────
+    // Drag-drop reordering
 
     private void ItemsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -585,7 +588,7 @@ public partial class ChecklistWindow : OverlayWindow
         e.Handled = true;
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────
+    // Helpers
 
     private static ChecklistItem? GetItemFromSender(object sender)
         => (sender as FrameworkElement)?.DataContext as ChecklistItem;

@@ -18,8 +18,8 @@ public interface IAppSettingsService {
     void SavePromptForNoteName(bool promptForNoteName);
     string? LoadCustomHeader();
     void SaveCustomHeader(string? customHeader);
-    (string modifiers, string key) LoadGlobalHotkey();
-    void SaveGlobalHotkey(string modifiers, string key);
+    (string modifiers, string key) LoadNotesHotkey();
+    void SaveNotesHotkey(string modifiers, string key);
     (string modifiers, string key) LoadChecklistHotkey();
     void SaveChecklistHotkey(string modifiers, string key);
     (string modifiers, string key) LoadDictionaryHotkey();
@@ -40,16 +40,18 @@ public interface IAppSettingsService {
     void ClearLegacyDictionaryItems();
     DictionaryWindowState LoadDictionaryWindowState();
     void SaveDictionaryWindowState(DictionaryWindowState state);
-    bool LoadHideButtonHidesAll();
-    void SaveHideButtonHidesAll(bool hidesAll);
+    bool LoadMainHideButtonHidesAll();
+    void SaveMainHideButtonHidesAll(bool hidesAll);
     bool LoadConfirmNoteDeletion();
     void SaveConfirmNoteDeletion(bool confirm);
     ScratchpadWindowState LoadScratchpadWindowState();
     void SaveScratchpadWindowState(ScratchpadWindowState state);
     NoteEditorWindowState LoadNoteEditorWindowState();
     void SaveNoteEditorWindowState(NoteEditorWindowState state);
-    bool LoadRestoreEditorSession();
-    void SaveRestoreEditorSession(bool enabled);
+    MiniPadWindowState LoadMiniPadWindowState();
+    void SaveMiniPadWindowState(MiniPadWindowState state);
+    bool LoadReopenEditorTabsOnStartup();
+    void SaveReopenEditorTabsOnStartup(bool enabled);
     string? LoadPreferredDisplayDeviceName();
     void SavePreferredDisplayDeviceName(string? deviceName);
 }

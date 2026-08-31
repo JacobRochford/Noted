@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Interop;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -23,11 +24,14 @@ public partial class MainWindow : Window {
     private readonly IAppSettingsService _settingsService;
     private readonly INoteFileService _fileService;
     private readonly NoteEditorWindow _noteEditor;
-    private readonly IStartupService _startupService;
+    private readonly IRunOnStartupService _runOnStartupService;
+    private readonly Func<FullBackupResult> _createOrUpdateUserBackup;
+    private readonly Func<FullBackupInfo> _getUserBackupInfo;
+    private readonly Action _requestUserBackupRestore;
     private readonly MainWindowViewModel _viewModel;
     private GlobalHotkeysService? _globalHotkeysService;
-    private HotkeyRegistration? _mainHotkeyRegistration;
-    private HotkeyRegistration? _additionalMainHotkeyRegistration;
+    private HotkeyRegistration? _notesHotkeyRegistration;
+    private HotkeyRegistration? _additionalNotesHotkeyRegistration;
     private HotkeyRegistration? _checklistHotkeyRegistration;
     private HotkeyRegistration? _dictionaryHotkeyRegistration;
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
@@ -35,13 +39,14 @@ public partial class MainWindow : Window {
     // UI state
     private bool _isUpdatingSettingsView;
     private bool _runOnStartupDisplayedState;
-    private bool _hideButtonHidesAll;
+    private bool _mainHideButtonHidesAll;
     private string? _preferredDisplayDeviceName;
     private bool _cleanupCompleted;
     private bool _hotkeyInitializationInProgress;
     private bool _hotkeysInitialized;
     private bool _isNoActivateTemporarilyStripped;
     private bool _isCommittingRename;
+    private bool _lastBackupAttemptFailed;
 
     // ghost mode
     private const double DefaultPanelOpacity = 0.88;
@@ -70,11 +75,14 @@ public partial class MainWindow : Window {
     private sealed record DisplayOption(string? DeviceName, string Label);
 
 
-    public MainWindow(
+    internal MainWindow(
             IAppSettingsService settingsService,
             INoteFileService fileService,
             NoteEditorWindow noteEditor,
-            IStartupService startupService
+            IRunOnStartupService runOnStartupService,
+            Func<FullBackupResult> createOrUpdateUserBackup,
+            Func<FullBackupInfo> getUserBackupInfo,
+            Action requestUserBackupRestore
         )
     {
         InitializeComponent();
@@ -82,7 +90,10 @@ public partial class MainWindow : Window {
         _settingsService = settingsService;
         _fileService = fileService;
         _noteEditor = noteEditor;
-        _startupService = startupService;
+        _runOnStartupService = runOnStartupService;
+        _createOrUpdateUserBackup = createOrUpdateUserBackup;
+        _getUserBackupInfo = getUserBackupInfo;
+        _requestUserBackupRestore = requestUserBackupRestore;
 
         _viewModel = new MainWindowViewModel(_fileService, _settingsService, action => Dispatcher.Invoke(action));
         DataContext = _viewModel;
@@ -92,7 +103,8 @@ public partial class MainWindow : Window {
 
         InitializeEventHandlers();
         InitializeNotesView();
-        InitializeHotkeyUI();
+        InitializeNotesHotkeyEditor();
+        RefreshUserBackupControls();
     }
 
     private void InitializeTrayIcon()
@@ -112,7 +124,7 @@ public partial class MainWindow : Window {
             _settingsService.LoadDefaultOpacity(),
             MinimumPanelOpacity,
             DefaultPanelOpacity);
-        _hideButtonHidesAll = _settingsService.LoadHideButtonHidesAll();
+        _mainHideButtonHidesAll = _settingsService.LoadMainHideButtonHidesAll();
         _preferredDisplayDeviceName = _settingsService.LoadPreferredDisplayDeviceName();
     }
 
@@ -120,9 +132,9 @@ public partial class MainWindow : Window {
     private void InitializeEventHandlers()
     {
         // overlay button drag
-        OverlayButton.PreviewMouseLeftButtonDown += OverlayButton_MouseLeftButtonDown;
-        OverlayButton.PreviewMouseMove += OverlayButton_MouseMove;
-        OverlayButton.PreviewMouseLeftButtonUp += OverlayButton_MouseLeftButtonUp;
+        FloatingNotesButton.PreviewMouseLeftButtonDown += FloatingNotesButton_MouseLeftButtonDown;
+        FloatingNotesButton.PreviewMouseMove += FloatingNotesButton_MouseMove;
+        FloatingNotesButton.PreviewMouseLeftButtonUp += FloatingNotesButton_MouseLeftButtonUp;
         // notes panel drag
         NotesPanel.PreviewMouseLeftButtonDown += NotesPanel_PreviewMouseLeftButtonDown;
         NotesPanel.PreviewMouseMove += NotesPanel_PreviewMouseMove;
@@ -153,18 +165,18 @@ public partial class MainWindow : Window {
         SetSettingsViewVisible(false);
     }
 
-    private void InitializeHotkeyUI()
+    private void InitializeNotesHotkeyEditor()
     {
-        HotkeyKeyCombo.ItemsSource = HotkeyConstants.ValidKeys;
-        ModifierCtrl.Checked += (s, e) => UpdateHotkeyPreview();
-        ModifierCtrl.Unchecked += (s, e) => UpdateHotkeyPreview();
-        ModifierAlt.Checked += (s, e) => UpdateHotkeyPreview();
-        ModifierAlt.Unchecked += (s, e) => UpdateHotkeyPreview();
-        ModifierShift.Checked += (s, e) => UpdateHotkeyPreview();
-        ModifierShift.Unchecked += (s, e) => UpdateHotkeyPreview();
-        ModifierWin.Checked += (s, e) => UpdateHotkeyPreview();
-        ModifierWin.Unchecked += (s, e) => UpdateHotkeyPreview();
-        HotkeyKeyCombo.SelectionChanged += (s, e) => UpdateHotkeyPreview();
+        NotesHotkeyKeyCombo.ItemsSource = HotkeyConstants.ValidKeys;
+        ModifierCtrl.Checked += (s, e) => UpdateNotesHotkeyPreview();
+        ModifierCtrl.Unchecked += (s, e) => UpdateNotesHotkeyPreview();
+        ModifierAlt.Checked += (s, e) => UpdateNotesHotkeyPreview();
+        ModifierAlt.Unchecked += (s, e) => UpdateNotesHotkeyPreview();
+        ModifierShift.Checked += (s, e) => UpdateNotesHotkeyPreview();
+        ModifierShift.Unchecked += (s, e) => UpdateNotesHotkeyPreview();
+        ModifierWin.Checked += (s, e) => UpdateNotesHotkeyPreview();
+        ModifierWin.Unchecked += (s, e) => UpdateNotesHotkeyPreview();
+        NotesHotkeyKeyCombo.SelectionChanged += (s, e) => UpdateNotesHotkeyPreview();
     }
 
     private void HeaderEditBox_LostFocus(object sender, RoutedEventArgs e)
@@ -267,7 +279,7 @@ public partial class MainWindow : Window {
         Height = SystemParameters.VirtualScreenHeight;
 
         Dispatcher.BeginInvoke(
-            PositionWorkspaceOnPreferredDisplay,
+            PositionNotedOnPreferredDisplay,
             DispatcherPriority.Loaded);
 
         InitializeGlobalHotkeys();
@@ -292,18 +304,18 @@ public partial class MainWindow : Window {
         {
             _globalHotkeysService ??= new GlobalHotkeysService(this);
 
-            if (_mainHotkeyRegistration is null)
+            if (_notesHotkeyRegistration is null)
             {
-                var (modifiers, key) = _settingsService.LoadGlobalHotkey();
+                var (modifiers, key) = _settingsService.LoadNotesHotkey();
                 var result = RegisterWithFallback(
-                    "Main",
+                    "Notes",
                     modifiers,
                     key,
                     "Ctrl+Shift",
                     "Space",
-                    OnGlobalHotkeyPressed,
-                    _settingsService.SaveGlobalHotkey);
-                _mainHotkeyRegistration = result.Registration;
+                    OnNotesHotkeyPressed,
+                    _settingsService.SaveNotesHotkey);
+                _notesHotkeyRegistration = result.Registration;
                 if (result.Warning is not null)
                     warnings.Add(result.Warning);
             }
@@ -341,7 +353,7 @@ public partial class MainWindow : Window {
             }
 
             _hotkeysInitialized = true;
-            SynchronizeMainHotkeyControls(restoreEditorToActive: true);
+            SyncNotesHotkeyControls(restoreEditorToActive: true);
         }
         catch (Exception exception)
         {
@@ -461,14 +473,12 @@ public partial class MainWindow : Window {
             $"{featureName} hotkey {requestedModifiers}+{requestedKey} could not be registered. " +
             $"No fallback is active. {failureSummary}".TrimEnd());
     }
-    private void OnGlobalHotkeyPressed()
+    private void OnNotesHotkeyPressed()
     {
-        // Global toggle: hide all if any open, show notes only if all hidden
-        WindowManager.ToggleWorkspaceVisibility();
+        WindowManager.ToggleNotedWindows();
     }
     private void OnChecklistHotkeyPressed()
     {
-        // Global toggle: hide all if any open, show notes only if all hidden
         WindowManager.ToggleChecklist();
     }
     private void OnDictionaryHotkeyPressed()
@@ -476,7 +486,6 @@ public partial class MainWindow : Window {
         WindowManager.ToggleDictionary();
     }
 
-    // after reload, update header and restore selection (UI stays in sync, don't wait for FS events)
     private void OnNotesLoaded(object? sender, EventArgs e) {
         UpdateNotesDirectoryDisplay();
         if (_viewModel.SelectedNoteKey is not null)
@@ -486,29 +495,25 @@ public partial class MainWindow : Window {
 
 
     private void UpdateNotesDirectoryDisplay() {
-        SettingsNotesDirectoryText.Text = _fileService.NotesDirectory;
+        NotesFolderPathText.Text = _fileService.NotesDirectory;
         SettingsButton.ToolTip = SettingsView.Visibility == Visibility.Visible
             ? "Return to notes"
             : "Open settings";
-        UpdateShowHideNotesDirectoryButton();
-        // visibility: handled by binding
+        UpdateToggleNotesFolderPathButton();
     }
 
 
-    private void UpdateShowHideNotesDirectoryButton()
+    private void UpdateToggleNotesFolderPathButton()
     {
-        if (ShowHideNotesDirectoryButton != null)
-            ShowHideNotesDirectoryButton.Content = _viewModel.ShowNotesDirectory ? "Hide Folder" : "Show Folder";
-        // SettingsNotesDirectoryText.Visibility: binding
+        if (ToggleNotesFolderPathButton != null)
+            ToggleNotesFolderPathButton.Content = _viewModel.ShowNotesDirectory ? "Hide path" : "Show path";
     }
 
-    private void ShowHideNotesDirectoryButton_Click(object sender, RoutedEventArgs e)
+    private void ToggleNotesFolderPathButton_Click(object sender, RoutedEventArgs e)
     {
         _viewModel.ShowNotesDirectory = !_viewModel.ShowNotesDirectory;
-        UpdateShowHideNotesDirectoryButton();
+        UpdateToggleNotesFolderPathButton();
     }
-
-    // UpdateHeaderText() removed; header is now ViewModel-driven
 
     private void PinNoteButton_Click(object sender, RoutedEventArgs e) {
         if (sender is FrameworkElement element && element.DataContext is NoteItem note) {
@@ -521,6 +526,15 @@ public partial class MainWindow : Window {
         SettingsView.Visibility = setVisible ? Visibility.Visible : Visibility.Collapsed;
         UtilityMenu.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
         HeaderText.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
+        SettingsHeaderText.Visibility = setVisible ? Visibility.Visible : Visibility.Collapsed;
+        NewNoteButton.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
+        QuickNoteButton.Visibility = setVisible
+            ? Visibility.Collapsed
+            : _settingsService.LoadNewNoteMode() == NewNoteMode.Both
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        SettingsButtonIcon.Text = setVisible ? "\uE72B" : "\uE713";
+        AutomationProperties.SetName(SettingsButton, setVisible ? "Return to notes" : "Settings");
         _viewModel.IsSettingsVisible = setVisible;
         UpdateNotesDirectoryDisplay();
         // Restore correct opacity when closing settings (slider may have previewed a value)
@@ -545,27 +559,27 @@ public partial class MainWindow : Window {
             TimestampNoneOption.IsChecked = timestampPlacement == NoteTimestampPlacement.None;
             TimestampTopOption.IsChecked = timestampPlacement == NoteTimestampPlacement.Top;
             TimestampBottomOption.IsChecked = timestampPlacement == NoteTimestampPlacement.Bottom;
-            SettingsNotesDirectoryText.Text = _fileService.NotesDirectory;
+            NotesFolderPathText.Text = _fileService.NotesDirectory;
             var showModified = _settingsService.LoadShowModifiedSubtitle();
             ShowModifiedSubtitleOption.IsChecked = showModified;
             _viewModel.ShowModifiedSubtitle = showModified;
             ConfirmNoteDeletionOption.IsChecked = _settingsService.LoadConfirmNoteDeletion();
 
             // Load hotkey settings
-            var (modifiers, key) = _settingsService.LoadGlobalHotkey();
-            if (_mainHotkeyRegistration is not null
-                && _additionalMainHotkeyRegistration is null)
+            var (modifiers, key) = _settingsService.LoadNotesHotkey();
+            if (_notesHotkeyRegistration is not null
+                && _additionalNotesHotkeyRegistration is null)
             {
-                SetHotkeyEditor(
-                    _mainHotkeyRegistration.Modifiers,
-                    _mainHotkeyRegistration.Key);
+                SetNotesHotkeyEditor(
+                    _notesHotkeyRegistration.Modifiers,
+                    _notesHotkeyRegistration.Key);
             }
             else
             {
-                SetHotkeyEditor(modifiers, key);
+                SetNotesHotkeyEditor(modifiers, key);
             }
 
-            UpdateCurrentHotkeyDisplay();
+            UpdateCurrentNotesHotkeyDisplay();
             _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
             _ghostModeOpacity = NormalizeOpacity(
                 _settingsService.LoadGhostModeOpacity(),
@@ -580,10 +594,10 @@ public partial class MainWindow : Window {
             UpdateGhostModeOpacityLabel();
             DefaultOpacitySlider.Value = _defaultOpacity * 100;
             UpdateDefaultOpacityLabel();
-            _runOnStartupDisplayedState = _startupService.IsRunOnStartupEnabled;
+            _runOnStartupDisplayedState = _runOnStartupService.IsRunOnStartupEnabled;
             RunOnStartupOption.IsChecked = _runOnStartupDisplayedState;
-            _hideButtonHidesAll = _settingsService.LoadHideButtonHidesAll();
-            HideButtonHidesAllOption.IsChecked = _hideButtonHidesAll;
+            _mainHideButtonHidesAll = _settingsService.LoadMainHideButtonHidesAll();
+            MainHideButtonHidesAllOption.IsChecked = _mainHideButtonHidesAll;
             _preferredDisplayDeviceName = _settingsService.LoadPreferredDisplayDeviceName();
             UpdatePreferredDisplayOptions();
             var folderNavigationMode = _settingsService.LoadFolderNavigationMode()
@@ -639,10 +653,10 @@ public partial class MainWindow : Window {
 
         _settingsService.SavePreferredDisplayDeviceName(option.DeviceName);
         _preferredDisplayDeviceName = option.DeviceName;
-        Dispatcher.BeginInvoke(PositionWorkspaceOnPreferredDisplay, DispatcherPriority.Loaded);
+        Dispatcher.BeginInvoke(PositionNotedOnPreferredDisplay, DispatcherPriority.Loaded);
     }
 
-    private void PositionWorkspaceOnPreferredDisplay()
+    private void PositionNotedOnPreferredDisplay()
     {
         var screen = ResolvePreferredDisplay();
         if (screen is null)
@@ -667,12 +681,12 @@ public partial class MainWindow : Window {
         Canvas.SetLeft(NotesPanel, panelLeft);
         Canvas.SetTop(NotesPanel, panelTop);
 
-        var buttonWidth = OverlayButton.ActualWidth > 0 ? OverlayButton.ActualWidth : OverlayButton.Width;
-        var buttonHeight = OverlayButton.ActualHeight > 0 ? OverlayButton.ActualHeight : OverlayButton.Height;
-        Canvas.SetRight(OverlayButton, double.NaN);
-        Canvas.SetBottom(OverlayButton, double.NaN);
-        Canvas.SetLeft(OverlayButton, workLeft + workWidth - buttonWidth - 20);
-        Canvas.SetTop(OverlayButton, workTop + workHeight - buttonHeight - 8);
+        var buttonWidth = FloatingNotesButton.ActualWidth > 0 ? FloatingNotesButton.ActualWidth : FloatingNotesButton.Width;
+        var buttonHeight = FloatingNotesButton.ActualHeight > 0 ? FloatingNotesButton.ActualHeight : FloatingNotesButton.Height;
+        Canvas.SetRight(FloatingNotesButton, double.NaN);
+        Canvas.SetBottom(FloatingNotesButton, double.NaN);
+        Canvas.SetLeft(FloatingNotesButton, workLeft + workWidth - buttonWidth - 20);
+        Canvas.SetTop(FloatingNotesButton, workTop + workHeight - buttonHeight - 8);
     }
 
     private DisplayInfo? ResolvePreferredDisplay()
@@ -702,9 +716,9 @@ public partial class MainWindow : Window {
     }
 
 
-    private void SetHotkeyEditor(string modifiers, string key)
+    private void SetNotesHotkeyEditor(string modifiers, string key)
     {
-        HotkeyKeyCombo.SelectedItem = key;
+        NotesHotkeyKeyCombo.SelectedItem = key;
 
         var modifierList = modifiers
             .Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
@@ -714,44 +728,44 @@ public partial class MainWindow : Window {
         ModifierShift.IsChecked = modifierList.Contains("Shift");
         ModifierWin.IsChecked = modifierList.Contains("Win");
 
-        UpdateHotkeyPreview();
+        UpdateNotesHotkeyPreview();
     }
 
-    private void SynchronizeMainHotkeyControls(bool restoreEditorToActive)
+    private void SyncNotesHotkeyControls(bool restoreEditorToActive)
     {
         if (restoreEditorToActive
-            && _mainHotkeyRegistration is not null
-            && _additionalMainHotkeyRegistration is null)
+            && _notesHotkeyRegistration is not null
+            && _additionalNotesHotkeyRegistration is null)
         {
-            SetHotkeyEditor(
-                _mainHotkeyRegistration.Modifiers,
-                _mainHotkeyRegistration.Key);
+            SetNotesHotkeyEditor(
+                _notesHotkeyRegistration.Modifiers,
+                _notesHotkeyRegistration.Key);
         }
 
-        UpdateCurrentHotkeyDisplay();
+        UpdateCurrentNotesHotkeyDisplay();
     }
 
-    private void UpdateCurrentHotkeyDisplay()
+    private void UpdateCurrentNotesHotkeyDisplay()
     {
-        if (_mainHotkeyRegistration is null)
+        if (_notesHotkeyRegistration is null)
         {
-            CurrentHotkeyDisplay.Text = "Not registered";
+            CurrentNotesHotkeyDisplay.Text = "Not registered";
             return;
         }
 
-        if (_additionalMainHotkeyRegistration is not null)
+        if (_additionalNotesHotkeyRegistration is not null)
         {
-            CurrentHotkeyDisplay.Text =
-                $"Multiple active: {_mainHotkeyRegistration.Combination} and " +
-                _additionalMainHotkeyRegistration.Combination;
+            CurrentNotesHotkeyDisplay.Text =
+                $"Multiple active: {_notesHotkeyRegistration.Combination} and " +
+                _additionalNotesHotkeyRegistration.Combination;
             return;
         }
 
-        CurrentHotkeyDisplay.Text = _mainHotkeyRegistration.Combination;
+        CurrentNotesHotkeyDisplay.Text = _notesHotkeyRegistration.Combination;
     }
 
 
-    private void UpdateHotkeyPreview()
+    private void UpdateNotesHotkeyPreview()
     {
         // update preview label as user changes hotkey UI
         var selectedModifiers = new List<string>();
@@ -760,13 +774,13 @@ public partial class MainWindow : Window {
         if (ModifierShift.IsChecked == true) selectedModifiers.Add("Shift");
         if (ModifierWin.IsChecked == true) selectedModifiers.Add("Win");
 
-        var selectedKey = HotkeyKeyCombo.SelectedItem as string;
+        var selectedKey = NotesHotkeyKeyCombo.SelectedItem as string;
         var builtHotkey = HotkeyConstants.BuildHotkey(selectedModifiers, selectedKey);
 
-        HotkeyPreview.Text = builtHotkey ?? "(Select modifiers and key)";
+        NotesHotkeyPreview.Text = builtHotkey ?? "(Select modifiers and key)";
     }
 
-    private void ApplyHotkeyButton_Click(object sender, RoutedEventArgs e)
+    private void ApplyNotesHotkeyButton_Click(object sender, RoutedEventArgs e)
     {
         var selectedModifiers = new List<string>();
         if (ModifierCtrl.IsChecked == true) selectedModifiers.Add("Ctrl");
@@ -774,7 +788,7 @@ public partial class MainWindow : Window {
         if (ModifierShift.IsChecked == true) selectedModifiers.Add("Shift");
         if (ModifierWin.IsChecked == true) selectedModifiers.Add("Win");
 
-        var selectedKey = HotkeyKeyCombo.SelectedItem as string;
+        var selectedKey = NotesHotkeyKeyCombo.SelectedItem as string;
         var builtHotkey = HotkeyConstants.BuildHotkey(selectedModifiers, selectedKey);
 
         if (selectedModifiers.Count == 0
@@ -797,14 +811,14 @@ public partial class MainWindow : Window {
                 "Hotkey Update Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
-            UpdateCurrentHotkeyDisplay();
+            UpdateCurrentNotesHotkeyDisplay();
             return;
         }
 
         var validation = _globalHotkeysService.Validate(modifiers, selectedKey);
         if (!validation.Success || validation.Modifiers is null || validation.Key is null)
         {
-            SynchronizeMainHotkeyControls(restoreEditorToActive: true);
+            SyncNotesHotkeyControls(restoreEditorToActive: true);
             AppDialog.Show(
                 validation.Description,
                 "Invalid Hotkey Selection",
@@ -813,11 +827,11 @@ public partial class MainWindow : Window {
             return;
         }
 
-        if (_additionalMainHotkeyRegistration is not null)
+        if (_additionalNotesHotkeyRegistration is not null)
         {
-            UpdateCurrentHotkeyDisplay();
+            UpdateCurrentNotesHotkeyDisplay();
             AppDialog.Show(
-                "Multiple Main hotkeys may still be active after an earlier rollback failure. " +
+                "Multiple Notes hotkeys may still be active after an earlier rollback failure. " +
                 "Restart Noted before attempting another replacement.",
                 "Hotkey State Is Ambiguous",
                 MessageBoxButton.OK,
@@ -826,20 +840,20 @@ public partial class MainWindow : Window {
         }
 
         var replacement = _globalHotkeysService.Replace(
-            "Main",
-            _mainHotkeyRegistration,
+            "Notes",
+            _notesHotkeyRegistration,
             validation.Modifiers,
             validation.Key,
-            OnGlobalHotkeyPressed);
+            OnNotesHotkeyPressed);
 
-        _mainHotkeyRegistration = replacement.ActiveRegistration;
-        _additionalMainHotkeyRegistration = replacement.AdditionalActiveRegistration;
+        _notesHotkeyRegistration = replacement.ActiveRegistration;
+        _additionalNotesHotkeyRegistration = replacement.AdditionalActiveRegistration;
 
         if (!replacement.Success)
         {
-            SynchronizeMainHotkeyControls(
+            SyncNotesHotkeyControls(
                 restoreEditorToActive: !replacement.HasDualActiveRegistrations
-                    && _mainHotkeyRegistration is not null);
+                    && _notesHotkeyRegistration is not null);
             AppDialog.Show(
                 replacement.Description,
                 replacement.HasDualActiveRegistrations
@@ -850,20 +864,20 @@ public partial class MainWindow : Window {
             return;
         }
 
-        SynchronizeMainHotkeyControls(restoreEditorToActive: true);
-        if (replacement.NoChange || _mainHotkeyRegistration is null)
+        SyncNotesHotkeyControls(restoreEditorToActive: true);
+        if (replacement.NoChange || _notesHotkeyRegistration is null)
             return;
 
         try
         {
-            _settingsService.SaveGlobalHotkey(
-                _mainHotkeyRegistration.Modifiers,
-                _mainHotkeyRegistration.Key);
+            _settingsService.SaveNotesHotkey(
+                _notesHotkeyRegistration.Modifiers,
+                _notesHotkeyRegistration.Key);
         }
         catch (Exception exception)
         {
             AppDialog.Show(
-                $"The hotkey is active as {_mainHotkeyRegistration.Combination}, " +
+                $"The hotkey is active as {_notesHotkeyRegistration.Combination}, " +
                 $"but the setting could not be saved: {exception.Message}",
                 "Hotkey Active but Not Saved",
                 MessageBoxButton.OK,
@@ -872,7 +886,7 @@ public partial class MainWindow : Window {
         }
 
         AppDialog.Show(
-            $"Global hotkey updated to: {_mainHotkeyRegistration.Combination}",
+            $"Notes hotkey updated to: {_notesHotkeyRegistration.Combination}",
             "Hotkey Updated",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
@@ -909,7 +923,7 @@ public partial class MainWindow : Window {
 
         var requestedState = RunOnStartupOption.IsChecked == true;
         var previousDisplayedState = _runOnStartupDisplayedState;
-        var result = _startupService.SetRunOnStartup(requestedState);
+        var result = _runOnStartupService.SetRunOnStartup(requestedState);
         var displayedState = result.ActualEnabled ?? previousDisplayedState;
 
         _isUpdatingSettingsView = true;
@@ -930,10 +944,10 @@ public partial class MainWindow : Window {
     }
 
 
-    private void HideButtonHidesAllOption_Changed(object sender, RoutedEventArgs e) {
+    private void MainHideButtonHidesAllOption_Changed(object sender, RoutedEventArgs e) {
         if (_isUpdatingSettingsView) return;
-        _hideButtonHidesAll = HideButtonHidesAllOption.IsChecked == true;
-        _settingsService.SaveHideButtonHidesAll(_hideButtonHidesAll);
+        _mainHideButtonHidesAll = MainHideButtonHidesAllOption.IsChecked == true;
+        _settingsService.SaveMainHideButtonHidesAll(_mainHideButtonHidesAll);
     }
 
 
@@ -1092,14 +1106,13 @@ public partial class MainWindow : Window {
     }
 
 
-    private void OverlayButton_Click(object sender, RoutedEventArgs e) {
-        // Global toggle: hide all if any open, show notes only if all hidden
-        WindowManager.ToggleWorkspaceVisibility();
+    private void FloatingNotesButton_Click(object sender, RoutedEventArgs e) {
+        WindowManager.ToggleNotedWindows();
     }
 
 
-    private void MinimizeNotesButton_Click(object sender, RoutedEventArgs e) {
-        if (_hideButtonHidesAll)
+    private void HideNotesButton_Click(object sender, RoutedEventArgs e) {
+        if (_mainHideButtonHidesAll)
             WindowManager.HideAll();
         else
             HideNotesPanelAndEditor();
@@ -1124,10 +1137,126 @@ public partial class MainWindow : Window {
     }
 
 
-    private void BackToNotesButton_Click(object sender, RoutedEventArgs e) {
-        // always reload notes after settings
-        _viewModel.LoadNotes();
-        SetSettingsViewVisible(false);
+    private void CreateOrUpdateBackupButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lastBackupAttemptFailed)
+        {
+            _lastBackupAttemptFailed = false;
+            RefreshUserBackupControls();
+        }
+
+        var backupInfo = _getUserBackupInfo();
+        var action = backupInfo.Exists ? "Update" : "Create";
+        var confirmation = AppDialog.Show(
+            this,
+            $"{action} your full Noted backup from the current data?\n\n" +
+            "Noted will build and verify the new backup before replacing the current one. " +
+            "The previous backup is kept separately.",
+            $"{action} Backup",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (confirmation != MessageBoxResult.Yes)
+            return;
+
+        RunBackupCommand(_createOrUpdateUserBackup);
+    }
+
+    private void RestoreBackupButton_Click(object sender, RoutedEventArgs e)
+    {
+        var backupInfo = _getUserBackupInfo();
+        if (!backupInfo.IsValid)
+        {
+            RefreshUserBackupControls();
+            return;
+        }
+
+        var backupDate = backupInfo.LastUpdatedUtc?.ToLocalTime().ToString("MMM d, yyyy h:mm tt")
+            ?? "an unknown date";
+        var confirmation = AppDialog.Show(
+            this,
+            $"Restore all backed-up Noted data from {backupDate}?\n\n" +
+            "Noted will save pending work, close, and restore the verified files. " +
+            "The backup itself will not be changed.",
+            "Restore Backup",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirmation == MessageBoxResult.Yes)
+            _requestUserBackupRestore();
+    }
+
+    private void RunBackupCommand(Func<FullBackupResult> command)
+    {
+        CreateOrUpdateBackupButton.IsEnabled = false;
+        RestoreBackupButton.IsEnabled = false;
+        BackupStatusText.Text = "Checking and copying current data...";
+        BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
+        var previousCursor = Mouse.OverrideCursor;
+        Mouse.OverrideCursor = Cursors.Wait;
+
+        FullBackupResult result;
+        try
+        {
+            result = command();
+        }
+        finally
+        {
+            Mouse.OverrideCursor = previousCursor;
+            CreateOrUpdateBackupButton.IsEnabled = true;
+        }
+
+        var backupInfo = _getUserBackupInfo();
+        var resultMessage = result.Status == FullBackupStatus.Created && backupInfo.IsValid
+            ? BuildBackupStatusText(backupInfo)
+            : result.Message;
+        BackupStatusText.Text = string.IsNullOrWhiteSpace(result.Warning)
+            ? resultMessage
+            : $"{resultMessage} {result.Warning}";
+        BackupStatusText.Foreground = result.Status switch
+        {
+            FullBackupStatus.Created => new SolidColorBrush(Color.FromRgb(44, 110, 145)),
+            FullBackupStatus.Skipped => new SolidColorBrush(Color.FromRgb(95, 116, 128)),
+            _ => new SolidColorBrush(Color.FromRgb(184, 79, 79))
+        };
+        _lastBackupAttemptFailed = result.Status is
+            FullBackupStatus.Blocked or FullBackupStatus.Failed;
+        RefreshUserBackupControls(updateStatusText: false);
+    }
+
+    private void RefreshUserBackupControls(bool updateStatusText = true)
+    {
+        var backupInfo = _getUserBackupInfo();
+        CreateOrUpdateBackupButton.Content = backupInfo.Exists
+            ? "Update Backup"
+            : "Create Backup";
+        RestoreBackupButton.IsEnabled = backupInfo.IsValid;
+
+        if (!updateStatusText)
+            return;
+
+        if (!backupInfo.Exists)
+        {
+            BackupStatusText.Text = "No full backup has been created yet.";
+            BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
+            return;
+        }
+
+        if (!backupInfo.IsValid)
+        {
+            BackupStatusText.Text = $"The existing backup needs attention: {backupInfo.Error}";
+            BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(184, 79, 79));
+            return;
+        }
+
+        BackupStatusText.Text = BuildBackupStatusText(backupInfo);
+        BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
+    }
+
+    private static string BuildBackupStatusText(FullBackupInfo backupInfo)
+    {
+        var backupDate = backupInfo.LastUpdatedUtc?.ToLocalTime().ToString("MMM d, yyyy 'at' h:mm tt")
+            ?? "unknown date";
+        var fileLabel = backupInfo.FileCount == 1 ? "file" : "files";
+        return $"Last backup: {backupDate} • {backupInfo.FileCount} {fileLabel}";
     }
 
     private void ChecklistButton_Click(object sender, RoutedEventArgs e)
@@ -1145,9 +1274,9 @@ public partial class MainWindow : Window {
         WindowManager.ToggleScratchpad();
     }
 
-    private void MicroScratchpadButton_Click(object sender, RoutedEventArgs e)
+    private void MiniPadButton_Click(object sender, RoutedEventArgs e)
     {
-        WindowManager.ToggleMicroScratchpad();
+        WindowManager.ToggleMiniPad();
     }
 
     private void CopyNoteName_Click(object sender, RoutedEventArgs e)
@@ -1255,8 +1384,8 @@ public partial class MainWindow : Window {
 
         _settingsService.SaveNewNoteMode(newNoteMode.Value);
 
-        // Update button visibility
-        QuickNoteButton.Visibility = newNoteMode == NewNoteMode.Both ? Visibility.Visible : Visibility.Collapsed;
+        if (SettingsView.Visibility != Visibility.Visible)
+            QuickNoteButton.Visibility = newNoteMode == NewNoteMode.Both ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void TimestampPlacementOption_Checked(object sender, RoutedEventArgs e) {
@@ -1450,13 +1579,13 @@ public partial class MainWindow : Window {
             if (string.Equals(selectedDirectory, _fileService.NotesDirectory, StringComparison.OrdinalIgnoreCase))
                 return;
 
-            if (!_noteEditor.TryPrepareForDocumentClear())
+            if (!_noteEditor.TryPrepareToCloseAllDocuments())
                 return;
 
             var changed = _fileService.ChangeNotesDirectory(selectedDirectory);
             _viewModel.SelectedNoteKey = null;
             if (changed) {
-                _noteEditor.ClearDocument();
+                _noteEditor.CloseAllDocuments();
                 _noteEditor.HideWindow();
                 _viewModel.ClearFilter();
                 _viewModel.LoadNotes();
@@ -1472,7 +1601,7 @@ public partial class MainWindow : Window {
 
     private void MainCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
         if (NotesPanel.Visibility == Visibility.Visible &&
-            !NotesPanel.IsMouseOver && !OverlayButton.IsMouseOver) {
+            !NotesPanel.IsMouseOver && !FloatingNotesButton.IsMouseOver) {
             HideNotesPanelAndEditor();
         }
     }
@@ -1810,20 +1939,20 @@ public partial class MainWindow : Window {
     #endregion
 
     #region Overlay Button Drag
-    private void OverlayButton_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
-        BeginDrag(OverlayButton, e);
+    private void FloatingNotesButton_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+        BeginDrag(FloatingNotesButton, e);
     }
 
-    private void OverlayButton_MouseMove(object sender, MouseEventArgs e) {
-        UpdateDrag(OverlayButton, e);
+    private void FloatingNotesButton_MouseMove(object sender, MouseEventArgs e) {
+        UpdateDrag(FloatingNotesButton, e);
     }
 
-    private void OverlayButton_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
+    private void FloatingNotesButton_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) {
         var wasDragging = _isDragging;
-        EndDrag(OverlayButton, e);
+        EndDrag(FloatingNotesButton, e);
 
         if (!wasDragging && e.ChangedButton == MouseButton.Left) {
-            OverlayButton_Click(OverlayButton, new RoutedEventArgs());
+            FloatingNotesButton_Click(FloatingNotesButton, new RoutedEventArgs());
             e.Handled = true;
         }
     }
@@ -1982,7 +2111,7 @@ public partial class MainWindow : Window {
 
     private void TrayShowHideNotes_Click(object sender, RoutedEventArgs e)
     {
-        WindowManager.ToggleWorkspaceVisibility();
+        WindowManager.ToggleNotedWindows();
     }
 
 
@@ -2006,8 +2135,8 @@ public partial class MainWindow : Window {
         // cleanup global hotkey
         _globalHotkeysService?.Dispose();
         _globalHotkeysService = null;
-        _mainHotkeyRegistration = null;
-        _additionalMainHotkeyRegistration = null;
+        _notesHotkeyRegistration = null;
+        _additionalNotesHotkeyRegistration = null;
         _checklistHotkeyRegistration = null;
         _dictionaryHotkeyRegistration = null;
         _hotkeysInitialized = false;
@@ -2020,9 +2149,9 @@ public partial class MainWindow : Window {
         }
 
         // event handlers
-        OverlayButton.PreviewMouseLeftButtonDown -= OverlayButton_MouseLeftButtonDown;
-        OverlayButton.PreviewMouseMove -= OverlayButton_MouseMove;
-        OverlayButton.PreviewMouseLeftButtonUp -= OverlayButton_MouseLeftButtonUp;
+        FloatingNotesButton.PreviewMouseLeftButtonDown -= FloatingNotesButton_MouseLeftButtonDown;
+        FloatingNotesButton.PreviewMouseMove -= FloatingNotesButton_MouseMove;
+        FloatingNotesButton.PreviewMouseLeftButtonUp -= FloatingNotesButton_MouseLeftButtonUp;
 
         NotesPanel.PreviewMouseLeftButtonDown -= NotesPanel_PreviewMouseLeftButtonDown;
         NotesPanel.PreviewMouseMove -= NotesPanel_PreviewMouseMove;

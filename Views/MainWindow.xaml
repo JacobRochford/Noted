@@ -125,7 +125,7 @@
             </Setter>
         </Style>
 
-        <Style x:Key="ToolLauncherButtonStyle" TargetType="Button">
+        <Style x:Key="UtilityMenuButtonStyle" TargetType="Button">
             <Setter Property="Height" Value="30"/>
             <Setter Property="Margin" Value="0,0,5,0"/>
             <Setter Property="Padding" Value="5,0"/>
@@ -290,6 +290,13 @@
                                            ToolTip="Double-click to set a custom header"
                                            Visibility="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthToHeaderVisibilityConverter}}"
                                            MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"/>
+                                <TextBlock x:Name="SettingsHeaderText"
+                                           Text="Settings"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           Foreground="#2C6E91"
+                                           VerticalAlignment="Center"
+                                           Visibility="Collapsed"/>
                                 <TextBox x:Name="HeaderTextEdit"
                                          FontSize="16"
                                          FontWeight="SemiBold"
@@ -351,14 +358,15 @@
                                 Margin="0,0,3,0"
                                 ToolTip="Settings"
                                 AutomationProperties.Name="Settings">
-                            <TextBlock FontFamily="Segoe MDL2 Assets"
+                            <TextBlock x:Name="SettingsButtonIcon"
+                                       FontFamily="Segoe MDL2 Assets"
                                        Text="&#xE713;"
                                        FontSize="16"/>
                         </Button>
 
-                        <Button x:Name="MinimizeNotesButton"
+                        <Button x:Name="HideNotesButton"
                                 Grid.Column="4"
-                                Click="MinimizeNotesButton_Click"
+                                Click="HideNotesButton_Click"
                                 Style="{StaticResource HeaderChromeButtonStyle}"
                                 ToolTip="Hide Notes"
                                 AutomationProperties.Name="Hide Notes">
@@ -372,8 +380,8 @@
                     <UniformGrid x:Name="UtilityMenu" Grid.Row="1" Columns="4">
                         <Button x:Name="ChecklistButton"
                                 Click="ChecklistButton_Click"
-                                Style="{StaticResource ToolLauncherButtonStyle}"
-                                ToolTip="Toggle Checklist">
+                                Style="{StaticResource UtilityMenuButtonStyle}"
+                                ToolTip="Show or hide Checklist">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <TextBlock Text="✓" FontSize="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="Checklist" VerticalAlignment="Center"/>
@@ -382,8 +390,8 @@
 
                         <Button x:Name="DictionaryButton"
                                 Click="DictionaryButton_Click"
-                                Style="{StaticResource ToolLauncherButtonStyle}"
-                                ToolTip="Toggle Dictionary">
+                                Style="{StaticResource UtilityMenuButtonStyle}"
+                                ToolTip="Show or hide Dictionary">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <TextBlock Text="Aa" FontWeight="Bold" FontSize="10" Margin="0,0,4,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="Dictionary" VerticalAlignment="Center"/>
@@ -392,25 +400,25 @@
 
                         <Button x:Name="ScratchpadButton"
                                 Click="ScratchpadButton_Click"
-                                Style="{StaticResource ToolLauncherButtonStyle}"
-                                ToolTip="Toggle Scratchpad">
+                                Style="{StaticResource UtilityMenuButtonStyle}"
+                                ToolTip="Show or hide Scratchpad">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <TextBlock Text="✎" FontSize="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="Scratchpad" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
 
-                        <Button x:Name="MicroScratchpadButton"
-                                Click="MicroScratchpadButton_Click"
-                                ToolTip="Show or hide Mini Pad">
+                        <Button x:Name="MiniPadButton"
+                                Click="MiniPadButton_Click"
+                                ToolTip="Show or hide MiniPad">
                             <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource ToolLauncherButtonStyle}">
+                                <Style TargetType="Button" BasedOn="{StaticResource UtilityMenuButtonStyle}">
                                     <Setter Property="Margin" Value="0"/>
                                 </Style>
                             </Button.Style>
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <TextBlock Text="▤" FontSize="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Mini Pad" VerticalAlignment="Center"/>
+                                <TextBlock Text="MiniPad" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Button>
                     </UniformGrid>
@@ -929,63 +937,6 @@
                     </DockPanel>
 
                         <DockPanel x:Name="SettingsView" Margin="0,4,0,0">
-                            <Grid DockPanel.Dock="Top" Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <TextBlock Text="Settings"
-                                           Grid.Column="0"
-                                           FontSize="15"
-                                           FontWeight="SemiBold"
-                                           Foreground="#2C6E91"
-                                           VerticalAlignment="Center"
-                                           Margin="4,0,0,0"
-                                           />
-
-                                <Button x:Name="BackToNotesButton"
-                                        Grid.Column="1"
-                                        Content="Back"
-                                        Click="BackToNotesButton_Click"
-                                        FontSize="13"
-                                        FontWeight="Bold"
-                                        Foreground="White"
-                                        Cursor="Hand"
-                                        Padding="18,6"
-                                        Background="#2C6E91"
-                                        BorderThickness="0"
-                                        Margin="8,0,0,0">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border x:Name="bg"
-                                                    Background="#2C6E91"
-                                                    CornerRadius="16"
-                                                    Padding="{TemplateBinding Padding}">
-                                                <StackPanel Orientation="Horizontal"
-                                                            HorizontalAlignment="Center"
-                                                            VerticalAlignment="Center">
-                                                    <TextBlock Text="&#xE72B;"
-                                                               FontFamily="Segoe MDL2 Assets"
-                                                               FontSize="13"
-                                                               Margin="0,0,8,0"
-                                                               VerticalAlignment="Center"/>
-                                                    <ContentPresenter VerticalAlignment="Center"/>
-                                                </StackPanel>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="bg" Property="Background" Value="#1B4F6B"/>
-                                                </Trigger>
-                                                <Trigger Property="IsPressed" Value="True">
-                                                    <Setter TargetName="bg" Property="Background" Value="#153B4F"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                            </Grid>
-
                             <ScrollViewer DockPanel.Dock="Bottom"
                                           VerticalScrollBarVisibility="Auto">
                             <StackPanel>
@@ -1142,11 +1093,11 @@
                                               MinHeight="28"
                                               DisplayMemberPath="Label"
                                               SelectionChanged="PreferredDisplayCombo_SelectionChanged"/>
-                                    <CheckBox x:Name="HideButtonHidesAllOption"
+                                    <CheckBox x:Name="MainHideButtonHidesAllOption"
                                             Foreground="#355A6E"
                                             FontWeight="SemiBold"
-                                            Checked="HideButtonHidesAllOption_Changed"
-                                            Unchecked="HideButtonHidesAllOption_Changed"
+                                            Checked="MainHideButtonHidesAllOption_Changed"
+                                            Unchecked="MainHideButtonHidesAllOption_Changed"
                                             HorizontalAlignment="Stretch">
                                         <TextBlock Text="Hide other windows when hiding notes"
                                                TextWrapping="Wrap"
@@ -1299,9 +1250,9 @@
                                                    FontWeight="SemiBold"
                                                    Foreground="#355A6E"
                                                    Margin="0,0,8,0"/>
-                                        <Button x:Name="ShowHideNotesDirectoryButton"
+                                        <Button x:Name="ToggleNotesFolderPathButton"
                                                 Content="Show Folder"
-                                                Click="ShowHideNotesDirectoryButton_Click"
+                                                Click="ToggleNotesFolderPathButton_Click"
                                                 FontSize="11"
                                                 FontWeight="SemiBold"
                                                 Foreground="#2C6E91"
@@ -1312,7 +1263,7 @@
                                                 BorderBrush="#9EC7DB"
                                                 BorderThickness="1"/>
                                     </StackPanel>
-                                    <TextBlock x:Name="SettingsNotesDirectoryText"
+                                    <TextBlock x:Name="NotesFolderPathText"
                                                FontSize="11"
                                                Foreground="#5F7480"
                                                TextWrapping="Wrap"
@@ -1359,12 +1310,63 @@
                                     Padding="12"
                                     Margin="0,0,0,10">
                                 <StackPanel>
-                                    <TextBlock Text="Global Hotkey"
+                                    <TextBlock Text="Data Protection"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="#355A6E"
+                                               Margin="0,0,0,6"/>
+                                    <TextBlock Text="Create a verified backup of your notes, settings, checklist, dictionary, Scratchpad, MiniPad, and open-note recovery. Noted changes this backup only when you choose Update Backup."
+                                               FontSize="11"
+                                               Foreground="#5F7480"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,10"/>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <Button x:Name="CreateOrUpdateBackupButton"
+                                                Content="Create Backup"
+                                                Click="CreateOrUpdateBackupButton_Click"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Foreground="#2C6E91"
+                                                Cursor="Hand"
+                                                Padding="8,3"
+                                                Margin="0,0,8,6"
+                                                Background="Transparent"
+                                                BorderBrush="#9EC7DB"
+                                                BorderThickness="1"/>
+                                        <Button x:Name="RestoreBackupButton"
+                                                Content="Restore Backup"
+                                                Click="RestoreBackupButton_Click"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Foreground="#2C6E91"
+                                                Cursor="Hand"
+                                                Padding="8,3"
+                                                Margin="0,0,0,6"
+                                                Background="Transparent"
+                                                BorderBrush="#9EC7DB"
+                                                BorderThickness="1"/>
+                                    </WrapPanel>
+                                    <TextBlock x:Name="BackupStatusText"
+                                               Text="No full backup has been created yet."
+                                               FontSize="10"
+                                               Foreground="#5F7480"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#EFF7FB"
+                                    BorderBrush="#C9DFEC"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="12"
+                                    Margin="0,0,0,10">
+                                <StackPanel>
+                                    <TextBlock Text="Notes Hotkey"
                                                FontSize="12"
                                                FontWeight="SemiBold"
                                                Foreground="#355A6E"
                                                Margin="0,0,0,8"/>
-                                    <TextBlock Text="Activate notes panel with a keyboard shortcut"
+                                    <TextBlock Text="Show or hide Noted with a keyboard shortcut"
                                                FontSize="11"
                                                Foreground="#5F7480"
                                                TextWrapping="Wrap"
@@ -1380,7 +1382,7 @@
                                                    Foreground="#5F7480"
                                                    VerticalAlignment="Center"
                                                    Margin="0,0,8,0"/>
-                                        <TextBlock x:Name="CurrentHotkeyDisplay"
+                                        <TextBlock x:Name="CurrentNotesHotkeyDisplay"
                                                    Grid.Column="1"
                                                    Foreground="#2C6E91"
                                                    FontWeight="SemiBold"
@@ -1405,7 +1407,7 @@
                                                    FontSize="10"
                                                    Foreground="#5F7480"
                                                    Margin="0,0,0,4"/>
-                                        <ComboBox x:Name="HotkeyKeyCombo"
+                                        <ComboBox x:Name="NotesHotkeyKeyCombo"
                                                   Foreground="#355A6E"
                                                   Background="#FFFFFF"
                                                   BorderBrush="#C9DFEC"
@@ -1423,15 +1425,15 @@
                                                 Background="#FFFFFF"
                                                 Padding="8,6"
                                                 Margin="0,0,0,8">
-                                            <TextBlock x:Name="HotkeyPreview"
+                                            <TextBlock x:Name="NotesHotkeyPreview"
                                                        Text="(Select modifiers and key)"
                                                        FontSize="11"
                                                        Foreground="#355A6E"/>
                                         </Border>
                                     </StackPanel>
-                                    <Button x:Name="ApplyHotkeyButton"
+                                    <Button x:Name="ApplyNotesHotkeyButton"
                                             Content="Apply Hotkey"
-                                            Click="ApplyHotkeyButton_Click"
+                                            Click="ApplyNotesHotkeyButton_Click"
                                             FontSize="11"
                                             FontWeight="SemiBold"
                                             Foreground="#2C6E91"
@@ -1496,7 +1498,7 @@
             </Grid>
         </Border>
 
-        <Button x:Name="OverlayButton"
+        <Button x:Name="FloatingNotesButton"
                 Content="Notes"
             Width="96" Height="48"
                 Canvas.Right="20" Canvas.Bottom="20"

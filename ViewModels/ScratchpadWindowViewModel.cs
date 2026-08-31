@@ -28,6 +28,7 @@ public sealed class ScratchpadWindowViewModel : INotifyPropertyChanged
     public ScratchpadWindowState InitialWindowState => _windowState;
     public string InitialContent { get; }
     public bool InitialContentLoadSucceeded { get; }
+    internal bool RecoveryIssuesFoundThisRun { get; }
 
     public bool GhostModeEnabled
     {
@@ -89,6 +90,8 @@ public sealed class ScratchpadWindowViewModel : INotifyPropertyChanged
         _fontSize = _windowState.FontSize;
 
         var loadResult = _contentService.TryLoadContent();
+        RecoveryIssuesFoundThisRun =
+            !loadResult.Success || !string.IsNullOrWhiteSpace(loadResult.Warning);
         InitialContentLoadSucceeded = loadResult.Success;
         InitialContent = loadResult.Success && loadResult.Exists
             ? loadResult.Content ?? string.Empty

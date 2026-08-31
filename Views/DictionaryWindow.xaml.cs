@@ -68,6 +68,9 @@ public partial class DictionaryWindow : OverlayWindow
         return success;
     }
 
+    internal string? BackupBlockingIssue => _viewModel.PersistenceError;
+    internal bool RecoveryBlocksBackup => _viewModel.RecoveryIssuesFoundThisRun;
+
     protected override void OnClosing(CancelEventArgs e)
     {
         if (!TryFlushPendingContent(out var error))
@@ -124,7 +127,7 @@ public partial class DictionaryWindow : OverlayWindow
         object sender,
         DependencyPropertyChangedEventArgs e)
     {
-        if (!_preserveOpenStateOnClose)
+        if (!_preserveOpenStateOnClose && !IsChangingGroupVisibility)
         {
             _reopenOnStartup = IsWindowVisible;
             SaveWindowState();
@@ -202,7 +205,7 @@ public partial class DictionaryWindow : OverlayWindow
 
     internal void PrepareForApplicationShutdown()
     {
-        _reopenOnStartup = IsWindowVisible;
+        _reopenOnStartup = IsWindowVisible || IsHiddenTogether;
         _preserveOpenStateOnClose = true;
         SaveWindowState();
     }

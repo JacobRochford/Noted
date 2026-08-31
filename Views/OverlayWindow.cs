@@ -11,6 +11,8 @@ namespace Noted;
 
 public abstract class OverlayWindow : Window
 {
+    private bool _isChangingGroupVisibility;
+
     protected bool _ghostModeEnabled;
     protected double _ghostModeOpacity;
     protected double _defaultOpacity;
@@ -127,16 +129,56 @@ public abstract class OverlayWindow : Window
     protected abstract void SaveWindowState();
 
     internal bool IsWindowVisible => Visibility == Visibility.Visible;
+    internal bool IsHiddenTogether { get; private set; }
+    protected bool IsChangingGroupVisibility => _isChangingGroupVisibility;
 
     internal void ShowWindow()
+    {
+        IsHiddenTogether = false;
+        ShowWindowCore();
+    }
+
+    internal void HideWindow()
+    {
+        IsHiddenTogether = false;
+        Visibility = Visibility.Collapsed;
+    }
+
+    internal void HideTogether()
+    {
+        _isChangingGroupVisibility = true;
+        IsHiddenTogether = true;
+        try
+        {
+            Visibility = Visibility.Collapsed;
+        }
+        finally
+        {
+            _isChangingGroupVisibility = false;
+        }
+    }
+
+    internal void RestoreTogether()
+    {
+        _isChangingGroupVisibility = true;
+        try
+        {
+            ShowWindowCore();
+            IsHiddenTogether = false;
+        }
+        finally
+        {
+            _isChangingGroupVisibility = false;
+        }
+    }
+
+    private void ShowWindowCore()
     {
         Visibility = Visibility.Visible;
         var hwnd = new WindowInteropHelper(this).Handle;
         WindowInterop.StripNoActivate(hwnd);
         WindowInterop.SetForegroundWindow(hwnd);
     }
-
-    internal void HideWindow() => Visibility = Visibility.Collapsed;
 
     internal void ToggleWindow()
     {

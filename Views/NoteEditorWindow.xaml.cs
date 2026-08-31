@@ -25,7 +25,9 @@ public partial class NoteEditorWindow : Window
     private readonly INoteEditorSessionService _sessionService;
     private readonly SaveScheduler<IReadOnlyList<RecoveryDraftSnapshot>> _recoverySaveScheduler;
     private readonly ObservableCollection<OpenNoteDocument> _documents = [];
-    private readonly HashSet<OpenNoteDocument> _discardWhenPreparedActionCompletes = [];
+    private readonly HashSet<OpenNoteDocument> _discardedDocumentsPendingDraftDeletion = [];
+    private readonly HashSet<string> _unsavedRecoveredPaths =
+        new(StringComparer.OrdinalIgnoreCase);
     private OpenNoteDocument? _activeDocument;
     private OpenNoteDocument? _draggedDocument;
     private Point _tabDragStart;
@@ -35,7 +37,10 @@ public partial class NoteEditorWindow : Window
     private bool _isPreparedForApplicationClose;
     private double _tabsPanelWidth = DefaultTabsPanelWidth;
     private bool _isTabsPanelCollapsed;
+    private bool _reopenOnStartup;
+    private bool _isHiddenTogether;
     private bool _suppressSessionSave;
+    private bool _recoveryIssuesFoundThisRun;
     private string? _recoveryOperationError;
     private string? _sessionPersistenceError;
     private string? _noteSaveWarning;
@@ -71,15 +76,20 @@ public partial class NoteEditorWindow : Window
         Height = NormalizeWindowDimension(windowState.Height, MinHeight, 650);
         _tabsPanelWidth = NormalizeTabsPanelWidth(windowState.TabsPanelWidth);
         _isTabsPanelCollapsed = windowState.IsTabsPanelCollapsed;
+        _reopenOnStartup = windowState.ReopenOnStartup;
         ApplyTabsPanelState();
         SetWordWrapEnabled(windowState.WordWrapEnabled);
-        RestoreSessionMenuItem.IsChecked = _settingsService.LoadRestoreEditorSession();
+        ReopenTabsOnStartupMenuItem.IsChecked = _settingsService.LoadReopenEditorTabsOnStartup();
         UpdateEditorState();
     }
 
     public string? OpenFilePath => _activeDocument?.FilePath;
     public bool IsDirty => _documents.Any(document => document.IsDirty);
     public bool IsWindowVisible => IsVisible;
+    internal bool RecoveryBlocksBackup =>
+        _unsavedRecoveredPaths.Count > 0 || _recoveryIssuesFoundThisRun;
+
+    internal string? BackupBlockingIssue => GetPersistenceIssues().FirstOrDefault();
     public event EventHandler? NewNoteRequested;
     public event EventHandler<NoteDeleteRequestedEventArgs>? DeleteNoteRequested;
 
@@ -88,13 +98,14 @@ public partial class NoteEditorWindow : Window
         return OpenNoteCore(filePath);
     }
 
-    internal bool TryPrepareForDocumentClear()
+    internal bool TryPrepareToCloseAllDocuments()
     {
         return TryResolveDirtyDocuments(_documents);
     }
 
     public bool TryPrepareForClose()
     {
+        var reopenOnStartup = IsVisible || _isHiddenTogether;
         CaptureActiveDocument();
         TryFlushRecoveryDraft(out _);
         if (!TryResolveDirtyDocuments(_documents))
@@ -106,23 +117,40 @@ public partial class NoteEditorWindow : Window
                 $"Noted could not close because the editor session was not saved.\n\n{_sessionPersistenceError}");
             return false;
         }
-        if (!TryDeletePreparedDiscardDrafts())
+        if (!TryDeleteDiscardedRecoveryDrafts())
             return false;
 
         _isPreparedForApplicationClose = true;
+        _reopenOnStartup = reopenOnStartup;
+        SaveWindowSize();
         return true;
+    }
+
+    internal bool TryFlushForBackup(out string? error)
+    {
+        if (!TryFlushRecoveryDraft(out error))
+            return false;
+
+        if (!SaveEditorSession())
+        {
+            error = _sessionPersistenceError ?? "The note editor session could not be saved.";
+            return false;
+        }
+
+        error = BackupBlockingIssue;
+        return error is null;
     }
 
     public void CancelPreparedClose()
     {
         _isPreparedForApplicationClose = false;
-        _discardWhenPreparedActionCompletes.Clear();
+        _discardedDocumentsPendingDraftDeletion.Clear();
         ScheduleRecoveryDraftSave();
     }
 
-    internal void RestoreEditorSession()
+    internal void ReopenSavedTabs()
     {
-        var sessionLoadResult = _settingsService.LoadRestoreEditorSession()
+        var sessionLoadResult = _settingsService.LoadReopenEditorTabsOnStartup()
             ? _sessionService.Load()
             : new NoteEditorSessionLoadResult(new NoteEditorSession(), []);
         var recoveryLoadResult = _recoveryService.LoadDrafts();
@@ -162,7 +190,6 @@ public partial class NoteEditorWindow : Window
                         PathsEqual(document.FilePath, session.ActiveFilePath))
                     ?? _documents[0];
                 ActivateDocument(activeDocument);
-                ShowWindow();
             }
         }
         finally
@@ -173,7 +200,18 @@ public partial class NoteEditorWindow : Window
         if (_documents.Count > 0)
             SaveEditorSession();
 
+        foreach (var document in _documents.Where(document => document.IsDirty))
+            _unsavedRecoveredPaths.Add(document.FilePath);
+
         ShowRecoveryIssues(recoveryIssues, sessionLoadResult.Issues);
+        if (_documents.Count > 0 &&
+            (_reopenOnStartup ||
+             _unsavedRecoveredPaths.Count > 0 ||
+             recoveryIssues.Count > 0 ||
+             sessionLoadResult.Issues.Count > 0))
+        {
+            ShowWindow();
+        }
     }
 
     public bool IsEditingFile(string filePath)
@@ -257,6 +295,8 @@ public partial class NoteEditorWindow : Window
         CaptureActiveDocument();
         var oldPath = document.FilePath;
         document.UpdateFilePath(NormalizePath(newFilePath));
+        if (_unsavedRecoveredPaths.Remove(oldPath))
+            _unsavedRecoveredPaths.Add(document.FilePath);
         document.IsMissing = false;
         if (document.IsDirty)
             MoveRecoveryDraft(oldPath, document);
@@ -278,6 +318,8 @@ public partial class NoteEditorWindow : Window
             var oldPath = document.FilePath;
             var relativePath = Path.GetRelativePath(normalizedOldDirectory, oldPath);
             document.UpdateFilePath(Path.Combine(normalizedNewDirectory, relativePath));
+            if (_unsavedRecoveredPaths.Remove(oldPath))
+                _unsavedRecoveredPaths.Add(document.FilePath);
             if (document.IsDirty)
                 MoveRecoveryDraft(oldPath, document);
         }
@@ -286,7 +328,7 @@ public partial class NoteEditorWindow : Window
         UpdateEditorState();
     }
 
-    public void ClearDocument()
+    public void CloseAllDocuments()
     {
         _suppressSessionSave = true;
         try
@@ -299,13 +341,27 @@ public partial class NoteEditorWindow : Window
             _suppressSessionSave = false;
         }
 
-        _discardWhenPreparedActionCompletes.Clear();
+        _discardedDocumentsPendingDraftDeletion.Clear();
         if (_documents.Count == 0)
             ClearEditorSurface();
         SaveEditorSession();
     }
 
     public void ShowWindow()
+    {
+        _isHiddenTogether = false;
+        _reopenOnStartup = true;
+        ShowWindowCore();
+        SaveWindowSize();
+    }
+
+    internal void RestoreTogether()
+    {
+        _isHiddenTogether = false;
+        ShowWindowCore();
+    }
+
+    private void ShowWindowCore()
     {
         if (!IsVisible)
             Show();
@@ -318,9 +374,22 @@ public partial class NoteEditorWindow : Window
 
     public void HideWindow()
     {
+        _isHiddenTogether = false;
         CaptureActiveDocument();
         TryFlushRecoveryDraft(out _);
         SaveEditorSession();
+        _reopenOnStartup = false;
+        SaveWindowSize();
+        Hide();
+    }
+
+    internal void HideTogether()
+    {
+        CaptureActiveDocument();
+        TryFlushRecoveryDraft(out _);
+        SaveEditorSession();
+        _isHiddenTogether = true;
+        SaveWindowSize();
         Hide();
     }
 
@@ -369,6 +438,8 @@ public partial class NoteEditorWindow : Window
                                    !string.Equals(draft.Content, persistedContent, StringComparison.Ordinal)
                 ? draft.Content
                 : persistedContent;
+            if (draft is not null && !string.Equals(draft.Content, persistedContent, StringComparison.Ordinal))
+                _unsavedRecoveredPaths.Add(normalizedPath);
             if (draft is not null && string.Equals(draft.Content, persistedContent, StringComparison.Ordinal))
                 AddRecoveryCleanupIssue(normalizedPath, issues);
 
@@ -532,14 +603,14 @@ public partial class NoteEditorWindow : Window
         CaptureActiveDocument();
         foreach (var document in documents.Where(document => document.IsDirty).ToList())
         {
-            _discardWhenPreparedActionCompletes.Remove(document);
+            _discardedDocumentsPendingDraftDeletion.Remove(document);
             var result = ShowSavePrompt(document.DisplayName);
             if (result == MessageBoxResult.Cancel)
                 return false;
             if (result == MessageBoxResult.Yes && !TrySaveDocument(document))
                 return false;
             if (result == MessageBoxResult.No)
-                _discardWhenPreparedActionCompletes.Add(document);
+                _discardedDocumentsPendingDraftDeletion.Add(document);
         }
 
         return true;
@@ -598,7 +669,8 @@ public partial class NoteEditorWindow : Window
 
             document.SavedContent = document.Content;
             document.IsDirty = false;
-            _discardWhenPreparedActionCompletes.Remove(document);
+            _unsavedRecoveredPaths.Remove(document.FilePath);
+            _discardedDocumentsPendingDraftDeletion.Remove(document);
             RefreshScheduledRecoveryDrafts();
             if (!TryDeleteRecoveryDraft(document.FilePath, out var cleanupError))
                 ShowRecoveryCleanupWarning(cleanupError!);
@@ -627,7 +699,8 @@ public partial class NoteEditorWindow : Window
                 return false;
         }
 
-        _discardWhenPreparedActionCompletes.Remove(document);
+        _discardedDocumentsPendingDraftDeletion.Remove(document);
+        _unsavedRecoveredPaths.Remove(document.FilePath);
         _documents.Remove(document);
         RefreshScheduledRecoveryDrafts();
 
@@ -832,9 +905,9 @@ public partial class NoteEditorWindow : Window
         }
     }
 
-    private bool TryDeletePreparedDiscardDrafts()
+    private bool TryDeleteDiscardedRecoveryDrafts()
     {
-        foreach (var document in _discardWhenPreparedActionCompletes.ToList())
+        foreach (var document in _discardedDocumentsPendingDraftDeletion.ToList())
         {
             if (TryDeleteRecoveryDraft(document.FilePath, out var error))
                 continue;
@@ -845,7 +918,7 @@ public partial class NoteEditorWindow : Window
             return false;
         }
 
-        _discardWhenPreparedActionCompletes.Clear();
+        _discardedDocumentsPendingDraftDeletion.Clear();
         _recoverySaveScheduler.CancelPending();
         return true;
     }
@@ -885,7 +958,15 @@ public partial class NoteEditorWindow : Window
 
     private void UpdatePersistenceErrorState()
     {
-        var errors = new[]
+        var errors = GetPersistenceIssues();
+        PersistenceErrorText.Text = string.Join("\n", errors);
+        PersistenceErrorPanel.Visibility = errors.Count == 0
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
+    private IReadOnlyList<string> GetPersistenceIssues() =>
+        new[]
             {
                 _recoverySaveScheduler.LastError,
                 _recoverySaveScheduler.LastWarning,
@@ -894,13 +975,9 @@ public partial class NoteEditorWindow : Window
                 _noteSaveWarning
             }
             .Where(error => !string.IsNullOrWhiteSpace(error))
+            .Select(error => error!)
             .Distinct(StringComparer.Ordinal)
             .ToList();
-        PersistenceErrorText.Text = string.Join("\n", errors);
-        PersistenceErrorPanel.Visibility = errors.Count == 0
-            ? Visibility.Collapsed
-            : Visibility.Visible;
-    }
 
     private void ShowRecoveryCleanupWarning(string message)
     {
@@ -923,6 +1000,8 @@ public partial class NoteEditorWindow : Window
             .ToList();
         if (issues.Count == 0)
             return;
+
+        _recoveryIssuesFoundThisRun = true;
 
         const int maximumShownIssues = 5;
         var issueText = string.Join("\n", issues.Take(maximumShownIssues));
@@ -956,7 +1035,8 @@ public partial class NoteEditorWindow : Window
                 Height = NormalizeWindowDimension(bounds.Height, MinHeight, 650),
                 TabsPanelWidth = _tabsPanelWidth,
                 IsTabsPanelCollapsed = _isTabsPanelCollapsed,
-                WordWrapEnabled = EditorTextBox.TextWrapping == TextWrapping.Wrap
+                WordWrapEnabled = EditorTextBox.TextWrapping == TextWrapping.Wrap,
+                ReopenOnStartup = _reopenOnStartup
             });
         }
         catch (SettingsPersistenceException ex)
@@ -1101,18 +1181,18 @@ public partial class NoteEditorWindow : Window
         SetMarkdownPreviewEnabled(sender is MenuItem { IsChecked: true });
     }
 
-    private void RestoreSessionMenuItem_Click(object sender, RoutedEventArgs e)
+    private void ReopenTabsOnStartupMenuItem_Click(object sender, RoutedEventArgs e)
     {
         var enabled = sender is MenuItem { IsChecked: true };
         try
         {
-            _settingsService.SaveRestoreEditorSession(enabled);
+            _settingsService.SaveReopenEditorTabsOnStartup(enabled);
             if (enabled)
                 SaveEditorSession();
         }
         catch (SettingsPersistenceException ex)
         {
-            RestoreSessionMenuItem.IsChecked = !enabled;
+            ReopenTabsOnStartupMenuItem.IsChecked = !enabled;
             ShowError("Unable to save setting", ex.Message);
         }
     }
@@ -1318,13 +1398,17 @@ public partial class NoteEditorWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
-        SaveWindowSize();
         if (_isPreparedForApplicationClose)
+        {
+            SaveWindowSize();
             return;
+        }
 
         CaptureActiveDocument();
         TryFlushRecoveryDraft(out _);
         SaveEditorSession();
+        _reopenOnStartup = false;
+        SaveWindowSize();
 
         e.Cancel = true;
         Hide();

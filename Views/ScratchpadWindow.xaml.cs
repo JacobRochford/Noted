@@ -104,6 +104,9 @@ public partial class ScratchpadWindow : OverlayWindow
         return _contentSaveScheduler.TryFlush(out error);
     }
 
+    internal string? BackupBlockingIssue => _viewModel.PersistenceError;
+    internal bool RecoveryBlocksBackup => _viewModel.RecoveryIssuesFoundThisRun;
+
     protected override void OnClosing(CancelEventArgs e)
     {
         if (!TryFlushPendingContent(out var error))
@@ -179,7 +182,7 @@ public partial class ScratchpadWindow : OverlayWindow
         }
     }
 
-    // ─── Content persistence ─────────────────────────────────────────────────
+    // Content saving
 
     private void RestoreEditorContent()
     {
@@ -308,7 +311,7 @@ public partial class ScratchpadWindow : OverlayWindow
 
     private void ScratchpadWindow_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (!_preserveOpenStateOnClose)
+        if (!_preserveOpenStateOnClose && !IsChangingGroupVisibility)
         {
             _reopenOnStartup = IsWindowVisible;
             _isWindowStateDirty = true;
@@ -325,7 +328,7 @@ public partial class ScratchpadWindow : OverlayWindow
 
     internal void PrepareForApplicationShutdown()
     {
-        _reopenOnStartup = IsWindowVisible;
+        _reopenOnStartup = IsWindowVisible || IsHiddenTogether;
         _preserveOpenStateOnClose = true;
         _isWindowStateDirty = true;
         if (!TryFlushPendingWindowState(out var error))
@@ -375,7 +378,7 @@ public partial class ScratchpadWindow : OverlayWindow
         Closed -= ScratchpadWindow_Closed;
     }
 
-    // ─── Editor state helpers ─────────────────────────────────────────────────
+    // Editor state
 
     private void UpdateCounts()
     {
@@ -406,7 +409,7 @@ public partial class ScratchpadWindow : OverlayWindow
         }
     }
 
-    // ─── UI event handlers ────────────────────────────────────────────────────
+    // UI events
 
     private void HideButton_Click(object sender, RoutedEventArgs e) => RequestHide();
 
@@ -435,7 +438,7 @@ public partial class ScratchpadWindow : OverlayWindow
         }
     }
 
-    // ─── Formatting ──────────────────────────────────────────────────────────
+    // Formatting
 
     private void BoldButton_Click(object sender, RoutedEventArgs e)
     {
@@ -600,7 +603,7 @@ public partial class ScratchpadWindow : OverlayWindow
         }
     }
 
-    // ─── Find & Replace ───────────────────────────────────────────────────────
+    // Find and replace
 
     private void FindButton_Click(object sender, RoutedEventArgs e) => ToggleFindBar();
 

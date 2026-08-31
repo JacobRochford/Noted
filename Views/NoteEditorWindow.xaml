@@ -199,10 +199,10 @@
                                       IsCheckable="True"
                                       Click="MarkdownMenuItem_Click"/>
                             <Separator/>
-                            <MenuItem x:Name="RestoreSessionMenuItem"
+                            <MenuItem x:Name="ReopenTabsOnStartupMenuItem"
                                       Header="Reopen Tabs on Startup"
                                       IsCheckable="True"
-                                      Click="RestoreSessionMenuItem_Click"/>
+                                      Click="ReopenTabsOnStartupMenuItem_Click"/>
                             <MenuItem x:Name="TabsPanelMenuItem"
                                       Header="Show Tabs"
                                       InputGestureText="Ctrl+B"

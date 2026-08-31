@@ -159,7 +159,7 @@
             </Setter>
         </Style>
 
-        <Style x:Key="DetailsBtn" TargetType="Button" BasedOn="{StaticResource SmallIconBtn}">
+        <Style x:Key="DetailsButtonStyle" TargetType="Button" BasedOn="{StaticResource SmallIconBtn}">
             <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Content" Value="&#xE70F;"/>
@@ -515,9 +515,9 @@
                                                           Style="{StaticResource NotedContextMenuItem}" Click="MoveToBottom_Click"/>
                                                 <Separator/>
                                                 <MenuItem Header="Duplicate item"
-                                                          Style="{StaticResource NotedContextMenuItem}" Click="Duplicate_Click"/>
+                                                          Style="{StaticResource NotedContextMenuItem}" Click="DuplicateItemMenuItem_Click"/>
                                                 <MenuItem Header="Delete item" Foreground="#B84F4F"
-                                                          Style="{StaticResource NotedContextMenuItem}" Click="DeleteItem_Click"/>
+                                                          Style="{StaticResource NotedContextMenuItem}" Click="DeleteItemMenuItem_Click"/>
                                             </ContextMenu>
                                         </Grid.ContextMenu>
 
@@ -532,7 +532,7 @@
                                             <Ellipse Grid.Column="0" Width="8" Height="8"
                                                      Fill="{Binding Priority, Converter={StaticResource PriorityToColor}}"
                                                      Cursor="Hand" ToolTip="Click to change priority"
-                                                     MouseLeftButtonDown="PriorityStrip_MouseLeftButtonDown"/>
+                                                     MouseLeftButtonDown="PriorityDot_MouseLeftButtonDown"/>
                                             <CheckBox Grid.Column="1" Style="{StaticResource ChecklistBox}"
                                                       IsChecked="{Binding IsChecked, UpdateSourceTrigger=PropertyChanged}"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -566,7 +566,7 @@
                                                 <TextBlock Text="{Binding DueDate, Converter={StaticResource DueDateToText}}"
                                                            Foreground="White" FontSize="10" FontWeight="SemiBold"/>
                                             </Border>
-                                            <Button Grid.Column="4" Style="{StaticResource DetailsBtn}"
+                                            <Button Grid.Column="4" Style="{StaticResource DetailsButtonStyle}"
                                                     Click="ExpandButton_Click" ToolTip="Edit details"/>
                                         </Grid>
 

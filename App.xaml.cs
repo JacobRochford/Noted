@@ -12,6 +12,7 @@ namespace Noted;
 public partial class App : Application
 {
     private const string SingleInstanceMutexName = "Noted.SingleInstance";
+    private static readonly TimeSpan RecentBackupInterval = TimeSpan.FromHours(24);
     private Mutex? _singleInstanceMutex;
     private AppSettingsService? _settingsService;
     private NoteFileService? _fileService;
@@ -23,8 +24,11 @@ public partial class App : Application
     private readonly ShutdownFlushCoordinator _shutdownFlushCoordinator = new();
     private IDisposable? _checklistShutdownRegistration;
     private IDisposable? _dictionaryShutdownRegistration;
-    private MicroScratchpadWindow? _microScratchpadWindow;
-    private IMicroScratchpadRecoveryService? _microScratchpadRecoveryService;
+    private MiniPadWindow? _miniPadWindow;
+    private IMiniPadRecoveryService? _miniPadRecoveryService;
+    private FullBackupService? _fullBackupService;
+    private readonly HashSet<string> _backupBlockReasons = new(StringComparer.Ordinal);
+    private bool _restoreUserBackupOnShutdown;
     private bool _isShuttingDown;
     private string? _lastShutdownWarning;
     private int _fatalErrorShown;
@@ -76,14 +80,27 @@ public partial class App : Application
 
         try
         {
+            var appDataDirectory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Noted");
+            var fullBackupService = new FullBackupService(
+                appDataDirectory,
+                appDataDirectory);
+            var pendingRestoreResult = fullBackupService.ApplyPendingUserBackupRestore();
+            if (pendingRestoreResult.Status == FullBackupStatus.Failed)
+                throw new IOException(pendingRestoreResult.Message);
+
             base.OnStartup(e);
             TryCreateDesktopShortcut();
 
             var settings = new AppSettingsService();
+            settings.PersistenceWarning += Settings_PersistenceWarning;
             _settingsService = settings;
-            _microScratchpadRecoveryService = new MicroScratchpadRecoveryService(settings.AppDataDirectory);
+            _miniPadRecoveryService = new MiniPadRecoveryService(settings.AppDataDirectory);
             var fileService = new NoteFileService(settings);
             startupFileService = fileService;
+            fullBackupService.UpdateNotesDirectory(fileService.NotesDirectory);
+            _fullBackupService = fullBackupService;
             var noteEditor = new NoteEditorWindow(
                 new NoteContentService(
                     () => fileService.NotesDirectory,
@@ -96,7 +113,10 @@ public partial class App : Application
                 settings,
                 fileService,
                 noteEditor,
-                new StartupService());
+                new RunOnStartupService(),
+                CreateOrUpdateUserBackup,
+                GetUserBackupInfo,
+                RequestUserBackupRestore);
             _fileService = fileService;
             _noteEditorWindow = noteEditor;
             _mainWindow = mainWindow;
@@ -107,19 +127,39 @@ public partial class App : Application
             WindowManager.ChecklistProvider = GetOrCreateChecklistWindow;
             WindowManager.DictionaryProvider = GetOrCreateDictionaryWindow;
             WindowManager.ScratchpadProvider = GetOrCreateScratchpadWindow;
-            WindowManager.MicroScratchpadProvider = GetOrCreateMicroScratchpadWindow;
+            WindowManager.MiniPadProvider = GetOrCreateMiniPadWindow;
             WindowManager.Editor = noteEditor;
 
             mainWindow.Show();
-            if (settings.LoadChecklistWindowState().ReopenOnStartup)
-                WindowManager.ShowChecklistPanel();
-            if (settings.LoadDictionaryWindowState().ReopenOnStartup)
-                WindowManager.ShowDictionaryPanel();
-            if (settings.LoadScratchpadWindowState().ReopenOnStartup)
-                WindowManager.ShowScratchpadPanel();
+            if (pendingRestoreResult.Status == FullBackupStatus.Restored)
+            {
+                AppDialog.Show(
+                    pendingRestoreResult.Message,
+                    "Noted - Backup Restored",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            if (settings.RecoveryNotice is not null)
+            {
+                BlockBackupsForThisRun("Settings recovery was used during this application run.");
+                AppDialog.Show(
+                    settings.RecoveryNotice,
+                    "Noted - Settings Recovered",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
 
-            noteEditor.RestoreEditorSession();
-            RestoreMicroScratchpadWindow();
+            if (settings.LoadChecklistWindowState().ReopenOnStartup)
+                WindowManager.ShowChecklist();
+            if (settings.LoadDictionaryWindowState().ReopenOnStartup)
+                WindowManager.ShowDictionary();
+            if (settings.LoadScratchpadWindowState().ReopenOnStartup)
+                WindowManager.ShowScratchpad();
+
+            noteEditor.ReopenSavedTabs();
+            if (noteEditor.RecoveryBlocksBackup)
+                BlockBackupsForThisRun("Note editor recovery was used or reported a problem during this application run.");
+            RestoreMiniPadWindow();
             _ = UpdateService.CheckForUpdatesAsync();
         }
         catch (Exception ex)
@@ -163,7 +203,7 @@ public partial class App : Application
             CloseExistingWindow(_dictionaryWindow, "Dictionary");
             CloseExistingWindow(_scratchpadWindow, "Scratchpad");
             CloseExistingWindow(_noteEditorWindow, "note editor");
-            CloseMicroScratchpadWindow();
+            CloseMiniPadWindow();
 
             _checklistShutdownRegistration?.Dispose();
             _checklistShutdownRegistration = null;
@@ -174,14 +214,32 @@ public partial class App : Application
             try { _fileService?.Dispose(); } catch (Exception ex) { Debug.WriteLine(ex); }
             WindowManager.ClearAll();
 
+            if (_restoreUserBackupOnShutdown && _fullBackupService is not null)
+            {
+                var restoreResult = _fullBackupService.ApplyPendingUserBackupRestore();
+                var message = restoreResult.Status == FullBackupStatus.Restored
+                    ? $"{restoreResult.Message}\n\nNoted will now close. Open it again to load the restored data."
+                    : $"{restoreResult.Message}\n\nNoted will retry before loading data the next time it starts.";
+                AppDialog.Show(
+                    message,
+                    restoreResult.Status == FullBackupStatus.Restored
+                        ? "Noted - Backup Restored"
+                        : "Noted - Restore Incomplete",
+                    MessageBoxButton.OK,
+                    restoreResult.Status == FullBackupStatus.Restored
+                        ? MessageBoxImage.Information
+                        : MessageBoxImage.Warning);
+            }
+
             _fileService = null;
             _mainWindow = null;
             _noteEditorWindow = null;
             _checklistWindow = null;
             _dictionaryWindow = null;
             _scratchpadWindow = null;
-            _microScratchpadWindow = null;
-            _microScratchpadRecoveryService = null;
+            _miniPadWindow = null;
+            _miniPadRecoveryService = null;
+            _fullBackupService = null;
         }
         finally
         {
@@ -322,34 +380,51 @@ public partial class App : Application
             WindowManager.Scratchpad = null;
     }
 
-    private MicroScratchpadWindow? GetOrCreateMicroScratchpadWindow()
+    private MiniPadWindow? GetOrCreateMiniPadWindow()
     {
         Dispatcher.VerifyAccess();
         if (_isShuttingDown)
-            return _microScratchpadWindow;
+            return _miniPadWindow;
 
-        if (_microScratchpadWindow is not null)
-            return _microScratchpadWindow;
+        if (_miniPadWindow is not null)
+            return _miniPadWindow;
 
-        var recoveryService = _microScratchpadRecoveryService
-            ?? throw new InvalidOperationException("Mini Pad recovery is not initialized.");
-        return CreateMicroScratchpadWindow(recoveryService, null);
+        var recoveryService = _miniPadRecoveryService
+            ?? throw new InvalidOperationException("MiniPad recovery is not initialized.");
+        return CreateMiniPadWindow(recoveryService, null);
     }
 
-    private void RestoreMicroScratchpadWindow()
+    private void Settings_PersistenceWarning(string warning)
     {
-        var recoveryService = _microScratchpadRecoveryService
-            ?? throw new InvalidOperationException("Mini Pad recovery is not initialized.");
+        BlockBackupsForThisRun("Settings recovery protection reported a warning during this application run.");
+        if (_isShuttingDown)
+            return;
+
+        AppDialog.Show(
+            $"Your settings were saved, but recovery protection needs attention.\n\n{warning}",
+            "Noted - Settings Recovery Warning",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+    }
+
+    private void RestoreMiniPadWindow()
+    {
+        var recoveryService = _miniPadRecoveryService
+            ?? throw new InvalidOperationException("MiniPad recovery is not initialized.");
 
         var loadResult = recoveryService.LoadDraft();
-        if (loadResult.Draft is not null)
+        var shouldReopen = _settingsService?.LoadMiniPadWindowState().ReopenOnStartup == true;
+        if (loadResult.Draft is not null || shouldReopen)
         {
-            var window = CreateMicroScratchpadWindow(recoveryService, loadResult.Draft);
-            window.Show();
+            var window = CreateMiniPadWindow(recoveryService, loadResult.Draft);
+            if (shouldReopen || loadResult.Issues.Count > 0)
+                window.Show();
         }
 
         if (loadResult.Issues.Count == 0)
             return;
+
+        BlockBackupsForThisRun("MiniPad recovery reported a problem during this application run.");
 
         const int maximumDisplayedIssues = 5;
         var issueText = string.Join(
@@ -362,58 +437,60 @@ public partial class App : Application
             ? $"\n\n{remainingCount} additional recovery issue(s) were not shown."
             : string.Empty;
         AppDialog.Show(
-            $"Some Mini Pad recovery files need attention. No recoverable content was silently discarded.\n\n{issueText}{remainingText}",
-            "Mini Pad Recovery",
+            $"Some MiniPad recovery files need attention. No recoverable content was silently discarded.\n\n{issueText}{remainingText}",
+            "MiniPad Recovery",
             MessageBoxButton.OK,
             MessageBoxImage.Warning);
     }
 
-    private MicroScratchpadWindow CreateMicroScratchpadWindow(
-        IMicroScratchpadRecoveryService recoveryService,
-        MicroScratchpadRecoveryDraft? draft)
+    private MiniPadWindow CreateMiniPadWindow(
+        IMiniPadRecoveryService recoveryService,
+        MiniPadRecoveryDraft? draft)
     {
-        var window = new MicroScratchpadWindow(recoveryService, draft);
-        window.Closed += MicroScratchpadWindow_Closed;
-        _microScratchpadWindow = window;
-        WindowManager.MicroScratchpad = window;
+        var settings = _settingsService
+            ?? throw new InvalidOperationException("Application settings are not initialized.");
+        var window = new MiniPadWindow(recoveryService, settings, draft);
+        window.Closed += MiniPadWindow_Closed;
+        _miniPadWindow = window;
+        WindowManager.MiniPad = window;
         return window;
     }
 
-    private void MicroScratchpadWindow_Closed(object? sender, EventArgs e)
+    private void MiniPadWindow_Closed(object? sender, EventArgs e)
     {
-        if (sender is not MicroScratchpadWindow window)
+        if (sender is not MiniPadWindow window)
             return;
 
-        window.Closed -= MicroScratchpadWindow_Closed;
-        if (!ReferenceEquals(_microScratchpadWindow, window))
+        window.Closed -= MiniPadWindow_Closed;
+        if (!ReferenceEquals(_miniPadWindow, window))
             return;
 
-        _microScratchpadWindow = null;
-        if (ReferenceEquals(WindowManager.MicroScratchpad, window))
-            WindowManager.MicroScratchpad = null;
+        _miniPadWindow = null;
+        if (ReferenceEquals(WindowManager.MiniPad, window))
+            WindowManager.MiniPad = null;
     }
 
-    private void CloseMicroScratchpadWindow()
+    private void CloseMiniPadWindow()
     {
-        var window = _microScratchpadWindow;
+        var window = _miniPadWindow;
         if (window is null)
             return;
 
-        window.Closed -= MicroScratchpadWindow_Closed;
+        window.Closed -= MiniPadWindow_Closed;
         if (!window.TryFlushPendingContent(out var error))
         {
             AppDialog.Show(
-                error ?? "Mini Pad recovery data could not be saved before shutdown.",
-                "Mini Pad Save Failed",
+                error ?? "MiniPad recovery data could not be saved before shutdown.",
+                "MiniPad Save Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
 
         window.KeepDraftOnClose();
-        CloseExistingWindow(window, "Mini Pad");
-        _microScratchpadWindow = null;
-        if (ReferenceEquals(WindowManager.MicroScratchpad, window))
-            WindowManager.MicroScratchpad = null;
+        CloseExistingWindow(window, "MiniPad");
+        _miniPadWindow = null;
+        if (ReferenceEquals(WindowManager.MiniPad, window))
+            WindowManager.MiniPad = null;
     }
 
     private static void CloseExistingWindow(Window? window, string name)
@@ -431,20 +508,155 @@ public partial class App : Application
         }
     }
 
+    private FullBackupInfo GetUserBackupInfo() =>
+        _fullBackupService?.GetUserBackupInfo()
+        ?? new FullBackupInfo(false, false, null, 0, "Backups are not available.");
+
+    private FullBackupResult CreateOrUpdateUserBackup()
+    {
+        var service = _fullBackupService;
+        if (service is null)
+        {
+            return new FullBackupResult(
+                FullBackupStatus.Failed,
+                FullBackupType.User,
+                null,
+                "Backups are not available.");
+        }
+
+        var preparationIssues = PrepareDataForBackup(includeRunRecoveryHistory: false);
+        if (preparationIssues.Count > 0)
+            return CreateBlockedBackupResult(FullBackupType.User, preparationIssues);
+
+        if (_fileService is not null)
+            service.UpdateNotesDirectory(_fileService.NotesDirectory);
+        return service.CreateOrUpdateUserBackup();
+    }
+
+    private void RequestUserBackupRestore()
+    {
+        _restoreUserBackupOnShutdown = true;
+        _mainWindow?.Close();
+    }
+
+    private IReadOnlyList<string> PrepareDataForBackup(bool includeRunRecoveryHistory)
+    {
+        var issues = includeRunRecoveryHistory
+            ? new List<string>(_backupBlockReasons)
+            : [];
+
+        if (_miniPadWindow is not null)
+        {
+            if (!_miniPadWindow.TryFlushPendingContent(out var error))
+                issues.Add(error ?? "MiniPad content could not be saved.");
+            if (!string.IsNullOrWhiteSpace(_miniPadWindow.BackupBlockingIssue))
+                issues.Add(_miniPadWindow.BackupBlockingIssue!);
+        }
+
+        if (_scratchpadWindow is not null)
+        {
+            if (!_scratchpadWindow.TryFlushPendingContent(out var error))
+                issues.Add(error ?? "Scratchpad content could not be saved.");
+            if (!string.IsNullOrWhiteSpace(_scratchpadWindow.BackupBlockingIssue))
+                issues.Add(_scratchpadWindow.BackupBlockingIssue!);
+            if (includeRunRecoveryHistory && _scratchpadWindow.RecoveryBlocksBackup)
+                issues.Add("Scratchpad recovery reported a problem during this application run.");
+        }
+
+        foreach (var failure in _shutdownFlushCoordinator.FlushAll())
+            issues.Add($"{failure.ParticipantName}: {failure.Error}");
+
+        if (!string.IsNullOrWhiteSpace(_checklistWindow?.BackupBlockingIssue))
+            issues.Add(_checklistWindow.BackupBlockingIssue!);
+        if (includeRunRecoveryHistory && _checklistWindow?.RecoveryBlocksBackup == true)
+            issues.Add("Checklist recovery reported a problem during this application run.");
+        if (!string.IsNullOrWhiteSpace(_dictionaryWindow?.BackupBlockingIssue))
+            issues.Add(_dictionaryWindow.BackupBlockingIssue!);
+        if (includeRunRecoveryHistory && _dictionaryWindow?.RecoveryBlocksBackup == true)
+            issues.Add("Dictionary recovery reported a problem during this application run.");
+
+        if (_noteEditorWindow is not null)
+        {
+            if (!_noteEditorWindow.TryFlushForBackup(out var error))
+                issues.Add(error ?? "Note editor recovery data could not be saved.");
+            if (_noteEditorWindow.RecoveryBlocksBackup)
+                issues.Add("Some automatically recovered notes still need to be saved, or note recovery reported a problem.");
+        }
+
+        return issues
+            .Where(issue => !string.IsNullOrWhiteSpace(issue))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static FullBackupResult CreateBlockedBackupResult(
+        FullBackupType backupType,
+        IReadOnlyList<string> issues)
+    {
+        const int maximumShownIssues = 5;
+        var message = string.Join(" ", issues.Take(maximumShownIssues));
+        if (issues.Count > maximumShownIssues)
+            message += $" {issues.Count - maximumShownIssues} additional issue(s) were not shown.";
+
+        return new FullBackupResult(
+            FullBackupStatus.Blocked,
+            backupType,
+            null,
+            backupType == FullBackupType.User
+                ? $"The backup was not created because current data could not be prepared safely. {message}"
+                : $"The recent automatic backup was not created because current data could not be prepared safely. {message}");
+    }
+
+    private void BlockBackupsForThisRun(string reason)
+    {
+        if (!string.IsNullOrWhiteSpace(reason))
+            _backupBlockReasons.Add(reason);
+    }
+
+    private void TryUpdateRecentBackup()
+    {
+        var service = _fullBackupService;
+        if (service is null || !service.UserBackupExists)
+            return;
+
+        var preparationIssues = PrepareDataForBackup(includeRunRecoveryHistory: true);
+        if (preparationIssues.Count > 0)
+            return;
+
+        if (_fileService is not null)
+            service.UpdateNotesDirectory(_fileService.NotesDirectory);
+        var result = service.CreateRecentBackupIfDue(RecentBackupInterval);
+        if ((result.Status is FullBackupStatus.Created or FullBackupStatus.Skipped) &&
+            string.IsNullOrWhiteSpace(result.Warning))
+        {
+            return;
+        }
+
+        var warning = string.IsNullOrWhiteSpace(result.Warning)
+            ? result.Message
+            : $"{result.Message}\n\n{result.Warning}";
+        AppDialog.Show(
+            $"Noted kept the existing backup copies unchanged.\n\n{warning}",
+            "Backup Warning",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+    }
+
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
-        if (_microScratchpadWindow is not null &&
-            !_microScratchpadWindow.TryFlushPendingContent(out var recoveryError))
+        if (_miniPadWindow is not null &&
+            !_miniPadWindow.TryFlushPendingContent(out var recoveryError))
         {
             e.Cancel = true;
-            var message = recoveryError ?? "Mini Pad recovery data could not be saved.";
+            CancelRequestedUserBackupRestore();
+            var message = recoveryError ?? "MiniPad recovery data could not be saved.";
             if (message == _lastShutdownWarning)
                 return;
 
             _lastShutdownWarning = message;
             AppDialog.Show(
-                $"Noted could not close because Mini Pad recovery data was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
-                "Mini Pad Save Failed",
+                $"Noted could not close because MiniPad recovery data was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
+                "MiniPad Save Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
@@ -453,6 +665,7 @@ public partial class App : Application
         if (_scratchpadWindow is not null && !_scratchpadWindow.TryFlushPendingContent(out var error))
         {
             e.Cancel = true;
+            CancelRequestedUserBackupRestore();
             var message = error ?? "Scratchpad content could not be saved before shutdown.";
             if (message == _lastShutdownWarning)
                 return;
@@ -470,6 +683,7 @@ public partial class App : Application
         if (toolSaveFailures.Count > 0)
         {
             e.Cancel = true;
+            CancelRequestedUserBackupRestore();
             var message = string.Join(
                 "\n",
                 toolSaveFailures.Select(failure =>
@@ -490,12 +704,51 @@ public partial class App : Application
         if (_noteEditorWindow is not null && !_noteEditorWindow.TryPrepareForClose())
         {
             e.Cancel = true;
+            CancelRequestedUserBackupRestore();
             return;
+        }
+
+        if (_restoreUserBackupOnShutdown)
+        {
+            var restoreResult = _fullBackupService?.ScheduleUserBackupRestore()
+                ?? new FullBackupResult(
+                    FullBackupStatus.Failed,
+                    FullBackupType.User,
+                    null,
+                    "Backups are not available.");
+            if (restoreResult.Status != FullBackupStatus.RestoreScheduled)
+            {
+                e.Cancel = true;
+                _noteEditorWindow?.CancelPreparedClose();
+                CancelRequestedUserBackupRestore();
+                AppDialog.Show(
+                    restoreResult.Message,
+                    "Noted - Restore Not Started",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
         }
 
         _checklistWindow?.PrepareForApplicationShutdown();
         _dictionaryWindow?.PrepareForApplicationShutdown();
         _scratchpadWindow?.PrepareForApplicationShutdown();
+        _miniPadWindow?.PrepareForApplicationShutdown();
+        if (!_restoreUserBackupOnShutdown)
+            TryUpdateRecentBackup();
+    }
+
+    private void CancelRequestedUserBackupRestore()
+    {
+        _restoreUserBackupOnShutdown = false;
+        try
+        {
+            _fullBackupService?.CancelPendingUserBackupRestore();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Debug.WriteLine(ex);
+        }
     }
 
     // Expected settings failures are recoverable after actionable feedback.
