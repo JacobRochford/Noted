@@ -2,95 +2,338 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Priority Colors"
-        Width="390"
-        Height="310"
+        Width="410"
+        Height="332"
         WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
         ResizeMode="NoResize"
-        Background="#F5F9FC"
+        ShowInTaskbar="False"
+        Background="Transparent"
         FontFamily="Segoe UI">
     <Window.Resources>
-        <Style x:Key="ColorComboBox" TargetType="ComboBox">
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="Padding" Value="7,3"/>
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderBrush" Value="#A8CDE0"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="ItemTemplate">
+        <DataTemplate x:Key="ColorChoiceTemplate">
+            <Grid MinWidth="215">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="22"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Ellipse Width="12" Height="12" Fill="{Binding Hex}"/>
+                <TextBlock Grid.Column="1" Margin="6,0,0,0"
+                           VerticalAlignment="Center" Foreground="#355A6E"
+                           Text="{Binding Name}"/>
+                <TextBlock Grid.Column="2" Margin="12,0,0,0"
+                           VerticalAlignment="Center" Foreground="#78909C"
+                           FontSize="11" Text="{Binding Hex}"/>
+            </Grid>
+        </DataTemplate>
+
+        <Style x:Key="ColorComboBoxItem" TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="9,6"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
                 <Setter.Value>
-                    <DataTemplate>
-                        <Grid MinWidth="190">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="22"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <Ellipse Width="12" Height="12" Fill="{Binding Hex}"/>
-                            <TextBlock Grid.Column="1" Margin="6,0,0,0"
-                                       VerticalAlignment="Center" Text="{Binding Name}"/>
-                            <TextBlock Grid.Column="2" Margin="12,0,0,0"
-                                       VerticalAlignment="Center" Foreground="#78909C"
-                                       FontSize="11" Text="{Binding Hex}"/>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBackground" Margin="2,1"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBackground" Property="Background" Value="#E4F2F8"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBackground" Property="Background" Value="#D5EAF4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ColorComboBox" TargetType="ComboBox">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#B7D4E2"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="#355A6E"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MaxDropDownHeight" Value="220"/>
+            <Setter Property="ItemTemplate" Value="{StaticResource ColorChoiceTemplate}"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource ColorComboBoxItem}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="DropDownButton"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}"
+                                          Cursor="{TemplateBinding Cursor}"
+                                          Focusable="False"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay,
+                                                              RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="SelectorBackground"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="5">
+                                            <Grid Margin="9,0,8,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="18"/>
+                                                </Grid.ColumnDefinitions>
+                                                <ContentPresenter VerticalAlignment="Center"
+                                                                  Content="{Binding SelectionBoxItem,
+                                                                                    RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                                  ContentTemplate="{Binding SelectionBoxItemTemplate,
+                                                                                            RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
+                                                <Path Grid.Column="1" Width="8" Height="5"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                      Data="M 0 0 L 4 4 L 8 0"
+                                                      Stroke="#6B8795" StrokeThickness="1.4"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="SelectorBackground" Property="Background" Value="#F1F8FB"/>
+                                                <Setter TargetName="SelectorBackground" Property="BorderBrush" Value="#79B8D3"/>
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="SelectorBackground" Property="BorderBrush" Value="#5BA8C8"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True" Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom" PopupAnimation="Fade">
+                                <Border MinWidth="268"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                        Margin="0,3,0,0" Padding="2"
+                                        Background="White" BorderBrush="#A8CDE0"
+                                        BorderThickness="1" CornerRadius="6">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="10" ShadowDepth="2"
+                                                          Opacity="0.18" Color="#000000"/>
+                                    </Border.Effect>
+                                    <ScrollViewer CanContentScroll="True"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
                         </Grid>
-                    </DataTemplate>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="DropDownButton" Property="BorderBrush" Value="#5BA8C8"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="HeaderIconButton" TargetType="Button">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#5F7480"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBackground"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#DCEEF6"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#C9E4F0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
 
         <Style x:Key="DialogButton" TargetType="Button">
-            <Setter Property="MinWidth" Value="76"/>
-            <Setter Property="Height" Value="31"/>
-            <Setter Property="Padding" Value="12,4"/>
+            <Setter Property="MinWidth" Value="78"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="13,4"/>
+            <Setter Property="Background" Value="#EEF5F8"/>
+            <Setter Property="Foreground" Value="#355A6E"/>
+            <Setter Property="BorderBrush" Value="#B7D4E2"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBackground"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#DCEEF6"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#C9E5F2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryDialogButton" TargetType="Button"
+               BasedOn="{StaticResource DialogButton}">
+            <Setter Property="Background" Value="#5BA8C8"/>
+            <Setter Property="BorderBrush" Value="#5BA8C8"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBackground"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#4A97B7"/>
+                                <Setter TargetName="ButtonBackground" Property="BorderBrush" Value="#4A97B7"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="#3E839F"/>
+                                <Setter TargetName="ButtonBackground" Property="BorderBrush" Value="#3E839F"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
-    <Grid Margin="22,18">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <Grid Background="Transparent">
+        <Border Margin="8" Background="#F5F9FC"
+                BorderBrush="#87CEEB" BorderThickness="1" CornerRadius="9">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="14" ShadowDepth="3"
+                                  Opacity="0.2" Color="#000000"/>
+            </Border.Effect>
 
-        <TextBlock Foreground="#2C6E91" FontSize="19" FontWeight="SemiBold"
-                   Text="Priority colors"/>
-        <TextBlock Grid.Row="1" Margin="0,4,0,15" Foreground="#6B8795"
-                   Text="Choose a color for each checklist priority."/>
+            <Grid Margin="14,10,14,14">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-        <Grid Grid.Row="2">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="76"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+                <Border Grid.Row="0" Padding="2,0,0,8"
+                        Background="Transparent" Cursor="SizeAll"
+                        MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-            <TextBlock VerticalAlignment="Center" Foreground="#355A6E" Text="High"/>
-            <ComboBox x:Name="HighColorComboBox" Grid.Column="1" Margin="0,0,0,9"
-                      Style="{StaticResource ColorComboBox}"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                    IsHitTestVisible="False">
+                            <Grid Width="22" Height="22" Margin="0,0,8,0">
+                                <Ellipse Width="9" Height="9" Margin="0,0,7,7"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                                         Fill="#FF0000"/>
+                                <Ellipse Width="9" Height="9" Margin="7,7,0,0"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                                         Fill="#5BA8C8"/>
+                            </Grid>
+                            <TextBlock VerticalAlignment="Center" Foreground="#2C6E91"
+                                       FontSize="16" FontWeight="SemiBold"
+                                       Text="Priority colors"/>
+                        </StackPanel>
 
-            <TextBlock Grid.Row="1" VerticalAlignment="Center" Foreground="#355A6E" Text="Medium"/>
-            <ComboBox x:Name="MediumColorComboBox" Grid.Row="1" Grid.Column="1" Margin="0,0,0,9"
-                      Style="{StaticResource ColorComboBox}"/>
+                        <Button Grid.Column="1" Content="&#xE711;"
+                                Style="{StaticResource HeaderIconButton}"
+                                Click="CloseButton_Click" ToolTip="Close"/>
+                    </Grid>
+                </Border>
 
-            <TextBlock Grid.Row="2" VerticalAlignment="Center" Foreground="#355A6E" Text="Low"/>
-            <ComboBox x:Name="LowColorComboBox" Grid.Row="2" Grid.Column="1"
-                      Style="{StaticResource ColorComboBox}"/>
-        </Grid>
+                <Border Grid.Row="1" Margin="0,0,0,14" Padding="0,9,0,0"
+                        BorderBrush="#D0E4EE" BorderThickness="0,1,0,0">
+                    <TextBlock Foreground="#6B8795" FontSize="12"
+                               Text="Choose a color for each checklist priority."/>
+                </Border>
 
-        <Grid Grid.Row="3" Margin="0,17,0,0">
-            <Button HorizontalAlignment="Left" Content="Reset"
-                    Click="ResetButton_Click" Style="{StaticResource DialogButton}"/>
-            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                <Button Margin="0,0,8,0" Content="Cancel"
-                        Click="CancelButton_Click" Style="{StaticResource DialogButton}"/>
-                <Button Background="#2C6E91" BorderBrush="#2C6E91" Foreground="White"
-                        Content="Save" Click="SaveButton_Click"
-                        Style="{StaticResource DialogButton}"/>
-            </StackPanel>
-        </Grid>
+                <Grid Grid.Row="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="76"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock VerticalAlignment="Center" Foreground="#355A6E"
+                               FontSize="12" Text="High"/>
+                    <ComboBox x:Name="HighColorComboBox" Grid.Column="1"
+                              Margin="0,0,0,9" Style="{StaticResource ColorComboBox}"/>
+
+                    <TextBlock Grid.Row="1" VerticalAlignment="Center"
+                               Foreground="#355A6E" FontSize="12" Text="Medium"/>
+                    <ComboBox x:Name="MediumColorComboBox" Grid.Row="1" Grid.Column="1"
+                              Margin="0,0,0,9" Style="{StaticResource ColorComboBox}"/>
+
+                    <TextBlock Grid.Row="2" VerticalAlignment="Center"
+                               Foreground="#355A6E" FontSize="12" Text="Low"/>
+                    <ComboBox x:Name="LowColorComboBox" Grid.Row="2" Grid.Column="1"
+                              Style="{StaticResource ColorComboBox}"/>
+                </Grid>
+
+                <Grid Grid.Row="3" Margin="0,17,0,0">
+                    <Button HorizontalAlignment="Left" Content="Reset"
+                            Click="ResetButton_Click" Style="{StaticResource DialogButton}"/>
+                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                        <Button Margin="0,0,8,0" Content="Cancel" IsCancel="True"
+                                Click="CancelButton_Click" Style="{StaticResource DialogButton}"/>
+                        <Button Content="Save" IsDefault="True"
+                                Click="SaveButton_Click" Style="{StaticResource PrimaryDialogButton}"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

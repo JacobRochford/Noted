@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Noted.Models;
 
 namespace Noted;
@@ -38,6 +39,17 @@ public partial class ChecklistPriorityColorsDialog : Window
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
         DialogResult = true;
+    }
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e)
+    {
+        DialogResult = false;
+    }
+
+    private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Pressed)
+            DragMove();
     }
 
     private void SetSelections(ChecklistPriorityColors colors)
