@@ -44,6 +44,9 @@ public partial class NoteEditorWindow : Window
     private string? _recoveryOperationError;
     private string? _sessionPersistenceError;
     private string? _noteSaveWarning;
+    private IReadOnlyList<TextMatch> _findMatches = [];
+    private int _currentFindMatchIndex = -1;
+    private bool _isApplyingFindReplacement;
 
     public NoteEditorWindow(
         INoteContentService contentService,
@@ -584,6 +587,8 @@ public partial class NoteEditorWindow : Window
         SetMarkdownPreviewEnabled(document.MarkdownPreviewEnabled, saveSession: false);
         UpdateEditorState();
         SaveEditorSession();
+        if (FindPanel.Visibility == Visibility.Visible)
+            RefreshFindResults(selectMatch: true);
         FocusActiveSurface();
     }
 
@@ -723,6 +728,7 @@ public partial class NoteEditorWindow : Window
 
     private void ClearEditorSurface()
     {
+        CloseFindPanel(focusEditor: false);
         RefreshScheduledRecoveryDrafts();
         _activeDocument = null;
         _isLoading = true;
@@ -783,6 +789,10 @@ public partial class NoteEditorWindow : Window
             : "Unsaved changes";
         EditorTextBox.IsEnabled = hasDocument;
         EditorTextBox.IsReadOnly = _activeDocument?.IsMissing == true;
+        FindButton.IsEnabled = hasDocument;
+        FindPanel.IsEnabled = hasDocument;
+        ReplaceButton.IsEnabled = hasDocument && _activeDocument?.IsMissing != true;
+        ReplaceAllButton.IsEnabled = hasDocument && _activeDocument?.IsMissing != true;
         SaveButton.IsEnabled = _activeDocument is { IsDirty: true, IsMissing: false };
         Title = hasDocument
             ? $"{(_activeDocument!.IsDirty ? "*" : string.Empty)}{_activeDocument.DisplayName} - Noted"
@@ -1047,7 +1057,17 @@ public partial class NoteEditorWindow : Window
 
     private void EditorTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_isLoading || _activeDocument is null)
+        if (_isLoading || _isApplyingFindReplacement || _activeDocument is null)
+            return;
+
+        StoreEditorChanges();
+        if (FindPanel.Visibility == Visibility.Visible)
+            RefreshFindResults(selectMatch: false);
+    }
+
+    private void StoreEditorChanges()
+    {
+        if (_activeDocument is null)
             return;
 
         _activeDocument.Content = EditorTextBox.Text;
@@ -1059,6 +1079,311 @@ public partial class NoteEditorWindow : Window
         ScheduleRecoveryDraftSave();
         UpdateMarkdownPreview();
         UpdateEditorState();
+    }
+
+    private void FindButton_Click(object sender, RoutedEventArgs e)
+    {
+        OpenFindPanel(showReplace: false);
+    }
+
+    private void FindMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        OpenFindPanel(showReplace: false);
+    }
+
+    private void ReplaceMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        OpenFindPanel(showReplace: true);
+    }
+
+    private void OpenFindPanel(bool showReplace)
+    {
+        if (_activeDocument is null)
+            return;
+
+        if (_isMarkdownPreviewEnabled)
+            SetMarkdownPreviewEnabled(false);
+
+        var wasVisible = FindPanel.Visibility == Visibility.Visible;
+        FindPanel.Visibility = Visibility.Visible;
+        if (showReplace)
+            ShowReplaceToggle.IsChecked = true;
+        else if (!wasVisible)
+            ShowReplaceToggle.IsChecked = false;
+        UpdateReplaceRowVisibility();
+
+        var selectedText = EditorTextBox.SelectedText;
+        if (!string.IsNullOrEmpty(selectedText)
+            && selectedText.Length <= 200
+            && selectedText.IndexOfAny(['\r', '\n']) < 0)
+        {
+            FindTextBox.Text = selectedText;
+        }
+        RefreshFindResults(selectMatch: true);
+
+        FindTextBox.Focus();
+        FindTextBox.SelectAll();
+    }
+
+    private void CloseFindButton_Click(object sender, RoutedEventArgs e)
+    {
+        CloseFindPanel(focusEditor: true);
+    }
+
+    private void CloseFindPanel(bool focusEditor)
+    {
+        FindPanel.Visibility = Visibility.Collapsed;
+        _findMatches = [];
+        _currentFindMatchIndex = -1;
+        FindResultText.Text = string.Empty;
+        if (focusEditor && _activeDocument is not null)
+            FocusActiveSurface();
+    }
+
+    private void ShowReplaceToggle_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateReplaceRowVisibility();
+    }
+
+    private void UpdateReplaceRowVisibility()
+    {
+        ReplaceRow.Visibility = ShowReplaceToggle.IsChecked == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        ShowReplaceToggle.ToolTip = ShowReplaceToggle.IsChecked == true
+            ? "Hide replace"
+            : "Show replace";
+    }
+
+    private void FindTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (FindPanel.Visibility == Visibility.Visible)
+            RefreshFindResults(selectMatch: true);
+    }
+
+    private void FindTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            FindPrevious();
+        else
+            FindNext();
+        e.Handled = true;
+    }
+
+    private void MatchCaseOption_Changed(object sender, RoutedEventArgs e)
+    {
+        if (FindPanel.Visibility == Visibility.Visible)
+            RefreshFindResults(selectMatch: true);
+    }
+
+    private void FindNextButton_Click(object sender, RoutedEventArgs e)
+    {
+        FindNext();
+    }
+
+    private void FindPreviousButton_Click(object sender, RoutedEventArgs e)
+    {
+        FindPrevious();
+    }
+
+    private void FindNext()
+    {
+        LoadFindMatches();
+        if (_findMatches.Count == 0)
+            return;
+
+        var selectedIndex = FindSelectedMatchIndex();
+        var nextIndex = selectedIndex >= 0
+            ? (selectedIndex + 1) % _findMatches.Count
+            : FindMatchAtOrAfter(EditorTextBox.SelectionStart);
+        SelectFindMatch(nextIndex);
+    }
+
+    private void FindPrevious()
+    {
+        LoadFindMatches();
+        if (_findMatches.Count == 0)
+            return;
+
+        var selectedIndex = FindSelectedMatchIndex();
+        var previousIndex = selectedIndex >= 0
+            ? (selectedIndex - 1 + _findMatches.Count) % _findMatches.Count
+            : FindMatchBefore(EditorTextBox.SelectionStart);
+        SelectFindMatch(previousIndex);
+    }
+
+    private void RefreshFindResults(bool selectMatch)
+    {
+        LoadFindMatches();
+        if (_findMatches.Count == 0)
+            return;
+
+        var selectedIndex = FindSelectedMatchIndex();
+        if (selectedIndex >= 0)
+        {
+            _currentFindMatchIndex = selectedIndex;
+            UpdateFindResultText();
+            return;
+        }
+
+        if (selectMatch)
+        {
+            SelectFindMatch(FindMatchAtOrAfter(EditorTextBox.SelectionStart));
+            return;
+        }
+
+        _currentFindMatchIndex = -1;
+        UpdateFindResultText();
+    }
+
+    private void LoadFindMatches()
+    {
+        _findMatches = PlainTextSearch.FindMatches(
+            EditorTextBox.Text,
+            FindTextBox.Text,
+            MatchCaseOption.IsChecked == true);
+        if (_findMatches.Count == 0)
+        {
+            _currentFindMatchIndex = -1;
+            FindResultText.Text = string.IsNullOrEmpty(FindTextBox.Text)
+                ? string.Empty
+                : "Not found";
+        }
+    }
+
+    private int FindSelectedMatchIndex()
+    {
+        for (var index = 0; index < _findMatches.Count; index++)
+        {
+            var match = _findMatches[index];
+            if (match.Start == EditorTextBox.SelectionStart
+                && match.Length == EditorTextBox.SelectionLength)
+                return index;
+        }
+
+        return -1;
+    }
+
+    private int FindMatchAtOrAfter(int textPosition)
+    {
+        for (var index = 0; index < _findMatches.Count; index++)
+        {
+            if (_findMatches[index].Start >= textPosition)
+                return index;
+        }
+
+        return 0;
+    }
+
+    private int FindMatchBefore(int textPosition)
+    {
+        for (var index = _findMatches.Count - 1; index >= 0; index--)
+        {
+            if (_findMatches[index].Start < textPosition)
+                return index;
+        }
+
+        return _findMatches.Count - 1;
+    }
+
+    private void SelectFindMatch(int index)
+    {
+        if (index < 0 || index >= _findMatches.Count)
+            return;
+
+        var match = _findMatches[index];
+        EditorTextBox.Select(match.Start, match.Length);
+        var lineIndex = EditorTextBox.GetLineIndexFromCharacterIndex(match.Start);
+        if (lineIndex >= 0)
+            EditorTextBox.ScrollToLine(lineIndex);
+        _currentFindMatchIndex = index;
+        UpdateFindResultText();
+    }
+
+    private void UpdateFindResultText()
+    {
+        FindResultText.Text = _findMatches.Count == 0
+            ? (string.IsNullOrEmpty(FindTextBox.Text) ? string.Empty : "Not found")
+            : _currentFindMatchIndex >= 0
+                ? $"{_currentFindMatchIndex + 1} of {_findMatches.Count}"
+                : $"{_findMatches.Count} found";
+    }
+
+    private void ReplaceButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (EditorTextBox.IsReadOnly)
+            return;
+
+        LoadFindMatches();
+        var selectedIndex = FindSelectedMatchIndex();
+        if (selectedIndex < 0)
+        {
+            FindNext();
+            return;
+        }
+
+        var match = _findMatches[selectedIndex];
+        ReplaceText(match.Start, match.Length, ReplaceTextBox.Text);
+        LoadFindMatches();
+        if (_findMatches.Count > 0)
+            SelectFindMatch(FindMatchAtOrAfter(match.Start + ReplaceTextBox.Text.Length));
+    }
+
+    private void ReplaceAllButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (EditorTextBox.IsReadOnly)
+            return;
+
+        LoadFindMatches();
+        if (_findMatches.Count == 0)
+            return;
+
+        var replacedCount = _findMatches.Count;
+        _isApplyingFindReplacement = true;
+        EditorTextBox.BeginChange();
+        try
+        {
+            for (var index = _findMatches.Count - 1; index >= 0; index--)
+            {
+                var match = _findMatches[index];
+                EditorTextBox.Select(match.Start, match.Length);
+                EditorTextBox.SelectedText = ReplaceTextBox.Text;
+            }
+        }
+        finally
+        {
+            EditorTextBox.EndChange();
+            _isApplyingFindReplacement = false;
+        }
+
+        StoreEditorChanges();
+        _findMatches = PlainTextSearch.FindMatches(
+            EditorTextBox.Text,
+            FindTextBox.Text,
+            MatchCaseOption.IsChecked == true);
+        _currentFindMatchIndex = -1;
+        FindResultText.Text = $"Replaced {replacedCount}";
+    }
+
+    private void ReplaceText(int start, int length, string replacement)
+    {
+        _isApplyingFindReplacement = true;
+        EditorTextBox.BeginChange();
+        try
+        {
+            EditorTextBox.Select(start, length);
+            EditorTextBox.SelectedText = replacement;
+        }
+        finally
+        {
+            EditorTextBox.EndChange();
+            _isApplyingFindReplacement = false;
+        }
+
+        StoreEditorChanges();
     }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
@@ -1269,6 +1594,9 @@ public partial class NoteEditorWindow : Window
 
     private void SetMarkdownPreviewEnabled(bool enabled, bool saveSession = true)
     {
+        if (enabled && FindPanel.Visibility == Visibility.Visible)
+            CloseFindPanel(focusEditor: false);
+
         _isMarkdownPreviewEnabled = enabled;
         if (_activeDocument is not null)
             _activeDocument.MarkdownPreviewEnabled = enabled;
@@ -1339,6 +1667,37 @@ public partial class NoteEditorWindow : Window
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var modifiers = Keyboard.Modifiers;
+        if (e.Key == Key.F && modifiers == ModifierKeys.Control)
+        {
+            OpenFindPanel(showReplace: false);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.H && modifiers == ModifierKeys.Control)
+        {
+            OpenFindPanel(showReplace: true);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.F3 && FindPanel.Visibility == Visibility.Visible)
+        {
+            if (modifiers.HasFlag(ModifierKeys.Shift))
+                FindPrevious();
+            else
+                FindNext();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape && FindPanel.Visibility == Visibility.Visible)
+        {
+            CloseFindPanel(focusEditor: true);
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.V && modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
         {
             ToggleMarkdownPreview();

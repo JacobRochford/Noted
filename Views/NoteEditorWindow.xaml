@@ -118,6 +118,85 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="EditorFindInput" TargetType="TextBox">
+            <Setter Property="Height" Value="27"/>
+            <Setter Property="Padding" Value="7,3"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#A8CDE0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="#355A6E"/>
+            <Setter Property="CaretBrush" Value="#2C6E91"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="EditorFindButton" TargetType="Button">
+            <Setter Property="MinWidth" Value="25"/>
+            <Setter Property="Height" Value="25"/>
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="Margin" Value="2,0,0,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#527386"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="FindButtonBackground"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="FindButtonBackground" Property="Background" Value="#DCEEF6"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="EditorFindToggle" TargetType="ToggleButton">
+            <Setter Property="MinWidth" Value="25"/>
+            <Setter Property="Height" Value="25"/>
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#527386"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="FindToggleBackground"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="FindToggleBackground" Property="Background" Value="#DCEEF6"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="FindToggleBackground" Property="Background" Value="#C9E5F2"/>
+                                <Setter Property="Foreground" Value="#2C6E91"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <DockPanel Background="#F5F9FC">
@@ -186,6 +265,13 @@
                             <MenuItem Header="Select All"
                                       Command="ApplicationCommands.SelectAll"
                                       CommandTarget="{Binding ElementName=EditorTextBox}"/>
+                            <Separator/>
+                            <MenuItem Header="Find..."
+                                      InputGestureText="Ctrl+F"
+                                      Click="FindMenuItem_Click"/>
+                            <MenuItem Header="Replace..."
+                                      InputGestureText="Ctrl+H"
+                                      Click="ReplaceMenuItem_Click"/>
                         </MenuItem>
                         <MenuItem Header="View">
                             <MenuItem x:Name="HeaderWordWrapMenuItem"
@@ -219,15 +305,28 @@
                                Visibility="Collapsed"/>
                 </StackPanel>
 
-                <Button x:Name="SaveButton"
-                        Grid.Column="1"
-                        Width="58"
-                        Height="26"
-                        VerticalAlignment="Center"
-                        Click="SaveButton_Click"
-                        Content="Save"
-                        IsEnabled="False"
-                        Style="{StaticResource EditorButton}"/>
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <Button x:Name="FindButton"
+                            Margin="0,0,6,0"
+                            Click="FindButton_Click"
+                            Style="{StaticResource HeaderIconButton}"
+                            ToolTip="Find in note (Ctrl+F)"
+                            AutomationProperties.Name="Find in note">
+                        <TextBlock FontFamily="Segoe MDL2 Assets"
+                                   FontSize="13"
+                                   Foreground="#527386"
+                                   Text="&#xE721;"/>
+                    </Button>
+                    <Button x:Name="SaveButton"
+                            Width="58"
+                            Height="26"
+                            Click="SaveButton_Click"
+                            Content="Save"
+                            IsEnabled="False"
+                            Style="{StaticResource EditorButton}"/>
+                </StackPanel>
             </Grid>
         </Border>
 
@@ -463,6 +562,113 @@
                             </ContextMenu>
                         </FlowDocumentScrollViewer.ContextMenu>
                     </FlowDocumentScrollViewer>
+
+                    <Border x:Name="FindPanel"
+                            Panel.ZIndex="10"
+                            Width="286"
+                            Margin="8"
+                            Padding="7"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Background="#F5F9FC"
+                            BorderBrush="#87CEEB"
+                            BorderThickness="1"
+                            CornerRadius="7"
+                            Visibility="Collapsed">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="12"
+                                              ShadowDepth="3"
+                                              Opacity="0.18"
+                                              Color="#000000"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ToggleButton x:Name="ShowReplaceToggle"
+                                              Click="ShowReplaceToggle_Click"
+                                              ToolTip="Show replace">
+                                    <ToggleButton.Style>
+                                        <Style TargetType="ToggleButton"
+                                               BasedOn="{StaticResource EditorFindToggle}">
+                                            <Setter Property="Content" Value="›"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter Property="Content" Value="⌄"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ToggleButton.Style>
+                                </ToggleButton>
+                                <TextBox x:Name="FindTextBox"
+                                         Grid.Column="1"
+                                         Margin="3,0,2,0"
+                                         Style="{StaticResource EditorFindInput}"
+                                         TextChanged="FindTextBox_TextChanged"
+                                         PreviewKeyDown="FindTextBox_PreviewKeyDown"
+                                         ToolTip="Find"/>
+                                <Button Grid.Column="2"
+                                        Content="↑"
+                                        Click="FindPreviousButton_Click"
+                                        Style="{StaticResource EditorFindButton}"
+                                        ToolTip="Previous match (Shift+Enter)"/>
+                                <Button Grid.Column="3"
+                                        Content="↓"
+                                        Click="FindNextButton_Click"
+                                        Style="{StaticResource EditorFindButton}"
+                                        ToolTip="Next match (Enter)"/>
+                                <Button Grid.Column="4"
+                                        Content="×"
+                                        Click="CloseFindButton_Click"
+                                        Style="{StaticResource EditorFindButton}"
+                                        ToolTip="Close (Escape)"/>
+                            </Grid>
+
+                            <Grid x:Name="ReplaceRow"
+                                  Margin="28,5,0,0"
+                                  Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="ReplaceTextBox"
+                                         Margin="0,0,2,0"
+                                         Style="{StaticResource EditorFindInput}"
+                                         ToolTip="Replace with"/>
+                                <Button x:Name="ReplaceButton"
+                                        Grid.Column="1"
+                                        Content="Replace"
+                                        Click="ReplaceButton_Click"
+                                        Style="{StaticResource EditorFindButton}"/>
+                                <Button x:Name="ReplaceAllButton"
+                                        Grid.Column="2"
+                                        Content="All"
+                                        Click="ReplaceAllButton_Click"
+                                        Style="{StaticResource EditorFindButton}"
+                                        ToolTip="Replace all"/>
+                            </Grid>
+
+                            <Grid Margin="31,4,2,0">
+                                <CheckBox x:Name="MatchCaseOption"
+                                          Content="Match case"
+                                          Checked="MatchCaseOption_Changed"
+                                          Unchecked="MatchCaseOption_Changed"
+                                          Foreground="#5F7480"
+                                          FontSize="10"/>
+                                <TextBlock x:Name="FindResultText"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Foreground="#78909C"
+                                           FontSize="10"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </Grid>
         </Border>
