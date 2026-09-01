@@ -10,7 +10,7 @@ namespace Noted.ViewModels;
 
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
-    private const string DefaultHeaderText = "Noted.";
+    private const string DefaultHeaderText = "Notes";
     private bool _isSettingsVisible;
     private readonly INoteFileService _fileService;
     private readonly IAppSettingsService _settingsService;
@@ -35,7 +35,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
             if (_headerText != value) {
                 _headerText = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(DisplayHeaderText));
             }
         }
     }
@@ -46,12 +45,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
             if (_isSettingsVisible != value) {
                 _isSettingsVisible = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(DisplayHeaderText));
             }
         }
     }
-
-    public string DisplayHeaderText => IsSettingsVisible ? "⚙" : HeaderText;
 
     public string EditableHeaderText => _customHeaderText;
 

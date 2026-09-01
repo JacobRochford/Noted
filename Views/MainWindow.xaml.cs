@@ -183,78 +183,61 @@ public partial class MainWindow : Window {
 
     private void HeaderEditBox_LostFocus(object sender, RoutedEventArgs e)
     {
-        EndHeaderEdit(true);
+        EndHeaderEdit(save: true);
     }
 
     private void HeaderEditBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter)
         {
-            EndHeaderEdit(true);
+            EndHeaderEdit(save: true);
             e.Handled = true;
         }
         else if (e.Key == Key.Escape)
         {
-            EndHeaderEdit(false);
+            EndHeaderEdit(save: false);
             e.Handled = true;
         }
     }
 
-    private void HeaderText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
-        if (e.ClickCount == 2)
-        {
-            e.Handled = true;
-            // double-click: start header edit
-            var currentHeaderText = _viewModel.EditableHeaderText;
-            Dispatcher.InvokeAsync(() => BeginHeaderEdit(currentHeaderText), DispatcherPriority.Input);
-        }
-    }
-
-    private void BeginHeaderEdit(string currentHeaderText)
+    private void HeaderText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        // force focus for overlay header edit
-        var hwnd = new WindowInteropHelper(this).Handle;
-        WindowInterop.StripNoActivate(hwnd);
+        if (e.ClickCount != 2 || _viewModel.IsSettingsVisible)
+            return;
+
+        e.Handled = true;
+        Dispatcher.InvokeAsync(BeginHeaderEdit, DispatcherPriority.Input);
+    }
+
+    private void BeginHeaderEdit()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        WindowInterop.StripNoActivate(handle);
         Activate();
-        WindowInterop.SetForegroundWindow(hwnd);
+        WindowInterop.SetForegroundWindow(handle);
 
+        _viewModel.HeaderTextEdit = _viewModel.EditableHeaderText;
         _viewModel.IsHeaderEditing = true;
-        HeaderText.Visibility = Visibility.Collapsed;
-        HeaderTextEdit.Visibility = Visibility.Visible;
-        _viewModel.HeaderTextEdit = currentHeaderText;
-
         HeaderTextEdit.Focus();
-        FocusManager.SetFocusedElement(this, HeaderTextEdit);
         Keyboard.Focus(HeaderTextEdit);
         HeaderTextEdit.SelectAll();
     }
 
     private void EndHeaderEdit(bool save)
     {
-        if (!_viewModel.IsHeaderEditing) return;
+        if (!_viewModel.IsHeaderEditing)
+            return;
+
         _viewModel.IsHeaderEditing = false;
-        HeaderText.Visibility = Visibility.Visible;
-        HeaderTextEdit.Visibility = Visibility.Collapsed;
+        WindowInterop.RestoreNoActivate(new WindowInteropHelper(this).Handle);
 
-        // restore WS_EX_NOACTIVATE
-        var hwnd = new WindowInteropHelper(this).Handle;
-        WindowInterop.RestoreNoActivate(hwnd);
+        if (!save)
+            return;
 
-        if (save)
-        {
-            var newHeader = HeaderTextEdit.Text.Trim();
-            if (string.IsNullOrWhiteSpace(newHeader))
-            {
-                _settingsService.SaveCustomHeader("");
-            }
-            else
-            {
-                _settingsService.SaveCustomHeader(newHeader);
-            }
-            _viewModel.SetCustomHeader(newHeader);
-        }
+        var newHeader = HeaderTextEdit.Text.Trim();
+        _settingsService.SaveCustomHeader(newHeader);
+        _viewModel.SetCustomHeader(newHeader);
     }
-
 
     private void MainWindow_SourceInitialized(object? sender, EventArgs e) {
         // overlay: never let Windows treat as foreground fullscreen (prevents DND)
@@ -527,8 +510,6 @@ public partial class MainWindow : Window {
         NotesListView.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
         SettingsView.Visibility = setVisible ? Visibility.Visible : Visibility.Collapsed;
         UtilityMenu.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
-        HeaderText.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
-        SettingsHeaderText.Visibility = setVisible ? Visibility.Visible : Visibility.Collapsed;
         NewNoteButton.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
         QuickNoteButton.Visibility = setVisible
             ? Visibility.Collapsed
@@ -1161,6 +1142,18 @@ public partial class MainWindow : Window {
             return;
 
         RunBackupCommand(_createOrUpdateUserBackup);
+    }
+
+    private void UtilityMenuButton_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = CompactUtilityMenuButton.ContextMenu;
+        if (menu is null)
+            return;
+
+        menu.PlacementTarget = CompactUtilityMenuButton;
+        menu.Placement = PlacementMode.Bottom;
+        menu.IsOpen = true;
+        e.Handled = true;
     }
 
     private void RestoreBackupButton_Click(object sender, RoutedEventArgs e)
@@ -1963,8 +1956,6 @@ public partial class MainWindow : Window {
         if (_notesPanelResizer.IsResizing || _notesPanelResizer.IsNearEdge(e.GetPosition(NotesPanel)))
             return;
 
-        // If the header textbox is in edit mode and has focus, transfer focus to trigger LostFocus event
-        // This must happen BEFORE the drag starts and captures the mouse
         if (HeaderTextEdit.IsVisible && HeaderTextEdit.IsFocused) {
             MainCanvas.Focus();
             return;
