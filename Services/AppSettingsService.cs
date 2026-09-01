@@ -206,6 +206,26 @@ public sealed class AppSettingsService : IAppSettingsService {
     public double LoadDefaultOpacity() => LoadSetting(s => s.DefaultOpacity);
     public void SaveDefaultOpacity(double opacity) => SaveSetting(s => s with { DefaultOpacity = opacity });
 
+    public AppThemeMode LoadAppThemeMode() => LoadSetting(s => s.AppThemeMode);
+
+    public void SaveAppThemeMode(AppThemeMode mode)
+    {
+        if (!Enum.IsDefined(mode))
+            throw new ArgumentOutOfRangeException(nameof(mode), mode, "Undefined application theme mode.");
+
+        SaveSetting(s => s with { AppThemeMode = mode });
+    }
+
+    public string LoadAccentColor() => LoadSetting(s => s.AccentColor);
+
+    public void SaveAccentColor(string color)
+    {
+        if (!AppTheme.TryNormalizeAccentColor(color, out var normalized))
+            throw new ArgumentException("The accent color must use six hexadecimal digits.", nameof(color));
+
+        SaveSetting(s => s with { AccentColor = normalized });
+    }
+
     public FolderNavigationMode LoadFolderNavigationMode() => LoadSetting(s => s.FolderNavigationMode);
     public void SaveFolderNavigationMode(FolderNavigationMode mode) => SaveSetting(s => s with { FolderNavigationMode = mode });
 
@@ -709,6 +729,10 @@ public sealed class AppSettingsService : IAppSettingsService {
             DictionaryHotkeyKey = string.IsNullOrWhiteSpace(settings.DictionaryHotkeyKey) ? "D" : settings.DictionaryHotkeyKey,
             GhostModeOpacity = NormalizeOpacity(settings.GhostModeOpacity, 0, 0.25),
             DefaultOpacity = NormalizeOpacity(settings.DefaultOpacity, 0.05, 0.88),
+            AppThemeMode = Enum.IsDefined(settings.AppThemeMode)
+                ? settings.AppThemeMode
+                : AppThemeMode.System,
+            AccentColor = AppTheme.NormalizeAccentColor(settings.AccentColor),
             FolderNavigationMode = Enum.IsDefined(settings.FolderNavigationMode)
                 ? settings.FolderNavigationMode
                 : FolderNavigationMode.DrillDown,
@@ -854,6 +878,8 @@ public sealed class AppSettingsService : IAppSettingsService {
         public bool GhostModeEnabled { get; init; } = false;
         public double GhostModeOpacity { get; init; } = 0.25;
         public double DefaultOpacity { get; init; } = 0.88;
+        public AppThemeMode AppThemeMode { get; init; } = AppThemeMode.System;
+        public string AccentColor { get; init; } = AppTheme.DefaultAccentColor;
         public FolderNavigationMode FolderNavigationMode { get; init; } = FolderNavigationMode.DrillDown;
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<ChecklistItemState>? ChecklistItems { get; init; }

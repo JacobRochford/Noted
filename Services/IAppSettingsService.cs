@@ -30,6 +30,10 @@ public interface IAppSettingsService {
     void SaveGhostModeOpacity(double opacity);
     double LoadDefaultOpacity();
     void SaveDefaultOpacity(double opacity);
+    AppThemeMode LoadAppThemeMode();
+    void SaveAppThemeMode(AppThemeMode mode);
+    string LoadAccentColor();
+    void SaveAccentColor(string color);
     FolderNavigationMode LoadFolderNavigationMode();
     void SaveFolderNavigationMode(FolderNavigationMode mode);
     IReadOnlyList<ChecklistItemState>? LoadLegacyChecklistItems();

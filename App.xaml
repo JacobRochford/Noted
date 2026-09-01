@@ -4,8 +4,27 @@
              xmlns:local="clr-namespace:Noted"
              ShutdownMode="OnMainWindowClose">
     <Application.Resources>
+        <SolidColorBrush x:Key="NotedWindowBackgroundBrush" Color="#F5F9FC"/>
+        <SolidColorBrush x:Key="NotedSurfaceBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="NotedSubtleSurfaceBrush" Color="#F2F8FB"/>
+        <SolidColorBrush x:Key="NotedInputBackgroundBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="NotedBorderBrush" Color="#C9DFEC"/>
+        <SolidColorBrush x:Key="NotedStrongBorderBrush" Color="#87CEEB"/>
+        <SolidColorBrush x:Key="NotedTextBrush" Color="#355A6E"/>
+        <SolidColorBrush x:Key="NotedSecondaryTextBrush" Color="#78909C"/>
+        <SolidColorBrush x:Key="NotedMutedTextBrush" Color="#8BA5B2"/>
+        <SolidColorBrush x:Key="NotedAccentBrush" Color="#5BA8C8"/>
+        <SolidColorBrush x:Key="NotedAccentHoverBrush" Color="#4A97B7"/>
+        <SolidColorBrush x:Key="NotedAccentPressedBrush" Color="#3E839F"/>
+        <SolidColorBrush x:Key="NotedAccentSoftBrush" Color="#DCEEF6"/>
+        <SolidColorBrush x:Key="NotedAccentSoftHoverBrush" Color="#C9E4F0"/>
+        <SolidColorBrush x:Key="NotedAccentTextBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="NotedDangerBrush" Color="#B84F4F"/>
+        <SolidColorBrush x:Key="NotedWarningBrush" Color="#B8761F"/>
+        <SolidColorBrush x:Key="NotedSuccessBrush" Color="#347052"/>
+
         <Style x:Key="NotedContextMenuItem" TargetType="MenuItem">
-            <Setter Property="Foreground" Value="#355A6E"/>
+            <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
             <Setter Property="Padding" Value="8,6"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -33,14 +52,14 @@
                                 <TextBlock Grid.Column="2"
                                            Margin="18,0,0,0"
                                            VerticalAlignment="Center"
-                                           Foreground="#78909C"
+                                           Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                            FontSize="11"
                                            Text="{TemplateBinding InputGestureText}"/>
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBackground" Property="Background" Value="#DCEEF6"/>
+                                <Setter TargetName="ItemBackground" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="ItemBackground" Property="Opacity" Value="0.45"/>
@@ -52,8 +71,8 @@
         </Style>
 
         <Style x:Key="NotedContextMenu" TargetType="ContextMenu">
-            <Setter Property="Background" Value="#F5F9FC"/>
-            <Setter Property="BorderBrush" Value="#A8CDE0"/>
+            <Setter Property="Background" Value="{DynamicResource NotedWindowBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource NotedBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="3"/>
             <Setter Property="FontFamily" Value="Segoe UI"/>

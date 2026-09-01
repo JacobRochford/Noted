@@ -591,6 +591,55 @@ public sealed class AppSettingsServiceTests
         Assert.AreEqual("#008080", colors.LowColor);
     }
 
+    [TestMethod]
+    public void ThemeSettingsUseTheNotedDefaults()
+    {
+        using var directory = new TestDirectory();
+        var service = CreateService(directory.Path);
+
+        Assert.AreEqual(AppThemeMode.System, service.LoadAppThemeMode());
+        Assert.AreEqual(AppTheme.DefaultAccentColor, service.LoadAccentColor());
+    }
+
+    [TestMethod]
+    public void ThemeSettingsPersistNormalizedAccentColor()
+    {
+        using var directory = new TestDirectory();
+        var service = CreateService(directory.Path);
+
+        service.SaveAppThemeMode(AppThemeMode.Dark);
+        service.SaveAccentColor("3366aa");
+
+        var reloaded = CreateService(directory.Path);
+        Assert.AreEqual(AppThemeMode.Dark, reloaded.LoadAppThemeMode());
+        Assert.AreEqual("#3366AA", reloaded.LoadAccentColor());
+    }
+
+    [TestMethod]
+    public void InvalidStoredThemeSettingsUseTheNotedDefaults()
+    {
+        using var directory = new TestDirectory();
+        File.WriteAllText(
+            directory.File("settings.json"),
+            "{\"NewNoteMode\":0,\"AppThemeMode\":99,\"AccentColor\":\"not-a-color\"}");
+
+        var service = CreateService(directory.Path);
+
+        Assert.AreEqual(AppThemeMode.System, service.LoadAppThemeMode());
+        Assert.AreEqual(AppTheme.DefaultAccentColor, service.LoadAccentColor());
+        Assert.IsNull(service.RecoveryNotice);
+    }
+
+    [TestMethod]
+    public void InvalidAccentColorIsNotSaved()
+    {
+        using var directory = new TestDirectory();
+        var service = CreateService(directory.Path);
+
+        Assert.ThrowsExactly<ArgumentException>(() => service.SaveAccentColor("blue"));
+        Assert.IsFalse(File.Exists(directory.File("settings.json")));
+    }
+
     private static AppSettingsService CreateService(
         string path,
         TimeProvider? clock = null,

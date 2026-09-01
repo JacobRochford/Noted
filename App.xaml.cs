@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
+using Noted.Models;
 using Noted.Services;
 using Noted.ViewModels;
 
@@ -15,6 +16,7 @@ public partial class App : Application
     private static readonly TimeSpan RecentBackupInterval = TimeSpan.FromHours(24);
     private Mutex? _singleInstanceMutex;
     private AppSettingsService? _settingsService;
+    private AppThemeManager? _themeManager;
     private NoteFileService? _fileService;
     private MainWindow? _mainWindow;
     private NoteEditorWindow? _noteEditorWindow;
@@ -99,6 +101,10 @@ public partial class App : Application
             var settings = new AppSettingsService();
             settings.PersistenceWarning += Settings_PersistenceWarning;
             _settingsService = settings;
+            _themeManager = new AppThemeManager(
+                Resources,
+                settings.LoadAppThemeMode(),
+                settings.LoadAccentColor());
             _miniPadRecoveryService = new MiniPadRecoveryService(settings.AppDataDirectory);
             var fileService = new NoteFileService(settings);
             startupFileService = fileService;
@@ -225,6 +231,8 @@ public partial class App : Application
             _dictionaryShutdownRegistration = null;
 
             mainWindow?.CleanupResources();
+            _themeManager?.Dispose();
+            _themeManager = null;
             try { _fileService?.Dispose(); } catch (Exception ex) { Debug.WriteLine(ex); }
             WindowManager.ClearAll();
 
