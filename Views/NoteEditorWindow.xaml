@@ -444,6 +444,8 @@
                                                 </ContextMenu.Resources>
                                                 <MenuItem Header="Close Tab"
                                                           Click="CloseTabButton_Click"/>
+                                                <MenuItem Header="Rename..."
+                                                          Click="RenameTabNoteMenuItem_Click"/>
                                                 <Separator/>
                                                 <MenuItem Header="Delete Note..."
                                                           Click="DeleteTabNoteMenuItem_Click"/>

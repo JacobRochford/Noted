@@ -71,7 +71,8 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Text="Enter note title"
+        <TextBlock x:Name="PromptText"
+               Text="Enter note title"
                FontSize="18"
                FontWeight="Bold"
                Foreground="#1A3A4A"
@@ -98,9 +99,9 @@
                     BorderBrush="#D1D5DB"
                     BorderThickness="1"
                     Style="{StaticResource RoundedButton}"/>
-            <Button x:Name="CreateButton"
+            <Button x:Name="ConfirmButton"
                     Content="Create"
-                    Click="CreateButton_Click"
+                    Click="ConfirmButton_Click"
                     Background="#2C6E91"
                     Foreground="White"
                     BorderBrush="#2C6E91"
