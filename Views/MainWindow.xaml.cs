@@ -34,7 +34,9 @@ public partial class MainWindow : Window {
     private HotkeyRegistration? _notesHotkeyRegistration;
     private HotkeyRegistration? _additionalNotesHotkeyRegistration;
     private HotkeyRegistration? _checklistHotkeyRegistration;
+    private HotkeyRegistration? _additionalChecklistHotkeyRegistration;
     private HotkeyRegistration? _dictionaryHotkeyRegistration;
+    private HotkeyRegistration? _additionalDictionaryHotkeyRegistration;
     private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
 
     // UI state
@@ -45,6 +47,7 @@ public partial class MainWindow : Window {
     private bool _cleanupCompleted;
     private bool _hotkeyInitializationInProgress;
     private bool _hotkeysInitialized;
+    private HotkeyFeature? _editingHotkeyFeature;
     private bool _isNoActivateTemporarilyStripped;
     private bool _isCommittingRename;
     private bool _lastBackupAttemptFailed;
@@ -74,6 +77,13 @@ public partial class MainWindow : Window {
         string? Warning);
 
     private sealed record DisplayOption(string? DeviceName, string Label);
+
+    private enum HotkeyFeature
+    {
+        Notes,
+        Checklist,
+        Dictionary
+    }
 
 
     internal MainWindow(
@@ -105,7 +115,7 @@ public partial class MainWindow : Window {
 
         InitializeEventHandlers();
         InitializeNotesView();
-        InitializeNotesHotkeyEditor();
+        InitializeHotkeyEditor();
         RefreshUserBackupControls();
     }
 
@@ -167,18 +177,18 @@ public partial class MainWindow : Window {
         SetSettingsViewVisible(false);
     }
 
-    private void InitializeNotesHotkeyEditor()
+    private void InitializeHotkeyEditor()
     {
-        NotesHotkeyKeyCombo.ItemsSource = HotkeyConstants.ValidKeys;
-        ModifierCtrl.Checked += (s, e) => UpdateNotesHotkeyPreview();
-        ModifierCtrl.Unchecked += (s, e) => UpdateNotesHotkeyPreview();
-        ModifierAlt.Checked += (s, e) => UpdateNotesHotkeyPreview();
-        ModifierAlt.Unchecked += (s, e) => UpdateNotesHotkeyPreview();
-        ModifierShift.Checked += (s, e) => UpdateNotesHotkeyPreview();
-        ModifierShift.Unchecked += (s, e) => UpdateNotesHotkeyPreview();
-        ModifierWin.Checked += (s, e) => UpdateNotesHotkeyPreview();
-        ModifierWin.Unchecked += (s, e) => UpdateNotesHotkeyPreview();
-        NotesHotkeyKeyCombo.SelectionChanged += (s, e) => UpdateNotesHotkeyPreview();
+        HotkeyKeyCombo.ItemsSource = HotkeyConstants.ValidKeys;
+        HotkeyModifierCtrl.Checked += (s, e) => UpdateHotkeyPreview();
+        HotkeyModifierCtrl.Unchecked += (s, e) => UpdateHotkeyPreview();
+        HotkeyModifierAlt.Checked += (s, e) => UpdateHotkeyPreview();
+        HotkeyModifierAlt.Unchecked += (s, e) => UpdateHotkeyPreview();
+        HotkeyModifierShift.Checked += (s, e) => UpdateHotkeyPreview();
+        HotkeyModifierShift.Unchecked += (s, e) => UpdateHotkeyPreview();
+        HotkeyModifierWin.Checked += (s, e) => UpdateHotkeyPreview();
+        HotkeyModifierWin.Unchecked += (s, e) => UpdateHotkeyPreview();
+        HotkeyKeyCombo.SelectionChanged += (s, e) => UpdateHotkeyPreview();
     }
 
     private void HeaderEditBox_LostFocus(object sender, RoutedEventArgs e)
@@ -338,7 +348,7 @@ public partial class MainWindow : Window {
             }
 
             _hotkeysInitialized = true;
-            SyncNotesHotkeyControls(restoreEditorToActive: true);
+            SyncHotkeyControls(restoreEditorToActive: true);
         }
         catch (Exception exception)
         {
@@ -548,21 +558,7 @@ public partial class MainWindow : Window {
             _viewModel.ShowModifiedSubtitle = showModified;
             ConfirmNoteDeletionOption.IsChecked = _settingsService.LoadConfirmNoteDeletion();
 
-            // Load hotkey settings
-            var (modifiers, key) = _settingsService.LoadNotesHotkey();
-            if (_notesHotkeyRegistration is not null
-                && _additionalNotesHotkeyRegistration is null)
-            {
-                SetNotesHotkeyEditor(
-                    _notesHotkeyRegistration.Modifiers,
-                    _notesHotkeyRegistration.Key);
-            }
-            else
-            {
-                SetNotesHotkeyEditor(modifiers, key);
-            }
-
-            UpdateCurrentNotesHotkeyDisplay();
+            SyncHotkeyControls(restoreEditorToActive: true);
             _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
             _ghostModeOpacity = NormalizeOpacity(
                 _settingsService.LoadGhostModeOpacity(),
@@ -699,79 +695,133 @@ public partial class MainWindow : Window {
     }
 
 
-    private void SetNotesHotkeyEditor(string modifiers, string key)
+    private void EditHotkeyButton_Click(object sender, RoutedEventArgs e)
     {
-        NotesHotkeyKeyCombo.SelectedItem = key;
+        if (sender is not Button button
+            || button.Tag is not string featureText
+            || !Enum.TryParse(featureText, out HotkeyFeature feature))
+            return;
+
+        _editingHotkeyFeature = feature;
+        HotkeyEditorTitle.Text = $"{GetHotkeyFeatureName(feature)} hotkey";
+
+        var registration = GetHotkeyRegistration(feature);
+        var additionalRegistration = GetAdditionalHotkeyRegistration(feature);
+        var (modifiers, key) = registration is not null && additionalRegistration is null
+            ? (registration.Modifiers, registration.Key)
+            : LoadHotkey(feature);
+
+        SetHotkeyEditor(modifiers, key);
+        HotkeyEditorPopup.PlacementTarget = button;
+        HotkeyEditorPopup.IsOpen = true;
+        Dispatcher.InvokeAsync(() => HotkeyKeyCombo.Focus(), DispatcherPriority.Input);
+    }
+
+    private void SetHotkeyEditor(string modifiers, string key)
+    {
+        HotkeyKeyCombo.SelectedItem = key;
 
         var modifierList = modifiers
             .Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        ModifierCtrl.IsChecked = modifierList.Contains("Ctrl");
-        ModifierAlt.IsChecked = modifierList.Contains("Alt");
-        ModifierShift.IsChecked = modifierList.Contains("Shift");
-        ModifierWin.IsChecked = modifierList.Contains("Win");
+        HotkeyModifierCtrl.IsChecked = modifierList.Contains("Ctrl");
+        HotkeyModifierAlt.IsChecked = modifierList.Contains("Alt");
+        HotkeyModifierShift.IsChecked = modifierList.Contains("Shift");
+        HotkeyModifierWin.IsChecked = modifierList.Contains("Win");
 
-        UpdateNotesHotkeyPreview();
+        UpdateHotkeyPreview();
     }
 
-    private void SyncNotesHotkeyControls(bool restoreEditorToActive)
+    private void SyncHotkeyControls(bool restoreEditorToActive)
     {
-        if (restoreEditorToActive
-            && _notesHotkeyRegistration is not null
-            && _additionalNotesHotkeyRegistration is null)
+        if (restoreEditorToActive && _editingHotkeyFeature is { } feature)
         {
-            SetNotesHotkeyEditor(
-                _notesHotkeyRegistration.Modifiers,
-                _notesHotkeyRegistration.Key);
+            var registration = GetHotkeyRegistration(feature);
+            if (registration is not null && GetAdditionalHotkeyRegistration(feature) is null)
+                SetHotkeyEditor(registration.Modifiers, registration.Key);
         }
 
-        UpdateCurrentNotesHotkeyDisplay();
+        UpdateCurrentHotkeyDisplay(
+            CurrentNotesHotkeyDisplay,
+            _notesHotkeyRegistration,
+            _additionalNotesHotkeyRegistration);
+        UpdateCurrentHotkeyDisplay(
+            CurrentChecklistHotkeyDisplay,
+            _checklistHotkeyRegistration,
+            _additionalChecklistHotkeyRegistration);
+        UpdateCurrentHotkeyDisplay(
+            CurrentDictionaryHotkeyDisplay,
+            _dictionaryHotkeyRegistration,
+            _additionalDictionaryHotkeyRegistration);
     }
 
-    private void UpdateCurrentNotesHotkeyDisplay()
+    private static void UpdateCurrentHotkeyDisplay(
+        TextBlock display,
+        HotkeyRegistration? registration,
+        HotkeyRegistration? additionalRegistration)
     {
-        if (_notesHotkeyRegistration is null)
+        if (registration is null)
         {
-            CurrentNotesHotkeyDisplay.Text = "Not registered";
+            display.Text = "Not registered";
+            display.ToolTip = null;
             return;
         }
 
-        if (_additionalNotesHotkeyRegistration is not null)
+        if (additionalRegistration is not null)
         {
-            CurrentNotesHotkeyDisplay.Text =
-                $"Multiple active: {_notesHotkeyRegistration.Combination} and " +
-                _additionalNotesHotkeyRegistration.Combination;
+            display.Text = "Multiple active";
+            display.ToolTip = $"{registration.Combination} and {additionalRegistration.Combination}";
             return;
         }
 
-        CurrentNotesHotkeyDisplay.Text = _notesHotkeyRegistration.Combination;
+        display.Text = registration.Combination;
+        display.ToolTip = null;
     }
 
-
-    private void UpdateNotesHotkeyPreview()
+    private void UpdateHotkeyPreview()
     {
-        // update preview label as user changes hotkey UI
-        var selectedModifiers = new List<string>();
-        if (ModifierCtrl.IsChecked == true) selectedModifiers.Add("Ctrl");
-        if (ModifierAlt.IsChecked == true) selectedModifiers.Add("Alt");
-        if (ModifierShift.IsChecked == true) selectedModifiers.Add("Shift");
-        if (ModifierWin.IsChecked == true) selectedModifiers.Add("Win");
-
-        var selectedKey = NotesHotkeyKeyCombo.SelectedItem as string;
-        var builtHotkey = HotkeyConstants.BuildHotkey(selectedModifiers, selectedKey);
-
-        NotesHotkeyPreview.Text = builtHotkey ?? "(Select modifiers and key)";
+        var selectedModifiers = GetSelectedHotkeyModifiers();
+        var selectedKey = HotkeyKeyCombo.SelectedItem as string;
+        HotkeyPreview.Text = HotkeyConstants.BuildHotkey(selectedModifiers, selectedKey)
+            ?? "Select modifiers and a key";
     }
 
-    private void ApplyNotesHotkeyButton_Click(object sender, RoutedEventArgs e)
+    private List<string> GetSelectedHotkeyModifiers()
     {
         var selectedModifiers = new List<string>();
-        if (ModifierCtrl.IsChecked == true) selectedModifiers.Add("Ctrl");
-        if (ModifierAlt.IsChecked == true) selectedModifiers.Add("Alt");
-        if (ModifierShift.IsChecked == true) selectedModifiers.Add("Shift");
-        if (ModifierWin.IsChecked == true) selectedModifiers.Add("Win");
+        if (HotkeyModifierCtrl.IsChecked == true) selectedModifiers.Add("Ctrl");
+        if (HotkeyModifierAlt.IsChecked == true) selectedModifiers.Add("Alt");
+        if (HotkeyModifierShift.IsChecked == true) selectedModifiers.Add("Shift");
+        if (HotkeyModifierWin.IsChecked == true) selectedModifiers.Add("Win");
+        return selectedModifiers;
+    }
 
-        var selectedKey = NotesHotkeyKeyCombo.SelectedItem as string;
+    private void ResetHotkeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_editingHotkeyFeature is not { } feature)
+            return;
+
+        var (modifiers, key) = GetDefaultHotkey(feature);
+        SetHotkeyEditor(modifiers, key);
+    }
+
+    private void CancelHotkeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        HotkeyEditorPopup.IsOpen = false;
+    }
+
+    private void HotkeyEditorPopup_Closed(object sender, EventArgs e)
+    {
+        _editingHotkeyFeature = null;
+    }
+
+    private void ApplyHotkeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_editingHotkeyFeature is not { } feature)
+            return;
+
+        var selectedModifiers = GetSelectedHotkeyModifiers();
+        var selectedKey = HotkeyKeyCombo.SelectedItem as string;
         var builtHotkey = HotkeyConstants.BuildHotkey(selectedModifiers, selectedKey);
 
         if (selectedModifiers.Count == 0
@@ -786,7 +836,7 @@ public partial class MainWindow : Window {
             return;
         }
 
-        var modifiers = string.Join("+", selectedModifiers);
+        var featureName = GetHotkeyFeatureName(feature);
         if (_globalHotkeysService is null)
         {
             AppDialog.Show(
@@ -794,14 +844,16 @@ public partial class MainWindow : Window {
                 "Hotkey Update Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
-            UpdateCurrentNotesHotkeyDisplay();
+            SyncHotkeyControls(restoreEditorToActive: false);
             return;
         }
 
-        var validation = _globalHotkeysService.Validate(modifiers, selectedKey);
+        var validation = _globalHotkeysService.Validate(
+            string.Join("+", selectedModifiers),
+            selectedKey);
         if (!validation.Success || validation.Modifiers is null || validation.Key is null)
         {
-            SyncNotesHotkeyControls(restoreEditorToActive: true);
+            SyncHotkeyControls(restoreEditorToActive: true);
             AppDialog.Show(
                 validation.Description,
                 "Invalid Hotkey Selection",
@@ -810,11 +862,11 @@ public partial class MainWindow : Window {
             return;
         }
 
-        if (_additionalNotesHotkeyRegistration is not null)
+        if (GetAdditionalHotkeyRegistration(feature) is not null)
         {
-            UpdateCurrentNotesHotkeyDisplay();
+            SyncHotkeyControls(restoreEditorToActive: false);
             AppDialog.Show(
-                "Multiple Notes hotkeys may still be active after an earlier rollback failure. " +
+                $"Multiple {featureName} hotkeys may still be active after an earlier rollback failure. " +
                 "Restart Noted before attempting another replacement.",
                 "Hotkey State Is Ambiguous",
                 MessageBoxButton.OK,
@@ -823,20 +875,22 @@ public partial class MainWindow : Window {
         }
 
         var replacement = _globalHotkeysService.Replace(
-            "Notes",
-            _notesHotkeyRegistration,
+            featureName,
+            GetHotkeyRegistration(feature),
             validation.Modifiers,
             validation.Key,
-            OnNotesHotkeyPressed);
+            GetHotkeyAction(feature));
 
-        _notesHotkeyRegistration = replacement.ActiveRegistration;
-        _additionalNotesHotkeyRegistration = replacement.AdditionalActiveRegistration;
+        SetHotkeyRegistrations(
+            feature,
+            replacement.ActiveRegistration,
+            replacement.AdditionalActiveRegistration);
 
         if (!replacement.Success)
         {
-            SyncNotesHotkeyControls(
+            SyncHotkeyControls(
                 restoreEditorToActive: !replacement.HasDualActiveRegistrations
-                    && _notesHotkeyRegistration is not null);
+                    && replacement.ActiveRegistration is not null);
             AppDialog.Show(
                 replacement.Description,
                 replacement.HasDualActiveRegistrations
@@ -847,20 +901,24 @@ public partial class MainWindow : Window {
             return;
         }
 
-        SyncNotesHotkeyControls(restoreEditorToActive: true);
-        if (replacement.NoChange || _notesHotkeyRegistration is null)
+        SyncHotkeyControls(restoreEditorToActive: true);
+        if (replacement.NoChange || replacement.ActiveRegistration is null)
+        {
+            HotkeyEditorPopup.IsOpen = false;
             return;
+        }
 
         try
         {
-            _settingsService.SaveNotesHotkey(
-                _notesHotkeyRegistration.Modifiers,
-                _notesHotkeyRegistration.Key);
+            SaveHotkey(
+                feature,
+                replacement.ActiveRegistration.Modifiers,
+                replacement.ActiveRegistration.Key);
         }
         catch (Exception exception)
         {
             AppDialog.Show(
-                $"The hotkey is active as {_notesHotkeyRegistration.Combination}, " +
+                $"The hotkey is active as {replacement.ActiveRegistration.Combination}, " +
                 $"but the setting could not be saved: {exception.Message}",
                 "Hotkey Active but Not Saved",
                 MessageBoxButton.OK,
@@ -868,12 +926,99 @@ public partial class MainWindow : Window {
             return;
         }
 
+        HotkeyEditorPopup.IsOpen = false;
         AppDialog.Show(
-            $"Notes hotkey updated to: {_notesHotkeyRegistration.Combination}",
+            $"{featureName} hotkey updated to: {replacement.ActiveRegistration.Combination}",
             "Hotkey Updated",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
     }
+
+    private HotkeyRegistration? GetHotkeyRegistration(HotkeyFeature feature) => feature switch
+    {
+        HotkeyFeature.Notes => _notesHotkeyRegistration,
+        HotkeyFeature.Checklist => _checklistHotkeyRegistration,
+        HotkeyFeature.Dictionary => _dictionaryHotkeyRegistration,
+        _ => null
+    };
+
+    private HotkeyRegistration? GetAdditionalHotkeyRegistration(HotkeyFeature feature) => feature switch
+    {
+        HotkeyFeature.Notes => _additionalNotesHotkeyRegistration,
+        HotkeyFeature.Checklist => _additionalChecklistHotkeyRegistration,
+        HotkeyFeature.Dictionary => _additionalDictionaryHotkeyRegistration,
+        _ => null
+    };
+
+    private void SetHotkeyRegistrations(
+        HotkeyFeature feature,
+        HotkeyRegistration? registration,
+        HotkeyRegistration? additionalRegistration)
+    {
+        switch (feature)
+        {
+            case HotkeyFeature.Notes:
+                _notesHotkeyRegistration = registration;
+                _additionalNotesHotkeyRegistration = additionalRegistration;
+                break;
+            case HotkeyFeature.Checklist:
+                _checklistHotkeyRegistration = registration;
+                _additionalChecklistHotkeyRegistration = additionalRegistration;
+                break;
+            case HotkeyFeature.Dictionary:
+                _dictionaryHotkeyRegistration = registration;
+                _additionalDictionaryHotkeyRegistration = additionalRegistration;
+                break;
+        }
+    }
+
+    private (string Modifiers, string Key) LoadHotkey(HotkeyFeature feature) => feature switch
+    {
+        HotkeyFeature.Notes => _settingsService.LoadNotesHotkey(),
+        HotkeyFeature.Checklist => _settingsService.LoadChecklistHotkey(),
+        HotkeyFeature.Dictionary => _settingsService.LoadDictionaryHotkey(),
+        _ => GetDefaultHotkey(feature)
+    };
+
+    private void SaveHotkey(HotkeyFeature feature, string modifiers, string key)
+    {
+        switch (feature)
+        {
+            case HotkeyFeature.Notes:
+                _settingsService.SaveNotesHotkey(modifiers, key);
+                break;
+            case HotkeyFeature.Checklist:
+                _settingsService.SaveChecklistHotkey(modifiers, key);
+                break;
+            case HotkeyFeature.Dictionary:
+                _settingsService.SaveDictionaryHotkey(modifiers, key);
+                break;
+        }
+    }
+
+    private static (string Modifiers, string Key) GetDefaultHotkey(HotkeyFeature feature) => feature switch
+    {
+        HotkeyFeature.Notes => ("Ctrl+Shift", "Space"),
+        HotkeyFeature.Checklist => ("Alt", "C"),
+        HotkeyFeature.Dictionary => ("Alt", "D"),
+        _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
+    };
+
+    private Action GetHotkeyAction(HotkeyFeature feature) => feature switch
+    {
+        HotkeyFeature.Notes => OnNotesHotkeyPressed,
+        HotkeyFeature.Checklist => OnChecklistHotkeyPressed,
+        HotkeyFeature.Dictionary => OnDictionaryHotkeyPressed,
+        _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
+    };
+
+    private static string GetHotkeyFeatureName(HotkeyFeature feature) => feature switch
+    {
+        HotkeyFeature.Notes => "Notes",
+        HotkeyFeature.Checklist => "Checklist",
+        HotkeyFeature.Dictionary => "Dictionary",
+        _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
+    };
 
     private void ShowModifiedSubtitleOption_Changed(object sender, RoutedEventArgs e)
     {
@@ -2127,7 +2272,10 @@ public partial class MainWindow : Window {
         _notesHotkeyRegistration = null;
         _additionalNotesHotkeyRegistration = null;
         _checklistHotkeyRegistration = null;
+        _additionalChecklistHotkeyRegistration = null;
         _dictionaryHotkeyRegistration = null;
+        _additionalDictionaryHotkeyRegistration = null;
+        _editingHotkeyFeature = null;
         _hotkeysInitialized = false;
         _notesPanelResizer.Dispose();
 

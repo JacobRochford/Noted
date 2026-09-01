@@ -1409,107 +1409,186 @@
                                     Padding="12"
                                     Margin="0,0,0,10">
                                 <StackPanel>
-                                    <TextBlock Text="Notes Hotkey"
+                                    <TextBlock Text="Hotkeys"
                                                FontSize="12"
                                                FontWeight="SemiBold"
                                                Foreground="#355A6E"
-                                               Margin="0,0,0,8"/>
-                                    <TextBlock Text="Show or hide Noted with a keyboard shortcut"
+                                               Margin="0,0,0,4"/>
+                                    <TextBlock Text="Show or hide a window with a keyboard shortcut"
                                                FontSize="11"
                                                Foreground="#5F7480"
                                                TextWrapping="Wrap"
                                                Margin="0,0,0,8"/>
-                                    <Grid Margin="0,0,0,8">
+
+                                    <Grid Height="32">
                                         <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="78"/>
                                             <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="30"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Current: "
-                                                   Grid.Column="0"
-                                                   Foreground="#5F7480"
-                                                   VerticalAlignment="Center"
-                                                   Margin="0,0,8,0"/>
+                                        <TextBlock Text="Notes"
+                                                   Foreground="#355A6E"
+                                                   VerticalAlignment="Center"/>
                                         <TextBlock x:Name="CurrentNotesHotkeyDisplay"
                                                    Grid.Column="1"
                                                    Foreground="#2C6E91"
                                                    FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"
                                                    VerticalAlignment="Center"
-                                                   Margin="0,0,12,0"
-                                                   MinWidth="80"
-                                                   TextAlignment="Center"/>
+                                                   HorizontalAlignment="Right"
+                                                   Margin="4,0,4,0"/>
+                                        <Button Grid.Column="2"
+                                                Tag="Notes"
+                                                Click="EditHotkeyButton_Click"
+                                                Style="{StaticResource HeaderChromeButtonStyle}"
+                                                ToolTip="Change Notes hotkey"
+                                                AutomationProperties.Name="Change Notes hotkey">
+                                            <TextBlock Text="✎" FontSize="13"/>
+                                        </Button>
                                     </Grid>
-                                    <StackPanel Margin="0,0,0,12">
-                                        <TextBlock Text="Select Modifiers"
-                                                   FontSize="10"
-                                                   Foreground="#5F7480"
-                                                   Margin="0,0,0,6"/>
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                            <CheckBox x:Name="ModifierCtrl" Content="Ctrl" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                                            <CheckBox x:Name="ModifierAlt" Content="Alt" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                                            <CheckBox x:Name="ModifierShift" Content="Shift" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                                            <CheckBox x:Name="ModifierWin" Content="Win" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                        
-                                        <TextBlock Text="Select Key"
-                                                   FontSize="10"
-                                                   Foreground="#5F7480"
-                                                   Margin="0,0,0,4"/>
-                                        <ComboBox x:Name="NotesHotkeyKeyCombo"
-                                                  Foreground="#355A6E"
-                                                  Background="#FFFFFF"
-                                                  BorderBrush="#C9DFEC"
-                                                  BorderThickness="1"
-                                                  Padding="8,6"
-                                                  FontSize="11"
-                                                  Margin="0,0,0,12"/>
-                                        
-                                        <TextBlock Text="Preview"
-                                                   FontSize="10"
-                                                   Foreground="#5F7480"
-                                                   Margin="0,0,0,4"/>
-                                        <Border BorderBrush="#C9DFEC"
+                                    <Border Height="1" Background="#D8E8F1"/>
+                                    <Grid Height="32">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="78"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="30"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Checklist"
+                                                   Foreground="#355A6E"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="CurrentChecklistHotkeyDisplay"
+                                                   Grid.Column="1"
+                                                   Foreground="#2C6E91"
+                                                   FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center"
+                                                   HorizontalAlignment="Right"
+                                                   Margin="4,0,4,0"/>
+                                        <Button Grid.Column="2"
+                                                Tag="Checklist"
+                                                Click="EditHotkeyButton_Click"
+                                                Style="{StaticResource HeaderChromeButtonStyle}"
+                                                ToolTip="Change Checklist hotkey"
+                                                AutomationProperties.Name="Change Checklist hotkey">
+                                            <TextBlock Text="✎" FontSize="13"/>
+                                        </Button>
+                                    </Grid>
+                                    <Border Height="1" Background="#D8E8F1"/>
+                                    <Grid Height="32">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="78"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="30"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Dictionary"
+                                                   Foreground="#355A6E"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="CurrentDictionaryHotkeyDisplay"
+                                                   Grid.Column="1"
+                                                   Foreground="#2C6E91"
+                                                   FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center"
+                                                   HorizontalAlignment="Right"
+                                                   Margin="4,0,4,0"/>
+                                        <Button Grid.Column="2"
+                                                Tag="Dictionary"
+                                                Click="EditHotkeyButton_Click"
+                                                Style="{StaticResource HeaderChromeButtonStyle}"
+                                                ToolTip="Change Dictionary hotkey"
+                                                AutomationProperties.Name="Change Dictionary hotkey">
+                                            <TextBlock Text="✎" FontSize="13"/>
+                                        </Button>
+                                    </Grid>
+
+                                    <Popup x:Name="HotkeyEditorPopup"
+                                           Placement="Bottom"
+                                           HorizontalOffset="-220"
+                                           AllowsTransparency="True"
+                                           PopupAnimation="Fade"
+                                           StaysOpen="False"
+                                           Closed="HotkeyEditorPopup_Closed">
+                                        <Border Width="250"
+                                                Padding="12"
+                                                Background="#F5F9FC"
+                                                BorderBrush="#87CEEB"
                                                 BorderThickness="1"
-                                                Background="#FFFFFF"
-                                                Padding="8,6"
-                                                Margin="0,0,0,8">
-                                            <TextBlock x:Name="NotesHotkeyPreview"
-                                                       Text="(Select modifiers and key)"
-                                                       FontSize="11"
-                                                       Foreground="#355A6E"/>
-                                        </Border>
-                                    </StackPanel>
-                                    <Button x:Name="ApplyNotesHotkeyButton"
-                                            Content="Apply Hotkey"
-                                            Click="ApplyNotesHotkeyButton_Click"
-                                            FontSize="11"
-                                            FontWeight="SemiBold"
-                                            Foreground="#2C6E91"
-                                            Cursor="Hand"
-                                            Padding="8,3"
-                                            HorizontalAlignment="Left"
-                                            Background="Transparent"
-                                            BorderBrush="#9EC7DB"
-                                            BorderThickness="1">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border x:Name="bg"
-                                                        Background="#EFF7FB"
-                                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                                        BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="6"
-                                                        Padding="{TemplateBinding Padding}">
-                                                    <ContentPresenter HorizontalAlignment="Center"
-                                                                      VerticalAlignment="Center"/>
+                                                CornerRadius="7">
+                                            <Border.Effect>
+                                                <DropShadowEffect BlurRadius="12"
+                                                                  ShadowDepth="3"
+                                                                  Opacity="0.2"
+                                                                  Color="#000000"/>
+                                            </Border.Effect>
+                                            <StackPanel>
+                                                <TextBlock x:Name="HotkeyEditorTitle"
+                                                           Margin="0,0,0,9"
+                                                           Foreground="#2C6E91"
+                                                           FontSize="12"
+                                                           FontWeight="SemiBold"/>
+                                                <WrapPanel Margin="0,0,0,9">
+                                                    <CheckBox x:Name="HotkeyModifierCtrl" Content="Ctrl" Margin="0,0,12,5"/>
+                                                    <CheckBox x:Name="HotkeyModifierAlt" Content="Alt" Margin="0,0,12,5"/>
+                                                    <CheckBox x:Name="HotkeyModifierShift" Content="Shift" Margin="0,0,12,5"/>
+                                                    <CheckBox x:Name="HotkeyModifierWin" Content="Win" Margin="0,0,0,5"/>
+                                                </WrapPanel>
+                                                <ComboBox x:Name="HotkeyKeyCombo"
+                                                          Foreground="#355A6E"
+                                                          Background="#FFFFFF"
+                                                          BorderBrush="#C9DFEC"
+                                                          BorderThickness="1"
+                                                          Padding="8,5"
+                                                          FontSize="11"
+                                                          Margin="0,0,0,8"/>
+                                                <Border BorderBrush="#C9DFEC"
+                                                        BorderThickness="1"
+                                                        Background="#FFFFFF"
+                                                        Padding="8,5"
+                                                        Margin="0,0,0,10">
+                                                    <TextBlock x:Name="HotkeyPreview"
+                                                               Text="Select modifiers and a key"
+                                                               FontSize="11"
+                                                               Foreground="#355A6E"/>
                                                 </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="bg" Property="Background" Value="#DCEEF8"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Button Content="Reset"
+                                                            Click="ResetHotkeyButton_Click"
+                                                            FontSize="11"
+                                                            Foreground="#5F7480"
+                                                            Cursor="Hand"
+                                                            Padding="4,3"
+                                                            HorizontalAlignment="Left"
+                                                            Background="Transparent"
+                                                            BorderThickness="0"/>
+                                                    <Button Grid.Column="1"
+                                                            Content="Cancel"
+                                                            Click="CancelHotkeyButton_Click"
+                                                            FontSize="11"
+                                                            Foreground="#5F7480"
+                                                            Cursor="Hand"
+                                                            Padding="7,3"
+                                                            Margin="0,0,5,0"
+                                                            Background="Transparent"
+                                                            BorderThickness="0"/>
+                                                    <Button Grid.Column="2"
+                                                            Content="Apply"
+                                                            Click="ApplyHotkeyButton_Click"
+                                                            FontSize="11"
+                                                            FontWeight="SemiBold"
+                                                            Foreground="White"
+                                                            Cursor="Hand"
+                                                            Padding="9,4"
+                                                            Background="#5BA8C8"
+                                                            BorderThickness="0"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </Popup>
                                 </StackPanel>
                             </Border>
 
