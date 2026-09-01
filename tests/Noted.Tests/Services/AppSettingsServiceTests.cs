@@ -566,6 +566,31 @@ public sealed class AppSettingsServiceTests
         Assert.IsTrue(miniPadState.ReopenOnStartup);
     }
 
+    [TestMethod]
+    public void ChecklistPriorityColorsPersistWithWindowSettings()
+    {
+        using var directory = new TestDirectory();
+        var service = CreateService(directory.Path);
+
+        service.SaveChecklistWindowState(new ChecklistWindowState
+        {
+            PriorityColors = new ChecklistPriorityColors
+            {
+                HighColor = "#800000",
+                MediumColor = "#FFD700",
+                LowColor = "#008080"
+            }
+        });
+
+        var colors = CreateService(directory.Path)
+            .LoadChecklistWindowState()
+            .PriorityColors;
+
+        Assert.AreEqual("#800000", colors.HighColor);
+        Assert.AreEqual("#FFD700", colors.MediumColor);
+        Assert.AreEqual("#008080", colors.LowColor);
+    }
+
     private static AppSettingsService CreateService(
         string path,
         TimeProvider? clock = null,
