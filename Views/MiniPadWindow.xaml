@@ -2,7 +2,6 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:noted="clr-namespace:Noted"
-        xmlns:Primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         Title="MiniPad"
         Width="320"
         Height="240"
@@ -11,7 +10,6 @@
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         AllowsTransparency="True"
-        ResizeMode="NoResize"
         ShowInTaskbar="False"
         Topmost="True"
         Background="Transparent">
@@ -181,24 +179,5 @@
             </Grid>
         </Border>
 
-        <Primitives:Thumb x:Name="ResizeThumb"
-                          Width="18"
-                          Height="18"
-                          HorizontalAlignment="Right"
-                          VerticalAlignment="Bottom"
-                          Background="Transparent"
-                          Cursor="SizeNWSE"
-                          Opacity="0"
-                          Panel.ZIndex="999"
-                          DragDelta="ResizeThumb_DragDelta"
-                          DragCompleted="ResizeThumb_DragCompleted"/>
-        <TextBlock Text="◢"
-                   Margin="0,0,4,3"
-                   HorizontalAlignment="Right"
-                   VerticalAlignment="Bottom"
-                   Foreground="#B8CDD7"
-                   FontSize="9"
-                   IsHitTestVisible="False"
-                   Panel.ZIndex="998"/>
     </Grid>
 </noted:OverlayWindow>

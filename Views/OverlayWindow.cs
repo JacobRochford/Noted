@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media.Animation;
@@ -12,6 +11,7 @@ namespace Noted;
 public abstract class OverlayWindow : Window
 {
     private bool _isChangingGroupVisibility;
+    private WindowEdgeResizer? _edgeResizer;
 
     protected bool _ghostModeEnabled;
     protected double _ghostModeOpacity;
@@ -19,6 +19,7 @@ public abstract class OverlayWindow : Window
 
     protected void InitializeOverlay(bool ghostModeEnabled, double ghostModeOpacity, double defaultOpacity)
     {
+        _edgeResizer ??= new WindowEdgeResizer(this, SaveWindowState);
         _ghostModeEnabled = ghostModeEnabled;
         _ghostModeOpacity = NormalizeOpacity(ghostModeOpacity, 0.25);
         _defaultOpacity = NormalizeOpacity(defaultOpacity, 0.88);
@@ -95,19 +96,6 @@ public abstract class OverlayWindow : Window
     }
 
     protected virtual void OnTitleBarDoubleClick() { }
-
-    protected void ResizeThumb_DragDelta(object sender, DragDeltaEventArgs e)
-    {
-        if (Width + e.HorizontalChange >= MinWidth)
-            Width += e.HorizontalChange;
-        if (Height + e.VerticalChange >= MinHeight)
-            Height += e.VerticalChange;
-    }
-
-    protected void ResizeThumb_DragCompleted(object sender, DragCompletedEventArgs e)
-    {
-        SaveWindowState();
-    }
 
     protected void ApplyGhostMode(bool enabled)
     {
