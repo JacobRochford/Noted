@@ -94,6 +94,20 @@ public partial class ChecklistWindow : OverlayWindow
 
     protected override void OnTitleBarDoubleClick() => ToggleWindow();
 
+    protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
+    {
+        if (Keyboard.FocusedElement is TextBox { Name: "ItemTitleTextBox" } textBox &&
+            !ReferenceEquals(
+                VisualTreeHelpers.FindAncestor<TextBox>(e.OriginalSource as DependencyObject),
+                textBox))
+        {
+            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            ItemsList.Focus();
+        }
+
+        base.OnPreviewMouseDown(e);
+    }
+
     protected override void SaveWindowState()
     {
         _settingsService.SaveChecklistWindowState(new ChecklistWindowState
