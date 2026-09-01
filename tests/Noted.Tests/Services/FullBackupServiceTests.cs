@@ -10,6 +10,161 @@ namespace Noted.Tests.Services;
 public sealed class FullBackupServiceTests
 {
     [TestMethod]
+    public void BackupPreviewVerifiesFilesAndComparesRestoreLocations()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var paths = CreateSourceData(directory);
+        var service = new FullBackupService(paths.AppData, paths.Notes);
+        Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
+
+        File.WriteAllText(Path.Combine(paths.Notes, "one.txt"), "changed note");
+        File.Delete(Path.Combine(paths.Notes, ".archive", "archived.md"));
+        var dictionaryPath = Path.Combine(paths.AppData, "dictionary.json");
+        File.Delete(dictionaryPath);
+        Directory.CreateDirectory(dictionaryPath);
+
+        var preview = service.GetUserBackupPreview();
+
+        Assert.IsTrue(preview.Exists);
+        Assert.IsTrue(preview.IsValid);
+        Assert.IsNull(preview.Error);
+        Assert.AreEqual(
+            BackupFileComparison.Changed,
+            preview.Files.Single(file => file.LogicalPath == "notes/one.txt").Comparison);
+        Assert.AreEqual(
+            BackupFileComparison.Missing,
+            preview.Files.Single(file => file.LogicalPath == "notes/.archive/archived.md").Comparison);
+        Assert.AreEqual(
+            BackupFileComparison.Unavailable,
+            preview.Files.Single(file => file.LogicalPath == "app/dictionary.json").Comparison);
+        Assert.AreEqual(
+            BackupFileComparison.Unchanged,
+            preview.Files.Single(file => file.LogicalPath == "app/settings.json").Comparison);
+        Assert.AreEqual(
+            2,
+            preview.Files.Single(file => file.LogicalPath == "app/checklist.json").ItemCount);
+    }
+
+    [TestMethod]
+    public void BackupFilePreviewReturnsVerifiedContentInItsStoredFormat()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var paths = CreateSourceData(directory);
+        var service = new FullBackupService(paths.AppData, paths.Notes);
+        Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
+
+        var preview = service.GetUserBackupPreview();
+        var note = service.ReadUserBackupFile(
+            preview.BackupId,
+            preview.Files.Single(file => file.LogicalPath == "notes/one.txt"));
+        var checklist = service.ReadUserBackupFile(
+            preview.BackupId,
+            preview.Files.Single(file => file.LogicalPath == "app/checklist.json"));
+        var scratchpad = service.ReadUserBackupFile(
+            preview.BackupId,
+            preview.Files.Single(file => file.LogicalPath == "app/scratchpad.rtf"));
+
+        Assert.IsTrue(note.Success);
+        Assert.AreEqual(BackupContentFormat.Text, note.Format);
+        Assert.AreEqual("note one", System.Text.Encoding.UTF8.GetString(note.Data!));
+        Assert.IsTrue(checklist.Success);
+        Assert.AreEqual(BackupContentFormat.Json, checklist.Format);
+        Assert.HasCount(
+            2,
+            JsonSerializer.Deserialize<List<ChecklistItemState>>(checklist.Data!)!);
+        Assert.IsTrue(scratchpad.Success);
+        Assert.AreEqual(BackupContentFormat.RichText, scratchpad.Format);
+    }
+
+    [TestMethod]
+    public void BackupFilePreviewRefusesContentAfterBackupIsChanged()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var paths = CreateSourceData(directory);
+        var service = new FullBackupService(paths.AppData, paths.Notes);
+        Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
+        var preview = service.GetUserBackupPreview();
+        var note = preview.Files.Single(file => file.LogicalPath == "notes/one.txt");
+        File.WriteAllText(
+            Path.Combine(service.BackupDirectory, "protected", "files", "notes", "one.txt"),
+            "changed backup");
+
+        var content = service.ReadUserBackupFile(preview.BackupId, note);
+
+        Assert.IsFalse(content.Success);
+        Assert.IsTrue(content.NeedsRecheck);
+        Assert.IsNull(content.Data);
+        StringAssert.Contains(content.Error, "could not be verified");
+    }
+
+    [TestMethod]
+    public void BackupPreviewComparesNotesWithTheRestoreFolderFromTheBackup()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var paths = CreateSourceData(directory);
+        var service = new FullBackupService(paths.AppData, paths.Notes);
+        Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
+        var otherNotes = directory.File("other-notes");
+        Directory.CreateDirectory(otherNotes);
+        File.WriteAllText(Path.Combine(otherNotes, "one.txt"), "different folder");
+        service.UpdateNotesDirectory(otherNotes);
+
+        var preview = service.GetUserBackupPreview();
+
+        Assert.AreEqual(
+            BackupFileComparison.Unchanged,
+            preview.Files.Single(file => file.LogicalPath == "notes/one.txt").Comparison);
+    }
+
+    [TestMethod]
+    public void OpenPreviewRefusesFilesFromAReplacementBackup()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var paths = CreateSourceData(directory);
+        var firstRun = new FullBackupService(paths.AppData, paths.Notes);
+        Assert.AreEqual(FullBackupStatus.Created, firstRun.CreateOrUpdateUserBackup().Status);
+        var preview = firstRun.GetUserBackupPreview();
+        var oldNote = preview.Files.Single(file => file.LogicalPath == "notes/one.txt");
+        File.WriteAllText(Path.Combine(paths.Notes, "one.txt"), "replacement backup note");
+        var secondRun = new FullBackupService(paths.AppData, paths.Notes);
+        Assert.AreEqual(FullBackupStatus.Created, secondRun.CreateOrUpdateUserBackup().Status);
+
+        var content = secondRun.ReadUserBackupFile(preview.BackupId, oldNote);
+
+        Assert.IsFalse(content.Success);
+        Assert.IsTrue(content.NeedsRecheck);
+        StringAssert.Contains(content.Error, "changed after this preview was opened");
+    }
+
+    [TestMethod]
+    public void BackupWithUnknownRestorePathIsInvalidBeforeRestoreStarts()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var paths = CreateSourceData(directory);
+        var service = new FullBackupService(paths.AppData, paths.Notes);
+        Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
+        var backupPath = Path.Combine(service.BackupDirectory, "protected");
+        var oldFilePath = Path.Combine(backupPath, "files", "notes", "one.txt");
+        var newFilePath = Path.Combine(backupPath, "files", "other", "one.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(newFilePath)!);
+        File.Move(oldFilePath, newFilePath);
+        var manifestPath = Path.Combine(backupPath, "manifest.json");
+        File.WriteAllText(
+            manifestPath,
+            File.ReadAllText(manifestPath).Replace(
+                "notes/one.txt",
+                "other/one.txt",
+                StringComparison.Ordinal));
+
+        var info = service.GetUserBackupInfo();
+        var restore = service.ScheduleUserBackupRestore();
+
+        Assert.IsFalse(info.IsValid);
+        Assert.AreEqual(FullBackupStatus.Blocked, restore.Status);
+        Assert.IsFalse(File.Exists(Path.Combine(service.BackupDirectory, "restore-request.json")));
+    }
+
+    [TestMethod]
     public void FirstUserBackupStoresVerifiedCurrentData()
     {
         using var directory = new TemporaryTestDirectory();

@@ -116,6 +116,8 @@ public partial class App : Application
                 new RunOnStartupService(),
                 CreateOrUpdateUserBackup,
                 GetUserBackupInfo,
+                GetUserBackupPreview,
+                ReadUserBackupFile,
                 RequestUserBackupRestore);
             _fileService = fileService;
             _noteEditorWindow = noteEditor;
@@ -511,6 +513,27 @@ public partial class App : Application
     private FullBackupInfo GetUserBackupInfo() =>
         _fullBackupService?.GetUserBackupInfo()
         ?? new FullBackupInfo(false, false, null, 0, "Backups are not available.");
+
+    private FullBackupPreview GetUserBackupPreview() =>
+        _fullBackupService?.GetUserBackupPreview()
+        ?? new FullBackupPreview(
+            false,
+            false,
+            Guid.Empty,
+            null,
+            [],
+            "Backups are not available.");
+
+    private BackupFileContent ReadUserBackupFile(
+        Guid backupId,
+        BackupFileSummary file) =>
+        _fullBackupService?.ReadUserBackupFile(backupId, file)
+        ?? new BackupFileContent(
+            false,
+            false,
+            BackupContentFormat.Text,
+            null,
+            "Backups are not available.");
 
     private FullBackupResult CreateOrUpdateUserBackup()
     {

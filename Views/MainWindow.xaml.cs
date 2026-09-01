@@ -27,6 +27,8 @@ public partial class MainWindow : Window {
     private readonly IRunOnStartupService _runOnStartupService;
     private readonly Func<FullBackupResult> _createOrUpdateUserBackup;
     private readonly Func<FullBackupInfo> _getUserBackupInfo;
+    private readonly Func<FullBackupPreview> _getUserBackupPreview;
+    private readonly Func<Guid, BackupFileSummary, BackupFileContent> _readUserBackupFile;
     private readonly Action _requestUserBackupRestore;
     private readonly MainWindowViewModel _viewModel;
     private readonly CanvasEdgeResizer _notesPanelResizer;
@@ -93,6 +95,8 @@ public partial class MainWindow : Window {
             IRunOnStartupService runOnStartupService,
             Func<FullBackupResult> createOrUpdateUserBackup,
             Func<FullBackupInfo> getUserBackupInfo,
+            Func<FullBackupPreview> getUserBackupPreview,
+            Func<Guid, BackupFileSummary, BackupFileContent> readUserBackupFile,
             Action requestUserBackupRestore
         )
     {
@@ -105,6 +109,8 @@ public partial class MainWindow : Window {
         _runOnStartupService = runOnStartupService;
         _createOrUpdateUserBackup = createOrUpdateUserBackup;
         _getUserBackupInfo = getUserBackupInfo;
+        _getUserBackupPreview = getUserBackupPreview;
+        _readUserBackupFile = readUserBackupFile;
         _requestUserBackupRestore = requestUserBackupRestore;
 
         _viewModel = new MainWindowViewModel(_fileService, _settingsService, action => Dispatcher.Invoke(action));
@@ -1304,6 +1310,79 @@ public partial class MainWindow : Window {
 
     private void RestoreBackupButton_Click(object sender, RoutedEventArgs e)
     {
+        ConfirmAndRequestBackupRestore();
+    }
+
+    private async void ViewBackupButton_Click(object sender, RoutedEventArgs e)
+    {
+        var previousCursor = Mouse.OverrideCursor;
+        var previousStatus = BackupStatusText.Text;
+        var previousStatusBrush = BackupStatusText.Foreground;
+        var createWasEnabled = CreateOrUpdateBackupButton.IsEnabled;
+        var viewWasEnabled = ViewBackupButton.IsEnabled;
+        var restoreWasEnabled = RestoreBackupButton.IsEnabled;
+        CreateOrUpdateBackupButton.IsEnabled = false;
+        ViewBackupButton.IsEnabled = false;
+        RestoreBackupButton.IsEnabled = false;
+        BackupStatusText.Text = "Checking backup contents...";
+        BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
+        Mouse.OverrideCursor = Cursors.Wait;
+
+        FullBackupPreview preview;
+        try
+        {
+            preview = await Task.Run(_getUserBackupPreview);
+        }
+        finally
+        {
+            Mouse.OverrideCursor = previousCursor;
+            CreateOrUpdateBackupButton.IsEnabled = createWasEnabled;
+            ViewBackupButton.IsEnabled = viewWasEnabled;
+            RestoreBackupButton.IsEnabled = restoreWasEnabled;
+            BackupStatusText.Text = previousStatus;
+            BackupStatusText.Foreground = previousStatusBrush;
+        }
+
+        if (!preview.IsValid)
+        {
+            RefreshUserBackupControls();
+            AppDialog.Show(
+                this,
+                preview.Exists
+                    ? $"The backup could not be verified: {preview.Error}"
+                    : "No backup exists yet.",
+                "View Backup",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var dialog = new BackupPreviewDialog(preview, _readUserBackupFile)
+        {
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.Manual
+        };
+        var panelLocation = NotesPanel.TranslatePoint(new Point(0, 0), this);
+        var bounds = WindowInterop.NormalizeWindowBounds(
+            Left + panelLocation.X + ((NotesPanel.ActualWidth - dialog.Width) / 2),
+            Top + panelLocation.Y + ((NotesPanel.ActualHeight - dialog.Height) / 2),
+            dialog.Width,
+            dialog.Height,
+            dialog.MinWidth,
+            dialog.MinHeight,
+            dialog.Width,
+            dialog.Height);
+        dialog.Left = bounds.Left;
+        dialog.Top = bounds.Top;
+        dialog.Width = bounds.Width;
+        dialog.Height = bounds.Height;
+
+        if (dialog.ShowDialog() == true)
+            ConfirmAndRequestBackupRestore();
+    }
+
+    private void ConfirmAndRequestBackupRestore()
+    {
         var backupInfo = _getUserBackupInfo();
         if (!backupInfo.IsValid)
         {
@@ -1328,6 +1407,7 @@ public partial class MainWindow : Window {
     private void RunBackupCommand(Func<FullBackupResult> command)
     {
         CreateOrUpdateBackupButton.IsEnabled = false;
+        ViewBackupButton.IsEnabled = false;
         RestoreBackupButton.IsEnabled = false;
         BackupStatusText.Text = "Checking and copying current data...";
         BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
@@ -1370,6 +1450,7 @@ public partial class MainWindow : Window {
             ? "Update Backup"
             : "Create Backup";
         RestoreBackupButton.IsEnabled = backupInfo.IsValid;
+        ViewBackupButton.IsEnabled = backupInfo.IsValid;
 
         if (!updateStatusText)
             return;
