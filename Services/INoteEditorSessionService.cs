@@ -6,6 +6,7 @@ public sealed record NoteEditorTabState
     public int CaretIndex { get; init; }
     public double VerticalOffset { get; init; }
     public bool MarkdownPreviewEnabled { get; init; }
+    public bool UsesGeneratedName { get; init; }
 }
 
 public sealed record NoteEditorSession

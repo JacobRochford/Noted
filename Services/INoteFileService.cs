@@ -2,6 +2,8 @@ using Noted.Models;
 
 namespace Noted.Services;
 
+public sealed record CreatedNote(string FileName, bool UsesGeneratedName);
+
 public interface INoteFileService : IDisposable {
     string NotesDirectory { get; }
     string DeletedNotesDirectory { get; }
@@ -11,7 +13,7 @@ public interface INoteFileService : IDisposable {
     IReadOnlyList<ArchivedNoteItem> GetArchivedNotes();
     IReadOnlyList<string> GetAllNoteKeys();
     string GetNoteKey(string filePath);
-    string CreateNote(string? requestedName = null);
+    CreatedNote CreateNote(string? requestedName = null);
     bool ChangeNotesDirectory(string newDirectory);
     bool DeleteNote(string fileName, string? containingDirectory = null);
     (bool Success, string? Error) ArchiveNote(string fileName, string? containingDirectory = null);

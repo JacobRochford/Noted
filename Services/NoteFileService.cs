@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using Noted.Helpers;
 using Noted.Models;
 
 namespace Noted.Services;
@@ -95,18 +96,19 @@ public sealed class NoteFileService : INoteFileService {
         return $"./{relativePath}";
     }
 
-    public string CreateNote(string? requestedName = null) {
+    public CreatedNote CreateNote(string? requestedName = null) {
         // create new note, optionally with user-supplied name
         var now = DateTime.Now;
-        var filename = string.IsNullOrWhiteSpace(requestedName)
+        var usesGeneratedName = string.IsNullOrWhiteSpace(requestedName);
+        var filename = usesGeneratedName
             ? BuildUniqueFileName(now)
-            : BuildRequestedFileName(requestedName);
+            : BuildRequestedFileName(requestedName!);
         var fullPath = Path.Combine(CurrentDirectory, filename);
         var content = BuildNewNoteContent(now, _settingsService.LoadTimestampPlacement());
         FileWriter.WriteAllText(fullPath, content);
         if (!string.Equals(File.ReadAllText(fullPath), content, StringComparison.Ordinal))
             throw new IOException("The new note was created but could not be verified.");
-        return filename;
+        return new CreatedNote(filename, usesGeneratedName);
     }
 
     public bool ChangeNotesDirectory(string newDirectory) {
@@ -292,16 +294,12 @@ public sealed class NoteFileService : INoteFileService {
 
     // pretty print note name if it's a generated timestamp
     public static string FormatNoteName(string fileName) {
-        var name = Path.GetFileNameWithoutExtension(fileName);
-        if (TryParseGeneratedNoteDate(name, out var dt)) {
-            return dt.ToString("MMM dd, yyyy  h:mm:ss tt");
-        }
-        return fileName;
+        return NoteNameFormatter.Format(fileName, keepExtensionForCustomName: true);
     }
 
     // show file name for generated notes, otherwise show last modified
     private static string BuildSubtitle(string fileName, DateTime lastWriteTime) {
-        return IsGeneratedNoteFileName(fileName)
+        return NoteNameFormatter.IsGenerated(fileName)
             ? fileName
             : $"Modified: {lastWriteTime:MMM dd, yyyy  h:mm tt}";
     }
@@ -408,29 +406,6 @@ public sealed class NoteFileService : INoteFileService {
             sanitized = sanitized[..^extension.Length].TrimEnd();
 
         return ValidateBaseName(sanitized);
-    }
-
-    // is this a generated note file name (timestamped)?
-    private static bool IsGeneratedNoteFileName(string fileName) {
-        return TryParseGeneratedNoteDate(Path.GetFileNameWithoutExtension(fileName), out _);
-    }
-
-    // try to parse a generated note file name as a timestamp
-    private static bool TryParseGeneratedNoteDate(string fileName, out DateTime timestamp) {
-        timestamp = default;
-        var timestampText = fileName.StartsWith("Note_", StringComparison.Ordinal)
-            ? fileName[5..]
-            : fileName;
-
-        var underscoreIndex = timestampText.LastIndexOf('_');
-        if (underscoreIndex > 0) {
-            var suffix = timestampText[(underscoreIndex + 1)..];
-            if (suffix.Length == 2 && suffix.All(char.IsDigit))
-                timestampText = timestampText[..underscoreIndex];
-        }
-
-        return DateTime.TryParseExact(timestampText, "yyyy-MM-dd_HH-mm-ss",
-            CultureInfo.InvariantCulture, DateTimeStyles.None, out timestamp);
     }
 
     // start watching for file/folder changes
