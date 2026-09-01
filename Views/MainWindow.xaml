@@ -1471,30 +1471,6 @@
                 </Grid>
                 </DockPanel>
 
-                <Thumb x:Name="NotesPanelResizeThumb"
-                       Width="18"
-                       Height="18"
-                       HorizontalAlignment="Right"
-                       VerticalAlignment="Bottom"
-                       Margin="0,0,1,1"
-                       Cursor="SizeNWSE"
-                       DragDelta="NotesPanelResizeThumb_DragDelta">
-                    <!-- Always show the resize thumb, even at minimum width -->
-                    <Thumb.Template>
-                        <ControlTemplate TargetType="Thumb">
-                            <Border Background="Transparent">
-                                <Grid HorizontalAlignment="Right"
-                                      VerticalAlignment="Bottom"
-                                      Margin="0,0,2,2">
-                                    <Path Data="M 0 10 L 10 0 M 4 10 L 10 4 M 8 10 L 10 8"
-                                          Stroke="#6E90A5"
-                                          StrokeThickness="1.2"
-                                          SnapsToDevicePixels="True"/>
-                                </Grid>
-                            </Border>
-                        </ControlTemplate>
-                    </Thumb.Template>
-                </Thumb>
             </Grid>
         </Border>
 

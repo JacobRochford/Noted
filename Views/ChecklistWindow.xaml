@@ -3,7 +3,6 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:noted="clr-namespace:Noted"
         xmlns:h="clr-namespace:Noted.Helpers"
-        xmlns:Primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         Title="Checklist"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -762,14 +761,5 @@
             </Border>
         </Popup>
 
-        <Primitives:Thumb x:Name="ResizeThumb" Width="18" Height="18"
-                          HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                          Background="Transparent" Cursor="SizeNWSE" Opacity="0"
-                          Panel.ZIndex="999" DragDelta="ResizeThumb_DragDelta"
-                          DragCompleted="ResizeThumb_DragCompleted"/>
-        <TextBlock Text="◢" Margin="0,0,4,3"
-                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                   Foreground="#B8CDD7" FontSize="9" IsHitTestVisible="False"
-                   Panel.ZIndex="998"/>
     </Grid>
 </noted:OverlayWindow>

@@ -29,6 +29,7 @@ public partial class MainWindow : Window {
     private readonly Func<FullBackupInfo> _getUserBackupInfo;
     private readonly Action _requestUserBackupRestore;
     private readonly MainWindowViewModel _viewModel;
+    private readonly CanvasEdgeResizer _notesPanelResizer;
     private GlobalHotkeysService? _globalHotkeysService;
     private HotkeyRegistration? _notesHotkeyRegistration;
     private HotkeyRegistration? _additionalNotesHotkeyRegistration;
@@ -86,6 +87,7 @@ public partial class MainWindow : Window {
         )
     {
         InitializeComponent();
+        _notesPanelResizer = new CanvasEdgeResizer(NotesPanel, MainCanvas, margin: 8);
 
         _settingsService = settingsService;
         _fileService = fileService;
@@ -1958,6 +1960,9 @@ public partial class MainWindow : Window {
     }
 
     private void NotesPanel_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+        if (_notesPanelResizer.IsResizing || _notesPanelResizer.IsNearEdge(e.GetPosition(NotesPanel)))
+            return;
+
         // If the header textbox is in edit mode and has focus, transfer focus to trigger LostFocus event
         // This must happen BEFORE the drag starts and captures the mouse
         if (HeaderTextEdit.IsVisible && HeaderTextEdit.IsFocused) {
@@ -1972,6 +1977,9 @@ public partial class MainWindow : Window {
     }
 
     private void NotesPanel_PreviewMouseMove(object sender, MouseEventArgs e) {
+        if (_notesPanelResizer.IsResizing)
+            return;
+
         UpdateDrag(NotesPanel, e);
     }
 
@@ -2079,16 +2087,6 @@ public partial class MainWindow : Window {
         return bottom > 0 ? MainCanvas.ActualHeight - bottom - element.ActualHeight : 0;
     }
 
-    private void NotesPanelResizeThumb_DragDelta(object sender, DragDeltaEventArgs e) {
-        var currentLeft = GetCanvasLeft(NotesPanel);
-        var currentTop = GetCanvasTop(NotesPanel);
-        var maxWidth = Math.Max(NotesPanel.MinWidth, MainCanvas.ActualWidth - currentLeft - 8);
-        var maxHeight = Math.Max(NotesPanel.MinHeight, MainCanvas.ActualHeight - currentTop - 8);
-
-        NotesPanel.Width = Math.Clamp(NotesPanel.Width + e.HorizontalChange, NotesPanel.MinWidth, maxWidth);
-        NotesPanel.Height = Math.Clamp(NotesPanel.Height + e.VerticalChange, NotesPanel.MinHeight, maxHeight);
-        e.Handled = true;
-    }
     #endregion
 
     #region System Tray Icon
@@ -2140,6 +2138,7 @@ public partial class MainWindow : Window {
         _checklistHotkeyRegistration = null;
         _dictionaryHotkeyRegistration = null;
         _hotkeysInitialized = false;
+        _notesPanelResizer.Dispose();
 
         // cleanup tray icon
         if (_trayIcon is not null) {
