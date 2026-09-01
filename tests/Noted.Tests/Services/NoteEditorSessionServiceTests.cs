@@ -43,7 +43,52 @@ public sealed class NoteEditorSessionServiceTests
         Assert.HasCount(1, Directory.GetFiles(directory.File("session"), "*.corrupt-*"));
     }
 
-    private static NoteEditorSession Session(string path, int caretIndex) =>
+    [TestMethod]
+    public void GeneratedNameStateIsSavedWithTheTab()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("notes", "2026-08-31_19-45-00.txt");
+        var service = new NoteEditorSessionService(directory.Path);
+        service.Save(Session(path, caretIndex: 0, usesGeneratedName: false));
+        service.Save(Session(path, caretIndex: 0, usesGeneratedName: true));
+
+        var loaded = service.Load();
+
+        Assert.IsTrue(loaded.Session.Tabs.Single().UsesGeneratedName);
+    }
+
+    [TestMethod]
+    public void OlderSessionWithoutGeneratedNameStateDefaultsToFalse()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var sessionDirectory = directory.File("session");
+        Directory.CreateDirectory(sessionDirectory);
+        File.WriteAllText(
+            Path.Combine(sessionDirectory, "editor-workspace.json"),
+            """
+            {
+              "Tabs": [
+                {
+                  "FilePath": "C:\\Notes\\2026-08-31_19-45-00.txt",
+                  "CaretIndex": 0,
+                  "VerticalOffset": 0,
+                  "MarkdownPreviewEnabled": false
+                }
+              ],
+              "ActiveFilePath": "C:\\Notes\\2026-08-31_19-45-00.txt"
+            }
+            """);
+        var service = new NoteEditorSessionService(directory.Path);
+
+        var loaded = service.Load();
+
+        Assert.IsFalse(loaded.Session.Tabs.Single().UsesGeneratedName);
+    }
+
+    private static NoteEditorSession Session(
+        string path,
+        int caretIndex,
+        bool usesGeneratedName = false) =>
         new()
         {
             Tabs =
@@ -53,7 +98,8 @@ public sealed class NoteEditorSessionServiceTests
                     FilePath = path,
                     CaretIndex = caretIndex,
                     VerticalOffset = 12.5,
-                    MarkdownPreviewEnabled = true
+                    MarkdownPreviewEnabled = true,
+                    UsesGeneratedName = usesGeneratedName
                 }
             ],
             ActiveFilePath = path

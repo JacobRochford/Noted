@@ -98,7 +98,12 @@ public partial class NoteEditorWindow : Window
 
     public bool OpenNote(string filePath)
     {
-        return OpenNoteCore(filePath);
+        return OpenNoteCore(filePath, usesGeneratedName: false);
+    }
+
+    internal bool OpenCreatedNote(string filePath, bool usesGeneratedName)
+    {
+        return OpenNoteCore(filePath, usesGeneratedName);
     }
 
     internal bool TryPrepareToCloseAllDocuments()
@@ -298,6 +303,7 @@ public partial class NoteEditorWindow : Window
         CaptureActiveDocument();
         var oldPath = document.FilePath;
         document.UpdateFilePath(NormalizePath(newFilePath));
+        document.UsesGeneratedName = false;
         if (_unsavedRecoveredPaths.Remove(oldPath))
             _unsavedRecoveredPaths.Add(document.FilePath);
         document.IsMissing = false;
@@ -410,7 +416,7 @@ public partial class NoteEditorWindow : Window
         FocusActiveSurface();
     }
 
-    private bool OpenNoteCore(string filePath)
+    private bool OpenNoteCore(string filePath, bool usesGeneratedName)
     {
         string normalizedPath;
         try
@@ -426,7 +432,11 @@ public partial class NoteEditorWindow : Window
         var existingDocument = FindDocument(normalizedPath);
         if (existingDocument is not null)
         {
+            if (usesGeneratedName)
+                existingDocument.UsesGeneratedName = true;
             ActivateDocument(existingDocument);
+            if (usesGeneratedName)
+                SaveEditorSession();
             ShowWindow();
             return true;
         }
@@ -450,7 +460,8 @@ public partial class NoteEditorWindow : Window
                 normalizedPath,
                 recoveredContent,
                 persistedContent,
-                isDirty: !string.Equals(recoveredContent, persistedContent, StringComparison.Ordinal));
+                isDirty: !string.Equals(recoveredContent, persistedContent, StringComparison.Ordinal),
+                usesGeneratedName: usesGeneratedName);
             _documents.Add(document);
             ActivateDocument(document);
             SaveEditorSession();
@@ -491,7 +502,8 @@ public partial class NoteEditorWindow : Window
                     caretIndex: Math.Clamp(tabState.CaretIndex, 0, missingDraft.Content.Length),
                     verticalOffset: tabState.VerticalOffset,
                     markdownPreviewEnabled: tabState.MarkdownPreviewEnabled,
-                    isMissing: true);
+                    isMissing: true,
+                    usesGeneratedName: tabState.UsesGeneratedName);
                 return true;
             }
 
@@ -511,7 +523,8 @@ public partial class NoteEditorWindow : Window
                 isDirty: !string.Equals(content, persistedContent, StringComparison.Ordinal),
                 caretIndex: Math.Clamp(tabState.CaretIndex, 0, content.Length),
                 verticalOffset: tabState.VerticalOffset,
-                markdownPreviewEnabled: tabState.MarkdownPreviewEnabled);
+                markdownPreviewEnabled: tabState.MarkdownPreviewEnabled,
+                usesGeneratedName: tabState.UsesGeneratedName);
             return true;
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
@@ -898,7 +911,8 @@ public partial class NoteEditorWindow : Window
                     FilePath = document.FilePath,
                     CaretIndex = document.CaretIndex,
                     VerticalOffset = document.VerticalOffset,
-                    MarkdownPreviewEnabled = document.MarkdownPreviewEnabled
+                    MarkdownPreviewEnabled = document.MarkdownPreviewEnabled,
+                    UsesGeneratedName = document.UsesGeneratedName
                 }).ToList(),
                 ActiveFilePath = _activeDocument?.FilePath
             });

@@ -1452,14 +1452,14 @@ public partial class MainWindow : Window {
 
     private void CreateAndOpenNewNote(Window owner) {
         try {
-            var filename = CreateNewNoteFromCurrentSettings(owner);
-            if (filename is null)
+            var createdNote = CreateNewNoteFromCurrentSettings(owner);
+            if (createdNote is null)
                 return;
 
-            var filePath = Path.Combine(_fileService.CurrentDirectory, filename);
+            var filePath = Path.Combine(_fileService.CurrentDirectory, createdNote.FileName);
             _viewModel.LoadNotes(_fileService.GetNoteKey(filePath));
             // OnNotesLoaded fires synchronously above, so selection is already set.
-            OpenCreatedNoteInEditor(filePath);
+            OpenCreatedNoteInEditor(filePath, createdNote.UsesGeneratedName);
         } catch (Exception ex) {
             AppDialog.Show(owner, $"Failed to create note:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -1468,20 +1468,17 @@ public partial class MainWindow : Window {
 
     private void QuickNoteButton_Click(object sender, RoutedEventArgs e) {
         try {
-            var filename = _fileService.CreateNote();
-            if (filename is null)
-                return;
-
-            var filePath = Path.Combine(_fileService.CurrentDirectory, filename);
+            var createdNote = _fileService.CreateNote();
+            var filePath = Path.Combine(_fileService.CurrentDirectory, createdNote.FileName);
             _viewModel.LoadNotes(_fileService.GetNoteKey(filePath));
-            OpenCreatedNoteInEditor(filePath);
+            OpenCreatedNoteInEditor(filePath, createdNote.UsesGeneratedName);
         } catch (Exception ex) {
             AppDialog.Show($"Failed to create quick note:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
-    private string? CreateNewNoteFromCurrentSettings(Window owner) {
+    private CreatedNote? CreateNewNoteFromCurrentSettings(Window owner) {
         var mode = _settingsService.LoadNewNoteMode();
 
         // In "Quick" mode, skip the dialog
@@ -1582,7 +1579,9 @@ public partial class MainWindow : Window {
         NoteDeleteRequestedEventArgs e) {
         DeleteNote(
             e.FilePath,
-            Path.GetFileNameWithoutExtension(e.FilePath),
+            NoteNameFormatter.Format(
+                Path.GetFileName(e.FilePath),
+                keepExtensionForCustomName: false),
             _noteEditor);
     }
 
@@ -1976,9 +1975,11 @@ public partial class MainWindow : Window {
         return false;
     }
 
-    private bool OpenCreatedNoteInEditor(string filePath) {
-        if (!OpenNoteInEditor(filePath))
+    private bool OpenCreatedNoteInEditor(string filePath, bool usesGeneratedName) {
+        if (!_noteEditor.OpenCreatedNote(filePath, usesGeneratedName)) {
+            RestoreSelectionToOpenEditorNote();
             return false;
+        }
 
         _noteEditor.BeginEditingCreatedNote(
             moveCaretToEnd: _settingsService.LoadTimestampPlacement() == NoteTimestampPlacement.Top);

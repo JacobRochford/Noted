@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
+using Noted.Helpers;
 
 namespace Noted.Models;
 
@@ -18,7 +19,8 @@ public sealed class OpenNoteDocument : INotifyPropertyChanged
         int caretIndex = 0,
         double verticalOffset = 0,
         bool markdownPreviewEnabled = false,
-        bool isMissing = false)
+        bool isMissing = false,
+        bool usesGeneratedName = false)
     {
         _filePath = Path.GetFullPath(filePath);
         Content = content;
@@ -28,10 +30,13 @@ public sealed class OpenNoteDocument : INotifyPropertyChanged
         CaretIndex = caretIndex;
         VerticalOffset = verticalOffset;
         MarkdownPreviewEnabled = markdownPreviewEnabled;
+        UsesGeneratedName = usesGeneratedName;
     }
 
     public string FilePath => _filePath;
-    public string DisplayName => Path.GetFileNameWithoutExtension(_filePath);
+    public string DisplayName => NoteNameFormatter.Format(
+        Path.GetFileName(_filePath),
+        keepExtensionForCustomName: false);
     public string TabLabel =>
         $"{DisplayName}{(_isMissing ? "  (missing)" : string.Empty)}{(_isDirty ? "  •" : string.Empty)}";
     public string Content { get; set; }
@@ -39,6 +44,7 @@ public sealed class OpenNoteDocument : INotifyPropertyChanged
     public int CaretIndex { get; set; }
     public double VerticalOffset { get; set; }
     public bool MarkdownPreviewEnabled { get; set; }
+    public bool UsesGeneratedName { get; set; }
 
     public bool IsDirty
     {
