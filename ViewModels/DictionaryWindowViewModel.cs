@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Security;
+using System.Windows.Data;
 using System.Windows.Threading;
 using Noted.Models;
 using Noted.Services;
@@ -19,9 +20,28 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposa
     private readonly SaveScheduler<IReadOnlyList<DictionaryItemState>> _saveScheduler;
     private readonly Action<Action> _uiThreadInvoke;
     private bool _ghostModeEnabled;
+    private string _searchText = "";
     private string? _persistenceError;
 
     public ObservableCollection<DictionaryItem> Items { get; }
+    public ICollectionView FilteredItems { get; }
+
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (_searchText == value) return;
+            _searchText = value ?? "";
+            FilteredItems.Refresh();
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(EmptyMessage));
+        }
+    }
+
+    public string EmptyMessage => Items.Count == 0
+        ? "No words yet"
+        : "No matching words";
 
     public bool GhostModeEnabled
     {
@@ -68,6 +88,8 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposa
             SaveItemsSnapshot);
         _uiThreadInvoke = uiThreadInvoke;
         Items = new ObservableCollection<DictionaryItem>();
+        FilteredItems = CollectionViewSource.GetDefaultView(Items);
+        FilteredItems.Filter = MatchesSearch;
         _ghostModeEnabled = ghostModeEnabled;
 
         var loadResult = _contentService.LoadItems();
@@ -93,11 +115,14 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposa
 
     private void Item_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (!string.IsNullOrWhiteSpace(SearchText))
+            FilteredItems.Refresh();
         SaveItems();
     }
 
     public DictionaryItem AddItem()
     {
+        SearchText = "";
         var newItem = new DictionaryItem { Word = "", Definition = "" };
         _uiThreadInvoke(() =>
         {
@@ -121,6 +146,18 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposa
         }
 
         SaveItems();
+        OnPropertyChanged(nameof(EmptyMessage));
+    }
+
+    private bool MatchesSearch(object item)
+    {
+        if (item is not DictionaryItem dictionaryItem)
+            return false;
+
+        var searchText = SearchText.Trim();
+        return searchText.Length == 0 ||
+               dictionaryItem.Word.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+               dictionaryItem.Definition.Contains(searchText, StringComparison.OrdinalIgnoreCase);
     }
 
     public void RemoveItem(DictionaryItem item)
