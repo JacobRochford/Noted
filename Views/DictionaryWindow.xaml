@@ -141,6 +141,7 @@
             <Grid Margin="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
@@ -169,12 +170,66 @@
                     </Grid>
                 </Border>
 
-                <Border Grid.Row="1" Background="White" BorderBrush="#C9DFEC"
+                <Border Grid.Row="1" Margin="0,0,0,7" Padding="9,0"
+                        Height="34" Background="White" BorderBrush="#C9DFEC"
+                        BorderThickness="1" CornerRadius="6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Margin="0,0,7,0"
+                                   VerticalAlignment="Center"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="12"
+                                   Foreground="#6D9BB1"
+                                   Text="&#xE721;"/>
+                        <Grid Grid.Column="1">
+                            <TextBox x:Name="SearchTextBox"
+                                     Padding="0"
+                                     VerticalContentAlignment="Center"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Foreground="#355A6E"
+                                     CaretBrush="#2C6E91"
+                                     FontSize="12"
+                                     Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Margin="1,0,0,0"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False"
+                                       Foreground="#8BA5B2"
+                                       FontSize="12"
+                                       FontStyle="Italic"
+                                       Text="Search words or definitions...">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding Text, ElementName=SearchTextBox}" Value=""/>
+                                                    <Condition Binding="{Binding IsKeyboardFocusWithin, ElementName=SearchTextBox}" Value="False"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </MultiDataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="2" Background="White" BorderBrush="#C9DFEC"
                         BorderThickness="1" CornerRadius="8" ClipToBounds="True">
                     <Grid>
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled">
-                            <ItemsControl x:Name="ItemsList" ItemsSource="{Binding Items}" Padding="5">
+                            <ItemsControl x:Name="ItemsList"
+                                          ItemsSource="{Binding FilteredItems}"
+                                          Padding="5"
+                                          Focusable="True"
+                                          FocusVisualStyle="{x:Null}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Margin="0,1" Padding="5,0,4,0" CornerRadius="6">
@@ -248,7 +303,7 @@
                                 <Style TargetType="StackPanel">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Items.Count}" Value="0">
+                                        <DataTrigger Binding="{Binding FilteredItems.IsEmpty}" Value="True">
                                             <Setter Property="Visibility" Value="Visible"/>
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -256,14 +311,14 @@
                             </StackPanel.Style>
                             <TextBlock Text="Aa" Foreground="#B8D5E2" FontSize="22"
                                        FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                            <TextBlock Text="No entries yet" Margin="0,5,0,0"
+                            <TextBlock Text="{Binding EmptyMessage}" Margin="0,5,0,0"
                                        Foreground="#8EA5B1" FontSize="12"
                                        HorizontalAlignment="Center"/>
                         </StackPanel>
                     </Grid>
                 </Border>
 
-                <Grid Grid.Row="2" Margin="1,8,1,0">
+                <Grid Grid.Row="3" Margin="1,8,1,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>

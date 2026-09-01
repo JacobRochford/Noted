@@ -60,6 +60,40 @@ public partial class DictionaryWindow : OverlayWindow
         IsVisibleChanged += DictionaryWindow_IsVisibleChanged;
     }
 
+    protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
+    {
+        if (Keyboard.FocusedElement is TextBox textBox &&
+            !ReferenceEquals(
+                VisualTreeHelpers.FindAncestor<TextBox>(e.OriginalSource as DependencyObject),
+                textBox))
+        {
+            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            ItemsList.Focus();
+        }
+
+        base.OnPreviewMouseDown(e);
+    }
+
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        if (e.Key == Key.F && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            SearchTextBox.Focus();
+            SearchTextBox.SelectAll();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && SearchTextBox.IsKeyboardFocusWithin)
+        {
+            if (SearchTextBox.Text.Length > 0)
+                SearchTextBox.Clear();
+            else
+                ItemsList.Focus();
+            e.Handled = true;
+        }
+
+        base.OnPreviewKeyDown(e);
+    }
+
     internal bool TryFlushPendingContent(out string? error)
     {
         var success = _viewModel.TryFlushPendingItems(out error);
