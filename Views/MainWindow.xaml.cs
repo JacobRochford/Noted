@@ -29,8 +29,11 @@ public partial class MainWindow : Window {
     private readonly Func<FullBackupInfo> _getUserBackupInfo;
     private readonly Func<FullBackupPreview> _getUserBackupPreview;
     private readonly Func<Guid, BackupFileSummary, BackupFileContent> _readUserBackupFile;
+    private readonly Func<string, FullBackupPreview> _getBackupImportPreview;
+    private readonly Func<string, Guid, string, BackupFileSummary, BackupFileContent> _readBackupImportFile;
     private readonly Func<string, BackupExportResult> _exportUserBackup;
     private readonly Action _requestUserBackupRestore;
+    private readonly Action<string, Guid, string> _requestBackupImportRestore;
     private readonly MainWindowViewModel _viewModel;
     private readonly CanvasEdgeResizer _notesPanelResizer;
     private GlobalHotkeysService? _globalHotkeysService;
@@ -98,8 +101,11 @@ public partial class MainWindow : Window {
             Func<FullBackupInfo> getUserBackupInfo,
             Func<FullBackupPreview> getUserBackupPreview,
             Func<Guid, BackupFileSummary, BackupFileContent> readUserBackupFile,
+            Func<string, FullBackupPreview> getBackupImportPreview,
+            Func<string, Guid, string, BackupFileSummary, BackupFileContent> readBackupImportFile,
             Func<string, BackupExportResult> exportUserBackup,
-            Action requestUserBackupRestore
+            Action requestUserBackupRestore,
+            Action<string, Guid, string> requestBackupImportRestore
         )
     {
         InitializeComponent();
@@ -113,8 +119,11 @@ public partial class MainWindow : Window {
         _getUserBackupInfo = getUserBackupInfo;
         _getUserBackupPreview = getUserBackupPreview;
         _readUserBackupFile = readUserBackupFile;
+        _getBackupImportPreview = getBackupImportPreview;
+        _readBackupImportFile = readBackupImportFile;
         _exportUserBackup = exportUserBackup;
         _requestUserBackupRestore = requestUserBackupRestore;
+        _requestBackupImportRestore = requestBackupImportRestore;
 
         _viewModel = new MainWindowViewModel(_fileService, _settingsService, action => Dispatcher.Invoke(action));
         DataContext = _viewModel;
@@ -1324,10 +1333,12 @@ public partial class MainWindow : Window {
         var createWasEnabled = CreateOrUpdateBackupButton.IsEnabled;
         var viewWasEnabled = ViewBackupButton.IsEnabled;
         var exportWasEnabled = ExportBackupButton.IsEnabled;
+        var importWasEnabled = ImportBackupButton.IsEnabled;
         var restoreWasEnabled = RestoreBackupButton.IsEnabled;
         CreateOrUpdateBackupButton.IsEnabled = false;
         ViewBackupButton.IsEnabled = false;
         ExportBackupButton.IsEnabled = false;
+        ImportBackupButton.IsEnabled = false;
         RestoreBackupButton.IsEnabled = false;
         BackupStatusText.Text = "Checking backup contents...";
         BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
@@ -1344,6 +1355,7 @@ public partial class MainWindow : Window {
             CreateOrUpdateBackupButton.IsEnabled = createWasEnabled;
             ViewBackupButton.IsEnabled = viewWasEnabled;
             ExportBackupButton.IsEnabled = exportWasEnabled;
+            ImportBackupButton.IsEnabled = importWasEnabled;
             RestoreBackupButton.IsEnabled = restoreWasEnabled;
             BackupStatusText.Text = previousStatus;
             BackupStatusText.Foreground = previousStatusBrush;
@@ -1368,20 +1380,7 @@ public partial class MainWindow : Window {
             Owner = this,
             WindowStartupLocation = WindowStartupLocation.Manual
         };
-        var panelLocation = NotesPanel.TranslatePoint(new Point(0, 0), this);
-        var bounds = WindowInterop.NormalizeWindowBounds(
-            Left + panelLocation.X + ((NotesPanel.ActualWidth - dialog.Width) / 2),
-            Top + panelLocation.Y + ((NotesPanel.ActualHeight - dialog.Height) / 2),
-            dialog.Width,
-            dialog.Height,
-            dialog.MinWidth,
-            dialog.MinHeight,
-            dialog.Width,
-            dialog.Height);
-        dialog.Left = bounds.Left;
-        dialog.Top = bounds.Top;
-        dialog.Width = bounds.Width;
-        dialog.Height = bounds.Height;
+        PositionBackupPreviewDialog(dialog);
 
         if (dialog.ShowDialog() == true)
             ConfirmAndRequestBackupRestore();
@@ -1404,6 +1403,7 @@ public partial class MainWindow : Window {
         CreateOrUpdateBackupButton.IsEnabled = false;
         ViewBackupButton.IsEnabled = false;
         ExportBackupButton.IsEnabled = false;
+        ImportBackupButton.IsEnabled = false;
         RestoreBackupButton.IsEnabled = false;
         BackupStatusText.Text = "Exporting verified backup...";
         BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
@@ -1443,6 +1443,127 @@ public partial class MainWindow : Window {
                 : MessageBoxImage.Warning);
     }
 
+    private async void ImportBackupButton_Click(object sender, RoutedEventArgs e)
+    {
+        var fileDialog = new OpenFileDialog
+        {
+            Title = "Import Noted Backup",
+            Filter = "Noted Backup (*.notedbackup)|*.notedbackup",
+            DefaultExt = ".notedbackup",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+        if (fileDialog.ShowDialog(this) != true)
+            return;
+
+        var previousCursor = Mouse.OverrideCursor;
+        var previousStatus = BackupStatusText.Text;
+        var previousStatusBrush = BackupStatusText.Foreground;
+        var createWasEnabled = CreateOrUpdateBackupButton.IsEnabled;
+        var viewWasEnabled = ViewBackupButton.IsEnabled;
+        var exportWasEnabled = ExportBackupButton.IsEnabled;
+        var importWasEnabled = ImportBackupButton.IsEnabled;
+        var restoreWasEnabled = RestoreBackupButton.IsEnabled;
+        CreateOrUpdateBackupButton.IsEnabled = false;
+        ViewBackupButton.IsEnabled = false;
+        ExportBackupButton.IsEnabled = false;
+        ImportBackupButton.IsEnabled = false;
+        RestoreBackupButton.IsEnabled = false;
+        BackupStatusText.Text = "Checking imported backup...";
+        BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
+        Mouse.OverrideCursor = Cursors.Wait;
+
+        FullBackupPreview preview;
+        try
+        {
+            preview = await Task.Run(() => _getBackupImportPreview(fileDialog.FileName));
+        }
+        finally
+        {
+            Mouse.OverrideCursor = previousCursor;
+            CreateOrUpdateBackupButton.IsEnabled = createWasEnabled;
+            ViewBackupButton.IsEnabled = viewWasEnabled;
+            ExportBackupButton.IsEnabled = exportWasEnabled;
+            ImportBackupButton.IsEnabled = importWasEnabled;
+            RestoreBackupButton.IsEnabled = restoreWasEnabled;
+            BackupStatusText.Text = previousStatus;
+            BackupStatusText.Foreground = previousStatusBrush;
+        }
+
+        if (!preview.IsValid)
+        {
+            AppDialog.Show(
+                this,
+                preview.Error ?? "The selected file is not a valid Noted backup.",
+                "Import Backup",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var verificationToken = preview.VerificationToken;
+        if (string.IsNullOrWhiteSpace(verificationToken))
+        {
+            AppDialog.Show(
+                this,
+                "The selected backup could not be tied to this preview. Check it again before restoring.",
+                "Import Backup",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var previewDialog = new BackupPreviewDialog(
+            preview,
+            (backupId, file) => _readBackupImportFile(
+                fileDialog.FileName,
+                backupId,
+                verificationToken,
+                file),
+            isImport: true)
+        {
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.Manual
+        };
+        PositionBackupPreviewDialog(previewDialog);
+        if (previewDialog.ShowDialog() != true)
+            return;
+
+        var backupDate = preview.CreatedUtc?.ToLocalTime().ToString("MMM d, yyyy h:mm tt")
+            ?? "an unknown date";
+        var confirmation = AppDialog.Show(
+            this,
+            $"Restore all Noted data from the imported backup dated {backupDate}?\n\n" +
+            "Noted will save pending work, close, and restore the verified files into this installation. " +
+            "Your existing user backup and the selected backup file will not be changed.",
+            "Restore Imported Backup",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirmation == MessageBoxResult.Yes)
+            _requestBackupImportRestore(
+                fileDialog.FileName,
+                preview.BackupId,
+                verificationToken);
+    }
+
+    private void PositionBackupPreviewDialog(BackupPreviewDialog dialog)
+    {
+        var panelLocation = NotesPanel.TranslatePoint(new Point(0, 0), this);
+        var bounds = WindowInterop.NormalizeWindowBounds(
+            Left + panelLocation.X + ((NotesPanel.ActualWidth - dialog.Width) / 2),
+            Top + panelLocation.Y + ((NotesPanel.ActualHeight - dialog.Height) / 2),
+            dialog.Width,
+            dialog.Height,
+            dialog.MinWidth,
+            dialog.MinHeight,
+            dialog.Width,
+            dialog.Height);
+        dialog.Left = bounds.Left;
+        dialog.Top = bounds.Top;
+        dialog.Width = bounds.Width;
+        dialog.Height = bounds.Height;
+    }
+
     private void ConfirmAndRequestBackupRestore()
     {
         var backupInfo = _getUserBackupInfo();
@@ -1471,6 +1592,7 @@ public partial class MainWindow : Window {
         CreateOrUpdateBackupButton.IsEnabled = false;
         ViewBackupButton.IsEnabled = false;
         ExportBackupButton.IsEnabled = false;
+        ImportBackupButton.IsEnabled = false;
         RestoreBackupButton.IsEnabled = false;
         BackupStatusText.Text = "Checking and copying current data...";
         BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
@@ -1521,6 +1643,7 @@ public partial class MainWindow : Window {
         RestoreBackupButton.IsEnabled = backupInfo.IsValid;
         ViewBackupButton.IsEnabled = backupInfo.IsValid;
         ExportBackupButton.IsEnabled = backupInfo.IsValid;
+        ImportBackupButton.IsEnabled = true;
 
         if (!updateStatusText)
             return;

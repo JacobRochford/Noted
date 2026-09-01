@@ -29,6 +29,9 @@ public partial class App : Application
     private FullBackupService? _fullBackupService;
     private readonly HashSet<string> _backupBlockReasons = new(StringComparer.Ordinal);
     private bool _restoreUserBackupOnShutdown;
+    private string? _importBackupPathOnShutdown;
+    private Guid? _importBackupIdOnShutdown;
+    private string? _importBackupVerificationTokenOnShutdown;
     private bool _isShuttingDown;
     private string? _lastShutdownWarning;
     private int _fatalErrorShown;
@@ -118,8 +121,11 @@ public partial class App : Application
                 GetUserBackupInfo,
                 GetUserBackupPreview,
                 ReadUserBackupFile,
+                GetBackupImportPreview,
+                ReadBackupImportFile,
                 ExportUserBackup,
-                RequestUserBackupRestore);
+                RequestUserBackupRestore,
+                RequestBackupImportRestore);
             _fileService = fileService;
             _noteEditorWindow = noteEditor;
             _mainWindow = mainWindow;
@@ -136,11 +142,16 @@ public partial class App : Application
             mainWindow.Show();
             if (pendingRestoreResult.Status == FullBackupStatus.Restored)
             {
+                var restoreMessage = string.IsNullOrWhiteSpace(pendingRestoreResult.Warning)
+                    ? pendingRestoreResult.Message
+                    : $"{pendingRestoreResult.Message}\n\n{pendingRestoreResult.Warning}";
                 AppDialog.Show(
-                    pendingRestoreResult.Message,
+                    restoreMessage,
                     "Noted - Backup Restored",
                     MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                    string.IsNullOrWhiteSpace(pendingRestoreResult.Warning)
+                        ? MessageBoxImage.Information
+                        : MessageBoxImage.Warning);
             }
             if (settings.RecoveryNotice is not null)
             {
@@ -220,16 +231,20 @@ public partial class App : Application
             if (_restoreUserBackupOnShutdown && _fullBackupService is not null)
             {
                 var restoreResult = _fullBackupService.ApplyPendingUserBackupRestore();
+                var restoreDetails = string.IsNullOrWhiteSpace(restoreResult.Warning)
+                    ? restoreResult.Message
+                    : $"{restoreResult.Message}\n\n{restoreResult.Warning}";
                 var message = restoreResult.Status == FullBackupStatus.Restored
-                    ? $"{restoreResult.Message}\n\nNoted will now close. Open it again to load the restored data."
-                    : $"{restoreResult.Message}\n\nNoted will retry before loading data the next time it starts.";
+                    ? $"{restoreDetails}\n\nNoted will now close. Open it again to load the restored data."
+                    : $"{restoreDetails}\n\nNoted will retry before loading data the next time it starts.";
                 AppDialog.Show(
                     message,
                     restoreResult.Status == FullBackupStatus.Restored
                         ? "Noted - Backup Restored"
                         : "Noted - Restore Incomplete",
                     MessageBoxButton.OK,
-                    restoreResult.Status == FullBackupStatus.Restored
+                    restoreResult.Status == FullBackupStatus.Restored &&
+                    string.IsNullOrWhiteSpace(restoreResult.Warning)
                         ? MessageBoxImage.Information
                         : MessageBoxImage.Warning);
             }
@@ -543,6 +558,33 @@ public partial class App : Application
             null,
             "Backups are not available.");
 
+    private FullBackupPreview GetBackupImportPreview(string archivePath) =>
+        _fullBackupService?.GetBackupImportPreview(archivePath)
+        ?? new FullBackupPreview(
+            false,
+            false,
+            Guid.Empty,
+            null,
+            [],
+            "Backups are not available.");
+
+    private BackupFileContent ReadBackupImportFile(
+        string archivePath,
+        Guid backupId,
+        string verificationToken,
+        BackupFileSummary file) =>
+        _fullBackupService?.ReadBackupImportFile(
+            archivePath,
+            backupId,
+            verificationToken,
+            file)
+        ?? new BackupFileContent(
+            false,
+            false,
+            BackupContentFormat.Text,
+            null,
+            "Backups are not available.");
+
     private FullBackupResult CreateOrUpdateUserBackup()
     {
         var service = _fullBackupService;
@@ -567,6 +609,21 @@ public partial class App : Application
     private void RequestUserBackupRestore()
     {
         _restoreUserBackupOnShutdown = true;
+        _importBackupPathOnShutdown = null;
+        _importBackupIdOnShutdown = null;
+        _importBackupVerificationTokenOnShutdown = null;
+        _mainWindow?.Close();
+    }
+
+    private void RequestBackupImportRestore(
+        string archivePath,
+        Guid backupId,
+        string verificationToken)
+    {
+        _restoreUserBackupOnShutdown = true;
+        _importBackupPathOnShutdown = archivePath;
+        _importBackupIdOnShutdown = backupId;
+        _importBackupVerificationTokenOnShutdown = verificationToken;
         _mainWindow?.Close();
     }
 
@@ -739,14 +796,75 @@ public partial class App : Application
             return;
         }
 
+        try
+        {
+            _checklistWindow?.PrepareForApplicationShutdown();
+            _dictionaryWindow?.PrepareForApplicationShutdown();
+            _scratchpadWindow?.PrepareForApplicationShutdown();
+            _miniPadWindow?.PrepareForApplicationShutdown();
+        }
+        catch (Exception ex) when (ex is
+                   SettingsPersistenceException or
+                   IOException or
+                   UnauthorizedAccessException)
+        {
+            e.Cancel = true;
+            _noteEditorWindow?.CancelPreparedClose();
+            CancelRequestedUserBackupRestore();
+            AppDialog.Show(
+                $"Noted could not close because window state was not saved.\n\n{ex.Message}\n\nThe application will remain open so you can retry.",
+                "Window State Save Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
         if (_restoreUserBackupOnShutdown)
         {
-            var restoreResult = _fullBackupService?.ScheduleUserBackupRestore()
+            if (_fileService is not null)
+                _fullBackupService?.UpdateNotesDirectory(_fileService.NotesDirectory);
+            var protectionResult = _fullBackupService?.CreateBeforeRestoreBackup()
                 ?? new FullBackupResult(
+                    FullBackupStatus.Failed,
+                    FullBackupType.BeforeRestore,
+                    null,
+                    "Backups are not available.");
+            if (protectionResult.Status is not (FullBackupStatus.Created or FullBackupStatus.Skipped))
+            {
+                e.Cancel = true;
+                _noteEditorWindow?.CancelPreparedClose();
+                CancelRequestedUserBackupRestore();
+                AppDialog.Show(
+                    $"Noted did not start the restore because the current data could not be protected first.\n\n{protectionResult.Message}",
+                    "Noted - Restore Not Started",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(protectionResult.Warning))
+            {
+                AppDialog.Show(
+                    protectionResult.Warning,
+                    "Noted - Backup Warning",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+
+            var restoreResult = _fullBackupService is null
+                ? new FullBackupResult(
                     FullBackupStatus.Failed,
                     FullBackupType.User,
                     null,
-                    "Backups are not available.");
+                    "Backups are not available.")
+                : _importBackupPathOnShutdown is not null &&
+                  _importBackupIdOnShutdown.HasValue &&
+                  _importBackupVerificationTokenOnShutdown is not null
+                    ? _fullBackupService.ScheduleBackupImportRestore(
+                        _importBackupPathOnShutdown,
+                        _importBackupIdOnShutdown.Value,
+                        _importBackupVerificationTokenOnShutdown)
+                    : _fullBackupService.ScheduleUserBackupRestore();
             if (restoreResult.Status != FullBackupStatus.RestoreScheduled)
             {
                 e.Cancel = true;
@@ -761,10 +879,6 @@ public partial class App : Application
             }
         }
 
-        _checklistWindow?.PrepareForApplicationShutdown();
-        _dictionaryWindow?.PrepareForApplicationShutdown();
-        _scratchpadWindow?.PrepareForApplicationShutdown();
-        _miniPadWindow?.PrepareForApplicationShutdown();
         if (!_restoreUserBackupOnShutdown)
             TryUpdateRecentBackup();
     }
@@ -772,6 +886,9 @@ public partial class App : Application
     private void CancelRequestedUserBackupRestore()
     {
         _restoreUserBackupOnShutdown = false;
+        _importBackupPathOnShutdown = null;
+        _importBackupIdOnShutdown = null;
+        _importBackupVerificationTokenOnShutdown = null;
         try
         {
             _fullBackupService?.CancelPendingUserBackupRestore();

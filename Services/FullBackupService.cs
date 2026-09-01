@@ -22,7 +22,9 @@ internal enum FullBackupType
     User,
 
     [JsonStringEnumMemberName("Latest")]
-    Recent
+    Recent,
+
+    BeforeRestore
 }
 
 internal sealed record FullBackupResult(
@@ -62,7 +64,8 @@ internal sealed record BackupFileSummary(
     string Sha256,
     int? ItemCount,
     long? ContentLength,
-    BackupFileComparison Comparison);
+    BackupFileComparison Comparison,
+    string? SourceLogicalPath = null);
 
 internal sealed record FullBackupPreview(
     bool Exists,
@@ -70,7 +73,8 @@ internal sealed record FullBackupPreview(
     Guid BackupId,
     DateTime? CreatedUtc,
     IReadOnlyList<BackupFileSummary> Files,
-    string? Error);
+    string? Error,
+    string? VerificationToken = null);
 
 internal sealed record BackupFileContent(
     bool Success,
@@ -109,6 +113,7 @@ internal sealed partial class FullBackupService
         _notesDirectory = Path.GetFullPath(notesDirectory);
         _backupDirectory = Path.Combine(_appDataDirectory, "full-snapshots");
         _clock = clock ?? TimeProvider.System;
+        TryCleanupFinishedImportFolders();
     }
 
     internal string BackupDirectory => _backupDirectory;
@@ -358,22 +363,30 @@ internal sealed partial class FullBackupService
                     "The pending backup restore request is not supported.");
             }
 
-            var userBackupPath = GetBackupPath(FullBackupType.User);
-            var userBackup = ReadBackup(userBackupPath, FullBackupType.User);
-            if (userBackup.Status != BackupReadStatus.Valid)
+            if (request.ImportId == Guid.Empty)
             {
                 throw new FileVerificationException(
-                    $"The user backup cannot be restored: {userBackup.Error ?? "the backup is missing"}.");
+                    "The pending backup import ID is invalid.");
             }
 
-            var manifest = userBackup.Manifest!;
+            var restorePath = request.ImportId.HasValue
+                ? GetPendingImportPath(request.ImportId.Value)
+                : GetBackupPath(FullBackupType.User);
+            var restoreBackup = ReadBackup(restorePath, FullBackupType.User);
+            if (restoreBackup.Status != BackupReadStatus.Valid)
+            {
+                throw new FileVerificationException(
+                    $"The backup cannot be restored: {restoreBackup.Error ?? "the backup is missing"}.");
+            }
+
+            var manifest = restoreBackup.Manifest!;
             if (manifest.BackupId != request.BackupId)
             {
                 throw new FileVerificationException(
-                    "The user backup changed after the restore was requested. Nothing was restored.");
+                    "The backup changed after the restore was requested. Nothing was restored.");
             }
 
-            var filesDirectory = Path.Combine(userBackupPath, FilesDirectoryName);
+            var filesDirectory = Path.Combine(restorePath, FilesDirectoryName);
             foreach (var entry in manifest.Entries
                          .OrderBy(entry => entry.LogicalPath, StringComparer.OrdinalIgnoreCase))
             {
@@ -387,11 +400,32 @@ internal sealed partial class FullBackupService
             }
 
             FileWriter.DeleteIfExists(requestPath);
+            string? warning = null;
+            if (request.ImportId.HasValue)
+            {
+                try
+                {
+                    var restoredImportPath = Path.Combine(
+                        _backupDirectory,
+                        $".restored-import-{request.ImportId.Value:N}");
+                    Directory.Move(restorePath, restoredImportPath);
+                    DeleteImportDirectory(restoredImportPath);
+                }
+                catch (Exception ex) when (IsExpectedBackupException(ex))
+                {
+                    System.Diagnostics.Debug.WriteLine(ex);
+                    warning = $"The imported backup was restored, but its temporary local copy could not be removed: {ex.Message}";
+                }
+            }
+
             return new FullBackupResult(
                 FullBackupStatus.Restored,
                 FullBackupType.User,
-                userBackupPath,
-                $"Restored {manifest.Entries.Count} files from your verified backup. The backup was not changed.");
+                restorePath,
+                request.ImportId.HasValue
+                    ? $"Restored {manifest.Entries.Count} files from the imported backup. Your user backup was not changed."
+                    : $"Restored {manifest.Entries.Count} files from your verified backup. The backup was not changed.",
+                warning);
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
@@ -404,8 +438,16 @@ internal sealed partial class FullBackupService
         }
     }
 
-    internal void CancelPendingUserBackupRestore() =>
-        FileWriter.DeleteIfExists(GetRestoreRequestPath());
+    internal void CancelPendingUserBackupRestore()
+    {
+        var requestPath = GetRestoreRequestPath();
+        var requestResult = JsonFileStore.Read<FullBackupRestoreRequest>(
+            requestPath,
+            BackupJsonOptions);
+        FileWriter.DeleteIfExists(requestPath);
+        if (requestResult.Success && requestResult.Value?.ImportId is Guid importId)
+            TryDeleteImportDirectory(GetPendingImportPath(importId));
+    }
 
     private FullBackupResult CreateBackup(
         FullBackupType requestedType,
@@ -1027,7 +1069,9 @@ internal sealed partial class FullBackupService
             .Where(path =>
                 Path.GetFileName(path).StartsWith(".building-", StringComparison.OrdinalIgnoreCase) ||
                 Path.GetFileName(path).StartsWith(".replacing-", StringComparison.OrdinalIgnoreCase) ||
-                Path.GetFileName(path).StartsWith(".failed-", StringComparison.OrdinalIgnoreCase))
+                Path.GetFileName(path).StartsWith(".failed-", StringComparison.OrdinalIgnoreCase) ||
+                Path.GetFileName(path).StartsWith(".importing-", StringComparison.OrdinalIgnoreCase) ||
+                Path.GetFileName(path).StartsWith("pending-import-", StringComparison.OrdinalIgnoreCase))
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -1315,7 +1359,12 @@ internal sealed partial class FullBackupService
 
     // These folder names predate the User/Recent terminology and must remain readable.
     private static string GetBackupFolderName(FullBackupType backupType) =>
-        backupType == FullBackupType.User ? "protected" : "latest";
+        backupType switch
+        {
+            FullBackupType.User => "protected",
+            FullBackupType.Recent => "latest",
+            _ => throw new ArgumentOutOfRangeException(nameof(backupType))
+        };
 
     private string GetRestoreRequestPath() =>
         Path.Combine(_backupDirectory, RestoreRequestFileName);
@@ -1439,7 +1488,13 @@ internal sealed partial class FullBackupService
     }
 
     private static string GetBackupName(FullBackupType backupType) =>
-        backupType == FullBackupType.User ? "user backup" : "recent automatic backup";
+        backupType switch
+        {
+            FullBackupType.User => "user backup",
+            FullBackupType.Recent => "recent automatic backup",
+            FullBackupType.BeforeRestore => "before-restore backup",
+            _ => throw new ArgumentOutOfRangeException(nameof(backupType))
+        };
 
     private static string GetContainedPath(string rootDirectory, string relativePath)
     {
@@ -1498,6 +1553,7 @@ internal sealed partial class FullBackupService
     private static bool IsExpectedBackupException(Exception exception)
     {
         return exception is IOException or
+            InvalidDataException or
             UnauthorizedAccessException or
             System.Security.SecurityException or
             JsonException or
@@ -1541,7 +1597,8 @@ internal sealed partial class FullBackupService
         int SchemaVersion,
         [property: JsonPropertyName("SnapshotId")]
         Guid BackupId,
-        DateTime RequestedUtc);
+        DateTime RequestedUtc,
+        Guid? ImportId = null);
 
     private sealed record FullBackupEntry(
         string LogicalPath,

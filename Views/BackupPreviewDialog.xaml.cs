@@ -100,7 +100,8 @@ public partial class BackupPreviewDialog : Window
 
     internal BackupPreviewDialog(
         FullBackupPreview preview,
-        Func<Guid, BackupFileSummary, BackupFileContent> readFile)
+        Func<Guid, BackupFileSummary, BackupFileContent> readFile,
+        bool isImport = false)
     {
         ArgumentNullException.ThrowIfNull(preview);
         ArgumentNullException.ThrowIfNull(readFile);
@@ -110,6 +111,13 @@ public partial class BackupPreviewDialog : Window
         _readFile = readFile;
         _edgeResizer = new WindowEdgeResizer(this, () => { });
         Closed += (_, _) => _selectionVersion++;
+
+        if (isImport)
+        {
+            DialogTitleText.Text = "Imported backup contents";
+            RestoreBackupButton.Content = "Restore Imported Backup";
+            FooterText.Text = "Preview is read-only. Import verifies every file again before restoring.";
+        }
 
         var date = preview.CreatedUtc?.ToLocalTime().ToString("MMM d, yyyy 'at' h:mm tt")
             ?? "unknown date";
