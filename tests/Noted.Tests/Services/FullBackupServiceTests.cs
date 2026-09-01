@@ -8,7 +8,7 @@ using Noted.Services;
 namespace Noted.Tests.Services;
 
 [TestClass]
-public sealed class FullBackupServiceTests
+public sealed partial class FullBackupServiceTests
 {
     [TestMethod]
     public void ExportWritesACompleteVerifiedBackupFile()

@@ -235,7 +235,8 @@
                                        FontSize="16"
                                        VerticalAlignment="Center"
                                        Margin="0,0,9,0"/>
-                            <TextBlock Text="Backup contents"
+                            <TextBlock x:Name="DialogTitleText"
+                                       Text="Backup contents"
                                        Foreground="#2C6E91"
                                        FontSize="16"
                                        FontWeight="SemiBold"
@@ -335,7 +336,8 @@
                 </Grid>
 
                 <Grid Grid.Row="3" Margin="0,13,0,0">
-                    <TextBlock Text="Preview is read-only. Restore verifies every file again."
+                    <TextBlock x:Name="FooterText"
+                               Text="Preview is read-only. Restore verifies every file again."
                                Foreground="#6B8795"
                                FontSize="10"
                                VerticalAlignment="Center"/>
