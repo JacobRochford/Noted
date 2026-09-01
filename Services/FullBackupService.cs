@@ -79,7 +79,7 @@ internal sealed record BackupFileContent(
     byte[]? Data,
     string? Error);
 
-internal sealed class FullBackupService
+internal sealed partial class FullBackupService
 {
     private const int BackupSchemaVersion = 1;
     private const int SupportedSettingsSchemaVersion = 1;

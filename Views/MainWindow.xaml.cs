@@ -29,6 +29,7 @@ public partial class MainWindow : Window {
     private readonly Func<FullBackupInfo> _getUserBackupInfo;
     private readonly Func<FullBackupPreview> _getUserBackupPreview;
     private readonly Func<Guid, BackupFileSummary, BackupFileContent> _readUserBackupFile;
+    private readonly Func<string, BackupExportResult> _exportUserBackup;
     private readonly Action _requestUserBackupRestore;
     private readonly MainWindowViewModel _viewModel;
     private readonly CanvasEdgeResizer _notesPanelResizer;
@@ -97,6 +98,7 @@ public partial class MainWindow : Window {
             Func<FullBackupInfo> getUserBackupInfo,
             Func<FullBackupPreview> getUserBackupPreview,
             Func<Guid, BackupFileSummary, BackupFileContent> readUserBackupFile,
+            Func<string, BackupExportResult> exportUserBackup,
             Action requestUserBackupRestore
         )
     {
@@ -111,6 +113,7 @@ public partial class MainWindow : Window {
         _getUserBackupInfo = getUserBackupInfo;
         _getUserBackupPreview = getUserBackupPreview;
         _readUserBackupFile = readUserBackupFile;
+        _exportUserBackup = exportUserBackup;
         _requestUserBackupRestore = requestUserBackupRestore;
 
         _viewModel = new MainWindowViewModel(_fileService, _settingsService, action => Dispatcher.Invoke(action));
@@ -1320,9 +1323,11 @@ public partial class MainWindow : Window {
         var previousStatusBrush = BackupStatusText.Foreground;
         var createWasEnabled = CreateOrUpdateBackupButton.IsEnabled;
         var viewWasEnabled = ViewBackupButton.IsEnabled;
+        var exportWasEnabled = ExportBackupButton.IsEnabled;
         var restoreWasEnabled = RestoreBackupButton.IsEnabled;
         CreateOrUpdateBackupButton.IsEnabled = false;
         ViewBackupButton.IsEnabled = false;
+        ExportBackupButton.IsEnabled = false;
         RestoreBackupButton.IsEnabled = false;
         BackupStatusText.Text = "Checking backup contents...";
         BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
@@ -1338,6 +1343,7 @@ public partial class MainWindow : Window {
             Mouse.OverrideCursor = previousCursor;
             CreateOrUpdateBackupButton.IsEnabled = createWasEnabled;
             ViewBackupButton.IsEnabled = viewWasEnabled;
+            ExportBackupButton.IsEnabled = exportWasEnabled;
             RestoreBackupButton.IsEnabled = restoreWasEnabled;
             BackupStatusText.Text = previousStatus;
             BackupStatusText.Foreground = previousStatusBrush;
@@ -1381,6 +1387,62 @@ public partial class MainWindow : Window {
             ConfirmAndRequestBackupRestore();
     }
 
+    private async void ExportBackupButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Export Noted Backup",
+            Filter = "Noted Backup (*.notedbackup)|*.notedbackup",
+            DefaultExt = ".notedbackup",
+            AddExtension = true,
+            OverwritePrompt = true,
+            FileName = $"Noted Backup {DateTime.Now:yyyy-MM-dd}.notedbackup"
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        CreateOrUpdateBackupButton.IsEnabled = false;
+        ViewBackupButton.IsEnabled = false;
+        ExportBackupButton.IsEnabled = false;
+        RestoreBackupButton.IsEnabled = false;
+        BackupStatusText.Text = "Exporting verified backup...";
+        BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
+        var previousCursor = Mouse.OverrideCursor;
+        Mouse.OverrideCursor = Cursors.Wait;
+
+        BackupExportResult result;
+        FullBackupInfo? refreshedBackupInfo = null;
+        try
+        {
+            result = await Task.Run(() => _exportUserBackup(dialog.FileName));
+            refreshedBackupInfo = await Task.Run(_getUserBackupInfo);
+        }
+        finally
+        {
+            Mouse.OverrideCursor = previousCursor;
+            if (refreshedBackupInfo is not null)
+            {
+                UpdateUserBackupControls(refreshedBackupInfo);
+            }
+            else
+            {
+                CreateOrUpdateBackupButton.IsEnabled = true;
+            }
+        }
+
+        var message = string.IsNullOrWhiteSpace(result.Warning)
+            ? result.Message
+            : $"{result.Message}\n\n{result.Warning}";
+        AppDialog.Show(
+            this,
+            message,
+            result.Success ? "Backup Exported" : "Backup Export Failed",
+            MessageBoxButton.OK,
+            result.Success && string.IsNullOrWhiteSpace(result.Warning)
+                ? MessageBoxImage.Information
+                : MessageBoxImage.Warning);
+    }
+
     private void ConfirmAndRequestBackupRestore()
     {
         var backupInfo = _getUserBackupInfo();
@@ -1408,6 +1470,7 @@ public partial class MainWindow : Window {
     {
         CreateOrUpdateBackupButton.IsEnabled = false;
         ViewBackupButton.IsEnabled = false;
+        ExportBackupButton.IsEnabled = false;
         RestoreBackupButton.IsEnabled = false;
         BackupStatusText.Text = "Checking and copying current data...";
         BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
@@ -1445,12 +1508,19 @@ public partial class MainWindow : Window {
 
     private void RefreshUserBackupControls(bool updateStatusText = true)
     {
-        var backupInfo = _getUserBackupInfo();
+        UpdateUserBackupControls(_getUserBackupInfo(), updateStatusText);
+    }
+
+    private void UpdateUserBackupControls(
+        FullBackupInfo backupInfo,
+        bool updateStatusText = true)
+    {
         CreateOrUpdateBackupButton.Content = backupInfo.Exists
             ? "Update Backup"
             : "Create Backup";
         RestoreBackupButton.IsEnabled = backupInfo.IsValid;
         ViewBackupButton.IsEnabled = backupInfo.IsValid;
+        ExportBackupButton.IsEnabled = backupInfo.IsValid;
 
         if (!updateStatusText)
             return;
