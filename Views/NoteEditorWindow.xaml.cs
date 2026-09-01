@@ -18,6 +18,7 @@ public partial class NoteEditorWindow : Window
     private const double DefaultTabsPanelWidth = 190;
     private const double MinimumTabsPanelWidth = 88;
     private const double MaximumTabsPanelWidth = 360;
+    private const double TabsPanelCollapseThreshold = 36;
 
     private readonly INoteContentService _contentService;
     private readonly IAppSettingsService _settingsService;
@@ -1498,6 +1499,19 @@ public partial class NoteEditorWindow : Window
             ActivateDocument(document);
     }
 
+    private void OpenTabsList_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Middle)
+            return;
+
+        var document = FindDocumentFromElement(e.OriginalSource as DependencyObject);
+        if (document is null)
+            return;
+
+        e.Handled = true;
+        TryCloseDocument(document);
+    }
+
     private void OpenTabsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _tabDragStart = e.GetPosition(OpenTabsList);
@@ -1553,11 +1567,17 @@ public partial class NoteEditorWindow : Window
     {
         if (sender is not FrameworkElement { DataContext: OpenNoteDocument document })
             return;
-        if (document.IsDirty && !TryResolveDirtyDocuments([document]))
-            return;
 
-        RemoveDocument(document, deleteRecoveryDraft: true);
+        TryCloseDocument(document);
         e.Handled = true;
+    }
+
+    private bool TryCloseDocument(OpenNoteDocument document)
+    {
+        if (document.IsDirty && !TryResolveDirtyDocuments([document]))
+            return false;
+
+        return RemoveDocument(document, deleteRecoveryDraft: true);
     }
 
     private void WordWrapMenuItem_Click(object sender, RoutedEventArgs e)
@@ -1608,6 +1628,15 @@ public partial class NoteEditorWindow : Window
 
     private void TabsSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
     {
+        if (TabsColumn.ActualWidth <= TabsPanelCollapseThreshold)
+        {
+            SetTabsPanelCollapsed(collapsed: true, captureCurrentWidth: false);
+            return;
+        }
+
+        if (TabsColumn.ActualWidth < MinimumTabsPanelWidth)
+            TabsColumn.Width = new GridLength(MinimumTabsPanelWidth);
+
         CaptureTabsPanelWidth();
         SaveWindowSize();
     }
@@ -1617,9 +1646,9 @@ public partial class NoteEditorWindow : Window
         SetTabsPanelCollapsed(!_isTabsPanelCollapsed);
     }
 
-    private void SetTabsPanelCollapsed(bool collapsed)
+    private void SetTabsPanelCollapsed(bool collapsed, bool captureCurrentWidth = true)
     {
-        if (collapsed)
+        if (collapsed && captureCurrentWidth)
             CaptureTabsPanelWidth();
 
         _isTabsPanelCollapsed = collapsed;
@@ -1642,7 +1671,7 @@ public partial class NoteEditorWindow : Window
         else
         {
             TabsColumn.MaxWidth = MaximumTabsPanelWidth;
-            TabsColumn.MinWidth = MinimumTabsPanelWidth;
+            TabsColumn.MinWidth = 0;
             TabsColumn.Width = new GridLength(_tabsPanelWidth);
             TabsSplitterColumn.Width = new GridLength(5);
         }
