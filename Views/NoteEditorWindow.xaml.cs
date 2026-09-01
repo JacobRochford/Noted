@@ -588,12 +588,13 @@ public partial class NoteEditorWindow : Window
         }
     }
 
-    private void ActivateDocument(OpenNoteDocument document)
+    private void ActivateDocument(OpenNoteDocument document, bool focusEditor = true)
     {
         if (ReferenceEquals(_activeDocument, document))
         {
             OpenTabsList.SelectedItem = document;
-            FocusActiveSurface();
+            if (focusEditor)
+                FocusActiveSurface();
             return;
         }
 
@@ -614,7 +615,8 @@ public partial class NoteEditorWindow : Window
         SaveEditorSession();
         if (FindPanel.Visibility == Visibility.Visible)
             RefreshFindResults(selectMatch: true);
-        FocusActiveSurface();
+        if (focusEditor)
+            FocusActiveSurface();
     }
 
     private void CaptureActiveDocument()
@@ -1496,7 +1498,19 @@ public partial class NoteEditorWindow : Window
     private void OpenTabsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_isLoading && OpenTabsList.SelectedItem is OpenNoteDocument document)
-            ActivateDocument(document);
+            ActivateDocument(document, focusEditor: false);
+    }
+
+    private void OpenTabsList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Delete ||
+            OpenTabsList.SelectedItem is not OpenNoteDocument document)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        RequestNoteDeletion(document);
     }
 
     private void OpenTabsList_PreviewMouseDown(object sender, MouseButtonEventArgs e)
