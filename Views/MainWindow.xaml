@@ -13,7 +13,10 @@
     <Window.Resources>
         <local:WidthToActionButtonVisibilityConverter x:Key="WidthToActionButtonVisibilityConverter"/>
         <local:WidthToHeaderVisibilityConverter x:Key="WidthToHeaderVisibilityConverter"/>
+        <local:WidthBelowThresholdConverter x:Key="WidthBelow240" Threshold="240"/>
         <local:WidthBelowThresholdConverter x:Key="WidthBelow320" Threshold="320"/>
+        <local:WidthBelowThresholdConverter x:Key="WidthBelow340" Threshold="340"/>
+        <local:WidthBelowThresholdConverter x:Key="WidthBelow400" Threshold="400"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <local:IndentLevelToMarginConverter x:Key="IndentLevelToMarginConverter"/>
         
@@ -125,39 +128,16 @@
             </Setter>
         </Style>
 
-        <Style x:Key="UtilityMenuButtonStyle" TargetType="Button">
+        <Style x:Key="UtilityMenuButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource HeaderChromeButtonStyle}">
+            <Setter Property="Width" Value="24"/>
             <Setter Property="Height" Value="30"/>
-            <Setter Property="Margin" Value="0,0,5,0"/>
-            <Setter Property="Padding" Value="5,0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
             <Setter Property="Foreground" Value="#355A6E"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="bg"
-                                Background="#ECF5FA"
-                                BorderBrush="#C7DEE9"
-                                BorderThickness="1"
-                                CornerRadius="6"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#DCEEF8"/>
-                                <Setter TargetName="bg" Property="BorderBrush" Value="#9FC8DB"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#CBE4F1"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
         <!-- Tray context menu styles -->
@@ -257,18 +237,14 @@
                 <DockPanel>
                 <!-- Header bar -->
                 <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
 
-                    <!-- Title + primary/app-level actions -->
-                    <Grid Grid.Row="0" Margin="0,0,0,7">
+                    <Grid Grid.Column="0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
@@ -277,82 +253,202 @@
                                 Background="Transparent"
                                 Focusable="True"
                                 Cursor="SizeAll"
-                                Padding="0,3,8,3">
+                                Padding="0,3,6,3">
                             <Grid>
-                                <TextBlock x:Name="HeaderText"
-                                           Text="{Binding DisplayHeaderText, Mode=OneWay}"
-                                           FontSize="16"
-                                           FontWeight="SemiBold"
-                                           Foreground="#2C6E91"
-                                           VerticalAlignment="Center"
-                                           Cursor="Hand"
-                                           FocusVisualStyle="{x:Null}"
-                                           ToolTip="Double-click to set a custom header"
-                                           Visibility="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthToHeaderVisibilityConverter}}"
-                                           MouseLeftButtonDown="HeaderText_MouseLeftButtonDown"/>
-                                <TextBlock x:Name="SettingsHeaderText"
-                                           Text="Settings"
-                                           FontSize="16"
-                                           FontWeight="SemiBold"
-                                           Foreground="#2C6E91"
-                                           VerticalAlignment="Center"
-                                           Visibility="Collapsed"/>
-                                <TextBox x:Name="HeaderTextEdit"
-                                         FontSize="16"
-                                         FontWeight="SemiBold"
-                                         Text="{Binding HeaderTextEdit, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                         Foreground="#2C6E91"
-                                         VerticalAlignment="Center"
-                                         Visibility="Collapsed"
-                                         MinWidth="80"
-                                         FocusVisualStyle="{x:Null}"
-                                         ToolTip="Enter or click away to save"
-                                         LostFocus="HeaderEditBox_LostFocus"
-                                         KeyDown="HeaderEditBox_KeyDown"/>
+                            <TextBlock x:Name="HeaderText"
+                                       Text="{Binding HeaderText, Mode=OneWay}"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="#2C6E91"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       Cursor="Hand"
+                                       ToolTip="Double-click to edit the header"
+                                       MouseLeftButtonDown="HeaderText_MouseLeftButtonDown">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility"
+                                                Value="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthToHeaderVisibilityConverter}}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSettingsVisible}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsHeaderEditing}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBox x:Name="HeaderTextEdit"
+                                     Text="{Binding HeaderTextEdit, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     FontSize="16"
+                                     FontWeight="SemiBold"
+                                     Foreground="#2C6E91"
+                                     VerticalAlignment="Center"
+                                     MinWidth="80"
+                                     FocusVisualStyle="{x:Null}"
+                                     ToolTip="Enter or click away to save"
+                                     LostFocus="HeaderEditBox_LostFocus"
+                                     KeyDown="HeaderEditBox_KeyDown"
+                                     Visibility="{Binding IsHeaderEditing, Converter={StaticResource BoolToVisibility}}"/>
+                            <TextBlock Text="Settings"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="#2C6E91"
+                                       VerticalAlignment="Center"
+                                       Visibility="{Binding IsSettingsVisible, Converter={StaticResource BoolToVisibility}}"/>
                             </Grid>
                         </Border>
 
-                        <Button x:Name="NewNoteButton"
-                                Grid.Column="1"
-                                Content="+ New"
-                                Click="NewNoteButton_Click"
-                                Margin="0,0,6,0"
-                                ToolTip="Create a new note">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource PrimaryHeaderButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Grid.Column" Value="1"/>
+                                    <Setter Property="HorizontalAlignment" Value="Right"/>
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
-                                            <Setter Property="Content" Value="+"/>
-                                            <Setter Property="Width" Value="30"/>
-                                            <Setter Property="Padding" Value="0"/>
+                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow340}}" Value="True">
+                                            <Setter Property="Grid.Column" Value="0"/>
+                                            <Setter Property="Grid.ColumnSpan" Value="2"/>
+                                            <Setter Property="HorizontalAlignment" Value="Left"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </Button.Style>
-                        </Button>
+                            </StackPanel.Style>
 
-                        <Button x:Name="QuickNoteButton"
-                                Grid.Column="2"
-                                Content="Quick"
-                                Click="QuickNoteButton_Click"
-                                Margin="0,0,6,0"
-                                ToolTip="Create a quick note">
+                    <Button x:Name="NewNoteButton"
+                            Click="NewNoteButton_Click"
+                            Margin="0,0,3,0"
+                            ToolTip="Create a new note">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PrimaryHeaderButtonStyle}">
+                                <Setter Property="Content" Value="+ New"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
+                                        <Setter Property="Content" Value="+"/>
+                                        <Setter Property="Width" Value="30"/>
+                                        <Setter Property="Padding" Value="0"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                    <Button x:Name="QuickNoteButton"
+                            Click="QuickNoteButton_Click"
+                            Margin="0,0,3,0"
+                            ToolTip="Create a quick note">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PrimaryHeaderButtonStyle}">
+                                <Setter Property="Content" Value="Quick"/>
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow400}}" Value="True">
+                                        <Setter Property="Content" Value="⚡"/>
+                                        <Setter Property="Width" Value="30"/>
+                                        <Setter Property="Padding" Value="0"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                    <Grid x:Name="UtilityMenu">
+                        <StackPanel Orientation="Horizontal">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow240}}" Value="True"/>
+                                                <Condition Binding="{Binding ElementName=QuickNoteButton, Path=Visibility}" Value="Visible"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+
+                            <Button x:Name="ChecklistButton"
+                                    Click="ChecklistButton_Click"
+                                    Style="{StaticResource UtilityMenuButtonStyle}"
+                                    ToolTip="Show or hide Checklist"
+                                    AutomationProperties.Name="Checklist">
+                                <TextBlock Text="✓" FontSize="13"/>
+                            </Button>
+
+                            <Button x:Name="DictionaryButton"
+                                    Click="DictionaryButton_Click"
+                                    Style="{StaticResource UtilityMenuButtonStyle}"
+                                    ToolTip="Show or hide Dictionary"
+                                    AutomationProperties.Name="Dictionary">
+                                <TextBlock Text="Aa" FontWeight="Bold" FontSize="10"/>
+                            </Button>
+
+                            <Button x:Name="ScratchpadButton"
+                                    Click="ScratchpadButton_Click"
+                                    Style="{StaticResource UtilityMenuButtonStyle}"
+                                    ToolTip="Show or hide Scratchpad"
+                                    AutomationProperties.Name="Scratchpad">
+                                <TextBlock Text="✎" FontSize="13"/>
+                            </Button>
+
+                            <Button x:Name="MiniPadButton"
+                                    Click="MiniPadButton_Click"
+                                    Style="{StaticResource UtilityMenuButtonStyle}"
+                                    ToolTip="Show or hide MiniPad"
+                                    AutomationProperties.Name="MiniPad">
+                                <TextBlock Text="▤" FontSize="12"/>
+                            </Button>
+                        </StackPanel>
+
+                        <Button x:Name="CompactUtilityMenuButton"
+                                Click="UtilityMenuButton_Click"
+                                ToolTip="Open utility menu"
+                                AutomationProperties.Name="Utility menu">
                             <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource PrimaryHeaderButtonStyle}">
+                                <Style TargetType="Button" BasedOn="{StaticResource HeaderChromeButtonStyle}">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
-                                            <Setter Property="Content" Value="⚡"/>
-                                            <Setter Property="Width" Value="30"/>
-                                            <Setter Property="Padding" Value="0"/>
-                                        </DataTrigger>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow240}}" Value="True"/>
+                                                <Condition Binding="{Binding ElementName=QuickNoteButton, Path=Visibility}" Value="Visible"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </MultiDataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
+                            <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE712;" FontSize="15"/>
+                            <Button.ContextMenu>
+                                <ContextMenu Style="{StaticResource NotedContextMenu}"
+                                             Placement="Bottom">
+                                    <ContextMenu.Resources>
+                                        <Style TargetType="MenuItem" BasedOn="{StaticResource NotedContextMenuItem}"/>
+                                    </ContextMenu.Resources>
+                                    <MenuItem Header="Checklist" Click="ChecklistButton_Click">
+                                        <MenuItem.Icon><TextBlock Text="✓" FontSize="13"/></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Dictionary" Click="DictionaryButton_Click">
+                                        <MenuItem.Icon><TextBlock Text="Aa" FontSize="10" FontWeight="Bold"/></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Scratchpad" Click="ScratchpadButton_Click">
+                                        <MenuItem.Icon><TextBlock Text="✎" FontSize="13"/></MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="MiniPad" Click="MiniPadButton_Click">
+                                        <MenuItem.Icon><TextBlock Text="▤" FontSize="12"/></MenuItem.Icon>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </Button.ContextMenu>
                         </Button>
+                    </Grid>
+                        </StackPanel>
+                    </Grid>
 
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
                         <Button x:Name="SettingsButton"
-                                Grid.Column="3"
                                 Click="SettingsButton_Click"
                                 Style="{StaticResource HeaderChromeButtonStyle}"
                                 Margin="0,0,3,0"
@@ -365,7 +461,6 @@
                         </Button>
 
                         <Button x:Name="HideNotesButton"
-                                Grid.Column="4"
                                 Click="HideNotesButton_Click"
                                 Style="{StaticResource HeaderChromeButtonStyle}"
                                 ToolTip="Hide Notes"
@@ -374,54 +469,7 @@
                                        Text="&#xE711;"
                                        FontSize="15"/>
                         </Button>
-                    </Grid>
-
-                    <!-- Utility menu is visually separated from note actions above. -->
-                    <UniformGrid x:Name="UtilityMenu" Grid.Row="1" Columns="4">
-                        <Button x:Name="ChecklistButton"
-                                Click="ChecklistButton_Click"
-                                Style="{StaticResource UtilityMenuButtonStyle}"
-                                ToolTip="Show or hide Checklist">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <TextBlock Text="✓" FontSize="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Checklist" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button x:Name="DictionaryButton"
-                                Click="DictionaryButton_Click"
-                                Style="{StaticResource UtilityMenuButtonStyle}"
-                                ToolTip="Show or hide Dictionary">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <TextBlock Text="Aa" FontWeight="Bold" FontSize="10" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Dictionary" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button x:Name="ScratchpadButton"
-                                Click="ScratchpadButton_Click"
-                                Style="{StaticResource UtilityMenuButtonStyle}"
-                                ToolTip="Show or hide Scratchpad">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <TextBlock Text="✎" FontSize="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="Scratchpad" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button x:Name="MiniPadButton"
-                                Click="MiniPadButton_Click"
-                                ToolTip="Show or hide MiniPad">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource UtilityMenuButtonStyle}">
-                                    <Setter Property="Margin" Value="0"/>
-                                </Style>
-                            </Button.Style>
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                <TextBlock Text="▤" FontSize="12" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="MiniPad" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-                    </UniformGrid>
+                    </StackPanel>
                 </Grid>
 
                 <!-- Separator -->
