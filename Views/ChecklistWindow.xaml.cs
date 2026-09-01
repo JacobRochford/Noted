@@ -20,6 +20,7 @@ public partial class ChecklistWindow : OverlayWindow
     private ChecklistItem? _draggedItem;
     private ListBoxItem? _draggedContainer;
     private ChecklistTab? _tabBeingRenamed;
+    private ChecklistPriorityColors _priorityColors = new();
     private string? _lastPersistenceWarning;
     private bool _reopenOnStartup;
     private bool _preserveOpenStateOnClose;
@@ -32,6 +33,8 @@ public partial class ChecklistWindow : OverlayWindow
 
         _settingsService = settingsService;
         var state = _settingsService.LoadChecklistWindowState();
+        _priorityColors = ChecklistColors.Normalize(state.PriorityColors);
+        ApplyPriorityColors();
         _reopenOnStartup = state.ReopenOnStartup;
         RestoreWindowBounds(state.Left, state.Top, state.Width, state.Height);
 
@@ -119,7 +122,8 @@ public partial class ChecklistWindow : OverlayWindow
             Opacity         = _defaultOpacity,
             GhostModeOpacity = _ghostModeOpacity,
             GhostModeEnabled = _ghostModeEnabled,
-            ReopenOnStartup = _reopenOnStartup
+            ReopenOnStartup = _reopenOnStartup,
+            PriorityColors = _priorityColors
         });
     }
 
@@ -442,6 +446,34 @@ public partial class ChecklistWindow : OverlayWindow
             "Low"    => ChecklistPriority.Low,
             _        => ChecklistPriority.None
         };
+    }
+
+    private void PriorityColorsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ChecklistPriorityColorsDialog(_priorityColors)
+        {
+            Owner = this
+        };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        _priorityColors = ChecklistColors.Normalize(dialog.SelectedColors);
+        ApplyPriorityColors();
+        SaveWindowState();
+    }
+
+    private void ApplyPriorityColors()
+    {
+        Resources["ChecklistHighPriorityBrush"] = CreatePriorityBrush(_priorityColors.HighColor);
+        Resources["ChecklistMediumPriorityBrush"] = CreatePriorityBrush(_priorityColors.MediumColor);
+        Resources["ChecklistLowPriorityBrush"] = CreatePriorityBrush(_priorityColors.LowColor);
+    }
+
+    private static SolidColorBrush CreatePriorityBrush(string colorValue)
+    {
+        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(colorValue));
+        brush.Freeze();
+        return brush;
     }
 
     // Context menu reorder / duplicate

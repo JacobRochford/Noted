@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:noted="clr-namespace:Noted"
         xmlns:h="clr-namespace:Noted.Helpers"
+        xmlns:m="clr-namespace:Noted.Models"
         Title="Checklist"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -15,11 +16,30 @@
         MinHeight="360">
 
     <noted:OverlayWindow.Resources>
-        <h:PriorityToColorConverter x:Key="PriorityToColor"/>
         <h:DueDateToTextConverter x:Key="DueDateToText"/>
         <h:DueDateToColorConverter x:Key="DueDateToColor"/>
         <h:NullToVisibilityConverter x:Key="NullToVisibility"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+        <SolidColorBrush x:Key="ChecklistHighPriorityBrush" Color="#FF0000"/>
+        <SolidColorBrush x:Key="ChecklistMediumPriorityBrush" Color="#FFA500"/>
+        <SolidColorBrush x:Key="ChecklistLowPriorityBrush" Color="#0000FF"/>
+        <SolidColorBrush x:Key="ChecklistNoPriorityBrush" Color="#C5D2D9"/>
+
+        <Style x:Key="PriorityDotStyle" TargetType="Ellipse">
+            <Setter Property="Fill" Value="{DynamicResource ChecklistNoPriorityBrush}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Priority}" Value="{x:Static m:ChecklistPriority.High}">
+                    <Setter Property="Fill" Value="{DynamicResource ChecklistHighPriorityBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Priority}" Value="{x:Static m:ChecklistPriority.Medium}">
+                    <Setter Property="Fill" Value="{DynamicResource ChecklistMediumPriorityBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Priority}" Value="{x:Static m:ChecklistPriority.Low}">
+                    <Setter Property="Fill" Value="{DynamicResource ChecklistLowPriorityBrush}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
 
         <Style x:Key="ScrollBarThumbStyle" TargetType="Thumb">
             <Setter Property="MinHeight" Value="20"/>
@@ -486,23 +506,27 @@
                                                 <MenuItem Header="High priority" Tag="High"
                                                           Style="{StaticResource NotedContextMenuItem}"
                                                           Click="SetPriority_Click">
-                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="#D96868"/></MenuItem.Icon>
+                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="{DynamicResource ChecklistHighPriorityBrush}"/></MenuItem.Icon>
                                                 </MenuItem>
                                                 <MenuItem Header="Medium priority" Tag="Medium"
                                                           Style="{StaticResource NotedContextMenuItem}"
                                                           Click="SetPriority_Click">
-                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="#D6A64B"/></MenuItem.Icon>
+                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="{DynamicResource ChecklistMediumPriorityBrush}"/></MenuItem.Icon>
                                                 </MenuItem>
                                                 <MenuItem Header="Low priority" Tag="Low"
                                                           Style="{StaticResource NotedContextMenuItem}"
                                                           Click="SetPriority_Click">
-                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="#5BA8C8"/></MenuItem.Icon>
+                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="{DynamicResource ChecklistLowPriorityBrush}"/></MenuItem.Icon>
                                                 </MenuItem>
                                                 <MenuItem Header="No priority" Tag="None"
                                                           Style="{StaticResource NotedContextMenuItem}"
                                                           Click="SetPriority_Click">
-                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="#C5D2D9"/></MenuItem.Icon>
+                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="{DynamicResource ChecklistNoPriorityBrush}"/></MenuItem.Icon>
                                                 </MenuItem>
+                                                <Separator/>
+                                                <MenuItem Header="Priority colors..."
+                                                          Style="{StaticResource NotedContextMenuItem}"
+                                                          Click="PriorityColorsMenuItem_Click"/>
                                                 <Separator Tag="MoveTabsSeparator"/>
                                                 <MenuItem Header="Move to top" Tag="ManualReorder"
                                                           Style="{StaticResource NotedContextMenuItem}" Click="MoveToTop_Click"/>
@@ -529,7 +553,7 @@
                                                 <ColumnDefinition Width="30"/>
                                             </Grid.ColumnDefinitions>
                                             <Ellipse Grid.Column="0" Width="8" Height="8"
-                                                     Fill="{Binding Priority, Converter={StaticResource PriorityToColor}}"
+                                                     Style="{StaticResource PriorityDotStyle}"
                                                      Cursor="Hand" ToolTip="Click to change priority"
                                                      MouseLeftButtonDown="PriorityDot_MouseLeftButtonDown"/>
                                             <CheckBox Grid.Column="1" Style="{StaticResource ChecklistBox}"
@@ -705,7 +729,7 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <Ellipse Grid.Column="0" Width="8" Height="8"
-                             Fill="{Binding Priority, Converter={StaticResource PriorityToColor}}"
+                             Style="{StaticResource PriorityDotStyle}"
                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     <TextBlock Grid.Column="1" Text="{Binding Text}"
                                Margin="6,0,0,0" Foreground="#314B5A"

@@ -718,6 +718,11 @@ public sealed class AppSettingsService : IAppSettingsService {
                     ? item
                     : item with { Priority = ChecklistPriority.None })
                 .ToList(),
+            ChecklistWindowState = (settings.ChecklistWindowState ?? new ChecklistWindowState()) with
+            {
+                PriorityColors = ChecklistColors.Normalize(
+                    settings.ChecklistWindowState?.PriorityColors)
+            },
             DictionaryItems = settings.DictionaryItems?
                 .Where(item => item is not null)
                 .ToList()
