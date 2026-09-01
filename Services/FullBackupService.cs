@@ -39,6 +39,46 @@ internal sealed record FullBackupInfo(
     int FileCount,
     string? Error);
 
+internal enum BackupFileComparison
+{
+    Unchanged,
+    Changed,
+    Missing,
+    Unavailable
+}
+
+internal enum BackupContentFormat
+{
+    Text,
+    Json,
+    RichText
+}
+
+internal sealed record BackupFileSummary(
+    string LogicalPath,
+    string DisplayPath,
+    string Category,
+    long Length,
+    string Sha256,
+    int? ItemCount,
+    long? ContentLength,
+    BackupFileComparison Comparison);
+
+internal sealed record FullBackupPreview(
+    bool Exists,
+    bool IsValid,
+    Guid BackupId,
+    DateTime? CreatedUtc,
+    IReadOnlyList<BackupFileSummary> Files,
+    string? Error);
+
+internal sealed record BackupFileContent(
+    bool Success,
+    bool NeedsRecheck,
+    BackupContentFormat Format,
+    byte[]? Data,
+    string? Error);
+
 internal sealed class FullBackupService
 {
     private const int BackupSchemaVersion = 1;
@@ -46,6 +86,7 @@ internal sealed class FullBackupService
     private const string ManifestFileName = "manifest.json";
     private const string FilesDirectoryName = "files";
     private const string RestoreRequestFileName = "restore-request.json";
+    private const long MaximumPreviewFileSize = 4 * 1024 * 1024;
     private static readonly Guid MiniPadDraftId =
         new("A6CB4208-79C0-4C08-9D07-9CDF33F31337");
     private static readonly JsonSerializerOptions BackupJsonOptions = CreateJsonOptions();
@@ -90,6 +131,124 @@ internal sealed class FullBackupService
                 null),
             _ => new FullBackupInfo(true, false, null, 0, backup.Error)
         };
+    }
+
+    internal FullBackupPreview GetUserBackupPreview()
+    {
+        var path = GetBackupPath(FullBackupType.User);
+        var backup = ReadBackup(path, FullBackupType.User);
+        if (backup.Status == BackupReadStatus.Missing)
+            return new FullBackupPreview(false, false, Guid.Empty, null, [], null);
+        if (backup.Status != BackupReadStatus.Valid)
+            return new FullBackupPreview(true, false, Guid.Empty, null, [], backup.Error);
+
+        var manifest = backup.Manifest!;
+        var files = manifest.Entries
+            .Select(entry => new BackupFileSummary(
+                entry.LogicalPath,
+                GetDisplayPath(entry.LogicalPath),
+                GetFileCategory(entry.LogicalPath),
+                entry.Length,
+                entry.Sha256,
+                entry.ItemCount,
+                entry.ContentLength,
+                CompareWithCurrentFile(entry, manifest)))
+            .OrderBy(file => file.Category, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(file => file.DisplayPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new FullBackupPreview(
+            true,
+            true,
+            manifest.BackupId,
+            manifest.CreatedUtc,
+            files,
+            null);
+    }
+
+    internal BackupFileContent ReadUserBackupFile(
+        Guid backupId,
+        BackupFileSummary file)
+    {
+        if (backupId == Guid.Empty || string.IsNullOrWhiteSpace(file.LogicalPath))
+        {
+            return new BackupFileContent(
+                false,
+                false,
+                BackupContentFormat.Text,
+                null,
+                "Select a backup file to preview.");
+        }
+
+        var path = GetBackupPath(FullBackupType.User);
+        var manifestResult = JsonFileStore.Read<FullBackupManifest>(
+            Path.Combine(path, ManifestFileName),
+            BackupJsonOptions);
+        var manifest = manifestResult.Value;
+        if (!manifestResult.Success ||
+            manifest is null ||
+            manifest.SchemaVersion != BackupSchemaVersion ||
+            manifest.Type != FullBackupType.User ||
+            manifest.BackupId != backupId ||
+            manifest.Entries is null)
+        {
+            return new BackupFileContent(
+                false,
+                true,
+                BackupContentFormat.Text,
+                null,
+                "The backup changed after this preview was opened. Close this window and check it again.");
+        }
+
+        var entry = manifest.Entries.FirstOrDefault(item =>
+            string.Equals(
+                NormalizeLogicalPath(item.LogicalPath),
+                NormalizeLogicalPath(file.LogicalPath),
+                StringComparison.OrdinalIgnoreCase));
+        if (entry is null ||
+            entry.Length != file.Length ||
+            !string.Equals(entry.Sha256, file.Sha256, StringComparison.OrdinalIgnoreCase))
+        {
+            return new BackupFileContent(
+                false,
+                true,
+                BackupContentFormat.Text,
+                null,
+                "The selected file changed after this preview was opened. Close this window and check it again.");
+        }
+
+        try
+        {
+            if (entry.Length > MaximumPreviewFileSize)
+            {
+                return new BackupFileContent(
+                    false,
+                    false,
+                    BackupContentFormat.Text,
+                    null,
+                    "This file is verified but too large to display in the preview window.");
+            }
+
+            var filesDirectory = Path.Combine(path, FilesDirectoryName);
+            var filePath = GetContainedPath(filesDirectory, entry.LogicalPath);
+            var bytes = ReadFileBytes(filePath);
+            VerifyFileBytes(bytes, entry.Length, entry.Sha256, entry.LogicalPath);
+            return new BackupFileContent(
+                true,
+                false,
+                GetContentFormat(entry.LogicalPath),
+                bytes,
+                null);
+        }
+        catch (Exception ex) when (IsExpectedBackupException(ex))
+        {
+            return new BackupFileContent(
+                false,
+                true,
+                BackupContentFormat.Text,
+                null,
+                $"The selected file could not be verified: {ex.Message}");
+        }
     }
 
     internal void UpdateNotesDirectory(string notesDirectory)
@@ -814,6 +973,8 @@ internal sealed class FullBackupService
                 if (entry.Length < 0 || string.IsNullOrWhiteSpace(entry.Sha256))
                     return InvalidBackup(backupType, path, $"The manifest entry '{entry.LogicalPath}' is incomplete.");
 
+                _ = GetRestoreDestination(entry.LogicalPath, manifest);
+
                 var filePath = GetContainedPath(filesDirectory, entry.LogicalPath);
                 if (!File.Exists(filePath))
                     return InvalidBackup(backupType, path, $"The backup file '{entry.LogicalPath}' is missing.");
@@ -1182,6 +1343,84 @@ internal sealed class FullBackupService
 
         throw new FileVerificationException(
             $"The backup path '{logicalPath}' does not identify application or note data.");
+    }
+
+    private BackupFileComparison CompareWithCurrentFile(
+        FullBackupEntry entry,
+        FullBackupManifest manifest)
+    {
+        try
+        {
+            var currentPath = GetRestoreDestination(entry.LogicalPath, manifest);
+            var bytes = ReadFileBytes(currentPath);
+            var hash = Convert.ToHexString(SHA256.HashData(bytes));
+            return bytes.LongLength == entry.Length &&
+                   string.Equals(hash, entry.Sha256, StringComparison.OrdinalIgnoreCase)
+                ? BackupFileComparison.Unchanged
+                : BackupFileComparison.Changed;
+        }
+        catch (FileNotFoundException)
+        {
+            return BackupFileComparison.Missing;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return BackupFileComparison.Missing;
+        }
+        catch (Exception ex) when (IsExpectedBackupException(ex))
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+            return BackupFileComparison.Unavailable;
+        }
+    }
+
+    private static string GetDisplayPath(string logicalPath)
+    {
+        var normalizedPath = NormalizeLogicalPath(logicalPath);
+        var separator = normalizedPath.IndexOf('/');
+        return separator >= 0 && separator < normalizedPath.Length - 1
+            ? normalizedPath[(separator + 1)..]
+            : normalizedPath;
+    }
+
+    private static string GetFileCategory(string logicalPath)
+    {
+        var path = NormalizeLogicalPath(logicalPath);
+        if (path.StartsWith("notes/", StringComparison.OrdinalIgnoreCase))
+            return "Notes";
+        if (path.StartsWith("app/DeletedNotes/", StringComparison.OrdinalIgnoreCase))
+            return "Deleted notes";
+        if (path.StartsWith("app/note-history/", StringComparison.OrdinalIgnoreCase))
+            return "Note history";
+        if (path.StartsWith("app/recovery/micro-scratchpads/", StringComparison.OrdinalIgnoreCase))
+            return "MiniPad";
+        if (path.StartsWith("app/recovery/", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("app/session/editor-workspace.json", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Open notes";
+        }
+        if (path.Equals("app/checklist.json", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("app/checklist-tabs.json", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Checklist";
+        }
+        if (path.Equals("app/dictionary.json", StringComparison.OrdinalIgnoreCase))
+            return "Dictionary";
+        if (path.Equals("app/scratchpad.rtf", StringComparison.OrdinalIgnoreCase))
+            return "Scratchpad";
+        if (path.Equals("app/settings.json", StringComparison.OrdinalIgnoreCase))
+            return "Settings";
+        return "Application data";
+    }
+
+    private static BackupContentFormat GetContentFormat(string logicalPath)
+    {
+        var extension = Path.GetExtension(logicalPath);
+        if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
+            return BackupContentFormat.Json;
+        if (extension.Equals(".rtf", StringComparison.OrdinalIgnoreCase))
+            return BackupContentFormat.RichText;
+        return BackupContentFormat.Text;
     }
 
     private static void VerifyFileBytes(
