@@ -95,6 +95,7 @@ public partial class NoteEditorWindow : Window
     internal string? BackupBlockingIssue => GetPersistenceIssues().FirstOrDefault();
     public event EventHandler? NewNoteRequested;
     public event EventHandler<NoteDeleteRequestedEventArgs>? DeleteNoteRequested;
+    public event EventHandler<NoteRenameRequestedEventArgs>? NoteRenameRequested;
 
     public bool OpenNote(string filePath)
     {
@@ -301,13 +302,23 @@ public partial class NoteEditorWindow : Window
             return;
 
         CaptureActiveDocument();
+        UpdateDocumentPathAfterRename(document, newFilePath);
+    }
+
+    private void UpdateDocumentPathAfterRename(OpenNoteDocument document, string newFilePath)
+    {
         var oldPath = document.FilePath;
-        document.UpdateFilePath(NormalizePath(newFilePath));
+        var normalizedNewPath = NormalizePath(newFilePath);
+        var pathChanged = !string.Equals(
+            oldPath,
+            normalizedNewPath,
+            StringComparison.OrdinalIgnoreCase);
+        document.UpdateFilePath(normalizedNewPath);
         document.UsesGeneratedName = false;
         if (_unsavedRecoveredPaths.Remove(oldPath))
             _unsavedRecoveredPaths.Add(document.FilePath);
         document.IsMissing = false;
-        if (document.IsDirty)
+        if (pathChanged && document.IsDirty)
             MoveRecoveryDraft(oldPath, document);
         SaveEditorSession();
         UpdateEditorState();
@@ -658,10 +669,11 @@ public partial class NoteEditorWindow : Window
         try
         {
             var persistedContent = _contentService.Load(document.FilePath);
-            if (!string.Equals(
-                    persistedContent,
-                    document.SavedContent,
-                    StringComparison.Ordinal))
+            var shouldWriteContent = string.Equals(
+                persistedContent,
+                document.SavedContent,
+                StringComparison.Ordinal);
+            if (!shouldWriteContent)
             {
                 if (!string.Equals(
                         persistedContent,
@@ -678,7 +690,11 @@ public partial class NoteEditorWindow : Window
 
                 _noteSaveWarning = null;
             }
-            else
+
+            if (document.UsesGeneratedName && !TryRenameNote(document, isFirstSave: true))
+                return false;
+
+            if (shouldWriteContent)
             {
                 _noteSaveWarning = _contentService.Save(
                     document.FilePath,
@@ -701,6 +717,32 @@ public partial class NoteEditorWindow : Window
             ShowError("Unable to save note", ex.Message);
             return false;
         }
+    }
+
+    private bool TryRenameNote(OpenNoteDocument document, bool isFirstSave)
+    {
+        if (NoteRenameRequested is null)
+        {
+            ShowError(
+                "Unable to name note",
+                "Noted could not open the note naming prompt. The note was not saved.");
+            return false;
+        }
+
+        var request = new NoteRenameRequestedEventArgs(document.FilePath, isFirstSave);
+        NoteRenameRequested.Invoke(this, request);
+        if (request.IsCanceled)
+            return false;
+        if (string.IsNullOrWhiteSpace(request.NewFilePath))
+        {
+            ShowError(
+                "Unable to name note",
+                "The note was not renamed, so Noted did not save it.");
+            return false;
+        }
+
+        UpdateDocumentPathAfterRename(document, request.NewFilePath);
+        return true;
     }
 
     private bool RemoveDocument(
@@ -806,7 +848,8 @@ public partial class NoteEditorWindow : Window
         FindPanel.IsEnabled = hasDocument;
         ReplaceButton.IsEnabled = hasDocument && _activeDocument?.IsMissing != true;
         ReplaceAllButton.IsEnabled = hasDocument && _activeDocument?.IsMissing != true;
-        SaveButton.IsEnabled = _activeDocument is { IsDirty: true, IsMissing: false };
+        SaveButton.IsEnabled = _activeDocument is { IsMissing: false } document &&
+            (document.IsDirty || document.UsesGeneratedName);
         Title = hasDocument
             ? $"{(_activeDocument!.IsDirty ? "*" : string.Empty)}{_activeDocument.DisplayName} - Noted"
             : "Noted";
@@ -1425,6 +1468,23 @@ public partial class NoteEditorWindow : Window
     {
         if (sender is MenuItem { DataContext: OpenNoteDocument document })
             RequestNoteDeletion(document);
+    }
+
+    private void RenameTabNoteMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { DataContext: OpenNoteDocument document })
+            return;
+        if (document.IsMissing)
+        {
+            ShowError(
+                "Unable to rename note",
+                "The original file no longer exists, so this note cannot be renamed.");
+            return;
+        }
+
+        if (ReferenceEquals(document, _activeDocument))
+            CaptureActiveDocument();
+        TryRenameNote(document, isFirstSave: false);
     }
 
     private void RequestNoteDeletion(OpenNoteDocument document)

@@ -164,6 +164,7 @@ public partial class MainWindow : Window {
         SearchBox.LostFocus += SearchBox_LostFocus;
         _noteEditor.NewNoteRequested += NoteEditor_NewNoteRequested;
         _noteEditor.DeleteNoteRequested += NoteEditor_DeleteNoteRequested;
+        _noteEditor.NoteRenameRequested += NoteEditor_NoteRenameRequested;
         _viewModel.PropertyChanged += OnViewModelFilterTextChanged;
     }
 
@@ -1450,6 +1451,54 @@ public partial class MainWindow : Window {
         CreateAndOpenNewNote(_noteEditor);
     }
 
+    private void NoteEditor_NoteRenameRequested(
+        object? sender,
+        NoteRenameRequestedEventArgs e) {
+        var attemptedName = e.IsFirstSave
+            ? string.Empty
+            : Path.GetFileNameWithoutExtension(e.FilePath);
+        var oldFileName = Path.GetFileName(e.FilePath);
+        var containingDirectory = Path.GetDirectoryName(e.FilePath) ?? _fileService.CurrentDirectory;
+        var oldNoteKey = _fileService.GetNoteKey(e.FilePath);
+
+        while (true) {
+            var dialog = e.IsFirstSave
+                ? NewNoteNameDialog.ForFirstSave(attemptedName)
+                : NewNoteNameDialog.ForRename(attemptedName);
+            dialog.Owner = _noteEditor;
+            if (dialog.ShowDialog() != true) {
+                e.IsCanceled = true;
+                return;
+            }
+
+            attemptedName = dialog.NoteName;
+            var (success, newFileName, error) = _fileService.RenameNote(
+                oldFileName,
+                attemptedName,
+                containingDirectory);
+            if (!success) {
+                AppDialog.Show(
+                    _noteEditor,
+                    error ?? "The note could not be renamed.",
+                    e.IsFirstSave ? "Name Note" : "Rename Note",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                continue;
+            }
+
+            var renamedFilePath = Path.Combine(
+                containingDirectory,
+                newFileName ?? oldFileName);
+            var renamedNoteKey = _fileService.GetNoteKey(renamedFilePath);
+            _viewModel.ReplacePinnedNoteKey(oldNoteKey, renamedNoteKey);
+            e.NewFilePath = renamedFilePath;
+            Dispatcher.BeginInvoke(
+                DispatcherPriority.Background,
+                new Action(() => _viewModel.LoadNotes(renamedNoteKey)));
+            return;
+        }
+    }
+
     private void CreateAndOpenNewNote(Window owner) {
         try {
             var createdNote = CreateNewNoteFromCurrentSettings(owner);
@@ -2313,6 +2362,7 @@ public partial class MainWindow : Window {
         SearchBox.LostFocus -= SearchBox_LostFocus;
         _noteEditor.NewNoteRequested -= NoteEditor_NewNoteRequested;
         _noteEditor.DeleteNoteRequested -= NoteEditor_DeleteNoteRequested;
+        _noteEditor.NoteRenameRequested -= NoteEditor_NoteRenameRequested;
         _viewModel.PropertyChanged -= OnViewModelFilterTextChanged;
 
         _viewModel.NotesLoaded -= OnNotesLoaded;

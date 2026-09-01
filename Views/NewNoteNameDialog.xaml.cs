@@ -6,10 +6,37 @@ namespace Noted;
 public partial class NewNoteNameDialog : Window {
     public string NoteName => NoteNameTextBox.Text.Trim();
 
-    public NewNoteNameDialog(string initialName = "") {
+    public NewNoteNameDialog(string initialName = "")
+        : this(initialName, "Create Note", "Enter note title", "Create") {
+    }
+
+    private NewNoteNameDialog(
+        string initialName,
+        string title,
+        string prompt,
+        string confirmText) {
         InitializeComponent();
+        Title = title;
+        PromptText.Text = prompt;
+        ConfirmButton.Content = confirmText;
         NoteNameTextBox.Text = initialName;
         Loaded += OnLoaded;
+    }
+
+    public static NewNoteNameDialog ForFirstSave(string initialName = "") {
+        return new NewNoteNameDialog(
+            initialName,
+            "Name Note",
+            "Name this note before saving",
+            "Save");
+    }
+
+    public static NewNoteNameDialog ForRename(string initialName) {
+        return new NewNoteNameDialog(
+            initialName,
+            "Rename Note",
+            "Enter a new name",
+            "Rename");
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e) {
@@ -17,7 +44,7 @@ public partial class NewNoteNameDialog : Window {
         NoteNameTextBox.SelectAll();
     }
 
-    private void CreateButton_Click(object sender, RoutedEventArgs e) {
+    private void ConfirmButton_Click(object sender, RoutedEventArgs e) {
         TryConfirm();
     }
 
@@ -36,8 +63,8 @@ public partial class NewNoteNameDialog : Window {
     }
 
     private void NoteNameTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) {
-        if (CreateButton is not null)
-            CreateButton.IsEnabled = !string.IsNullOrWhiteSpace(NoteNameTextBox.Text);
+        if (ConfirmButton is not null)
+            ConfirmButton.IsEnabled = !string.IsNullOrWhiteSpace(NoteNameTextBox.Text);
     }
 
     private void TryConfirm() {
