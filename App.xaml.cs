@@ -118,6 +118,7 @@ public partial class App : Application
                 GetUserBackupInfo,
                 GetUserBackupPreview,
                 ReadUserBackupFile,
+                ExportUserBackup,
                 RequestUserBackupRestore);
             _fileService = fileService;
             _noteEditorWindow = noteEditor;
@@ -532,6 +533,13 @@ public partial class App : Application
             false,
             false,
             BackupContentFormat.Text,
+            null,
+            "Backups are not available.");
+
+    private BackupExportResult ExportUserBackup(string destinationPath) =>
+        _fullBackupService?.ExportUserBackup(destinationPath)
+        ?? new BackupExportResult(
+            false,
             null,
             "Backups are not available.");
 

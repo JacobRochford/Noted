@@ -1,4 +1,5 @@
 using System.IO;
+using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Noted.Models;
@@ -9,6 +10,92 @@ namespace Noted.Tests.Services;
 [TestClass]
 public sealed class FullBackupServiceTests
 {
+    [TestMethod]
+    public void ExportWritesACompleteVerifiedBackupFile()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var paths = CreateSourceData(directory);
+        var service = new FullBackupService(paths.AppData, paths.Notes);
+        Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
+        var exportPath = directory.File("noted-backup.notedbackup");
+
+        var result = service.ExportUserBackup(exportPath);
+
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual(Path.GetFullPath(exportPath), result.ExportPath);
+        Assert.IsNull(result.Warning);
+        using var archive = ZipFile.OpenRead(exportPath);
+        Assert.IsNotNull(archive.GetEntry("manifest.json"));
+        Assert.IsNotNull(archive.GetEntry("files/app/settings.json"));
+        var noteEntry = archive.GetEntry("files/notes/one.txt");
+        Assert.IsNotNull(noteEntry);
+        using var reader = new StreamReader(noteEntry.Open());
+        Assert.AreEqual("note one", reader.ReadToEnd());
+        Assert.HasCount(
+            service.GetUserBackupInfo().FileCount + 1,
+            archive.Entries.Where(entry => !string.IsNullOrEmpty(entry.Name)).ToList());
+    }
+
+    [TestMethod]
+    public void ExportReplacesAnExistingFileOnlyAfterVerification()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var paths = CreateSourceData(directory);
+        var service = new FullBackupService(paths.AppData, paths.Notes);
+        Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
+        var exportPath = directory.File("noted-backup.notedbackup");
+        File.WriteAllText(exportPath, "old export");
+
+        var result = service.ExportUserBackup(exportPath);
+
+        Assert.IsTrue(result.Success);
+        using var archive = ZipFile.OpenRead(exportPath);
+        Assert.IsNotNull(archive.GetEntry("manifest.json"));
+        Assert.HasCount(
+            1,
+            Directory.GetFiles(directory.Path, "noted-backup.notedbackup", SearchOption.TopDirectoryOnly));
+        Assert.HasCount(
+            0,
+            Directory.GetFiles(directory.Path, ".noted-backup.notedbackup.*", SearchOption.TopDirectoryOnly));
+    }
+
+    [TestMethod]
+    public void DamagedBackupCannotBeExported()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var paths = CreateSourceData(directory);
+        var service = new FullBackupService(paths.AppData, paths.Notes);
+        Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
+        File.WriteAllText(
+            Path.Combine(service.BackupDirectory, "protected", "files", "notes", "one.txt"),
+            "damaged backup");
+        var exportPath = directory.File("noted-backup.notedbackup");
+
+        var result = service.ExportUserBackup(exportPath);
+
+        Assert.IsFalse(result.Success);
+        Assert.IsFalse(File.Exists(exportPath));
+        Assert.HasCount(
+            0,
+            Directory.GetFiles(directory.Path, ".noted-backup.notedbackup.*", SearchOption.TopDirectoryOnly));
+    }
+
+    [TestMethod]
+    public void BackupCannotBeExportedIntoItsOwnStorageFolder()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var paths = CreateSourceData(directory);
+        var service = new FullBackupService(paths.AppData, paths.Notes);
+        Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
+        var exportPath = Path.Combine(service.BackupDirectory, "copy.notedbackup");
+
+        var result = service.ExportUserBackup(exportPath);
+
+        Assert.IsFalse(result.Success);
+        Assert.IsFalse(File.Exists(exportPath));
+        Assert.IsTrue(service.GetUserBackupInfo().IsValid);
+    }
+
     [TestMethod]
     public void BackupPreviewVerifiesFilesAndComparesRestoreLocations()
     {
