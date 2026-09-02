@@ -1109,6 +1109,38 @@
                                                 Background="#C65D8B" Tag="#C65D8B"
                                                 ToolTip="Pink"
                                                 Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#526D82" Tag="#526D82"
+                                                ToolTip="Slate"
+                                                Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#1A9CB0" Tag="#1A9CB0"
+                                                ToolTip="Cyan"
+                                                Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#2F9E73" Tag="#2F9E73"
+                                                ToolTip="Emerald"
+                                                Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#7B8D42" Tag="#7B8D42"
+                                                ToolTip="Olive"
+                                                Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#C99A24" Tag="#C99A24"
+                                                ToolTip="Gold"
+                                                Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#C95151" Tag="#C95151"
+                                                ToolTip="Red"
+                                                Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#D66B5D" Tag="#D66B5D"
+                                                ToolTip="Coral"
+                                                Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#B85C9E" Tag="#B85C9E"
+                                                ToolTip="Magenta"
+                                                Click="AccentPresetButton_Click"/>
                                         <Button Content="More colors..."
                                                 Height="27"
                                                 Margin="0,0,0,7"
@@ -1348,19 +1380,19 @@
                                     Padding="12"
                                     Margin="0,0,0,10">
                                 <StackPanel>
-                                    <TextBlock Text="Ghost Mode"
+                                    <TextBlock Text="Notes Opacity"
                                                FontSize="12"
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource NotedTextBrush}"
                                                Margin="0,0,0,8"/>
 
-                                    <!-- Default opacity (always active) -->
+                                    <!-- Visible opacity (always active) -->
                                     <Grid Margin="0,0,0,4">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Default opacity"
+                                        <TextBlock Text="Visible opacity"
                                                    Grid.Column="0"
                                                    FontSize="11"
                                                    Foreground="{DynamicResource NotedSecondaryTextBrush}"
@@ -1385,7 +1417,7 @@
                                             IsSnapToTickEnabled="False"
                                             Margin="0,0,0,14"/>
 
-                                    <!-- Ghost mode toggle -->
+                                    <!-- Idle fade toggle -->
                                     <CheckBox x:Name="GhostModeOption"
                                             Foreground="{DynamicResource NotedTextBrush}"
                                             FontWeight="SemiBold"
@@ -1393,18 +1425,18 @@
                                             Unchecked="GhostModeOption_Changed"
                                             Margin="0,0,0,10"
                                             HorizontalAlignment="Stretch">
-                                        <TextBlock Text="Semi-transparent when not hovered"
+                                        <TextBlock Text="Fade notes when not hovered"
                                                    TextWrapping="Wrap"
                                                    VerticalAlignment="Center"/>
                                     </CheckBox>
 
-                                    <!-- Ghost opacity (disabled when ghost mode is off) -->
+                                    <!-- Idle opacity (disabled when idle fade is off) -->
                                     <Grid Margin="0,0,0,4">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Ghost opacity"
+                                        <TextBlock Text="Idle opacity"
                                                    Grid.Column="0"
                                                    FontSize="11"
                                                    Foreground="{DynamicResource NotedSecondaryTextBrush}"
