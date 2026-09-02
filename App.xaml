@@ -465,7 +465,13 @@
                                 <Track.DecreaseRepeatButton>
                                     <RepeatButton Command="{x:Static Slider.DecreaseLarge}"
                                                   Background="Transparent"
-                                                  BorderThickness="0"/>
+                                                  BorderThickness="0">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
                                 </Track.DecreaseRepeatButton>
                                 <Track.Thumb>
                                     <Thumb Width="14" Height="14">
@@ -481,7 +487,13 @@
                                 <Track.IncreaseRepeatButton>
                                     <RepeatButton Command="{x:Static Slider.IncreaseLarge}"
                                                   Background="Transparent"
-                                                  BorderThickness="0"/>
+                                                  BorderThickness="0">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
                                 </Track.IncreaseRepeatButton>
                             </Track>
                         </Grid>
