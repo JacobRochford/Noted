@@ -52,6 +52,11 @@ public partial class NewNoteNameDialog : Window {
         DialogResult = false;
     }
 
+    private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
+        if (e.LeftButton == MouseButtonState.Pressed)
+            DragMove();
+    }
+
     private void NoteNameTextBox_KeyDown(object sender, KeyEventArgs e) {
         if (e.Key == Key.Enter) {
             TryConfirm();

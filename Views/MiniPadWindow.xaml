@@ -15,86 +15,16 @@
         Background="Transparent">
 
     <noted:OverlayWindow.Resources>
-        <Style x:Key="ScrollBarThumbStyle" TargetType="Thumb">
-            <Setter Property="MinHeight" Value="20"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Thumb">
-                        <Border Background="#91C5DE" CornerRadius="3" Margin="1,2"/>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ModernScrollBar" TargetType="ScrollBar">
-            <Setter Property="Width" Value="7"/>
-            <Setter Property="MinWidth" Value="7"/>
-            <Setter Property="Background" Value="#E6F2F8"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ScrollBar">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="3">
-                            <Track x:Name="PART_Track" IsDirectionReversed="True">
-                                <Track.DecreaseRepeatButton>
-                                    <RepeatButton Command="ScrollBar.PageUpCommand"
-                                                  Background="Transparent"
-                                                  BorderThickness="0"
-                                                  Opacity="0"/>
-                                </Track.DecreaseRepeatButton>
-                                <Track.Thumb>
-                                    <Thumb Style="{StaticResource ScrollBarThumbStyle}"/>
-                                </Track.Thumb>
-                                <Track.IncreaseRepeatButton>
-                                    <RepeatButton Command="ScrollBar.PageDownCommand"
-                                                  Background="Transparent"
-                                                  BorderThickness="0"
-                                                  Opacity="0"/>
-                                </Track.IncreaseRepeatButton>
-                            </Track>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style TargetType="ScrollBar" BasedOn="{StaticResource ModernScrollBar}"/>
-
-        <Style x:Key="HeaderIconBtn" TargetType="Button">
-            <Setter Property="Width" Value="30"/>
-            <Setter Property="Height" Value="30"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#5F7480"/>
-            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonBackground"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="5">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ButtonBackground" Property="Background" Value="#DCEEF6"/>
-                                <Setter Property="Foreground" Value="#2C6E91"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="ButtonBackground" Property="Background" Value="#C9E4F0"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource NotedScrollBar}"/>
+        <Style x:Key="HeaderIconBtn"
+               TargetType="Button"
+               BasedOn="{StaticResource NotedHeaderIconButton}"/>
     </noted:OverlayWindow.Resources>
 
     <Grid Background="Transparent">
         <Border Margin="1"
-                Background="#F5F9FC"
-                BorderBrush="#87CEEB"
+                Background="{DynamicResource NotedWindowBackgroundBrush}"
+                BorderBrush="{DynamicResource NotedStrongBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="8">
             <Grid Margin="10">
@@ -120,11 +50,11 @@
                                     IsHitTestVisible="False">
                             <TextBlock Text="✎"
                                        Margin="0,0,7,0"
-                                       Foreground="#5BA8C8"
+                                       Foreground="{DynamicResource NotedAccentBrush}"
                                        FontSize="15"
                                        VerticalAlignment="Center"/>
                             <TextBlock Text="MiniPad"
-                                       Foreground="#2C6E91"
+                                       Foreground="{DynamicResource NotedTextBrush}"
                                        FontSize="16"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Center"/>
@@ -141,8 +71,8 @@
                 </Border>
 
                 <Border Grid.Row="1"
-                        Background="White"
-                        BorderBrush="#C9DFEC"
+                        Background="{DynamicResource NotedSurfaceBrush}"
+                        BorderBrush="{DynamicResource NotedBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="8"
                         ClipToBounds="True">
@@ -154,9 +84,10 @@
                              VerticalScrollBarVisibility="Auto"
                              BorderThickness="0"
                              Padding="11,9"
-                             Background="White"
-                             Foreground="#263E4C"
-                             CaretBrush="#2C6E91"
+                             Background="{DynamicResource NotedInputBackgroundBrush}"
+                             Foreground="{DynamicResource NotedTextBrush}"
+                             CaretBrush="{DynamicResource NotedAccentBrush}"
+                             SelectionBrush="{DynamicResource NotedAccentSoftHoverBrush}"
                              FontFamily="Segoe UI"
                              FontSize="13"
                              SpellCheck.IsEnabled="True"/>
@@ -166,13 +97,13 @@
                         Grid.Row="2"
                         Margin="0,7,0,0"
                         Padding="8,6"
-                        Background="#FFF4E5"
-                        BorderBrush="#E5A23B"
+                        Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                        BorderBrush="{DynamicResource NotedWarningBrush}"
                         BorderThickness="1"
                         CornerRadius="6"
                         Visibility="Collapsed">
                     <TextBlock x:Name="PersistenceErrorText"
-                               Foreground="#7A3E00"
+                               Foreground="{DynamicResource NotedWarningBrush}"
                                FontSize="11"
                                TextWrapping="Wrap"/>
                 </Border>

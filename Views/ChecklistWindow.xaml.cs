@@ -312,7 +312,7 @@ public partial class ChecklistWindow : OverlayWindow
     {
         _tabBeingRenamed = tab;
         TabNamePrompt.Text = tab is null ? "New tab" : "Rename tab";
-        TabNamePrompt.Foreground = new SolidColorBrush(Color.FromRgb(44, 110, 145));
+        TabNamePrompt.Foreground = (Brush)FindResource("NotedAccentBrush");
         TabNameTextBox.Text = tab?.Name ?? "";
         ConfirmTabNameButton.Content = tab is null ? "Add" : "Save";
         TabNamePopup.PlacementTarget = placementTarget;
@@ -352,7 +352,7 @@ public partial class ChecklistWindow : OverlayWindow
             TabNamePrompt.Text = string.IsNullOrWhiteSpace(name)
                 ? "Enter a tab name"
                 : "That tab name is already in use";
-            TabNamePrompt.Foreground = new SolidColorBrush(Color.FromRgb(184, 79, 79));
+            TabNamePrompt.Foreground = (Brush)FindResource("NotedDangerBrush");
             return;
         }
 
@@ -362,7 +362,7 @@ public partial class ChecklistWindow : OverlayWindow
         if (!saved)
         {
             TabNamePrompt.Text = "The tab could not be saved";
-            TabNamePrompt.Foreground = new SolidColorBrush(Color.FromRgb(184, 79, 79));
+            TabNamePrompt.Foreground = (Brush)FindResource("NotedDangerBrush");
             ShowPersistenceWarningOnce(_viewModel.PersistenceError);
             return;
         }
@@ -787,7 +787,7 @@ public partial class ChecklistWindow : OverlayWindow
             Icon = new TextBlock
             {
                 Text = "↪",
-                Foreground = new SolidColorBrush(Color.FromRgb(91, 168, 200)),
+                Foreground = (Brush)FindResource("NotedAccentBrush"),
                 FontSize = 12
             }
         };

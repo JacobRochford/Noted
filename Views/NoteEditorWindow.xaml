@@ -6,127 +6,40 @@
         Height="650"
         MinWidth="520"
         MinHeight="250"
-        Background="#F5F9FC"
+        Background="{DynamicResource NotedWindowBackgroundBrush}"
+        Foreground="{DynamicResource NotedTextBrush}"
         FontFamily="Segoe UI"
         WindowStartupLocation="CenterScreen"
         Closing="Window_Closing"
         Loaded="Window_Loaded"
         PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
-        <Style x:Key="EditorScrollBarThumb" TargetType="Thumb">
-            <Setter Property="MinHeight" Value="20"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Thumb">
-                        <Border Background="#91C5DE" CornerRadius="3" Margin="1,2"/>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource NotedScrollBar}"/>
 
-        <Style TargetType="ScrollBar">
-            <Setter Property="Width" Value="7"/>
-            <Setter Property="MinWidth" Value="7"/>
-            <Setter Property="Background" Value="#E6F2F8"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ScrollBar">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="3">
-                            <Track x:Name="PART_Track" IsDirectionReversed="True">
-                                <Track.DecreaseRepeatButton>
-                                    <RepeatButton Command="ScrollBar.PageUpCommand"
-                                                  Background="Transparent"
-                                                  BorderThickness="0"
-                                                  Opacity="0"/>
-                                </Track.DecreaseRepeatButton>
-                                <Track.Thumb>
-                                    <Thumb Style="{StaticResource EditorScrollBarThumb}"/>
-                                </Track.Thumb>
-                                <Track.IncreaseRepeatButton>
-                                    <RepeatButton Command="ScrollBar.PageDownCommand"
-                                                  Background="Transparent"
-                                                  BorderThickness="0"
-                                                  Opacity="0"/>
-                                </Track.IncreaseRepeatButton>
-                            </Track>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="EditorButton" TargetType="Button">
-            <Setter Property="Background" Value="#5BA8C8"/>
-            <Setter Property="Foreground" Value="White"/>
+        <Style x:Key="EditorButton" TargetType="Button" BasedOn="{StaticResource NotedPrimaryButton}">
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Padding" Value="10,3"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonBackground"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="5"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ButtonBackground" Property="Background" Value="#4A97B7"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="ButtonBackground" Property="Background" Value="#3F86A3"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="ButtonBackground" Property="Opacity" Value="0.45"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
-        <Style x:Key="HeaderIconButton" TargetType="Button">
+        <Style x:Key="HeaderIconButton" TargetType="Button" BasedOn="{StaticResource NotedHeaderIconButton}">
             <Setter Property="Width" Value="26"/>
             <Setter Property="Height" Value="26"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Padding" Value="5"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="IconBackground"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="4"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="IconBackground" Property="Background" Value="#DCEEF6"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="IconBackground" Property="Background" Value="#C9E5F2"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
-        <Style x:Key="EditorFindInput" TargetType="TextBox">
+        <Style x:Key="TabCloseButton"
+               TargetType="Button"
+               BasedOn="{StaticResource NotedHeaderIconButton}">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
+
+        <Style x:Key="EditorFindInput" TargetType="TextBox" BasedOn="{StaticResource NotedTextInput}">
             <Setter Property="Height" Value="27"/>
             <Setter Property="Padding" Value="7,3"/>
-            <Setter Property="Background" Value="White"/>
-            <Setter Property="BorderBrush" Value="#A8CDE0"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="#355A6E"/>
-            <Setter Property="CaretBrush" Value="#2C6E91"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
@@ -138,7 +51,7 @@
             <Setter Property="Margin" Value="2,0,0,0"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#527386"/>
+            <Setter Property="Foreground" Value="{DynamicResource NotedSecondaryTextBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="Template">
@@ -153,8 +66,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="FindButtonBackground" Property="Background" Value="#DCEEF6"/>
-                                <Setter Property="Foreground" Value="#2C6E91"/>
+                                <Setter TargetName="FindButtonBackground" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.4"/>
@@ -171,7 +84,7 @@
             <Setter Property="Padding" Value="5,2"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#527386"/>
+            <Setter Property="Foreground" Value="{DynamicResource NotedSecondaryTextBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="Template">
@@ -186,11 +99,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="FindToggleBackground" Property="Background" Value="#DCEEF6"/>
+                                <Setter TargetName="FindToggleBackground" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="FindToggleBackground" Property="Background" Value="#C9E5F2"/>
-                                <Setter Property="Foreground" Value="#2C6E91"/>
+                                <Setter TargetName="FindToggleBackground" Property="Background" Value="{DynamicResource NotedAccentSoftHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -199,11 +112,11 @@
         </Style>
     </Window.Resources>
 
-    <DockPanel Background="#F5F9FC">
+    <DockPanel Background="{DynamicResource NotedWindowBackgroundBrush}">
         <Border DockPanel.Dock="Top"
                 Padding="10,6"
-                Background="#EFF7FB"
-                BorderBrush="#C9DFEC"
+                Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                BorderBrush="{DynamicResource NotedBorderBrush}"
                 BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -218,21 +131,29 @@
                             Style="{StaticResource HeaderIconButton}"
                             AutomationProperties.Name="Toggle tabs panel">
                         <Grid Width="14" Height="14">
-                            <Border BorderBrush="#5F7480"
+                            <Border BorderBrush="{DynamicResource NotedSecondaryTextBrush}"
                                     BorderThickness="1"
                                     CornerRadius="1"/>
                             <Rectangle x:Name="TabsPanelIconSidebar"
                                        Width="4"
                                        Margin="2"
                                        HorizontalAlignment="Left"
-                                       Fill="#5BA8C8"/>
+                                       Fill="{DynamicResource NotedAccentBrush}"/>
                             <Border Width="1"
                                     Margin="6,2,0,2"
                                     HorizontalAlignment="Left"
-                                    Background="#A8CDE0"/>
+                                    Background="{DynamicResource NotedStrongBorderBrush}"/>
                         </Grid>
                     </Button>
-                    <Menu Background="Transparent" Foreground="#355A6E" FontSize="12">
+                    <Menu Background="Transparent"
+                          Foreground="{DynamicResource NotedTextBrush}"
+                          FontSize="12">
+                        <Menu.Resources>
+                            <Style TargetType="MenuItem"
+                                   BasedOn="{StaticResource NotedMenuItem}"/>
+                            <Style TargetType="Separator"
+                                   BasedOn="{StaticResource NotedMenuSeparator}"/>
+                        </Menu.Resources>
                         <MenuItem Header="File">
                             <MenuItem Header="New Note"
                                       InputGestureText="Ctrl+N"
@@ -299,7 +220,7 @@
                     <TextBlock x:Name="DirtyStatusText"
                                Margin="8,0,0,0"
                                VerticalAlignment="Center"
-                               Foreground="#C9302C"
+                               Foreground="{DynamicResource NotedDangerBrush}"
                                FontSize="11"
                                Text="Unsaved changes"
                                Visibility="Collapsed"/>
@@ -316,7 +237,7 @@
                             AutomationProperties.Name="Find in note">
                         <TextBlock FontFamily="Segoe MDL2 Assets"
                                    FontSize="13"
-                                   Foreground="#527386"
+                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                    Text="&#xE721;"/>
                     </Button>
                     <Button x:Name="SaveButton"
@@ -333,20 +254,20 @@
         <Border x:Name="PersistenceErrorPanel"
                 DockPanel.Dock="Bottom"
                 Padding="8,5"
-                Background="#FFF4E5"
-                BorderBrush="#E5A23B"
+                Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                BorderBrush="{DynamicResource NotedWarningBrush}"
                 BorderThickness="0,1,0,0"
                 Visibility="Collapsed">
             <TextBlock x:Name="PersistenceErrorText"
-                       Foreground="#7A3E00"
+                       Foreground="{DynamicResource NotedWarningBrush}"
                        FontSize="11"
                        TextWrapping="Wrap"/>
         </Border>
 
         <Border Margin="10"
                 Padding="1"
-                Background="White"
-                BorderBrush="#C9DFEC"
+                Background="{DynamicResource NotedSurfaceBrush}"
+                BorderBrush="{DynamicResource NotedBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="8">
             <Grid>
@@ -358,7 +279,7 @@
 
                 <Border x:Name="TabsPanel"
                         Grid.Column="0"
-                        Background="#EFF7FB"
+                        Background="{DynamicResource NotedSubtleSurfaceBrush}"
                         CornerRadius="7,0,0,7"
                         Padding="7">
                     <DockPanel>
@@ -368,7 +289,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock VerticalAlignment="Center"
-                                       Foreground="#66879A"
+                                       Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                        FontSize="10"
                                        FontWeight="SemiBold"
                                        Text="OPEN NOTES"/>
@@ -380,7 +301,7 @@
                                     Style="{StaticResource HeaderIconButton}"
                                     ToolTip="New note (Ctrl+N)"
                                     AutomationProperties.Name="New note">
-                                <TextBlock Foreground="#355A6E"
+                                <TextBlock Foreground="{DynamicResource NotedTextBrush}"
                                            FontSize="17"
                                            FontWeight="Normal"
                                            LineHeight="17"
@@ -423,12 +344,12 @@
                                                     <Trigger Property="IsMouseOver" Value="True">
                                                         <Setter TargetName="TabBackground"
                                                                 Property="Background"
-                                                                Value="#E0F0F7"/>
+                                                                Value="{DynamicResource NotedAccentSoftBrush}"/>
                                                     </Trigger>
                                                     <Trigger Property="IsSelected" Value="True">
                                                         <Setter TargetName="TabBackground"
                                                                 Property="Background"
-                                                                Value="#C9E5F2"/>
+                                                                Value="{DynamicResource NotedAccentSoftHoverBrush}"/>
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
@@ -459,21 +380,16 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock VerticalAlignment="Center"
-                                                   Foreground="#355A6E"
+                                                   Foreground="{DynamicResource NotedTextBrush}"
                                                    FontSize="12"
                                                    Text="{Binding TabLabel}"
                                                    TextTrimming="CharacterEllipsis"
                                                    ToolTip="{Binding FilePath}"/>
                                         <Button Grid.Column="1"
                                                 Margin="7,0,0,0"
-                                                Padding="2,0"
-                                                Background="Transparent"
-                                                BorderThickness="0"
                                                 Click="CloseTabButton_Click"
                                                 Content="×"
-                                                Cursor="Hand"
-                                                Foreground="#66879A"
-                                                FontSize="14"
+                                                Style="{StaticResource TabCloseButton}"
                                                 ToolTip="Close tab"/>
                                     </Grid>
                                 </DataTemplate>
@@ -485,7 +401,7 @@
                 <GridSplitter x:Name="TabsSplitter"
                               Grid.Column="1"
                               HorizontalAlignment="Stretch"
-                              Background="#C9DFEC"
+                              Background="{DynamicResource NotedBorderBrush}"
                               Cursor="SizeWE"
                               DragCompleted="TabsSplitter_DragCompleted"
                               ResizeBehavior="PreviousAndNext"
@@ -496,16 +412,16 @@
                              Padding="12"
                              AcceptsReturn="True"
                              AcceptsTab="True"
-                             Background="White"
+                             Background="{DynamicResource NotedInputBackgroundBrush}"
                              BorderThickness="0"
-                             CaretBrush="#2C6E91"
-                             Foreground="#333333"
+                             CaretBrush="{DynamicResource NotedAccentBrush}"
+                             Foreground="{DynamicResource NotedTextBrush}"
                              FontFamily="Consolas"
                              FontSize="14"
                              HorizontalScrollBarVisibility="Disabled"
                              IsEnabled="False"
                              IsInactiveSelectionHighlightEnabled="True"
-                             SelectionBrush="#91C5DE"
+                             SelectionBrush="{DynamicResource NotedAccentSoftHoverBrush}"
                              SpellCheck.IsEnabled="True"
                              TextChanged="EditorTextBox_TextChanged"
                              TextWrapping="Wrap"
@@ -537,23 +453,25 @@
                                           Click="MarkdownMenuItem_Click"/>
                                 <Separator/>
                                 <MenuItem Header="Delete Note..."
-                                          Foreground="#B84F4F"
+                                          Foreground="{DynamicResource NotedDangerBrush}"
                                           Click="DeleteActiveNoteMenuItem_Click"/>
                             </ContextMenu>
                         </TextBox.ContextMenu>
                     </TextBox>
 
                     <FlowDocumentScrollViewer x:Name="MarkdownPreview"
-                                              Background="White"
+                                              Background="{DynamicResource NotedInputBackgroundBrush}"
+                                              Foreground="{DynamicResource NotedTextBrush}"
                                               BorderThickness="0"
                                               IsToolBarVisible="False"
                                               Visibility="Collapsed"
                                               VerticalScrollBarVisibility="Auto">
                         <FlowDocumentScrollViewer.ContextMenu>
-                            <ContextMenu Background="#F5F9FC"
-                                         BorderBrush="#A8CDE0"
-                                         BorderThickness="1"
-                                         Padding="4">
+                            <ContextMenu Style="{StaticResource NotedContextMenu}">
+                                <ContextMenu.Resources>
+                                    <Style TargetType="MenuItem"
+                                           BasedOn="{StaticResource NotedContextMenuItem}"/>
+                                </ContextMenu.Resources>
                                 <MenuItem Header="Copy" Command="ApplicationCommands.Copy"/>
                                 <Separator/>
                                 <MenuItem x:Name="PreviewMarkdownMenuItem"
@@ -563,7 +481,7 @@
                                           Click="MarkdownMenuItem_Click"/>
                                 <Separator/>
                                 <MenuItem Header="Delete Note..."
-                                          Foreground="#B84F4F"
+                                          Foreground="{DynamicResource NotedDangerBrush}"
                                           Click="DeleteActiveNoteMenuItem_Click"/>
                             </ContextMenu>
                         </FlowDocumentScrollViewer.ContextMenu>
@@ -576,8 +494,8 @@
                             Padding="7"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Top"
-                            Background="#F5F9FC"
-                            BorderBrush="#87CEEB"
+                            Background="{DynamicResource NotedSurfaceBrush}"
+                            BorderBrush="{DynamicResource NotedAccentBrush}"
                             BorderThickness="1"
                             CornerRadius="7"
                             Visibility="Collapsed">
@@ -665,12 +583,12 @@
                                           Content="Match case"
                                           Checked="MatchCaseOption_Changed"
                                           Unchecked="MatchCaseOption_Changed"
-                                          Foreground="#5F7480"
+                                          Style="{StaticResource NotedCheckBox}"
                                           FontSize="10"/>
                                 <TextBlock x:Name="FindResultText"
                                            HorizontalAlignment="Right"
                                            VerticalAlignment="Center"
-                                           Foreground="#78909C"
+                                           Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                            FontSize="10"/>
                             </Grid>
                         </StackPanel>

@@ -93,7 +93,8 @@ public partial class MainWindow : Window {
     [
         new(AppThemeMode.System, "Use Windows setting"),
         new(AppThemeMode.Light, "Light"),
-        new(AppThemeMode.Dark, "Dark")
+        new(AppThemeMode.Dark, "Dark"),
+        new(AppThemeMode.Midnight, "Midnight blue")
     ];
 
     private enum HotkeyFeature
@@ -1081,6 +1082,17 @@ public partial class MainWindow : Window {
             AccentHexTextBox.Text = color;
     }
 
+    private void ChooseAccentColorButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new AccentColorDialog(_activeAccentColor)
+        {
+            Owner = this
+        };
+
+        if (dialog.ShowDialog() == true)
+            AccentHexTextBox.Text = dialog.SelectedColor;
+    }
+
     private void AccentHexTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_isUpdatingSettingsView)
@@ -1458,7 +1470,7 @@ public partial class MainWindow : Window {
         ImportBackupButton.IsEnabled = false;
         RestoreBackupButton.IsEnabled = false;
         BackupStatusText.Text = "Checking backup contents...";
-        BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
+        BackupStatusText.Foreground = (Brush)FindResource("NotedSecondaryTextBrush");
         Mouse.OverrideCursor = Cursors.Wait;
 
         FullBackupPreview preview;
@@ -1523,7 +1535,7 @@ public partial class MainWindow : Window {
         ImportBackupButton.IsEnabled = false;
         RestoreBackupButton.IsEnabled = false;
         BackupStatusText.Text = "Exporting verified backup...";
-        BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
+        BackupStatusText.Foreground = (Brush)FindResource("NotedSecondaryTextBrush");
         var previousCursor = Mouse.OverrideCursor;
         Mouse.OverrideCursor = Cursors.Wait;
 
@@ -1587,7 +1599,7 @@ public partial class MainWindow : Window {
         ImportBackupButton.IsEnabled = false;
         RestoreBackupButton.IsEnabled = false;
         BackupStatusText.Text = "Checking imported backup...";
-        BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
+        BackupStatusText.Foreground = (Brush)FindResource("NotedSecondaryTextBrush");
         Mouse.OverrideCursor = Cursors.Wait;
 
         FullBackupPreview preview;
@@ -1712,7 +1724,7 @@ public partial class MainWindow : Window {
         ImportBackupButton.IsEnabled = false;
         RestoreBackupButton.IsEnabled = false;
         BackupStatusText.Text = "Checking and copying current data...";
-        BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
+        BackupStatusText.Foreground = (Brush)FindResource("NotedSecondaryTextBrush");
         var previousCursor = Mouse.OverrideCursor;
         Mouse.OverrideCursor = Cursors.Wait;
 
@@ -1736,9 +1748,9 @@ public partial class MainWindow : Window {
             : $"{resultMessage} {result.Warning}";
         BackupStatusText.Foreground = result.Status switch
         {
-            FullBackupStatus.Created => new SolidColorBrush(Color.FromRgb(44, 110, 145)),
-            FullBackupStatus.Skipped => new SolidColorBrush(Color.FromRgb(95, 116, 128)),
-            _ => new SolidColorBrush(Color.FromRgb(184, 79, 79))
+            FullBackupStatus.Created => (Brush)FindResource("NotedAccentBrush"),
+            FullBackupStatus.Skipped => (Brush)FindResource("NotedSecondaryTextBrush"),
+            _ => (Brush)FindResource("NotedDangerBrush")
         };
         _lastBackupAttemptFailed = result.Status is
             FullBackupStatus.Blocked or FullBackupStatus.Failed;
@@ -1768,19 +1780,19 @@ public partial class MainWindow : Window {
         if (!backupInfo.Exists)
         {
             BackupStatusText.Text = "No full backup has been created yet.";
-            BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
+            BackupStatusText.Foreground = (Brush)FindResource("NotedSecondaryTextBrush");
             return;
         }
 
         if (!backupInfo.IsValid)
         {
             BackupStatusText.Text = $"The existing backup needs attention: {backupInfo.Error}";
-            BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(184, 79, 79));
+            BackupStatusText.Foreground = (Brush)FindResource("NotedDangerBrush");
             return;
         }
 
         BackupStatusText.Text = BuildBackupStatusText(backupInfo);
-        BackupStatusText.Foreground = new SolidColorBrush(Color.FromRgb(95, 116, 128));
+        BackupStatusText.Foreground = (Brush)FindResource("NotedSecondaryTextBrush");
     }
 
     private static string BuildBackupStatusText(FullBackupInfo backupInfo)

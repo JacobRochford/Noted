@@ -41,86 +41,16 @@
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="ScrollBarThumbStyle" TargetType="Thumb">
-            <Setter Property="MinHeight" Value="20"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Thumb">
-                        <Border Background="#91C5DE" CornerRadius="3" Margin="1,2"/>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ModernScrollBar" TargetType="ScrollBar">
-            <Setter Property="Width" Value="7"/>
-            <Setter Property="MinWidth" Value="7"/>
-            <Setter Property="Background" Value="#E6F2F8"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ScrollBar">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="3">
-                            <Track x:Name="PART_Track" IsDirectionReversed="True">
-                                <Track.DecreaseRepeatButton>
-                                    <RepeatButton Command="ScrollBar.PageUpCommand"
-                                                  Background="Transparent"
-                                                  BorderThickness="0"
-                                                  Opacity="0"/>
-                                </Track.DecreaseRepeatButton>
-                                <Track.Thumb>
-                                    <Thumb Style="{StaticResource ScrollBarThumbStyle}"/>
-                                </Track.Thumb>
-                                <Track.IncreaseRepeatButton>
-                                    <RepeatButton Command="ScrollBar.PageDownCommand"
-                                                  Background="Transparent"
-                                                  BorderThickness="0"
-                                                  Opacity="0"/>
-                                </Track.IncreaseRepeatButton>
-                            </Track>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style TargetType="ScrollBar" BasedOn="{StaticResource ModernScrollBar}"/>
-
-        <Style x:Key="HeaderIconBtn" TargetType="Button">
-            <Setter Property="Width" Value="30"/>
-            <Setter Property="Height" Value="30"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#5F7480"/>
-            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonBackground"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="5">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ButtonBackground" Property="Background" Value="#DCEEF6"/>
-                                <Setter Property="Foreground" Value="#2C6E91"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="ButtonBackground" Property="Background" Value="#C9E4F0"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource NotedScrollBar}"/>
+        <Style x:Key="HeaderIconBtn"
+               TargetType="Button"
+               BasedOn="{StaticResource NotedHeaderIconButton}"/>
 
         <Style x:Key="FilterTab" TargetType="RadioButton">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0,0,0,2"/>
-            <Setter Property="Foreground" Value="#6B7F8A"/>
+            <Setter Property="Foreground" Value="{DynamicResource NotedSecondaryTextBrush}"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Padding" Value="11,7,11,6"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -137,12 +67,12 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="TabBackground" Property="Background" Value="#EAF5FA"/>
-                                <Setter Property="Foreground" Value="#2C6E91"/>
+                                <Setter TargetName="TabBackground" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter Property="BorderBrush" Value="#5BA8C8"/>
-                                <Setter Property="Foreground" Value="#2C6E91"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource NotedAccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
                                 <Setter Property="FontWeight" Value="SemiBold"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -156,7 +86,7 @@
             <Setter Property="Height" Value="26"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#78909C"/>
+            <Setter Property="Foreground" Value="{DynamicResource NotedSecondaryTextBrush}"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -169,8 +99,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ButtonBackground" Property="Background" Value="#DCEEF6"/>
-                                <Setter Property="Foreground" Value="#2C6E91"/>
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -184,8 +114,8 @@
             <Setter Property="Content" Value="&#xE70F;"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                    <Setter Property="Background" Value="#DCEEF6"/>
-                    <Setter Property="Foreground" Value="#2C6E91"/>
+                    <Setter Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -193,7 +123,7 @@
         <Style x:Key="FooterLinkBtn" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#6B7F8A"/>
+            <Setter Property="Foreground" Value="{DynamicResource NotedSecondaryTextBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="Padding" Value="4,3"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -208,8 +138,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ButtonBackground" Property="Background" Value="#E5F2F8"/>
-                                <Setter Property="Foreground" Value="#2C6E91"/>
+                                <Setter TargetName="ButtonBackground" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -217,34 +147,10 @@
             </Setter>
         </Style>
 
-        <Style x:Key="PrimaryBtn" TargetType="Button">
-            <Setter Property="Background" Value="#5BA8C8"/>
-            <Setter Property="Foreground" Value="White"/>
+        <Style x:Key="PrimaryBtn" TargetType="Button" BasedOn="{StaticResource NotedPrimaryButton}">
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="11,6"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonBackground"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="5"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ButtonBackground" Property="Background" Value="#4A97B7"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="ButtonBackground" Property="Background" Value="#3E839F"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
         <Style x:Key="ChecklistBox" TargetType="CheckBox">
@@ -255,21 +161,22 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
                         <Border x:Name="Box" Width="18" Height="18"
-                                Background="White" BorderBrush="#9CB4C0"
+                                Background="{DynamicResource NotedInputBackgroundBrush}"
+                                BorderBrush="{DynamicResource NotedStrongBorderBrush}"
                                 BorderThickness="1" CornerRadius="4">
                             <TextBlock x:Name="CheckMark" Text="✓"
-                                       Foreground="White" FontSize="13" FontWeight="Bold"
+                                       Foreground="{DynamicResource NotedAccentTextBrush}" FontSize="13" FontWeight="Bold"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Visibility="Collapsed"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Box" Property="BorderBrush" Value="#5BA8C8"/>
-                                <Setter TargetName="Box" Property="Background" Value="#EFF8FC"/>
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource NotedAccentBrush}"/>
+                                <Setter TargetName="Box" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Box" Property="Background" Value="#5BA8C8"/>
-                                <Setter TargetName="Box" Property="BorderBrush" Value="#5BA8C8"/>
+                                <Setter TargetName="Box" Property="Background" Value="{DynamicResource NotedAccentBrush}"/>
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource NotedAccentBrush}"/>
                                 <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -280,7 +187,9 @@
     </noted:OverlayWindow.Resources>
 
     <Grid Background="Transparent">
-        <Border Margin="1" Background="#F5F9FC" BorderBrush="#87CEEB"
+        <Border Margin="1"
+                Background="{DynamicResource NotedWindowBackgroundBrush}"
+                BorderBrush="{DynamicResource NotedStrongBorderBrush}"
                 BorderThickness="1" CornerRadius="8">
             <Grid Margin="10">
                 <Grid.RowDefinitions>
@@ -301,11 +210,11 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Orientation="Horizontal"
                                     VerticalAlignment="Center" IsHitTestVisible="False">
-                            <TextBlock Text="✓" Margin="0,0,7,0" Foreground="#5BA8C8"
+                            <TextBlock Text="✓" Margin="0,0,7,0" Foreground="{DynamicResource NotedAccentBrush}"
                                        FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
-                            <TextBlock Text="Checklist" Foreground="#2C6E91"
+                            <TextBlock Text="Checklist" Foreground="{DynamicResource NotedTextBrush}"
                                        FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            <TextBlock Text="⚠" Margin="8,0,0,0" Foreground="#B35A00"
+                            <TextBlock Text="⚠" Margin="8,0,0,0" Foreground="{DynamicResource NotedWarningBrush}"
                                        FontSize="12" VerticalAlignment="Center"
                                        Visibility="{Binding HasPersistenceError, Converter={StaticResource BoolToVisibility}}"
                                        ToolTip="{Binding PersistenceError}"/>
@@ -321,7 +230,7 @@
                 </Border>
 
                 <Border Grid.Row="1" Margin="0,0,0,7"
-                        BorderBrush="#D0E4EE" BorderThickness="0,0,0,1">
+                        BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="0,0,0,1">
                     <Border.ContextMenu>
                         <ContextMenu Style="{StaticResource NotedContextMenu}"
                                      Opened="TabBarContextMenu_Opened">
@@ -373,7 +282,7 @@
                                                               Click="RenameTab_Click"/>
                                                     <MenuItem Header="Delete tab"
                                                               Tag="Delete"
-                                                              Foreground="#B84F4F"
+                                                              Foreground="{DynamicResource NotedDangerBrush}"
                                                               Style="{StaticResource NotedContextMenuItem}"
                                                               Click="DeleteTab_Click"/>
                                                     <MenuItem Header="Hide tab"
@@ -409,7 +318,8 @@
                 </Border>
 
                 <Border Grid.Row="2" Margin="0,0,0,7" Padding="8,0"
-                        Background="White" BorderBrush="#A8CDE0" BorderThickness="1"
+                        Background="{DynamicResource NotedInputBackgroundBrush}"
+                        BorderBrush="{DynamicResource NotedStrongBorderBrush}" BorderThickness="1"
                         CornerRadius="6"
                         Visibility="{Binding IsSearchVisible, Converter={StaticResource BoolToVisibility}}">
                     <Grid>
@@ -419,14 +329,17 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="&#xE721;" Margin="0,0,6,0"
                                    FontFamily="Segoe MDL2 Assets" FontSize="12"
-                                   Foreground="#78909C" VerticalAlignment="Center"/>
+                                   Foreground="{DynamicResource NotedSecondaryTextBrush}" VerticalAlignment="Center"/>
                         <Grid Grid.Column="1">
                             <TextBox x:Name="SearchBox"
                                      Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                                      Padding="0,7" Background="Transparent" BorderThickness="0"
-                                     CaretBrush="#2C6E91" Foreground="#355A6E" FontSize="12"
+                                     CaretBrush="{DynamicResource NotedAccentBrush}"
+                                     Foreground="{DynamicResource NotedTextBrush}"
+                                     SelectionBrush="{DynamicResource NotedAccentSoftHoverBrush}"
+                                     FontSize="12"
                                      VerticalContentAlignment="Center" KeyDown="SearchBox_KeyDown"/>
-                            <TextBlock Text="Search checklist..." Foreground="#8EA5B1"
+                            <TextBlock Text="Search checklist..." Foreground="{DynamicResource NotedMutedTextBrush}"
                                        FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
@@ -445,9 +358,13 @@
 
                 <ProgressBar Grid.Row="3" Height="3" Margin="1,0,1,7"
                              Value="{Binding ProgressPercent, Mode=OneWay}" Maximum="100"
-                             Background="#E2EDF2" BorderThickness="0" Foreground="#5BA8C8"/>
+                             Background="{DynamicResource NotedBorderBrush}"
+                             BorderThickness="0"
+                             Foreground="{DynamicResource NotedAccentBrush}"/>
 
-                <Border Grid.Row="4" Background="White" BorderBrush="#C9DFEC"
+                <Border Grid.Row="4"
+                        Background="{DynamicResource NotedSurfaceBrush}"
+                        BorderBrush="{DynamicResource NotedBorderBrush}"
                         BorderThickness="1" CornerRadius="8" ClipToBounds="True">
                     <Grid>
                         <ListBox x:Name="ItemsList" ItemsSource="{Binding FilteredItems}"
@@ -481,10 +398,10 @@
                                                 </Border>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="RowBackground" Property="Background" Value="#EFF7FB"/>
+                                                        <Setter TargetName="RowBackground" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
                                                     </Trigger>
                                                     <Trigger Property="IsSelected" Value="True">
-                                                        <Setter TargetName="RowBackground" Property="Background" Value="#E5F2F8"/>
+                                                        <Setter TargetName="RowBackground" Property="Background" Value="{DynamicResource NotedAccentSoftHoverBrush}"/>
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
@@ -539,7 +456,7 @@
                                                 <Separator/>
                                                 <MenuItem Header="Duplicate item"
                                                           Style="{StaticResource NotedContextMenuItem}" Click="DuplicateItemMenuItem_Click"/>
-                                                <MenuItem Header="Delete item" Foreground="#B84F4F"
+                                                <MenuItem Header="Delete item" Foreground="{DynamicResource NotedDangerBrush}"
                                                           Style="{StaticResource NotedContextMenuItem}" Click="DeleteItemMenuItem_Click"/>
                                             </ContextMenu>
                                         </Grid.ContextMenu>
@@ -567,7 +484,7 @@
                                                      GotFocus="ItemTextBox_GotFocus" LostFocus="ItemTextBox_LostFocus">
                                                 <TextBox.Style>
                                                     <Style TargetType="TextBox">
-                                                        <Setter Property="Foreground" Value="#314B5A"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
                                                         <Setter Property="Cursor" Value="Hand"/>
                                                         <Style.Triggers>
                                                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
@@ -575,7 +492,7 @@
                                                             </Trigger>
                                                             <DataTrigger Binding="{Binding IsChecked}" Value="True">
                                                                 <Setter Property="TextDecorations" Value="Strikethrough"/>
-                                                                <Setter Property="Foreground" Value="#91A4AE"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource NotedMutedTextBrush}"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -587,14 +504,15 @@
                                                     Visibility="{Binding DueDate, Converter={StaticResource NullToVisibility}}"
                                                     MouseLeftButtonDown="DueDateChip_MouseLeftButtonDown">
                                                 <TextBlock Text="{Binding DueDate, Converter={StaticResource DueDateToText}}"
-                                                           Foreground="White" FontSize="10" FontWeight="SemiBold"/>
+                                                           Foreground="{DynamicResource NotedAccentTextBrush}" FontSize="10" FontWeight="SemiBold"/>
                                             </Border>
                                             <Button Grid.Column="4" Style="{StaticResource DetailsButtonStyle}"
                                                     Click="ExpandButton_Click" ToolTip="Edit details"/>
                                         </Grid>
 
                                         <Border Grid.Row="1" Margin="31,0,5,6" Padding="12,10"
-                                                Background="#F2F8FB" BorderBrush="#D8E9F1"
+                                                Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                                BorderBrush="{DynamicResource NotedBorderBrush}"
                                                 BorderThickness="1" CornerRadius="6">
                                             <Border.Style>
                                                 <Style TargetType="Border">
@@ -608,12 +526,16 @@
                                             </Border.Style>
                                             <StackPanel>
                                                 <TextBlock Text="NOTES" Margin="1,0,0,5"
-                                                           Foreground="#6B8795" FontSize="10" FontWeight="SemiBold"/>
+                                                           Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="10" FontWeight="SemiBold"/>
                                                 <TextBox Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}"
                                                          MinHeight="52" MaxHeight="120" Padding="8,6"
-                                                         AcceptsReturn="True" TextWrapping="Wrap" Background="White"
-                                                         BorderBrush="#C9DFEC" BorderThickness="1"
-                                                         Foreground="#355A6E" FontSize="12"
+                                                         AcceptsReturn="True" TextWrapping="Wrap"
+                                                         Background="{DynamicResource NotedInputBackgroundBrush}"
+                                                         BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="1"
+                                                         Foreground="{DynamicResource NotedTextBrush}"
+                                                         CaretBrush="{DynamicResource NotedAccentBrush}"
+                                                         SelectionBrush="{DynamicResource NotedAccentSoftHoverBrush}"
+                                                         FontSize="12"
                                                          VerticalScrollBarVisibility="Auto"/>
                                                 <Grid Margin="0,9,0,0">
                                                     <Grid.ColumnDefinitions>
@@ -622,11 +544,32 @@
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
                                                     <TextBlock Grid.Column="0" Text="DUE" Margin="1,0,9,0"
-                                                               Foreground="#6B8795" FontSize="10" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="10" FontWeight="SemiBold"
                                                                VerticalAlignment="Center"/>
                                                     <DatePicker Grid.Column="1" Height="28"
                                                                 SelectedDate="{Binding DueDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                BorderBrush="#C9DFEC" FontSize="12"/>
+                                                                Background="{DynamicResource NotedInputBackgroundBrush}"
+                                                                BorderBrush="{DynamicResource NotedBorderBrush}"
+                                                                Foreground="{DynamicResource NotedTextBrush}"
+                                                                FontSize="12">
+                                                        <DatePicker.Resources>
+                                                            <Style TargetType="DatePickerTextBox">
+                                                                <Setter Property="Background" Value="{DynamicResource NotedInputBackgroundBrush}"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
+                                                                <Setter Property="CaretBrush" Value="{DynamicResource NotedAccentBrush}"/>
+                                                                <Setter Property="BorderThickness" Value="0"/>
+                                                            </Style>
+                                                            <Style TargetType="Calendar">
+                                                                <Setter Property="Background" Value="{DynamicResource NotedSurfaceBrush}"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource NotedStrongBorderBrush}"/>
+                                                            </Style>
+                                                            <Style TargetType="CalendarDayButton"
+                                                                   BasedOn="{StaticResource NotedCalendarDayButton}"/>
+                                                            <Style TargetType="CalendarButton"
+                                                                   BasedOn="{StaticResource NotedCalendarButton}"/>
+                                                        </DatePicker.Resources>
+                                                    </DatePicker>
                                                     <Button Grid.Column="2" Content="&#xE711;" Margin="4,0,0,0"
                                                             Style="{StaticResource SmallIconBtn}"
                                                             FontFamily="Segoe MDL2 Assets"
@@ -652,10 +595,10 @@
                                     </Style.Triggers>
                                 </Style>
                             </StackPanel.Style>
-                            <TextBlock Text="✓" Foreground="#B8D5E2" FontSize="24"
+                            <TextBlock Text="✓" Foreground="{DynamicResource NotedBorderBrush}" FontSize="24"
                                        HorizontalAlignment="Center"/>
                             <TextBlock Margin="0,5,0,0"
-                                       Foreground="#8EA5B1" FontSize="12" HorizontalAlignment="Center">
+                                       Foreground="{DynamicResource NotedMutedTextBrush}" FontSize="12" HorizontalAlignment="Center">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Text" Value="Nothing here"/>
@@ -678,7 +621,7 @@
                     </Grid.ColumnDefinitions>
                     <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="{Binding FooterText}" Margin="0,0,4,0"
-                                   Foreground="#78909C" FontSize="11" VerticalAlignment="Center"/>
+                                   Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="11" VerticalAlignment="Center"/>
                         <Button Content="Clear done" Margin="2,0,0,0"
                                 Style="{StaticResource FooterLinkBtn}" Click="ClearCompleted_Click"
                                 ToolTip="Remove all completed items"
@@ -695,7 +638,9 @@
                                 Orientation="Horizontal" VerticalAlignment="Center">
                         <CheckBox Content="Ghost" Margin="0,0,8,0"
                                   IsChecked="{Binding GhostModeEnabled, Mode=TwoWay}"
-                                  Foreground="#78909C" FontSize="11" VerticalAlignment="Center"/>
+                                  Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                  Style="{StaticResource NotedCheckBox}"
+                                  FontSize="11" VerticalAlignment="Center"/>
                         <Button Content="+ Add" Style="{StaticResource PrimaryBtn}"
                                 IsEnabled="{Binding CanAddItem}"
                                 Click="AddButton_Click" ToolTip="Add item"/>
@@ -714,8 +659,8 @@
                     MinWidth="160"
                     Height="40"
                     Padding="8,0"
-                    Background="White"
-                    BorderBrush="#5BA8C8"
+                    Background="{DynamicResource NotedSurfaceBrush}"
+                    BorderBrush="{DynamicResource NotedAccentBrush}"
                     BorderThickness="1"
                     CornerRadius="6"
                     Opacity="0.92">
@@ -732,7 +677,7 @@
                              Style="{StaticResource PriorityDotStyle}"
                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     <TextBlock Grid.Column="1" Text="{Binding Text}"
-                               Margin="6,0,0,0" Foreground="#314B5A"
+                               Margin="6,0,0,0" Foreground="{DynamicResource NotedTextBrush}"
                                FontSize="13" TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center"/>
                 </Grid>
@@ -745,8 +690,8 @@
                PopupAnimation="Fade"
                StaysOpen="False">
             <Border Padding="10"
-                    Background="#F5F9FC"
-                    BorderBrush="#87CEEB"
+                    Background="{DynamicResource NotedWindowBackgroundBrush}"
+                    BorderBrush="{DynamicResource NotedStrongBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="7">
                 <Border.Effect>
@@ -757,16 +702,18 @@
                     <TextBlock x:Name="TabNamePrompt"
                                Text="New tab"
                                Margin="1,0,0,6"
-                               Foreground="#2C6E91"
+                               Foreground="{DynamicResource NotedTextBrush}"
                                FontSize="12"
                                FontWeight="SemiBold"/>
                     <TextBox x:Name="TabNameTextBox"
                              MaxLength="30"
                              Padding="7,5"
-                             Background="White"
-                             BorderBrush="#A8CDE0"
+                             Background="{DynamicResource NotedInputBackgroundBrush}"
+                             BorderBrush="{DynamicResource NotedStrongBorderBrush}"
                              BorderThickness="1"
-                             Foreground="#355A6E"
+                             Foreground="{DynamicResource NotedTextBrush}"
+                             CaretBrush="{DynamicResource NotedAccentBrush}"
+                             SelectionBrush="{DynamicResource NotedAccentSoftHoverBrush}"
                              FontSize="12"
                              KeyDown="TabNameTextBox_KeyDown"/>
                     <StackPanel Margin="0,8,0,0"

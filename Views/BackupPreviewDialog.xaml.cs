@@ -13,11 +13,8 @@ namespace Noted;
 
 internal sealed class BackupPreviewRow
 {
-    private static readonly Brush GreenBackground = CreateBrush(221, 242, 231);
     private static readonly Brush GreenForeground = CreateBrush(52, 112, 82);
-    private static readonly Brush AmberBackground = CreateBrush(255, 240, 210);
     private static readonly Brush AmberForeground = CreateBrush(145, 99, 28);
-    private static readonly Brush RedBackground = CreateBrush(250, 226, 226);
     private static readonly Brush RedForeground = CreateBrush(160, 70, 70);
     private static readonly Brush GrayBackground = CreateBrush(231, 238, 242);
     private static readonly Brush GrayForeground = CreateBrush(95, 116, 128);
@@ -39,20 +36,14 @@ internal sealed class BackupPreviewRow
         _ => "Can't compare"
     };
 
-    public Brush StatusBackground => File.Comparison switch
-    {
-        BackupFileComparison.Unchanged => GreenBackground,
-        BackupFileComparison.Changed => AmberBackground,
-        BackupFileComparison.Missing => RedBackground,
-        _ => GrayBackground
-    };
+    public Brush StatusBackground => GetThemeBrush("NotedSubtleSurfaceBrush", GrayBackground);
 
     public Brush StatusForeground => File.Comparison switch
     {
-        BackupFileComparison.Unchanged => GreenForeground,
-        BackupFileComparison.Changed => AmberForeground,
-        BackupFileComparison.Missing => RedForeground,
-        _ => GrayForeground
+        BackupFileComparison.Unchanged => GetThemeBrush("NotedSuccessBrush", GreenForeground),
+        BackupFileComparison.Changed => GetThemeBrush("NotedWarningBrush", AmberForeground),
+        BackupFileComparison.Missing => GetThemeBrush("NotedDangerBrush", RedForeground),
+        _ => GetThemeBrush("NotedSecondaryTextBrush", GrayForeground)
     };
 
     private static string BuildDetails(BackupFileSummary file)
@@ -82,6 +73,9 @@ internal sealed class BackupPreviewRow
         brush.Freeze();
         return brush;
     }
+
+    private static Brush GetThemeBrush(string key, Brush fallback) =>
+        Application.Current?.TryFindResource(key) as Brush ?? fallback;
 }
 
 public partial class BackupPreviewDialog : Window
@@ -218,7 +212,7 @@ public partial class BackupPreviewDialog : Window
             PagePadding = new Thickness(2),
             FontFamily = new FontFamily("Consolas"),
             FontSize = 12,
-            Foreground = new SolidColorBrush(Color.FromRgb(45, 62, 72))
+            Foreground = (Brush)FindResource("NotedTextBrush")
         };
         ContentPreview.ScrollToHome();
     }
@@ -235,8 +229,8 @@ public partial class BackupPreviewDialog : Window
 
         _needsRecheck = true;
         RestoreBackupButton.IsEnabled = false;
-        VerificationBadge.Background = new SolidColorBrush(Color.FromRgb(250, 226, 226));
-        VerificationText.Foreground = new SolidColorBrush(Color.FromRgb(160, 70, 70));
+        VerificationBadge.Background = (Brush)FindResource("NotedSubtleSurfaceBrush");
+        VerificationText.Foreground = (Brush)FindResource("NotedDangerBrush");
         VerificationText.Text = "Recheck needed";
         BackupSummaryText.Text = "The backup changed or became unavailable. Close this window and view it again.";
     }

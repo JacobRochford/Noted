@@ -607,11 +607,11 @@ public sealed class AppSettingsServiceTests
         using var directory = new TestDirectory();
         var service = CreateService(directory.Path);
 
-        service.SaveAppThemeMode(AppThemeMode.Dark);
+        service.SaveAppThemeMode(AppThemeMode.Midnight);
         service.SaveAccentColor("3366aa");
 
         var reloaded = CreateService(directory.Path);
-        Assert.AreEqual(AppThemeMode.Dark, reloaded.LoadAppThemeMode());
+        Assert.AreEqual(AppThemeMode.Midnight, reloaded.LoadAppThemeMode());
         Assert.AreEqual("#3366AA", reloaded.LoadAccentColor());
     }
 
