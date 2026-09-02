@@ -34,6 +34,7 @@ public interface IAppSettingsService {
     void SaveAppThemeMode(AppThemeMode mode);
     string LoadAccentColor();
     void SaveAccentColor(string color);
+    void SaveAppTheme(AppThemeMode mode, string accentColor);
     FolderNavigationMode LoadFolderNavigationMode();
     void SaveFolderNavigationMode(FolderNavigationMode mode);
     IReadOnlyList<ChecklistItemState>? LoadLegacyChecklistItems();

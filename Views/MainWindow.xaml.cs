@@ -34,6 +34,7 @@ public partial class MainWindow : Window {
     private readonly Func<string, BackupExportResult> _exportUserBackup;
     private readonly Action _requestUserBackupRestore;
     private readonly Action<string, Guid, string> _requestBackupImportRestore;
+    private readonly Action<AppThemeMode, string> _applyAppTheme;
     private readonly MainWindowViewModel _viewModel;
     private readonly CanvasEdgeResizer _notesPanelResizer;
     private GlobalHotkeysService? _globalHotkeysService;
@@ -57,6 +58,8 @@ public partial class MainWindow : Window {
     private bool _isNoActivateTemporarilyStripped;
     private bool _isCommittingRename;
     private bool _lastBackupAttemptFailed;
+    private AppThemeMode _activeThemeMode;
+    private string _activeAccentColor = AppTheme.DefaultAccentColor;
 
     // ghost mode
     private const double DefaultPanelOpacity = 0.88;
@@ -84,6 +87,15 @@ public partial class MainWindow : Window {
 
     private sealed record DisplayOption(string? DeviceName, string Label);
 
+    private sealed record AppearanceOption(AppThemeMode Mode, string Label);
+
+    private static readonly AppearanceOption[] AppearanceOptions =
+    [
+        new(AppThemeMode.System, "Use Windows setting"),
+        new(AppThemeMode.Light, "Light"),
+        new(AppThemeMode.Dark, "Dark")
+    ];
+
     private enum HotkeyFeature
     {
         Notes,
@@ -105,7 +117,8 @@ public partial class MainWindow : Window {
             Func<string, Guid, string, BackupFileSummary, BackupFileContent> readBackupImportFile,
             Func<string, BackupExportResult> exportUserBackup,
             Action requestUserBackupRestore,
-            Action<string, Guid, string> requestBackupImportRestore
+            Action<string, Guid, string> requestBackupImportRestore,
+            Action<AppThemeMode, string> applyAppTheme
         )
     {
         InitializeComponent();
@@ -124,6 +137,7 @@ public partial class MainWindow : Window {
         _exportUserBackup = exportUserBackup;
         _requestUserBackupRestore = requestUserBackupRestore;
         _requestBackupImportRestore = requestBackupImportRestore;
+        _applyAppTheme = applyAppTheme;
 
         _viewModel = new MainWindowViewModel(_fileService, _settingsService, action => Dispatcher.Invoke(action));
         DataContext = _viewModel;
@@ -145,6 +159,7 @@ public partial class MainWindow : Window {
 
     private void InitializeSettings()
     {
+        AppearanceModeCombo.ItemsSource = AppearanceOptions;
         _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
         _ghostModeOpacity = NormalizeOpacity(
             _settingsService.LoadGhostModeOpacity(),
@@ -156,6 +171,8 @@ public partial class MainWindow : Window {
             DefaultPanelOpacity);
         _mainHideButtonHidesAll = _settingsService.LoadMainHideButtonHidesAll();
         _preferredDisplayDeviceName = _settingsService.LoadPreferredDisplayDeviceName();
+        _activeThemeMode = _settingsService.LoadAppThemeMode();
+        _activeAccentColor = _settingsService.LoadAccentColor();
     }
 
 
@@ -576,6 +593,12 @@ public partial class MainWindow : Window {
             ShowModifiedSubtitleOption.IsChecked = showModified;
             _viewModel.ShowModifiedSubtitle = showModified;
             ConfirmNoteDeletionOption.IsChecked = _settingsService.LoadConfirmNoteDeletion();
+
+            _activeThemeMode = _settingsService.LoadAppThemeMode();
+            _activeAccentColor = _settingsService.LoadAccentColor();
+            AppearanceModeCombo.SelectedValue = _activeThemeMode;
+            AccentHexTextBox.Text = _activeAccentColor;
+            ShowAccentMessage($"Using {_activeAccentColor}", isError: false);
 
             SyncHotkeyControls(restoreEditorToActive: true);
             _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
@@ -1038,6 +1061,100 @@ public partial class MainWindow : Window {
         HotkeyFeature.Dictionary => "Dictionary",
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
     };
+
+    private void AppearanceModeCombo_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingSettingsView ||
+            AppearanceModeCombo.SelectedValue is not AppThemeMode mode)
+        {
+            return;
+        }
+
+        ApplyAndSaveAppearance(mode, _activeAccentColor);
+    }
+
+    private void AccentPresetButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string color })
+            AccentHexTextBox.Text = color;
+    }
+
+    private void AccentHexTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isUpdatingSettingsView)
+            return;
+
+        if (!AppTheme.TryNormalizeAccentColor(AccentHexTextBox.Text, out var accentColor))
+        {
+            ShowAccentMessage("Use a six-digit HEX color, such as #5BA8C8.", isError: true);
+            return;
+        }
+
+        ApplyAndSaveAppearance(_activeThemeMode, accentColor);
+    }
+
+    private void AccentHexTextBox_LostKeyboardFocus(
+        object sender,
+        KeyboardFocusChangedEventArgs e)
+    {
+        var displayColor = AppTheme.TryNormalizeAccentColor(
+            AccentHexTextBox.Text,
+            out var normalized)
+            ? normalized
+            : _activeAccentColor;
+        if (string.Equals(AccentHexTextBox.Text, displayColor, StringComparison.Ordinal))
+            return;
+
+        _isUpdatingSettingsView = true;
+        try
+        {
+            AccentHexTextBox.Text = displayColor;
+        }
+        finally
+        {
+            _isUpdatingSettingsView = false;
+        }
+
+        ShowAccentMessage($"Using {displayColor}", isError: false);
+    }
+
+    private void ResetAppearanceButton_Click(object sender, RoutedEventArgs e)
+    {
+        _isUpdatingSettingsView = true;
+        try
+        {
+            AppearanceModeCombo.SelectedValue = AppThemeMode.System;
+            AccentHexTextBox.Text = AppTheme.DefaultAccentColor;
+        }
+        finally
+        {
+            _isUpdatingSettingsView = false;
+        }
+
+        ApplyAndSaveAppearance(AppThemeMode.System, AppTheme.DefaultAccentColor);
+    }
+
+    private void ApplyAndSaveAppearance(AppThemeMode mode, string accentColor)
+    {
+        _settingsService.SaveAppTheme(mode, accentColor);
+        _applyAppTheme(mode, accentColor);
+        _activeThemeMode = mode;
+        _activeAccentColor = AppTheme.NormalizeAccentColor(accentColor);
+        ShowAccentMessage($"Using {_activeAccentColor}", isError: false);
+    }
+
+    private void ShowAccentMessage(string message, bool isError)
+    {
+        AccentValidationText.Text = message;
+        AccentValidationText.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            isError ? "NotedDangerBrush" : "NotedMutedTextBrush");
+        AccentHexTextBox.SetResourceReference(
+            Control.BorderBrushProperty,
+            isError ? "NotedDangerBrush" : "NotedBorderBrush");
+    }
 
     private void ShowModifiedSubtitleOption_Changed(object sender, RoutedEventArgs e)
     {

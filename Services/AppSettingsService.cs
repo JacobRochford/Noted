@@ -226,6 +226,22 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { AccentColor = normalized });
     }
 
+    public void SaveAppTheme(AppThemeMode mode, string accentColor)
+    {
+        if (!Enum.IsDefined(mode))
+            throw new ArgumentOutOfRangeException(nameof(mode), mode, "Undefined application theme mode.");
+        if (!AppTheme.TryNormalizeAccentColor(accentColor, out var normalizedAccent))
+            throw new ArgumentException(
+                "The accent color must use six hexadecimal digits.",
+                nameof(accentColor));
+
+        SaveSetting(s => s with
+        {
+            AppThemeMode = mode,
+            AccentColor = normalizedAccent
+        });
+    }
+
     public FolderNavigationMode LoadFolderNavigationMode() => LoadSetting(s => s.FolderNavigationMode);
     public void SaveFolderNavigationMode(FolderNavigationMode mode) => SaveSetting(s => s with { FolderNavigationMode = mode });
 

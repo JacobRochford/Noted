@@ -989,6 +989,166 @@
                                           VerticalScrollBarVisibility="Auto">
                             <StackPanel>
 
+                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="12"
+                                    Margin="0,0,0,10">
+                                <StackPanel>
+                                    <StackPanel.Resources>
+                                        <Style x:Key="AccentSwatchButton" TargetType="Button">
+                                            <Setter Property="Width" Value="27"/>
+                                            <Setter Property="Height" Value="27"/>
+                                            <Setter Property="Margin" Value="0,0,7,7"/>
+                                            <Setter Property="Cursor" Value="Hand"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="Swatch"
+                                                                Background="{TemplateBinding Background}"
+                                                                BorderBrush="{DynamicResource NotedStrongBorderBrush}"
+                                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                                CornerRadius="14"/>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="Swatch" Property="BorderThickness" Value="3"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsPressed" Value="True">
+                                                                <Setter TargetName="Swatch" Property="Opacity" Value="0.75"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </StackPanel.Resources>
+
+                                    <TextBlock Text="Appearance"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource NotedTextBrush}"
+                                               Margin="0,0,0,4"/>
+                                    <TextBlock Text="Choose how Noted looks. Changes are previewed immediately."
+                                               FontSize="11"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,10"/>
+
+                                    <Grid Margin="0,0,0,10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="72"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Theme"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                                   FontSize="11"/>
+                                        <ComboBox x:Name="AppearanceModeCombo"
+                                                  Grid.Column="1"
+                                                  MinHeight="28"
+                                                  DisplayMemberPath="Label"
+                                                  SelectedValuePath="Mode"
+                                                  SelectionChanged="AppearanceModeCombo_SelectionChanged"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Accent color"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                               FontSize="11"
+                                               Margin="0,0,0,6"/>
+                                    <WrapPanel>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#5BA8C8" Tag="#5BA8C8"
+                                                ToolTip="Noted blue"
+                                                Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#2C6E91" Tag="#2C6E91"
+                                                ToolTip="Deep blue"
+                                                Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#008080" Tag="#008080"
+                                                ToolTip="Teal"
+                                                Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#3E8E68" Tag="#3E8E68"
+                                                ToolTip="Green"
+                                                Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#7A5CB8" Tag="#7A5CB8"
+                                                ToolTip="Purple"
+                                                Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#D9822B" Tag="#D9822B"
+                                                ToolTip="Orange"
+                                                Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#C65D8B" Tag="#C65D8B"
+                                                ToolTip="Pink"
+                                                Click="AccentPresetButton_Click"/>
+                                    </WrapPanel>
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="AccentHexTextBox"
+                                                 MinHeight="28"
+                                                 MaxLength="7"
+                                                 Padding="7,4"
+                                                 Background="{DynamicResource NotedInputBackgroundBrush}"
+                                                 BorderBrush="{DynamicResource NotedBorderBrush}"
+                                                 Foreground="{DynamicResource NotedTextBrush}"
+                                                 CaretBrush="{DynamicResource NotedAccentBrush}"
+                                                 TextChanged="AccentHexTextBox_TextChanged"
+                                                 LostKeyboardFocus="AccentHexTextBox_LostKeyboardFocus"/>
+                                        <Button Grid.Column="1"
+                                                Content="Reset"
+                                                Margin="8,0,0,0"
+                                                Padding="8,3"
+                                                MinHeight="28"
+                                                Background="Transparent"
+                                                BorderBrush="{DynamicResource NotedBorderBrush}"
+                                                Foreground="{DynamicResource NotedTextBrush}"
+                                                Cursor="Hand"
+                                                Click="ResetAppearanceButton_Click"/>
+                                    </Grid>
+                                    <TextBlock x:Name="AccentValidationText"
+                                               FontSize="10"
+                                               Margin="1,4,0,8"/>
+
+                                    <Border Background="{DynamicResource NotedSurfaceBrush}"
+                                            BorderBrush="{DynamicResource NotedBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="Theme preview"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource NotedTextBrush}"/>
+                                                <TextBlock Text="Surfaces, text, and accent"
+                                                           FontSize="10"
+                                                           Foreground="{DynamicResource NotedSecondaryTextBrush}"/>
+                                            </StackPanel>
+                                            <Border Grid.Column="1"
+                                                    Background="{DynamicResource NotedAccentBrush}"
+                                                    CornerRadius="5"
+                                                    Padding="9,5">
+                                                <TextBlock Text="Accent"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource NotedAccentTextBrush}"/>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+
                             <Border Background="#EFF7FB"
                                     BorderBrush="#C9DFEC"
                                     BorderThickness="1"

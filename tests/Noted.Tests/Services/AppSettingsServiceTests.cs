@@ -640,6 +640,25 @@ public sealed class AppSettingsServiceTests
         Assert.IsFalse(File.Exists(directory.File("settings.json")));
     }
 
+    [TestMethod]
+    public void ThemeModeAndAccentCanBeSavedTogether()
+    {
+        using var directory = new TestDirectory();
+        var service = CreateService(directory.Path);
+
+        service.SaveAppTheme(AppThemeMode.Light, "#C65D8B");
+
+        using var settings = JsonDocument.Parse(
+            File.ReadAllText(directory.File("settings.json")));
+        Assert.AreEqual(1, settings.RootElement.GetProperty("Revision").GetInt64());
+        Assert.AreEqual(
+            (int)AppThemeMode.Light,
+            settings.RootElement.GetProperty("AppThemeMode").GetInt32());
+        Assert.AreEqual(
+            "#C65D8B",
+            settings.RootElement.GetProperty("AccentColor").GetString());
+    }
+
     private static AppSettingsService CreateService(
         string path,
         TimeProvider? clock = null,
