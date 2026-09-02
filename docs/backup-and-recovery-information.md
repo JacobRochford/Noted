@@ -1,4 +1,4 @@
-# Noted File Persistence and Recovery
+# How Noted Keeps Your Data Safe
 
 This document explains how Noted protects its files, chooses recovery data, and creates or restores local backups. It describes the current implementation and compatibility-sensitive storage names.
 
@@ -23,7 +23,7 @@ This document explains how Noted protects its files, chooses recovery data, and 
 | **Unsaved-change recovery** - protects editor text that has not been saved to the note itself | The editor stores separate recovery drafts for dirty notes. Each note has a path-validated recovery JSON file and a rolling backup. Draft recovery is separate from saved-note history. |
 | **Deleted-note retention** - allows recently deleted notes to be recovered manually | Deleted notes are moved to `%LocalAppData%\Noted\DeletedNotes`. Noted removes entries older than 14 days when it starts. Folder deletion remains permanent. |
 | **Recovery messages** - tells the user when protection is reduced or recovery occurred | Settings show a recovery notice. Checklist, Dictionary, Scratchpad, MiniPad, and the Note Editor surface persistence or backup warnings through their existing warning UI. Debug output also records expected file failures. |
-| **Automated fault tests** - verifies expected behavior under controlled file failures | The project includes 114 service-level tests covering Settings recovery and normalization, shared atomic writes, locked files, rolling backups, corrupt files, Scratchpad and MiniPad recovery, note drafts, editor sessions, saved-note history, atomic note creation, application theme resources, and full-backup creation, preview, export, import, replacement, and storage compatibility. |
+| **Automated fault tests** - verifies expected behavior under controlled file failures | The project includes 120 automated tests covering Settings recovery and normalization, shared atomic writes, locked files, rolling backups, corrupt files, Scratchpad and MiniPad recovery, note drafts, editor sessions, saved-note history, atomic note creation, application theme resources, and full-backup creation, preview, export, import, replacement, and storage compatibility. |
 
 ## Protection by data type
 
