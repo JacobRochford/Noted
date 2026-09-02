@@ -32,6 +32,8 @@ public partial class NoteEditorWindow : Window
     private readonly HashSet<OpenNoteDocument> _discardedDocumentsPendingDraftDeletion = [];
     private readonly HashSet<string> _unsavedRecoveredPaths =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _documentTimeText =
+        new(StringComparer.OrdinalIgnoreCase);
     private OpenNoteDocument? _activeDocument;
     private OpenNoteDocument? _secondaryDocument;
     private OpenNoteDocument? _focusedDocument;
@@ -339,6 +341,8 @@ public partial class NoteEditorWindow : Window
             normalizedNewPath,
             StringComparison.OrdinalIgnoreCase);
         document.UpdateFilePath(normalizedNewPath);
+        _documentTimeText.Remove(oldPath);
+        _documentTimeText.Remove(document.FilePath);
         document.UsesGeneratedName = false;
         if (_unsavedRecoveredPaths.Remove(oldPath))
             _unsavedRecoveredPaths.Add(document.FilePath);
@@ -365,6 +369,8 @@ public partial class NoteEditorWindow : Window
             var oldPath = document.FilePath;
             var relativePath = Path.GetRelativePath(normalizedOldDirectory, oldPath);
             document.UpdateFilePath(Path.Combine(normalizedNewDirectory, relativePath));
+            _documentTimeText.Remove(oldPath);
+            _documentTimeText.Remove(document.FilePath);
             if (_unsavedRecoveredPaths.Remove(oldPath))
                 _unsavedRecoveredPaths.Add(document.FilePath);
             if (document.IsDirty)
@@ -752,6 +758,7 @@ public partial class NoteEditorWindow : Window
 
             document.SavedContent = document.Content;
             document.IsDirty = false;
+            _documentTimeText.Remove(document.FilePath);
             if (ReferenceEquals(document, _secondaryDocument))
                 SecondaryDocumentTitle.Text = document.TabLabel;
             _unsavedRecoveredPaths.Remove(document.FilePath);
@@ -815,6 +822,7 @@ public partial class NoteEditorWindow : Window
 
         _discardedDocumentsPendingDraftDeletion.Remove(document);
         _unsavedRecoveredPaths.Remove(document.FilePath);
+        _documentTimeText.Remove(document.FilePath);
         _documents.Remove(document);
         RefreshScheduledRecoveryDrafts();
 
@@ -1265,20 +1273,31 @@ public partial class NoteEditorWindow : Window
         CaretPositionText.Text =
             $"Ln {Math.Max(0, lineIndex) + 1}, Col {caretIndex - lineStart + 1}";
 
+        DocumentTimeText.Text = GetDocumentTimeText(document);
+        DocumentTimeText.ToolTip = document.FilePath;
+    }
+
+    private string GetDocumentTimeText(OpenNoteDocument document)
+    {
+        if (document.IsMissing)
+            return "Original file missing";
+        if (_documentTimeText.TryGetValue(document.FilePath, out var text))
+            return text;
+
         try
         {
             var created = File.GetCreationTime(document.FilePath);
             var modified = File.GetLastWriteTime(document.FilePath);
-            DocumentTimeText.Text = $"Created {created:g}   Modified {modified:g}";
-            DocumentTimeText.ToolTip = document.FilePath;
+            text = $"Created {created:g}   Modified {modified:g}";
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
-            DocumentTimeText.Text = document.IsMissing
-                ? "Original file missing"
-                : string.Empty;
-            DocumentTimeText.ToolTip = document.FilePath;
+            System.Diagnostics.Debug.WriteLine(ex);
+            text = string.Empty;
         }
+
+        _documentTimeText[document.FilePath] = text;
+        return text;
     }
 
     private void StoreEditorChanges()
@@ -1700,6 +1719,8 @@ public partial class NoteEditorWindow : Window
             var oldPath = document.FilePath;
             _noteSaveWarning = _contentService.SaveAs(newPath, document.Content);
             document.UpdateFilePath(newPath);
+            _documentTimeText.Remove(oldPath);
+            _documentTimeText.Remove(newPath);
             document.UsesGeneratedName = false;
             document.SavedContent = document.Content;
             document.IsDirty = false;

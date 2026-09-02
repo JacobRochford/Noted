@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security;
 using Microsoft.Win32;
 
 namespace Noted.Services;
@@ -20,30 +21,42 @@ internal static class FileExplorerIntegrationService
 
     internal static bool IsEnabled()
     {
-        var expectedCommand = BuildOpenCommand();
-        using var commandKey = Registry.CurrentUser.OpenSubKey($@"{ApplicationKeyPath}\shell\open\command");
-        if (!string.Equals(
-                commandKey?.GetValue(null) as string,
-                expectedCommand,
-                StringComparison.OrdinalIgnoreCase))
+        try
         {
-            return false;
-        }
-
-        foreach (var extension in NoteFileExtensions.Supported)
-        {
-            using var extensionCommandKey = Registry.CurrentUser.OpenSubKey(
-                $@"Software\Classes\SystemFileAssociations\{extension}\shell\{ExplorerVerbName}\command");
+            var expectedCommand = BuildOpenCommand();
+            using var commandKey = Registry.CurrentUser.OpenSubKey($@"{ApplicationKeyPath}\shell\open\command");
             if (!string.Equals(
-                    extensionCommandKey?.GetValue(null) as string,
+                    commandKey?.GetValue(null) as string,
                     expectedCommand,
                     StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
-        }
 
-        return true;
+            foreach (var extension in NoteFileExtensions.Supported)
+            {
+                using var extensionCommandKey = Registry.CurrentUser.OpenSubKey(
+                    $@"Software\Classes\SystemFileAssociations\{extension}\shell\{ExplorerVerbName}\command");
+                if (!string.Equals(
+                        extensionCommandKey?.GetValue(null) as string,
+                        expectedCommand,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is
+                   IOException or
+                   InvalidOperationException or
+                   SecurityException or
+                   UnauthorizedAccessException)
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+            return false;
+        }
     }
 
     internal static void SetEnabled(bool enabled)
