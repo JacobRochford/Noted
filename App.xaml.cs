@@ -17,6 +17,7 @@ public partial class App : Application
     private Mutex? _singleInstanceMutex;
     private AppSettingsService? _settingsService;
     private AppThemeManager? _themeManager;
+    private FileOpenRequestService? _fileOpenRequestService;
     private NoteFileService? _fileService;
     private MainWindow? _mainWindow;
     private NoteEditorWindow? _noteEditorWindow;
@@ -56,6 +57,16 @@ public partial class App : Application
 
             if (!isNewInstance)
             {
+                var requestedFile = e.Args.FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(requestedFile) &&
+                    FileOpenRequestService.TrySend(requestedFile))
+                {
+                    _singleInstanceMutex.Dispose();
+                    _singleInstanceMutex = null;
+                    Shutdown();
+                    return;
+                }
+
                 AppDialog.Show(
                     "Noted is already running.\n\nCheck your system tray to find the existing instance.",
                     "Noted Already Running",
@@ -112,9 +123,7 @@ public partial class App : Application
             fullBackupService.UpdateNotesDirectory(fileService.NotesDirectory);
             _fullBackupService = fullBackupService;
             var noteEditor = new NoteEditorWindow(
-                new NoteContentService(
-                    () => fileService.NotesDirectory,
-                    settings.AppDataDirectory),
+                new NoteContentService(settings.AppDataDirectory),
                 settings,
                 new NoteRecoveryService(settings.AppDataDirectory),
                 new NoteEditorSessionService(settings.AppDataDirectory));
@@ -147,7 +156,13 @@ public partial class App : Application
             WindowManager.MiniPadProvider = GetOrCreateMiniPadWindow;
             WindowManager.Editor = noteEditor;
 
+            _fileOpenRequestService = new FileOpenRequestService(filePath =>
+                _ = Dispatcher.BeginInvoke(() => noteEditor.OpenNote(filePath)));
+            _fileOpenRequestService.Start();
+
             mainWindow.Show();
+            foreach (var requestedFile in e.Args.Where(path => !string.IsNullOrWhiteSpace(path)))
+                noteEditor.OpenNote(requestedFile);
             if (pendingRestoreResult.Status == FullBackupStatus.Restored)
             {
                 var restoreMessage = string.IsNullOrWhiteSpace(pendingRestoreResult.Warning)
@@ -235,6 +250,8 @@ public partial class App : Application
             mainWindow?.CleanupResources();
             _themeManager?.Dispose();
             _themeManager = null;
+            _fileOpenRequestService?.Dispose();
+            _fileOpenRequestService = null;
             try { _fileService?.Dispose(); } catch (Exception ex) { Debug.WriteLine(ex); }
             WindowManager.ClearAll();
 

@@ -58,6 +58,24 @@ public sealed class NoteEditorSessionServiceTests
     }
 
     [TestMethod]
+    public void SideBySideFileIsSavedWithTheEditorSession()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var primaryPath = directory.File("notes", "one.txt");
+        var secondaryPath = directory.File("notes", "two.txt");
+        var service = new NoteEditorSessionService(directory.Path);
+        var session = Session(primaryPath, caretIndex: 0) with
+        {
+            SecondaryFilePath = secondaryPath
+        };
+
+        service.Save(session);
+        var loaded = service.Load();
+
+        Assert.AreEqual(secondaryPath, loaded.Session.SecondaryFilePath);
+    }
+
+    [TestMethod]
     public void OlderSessionWithoutGeneratedNameStateDefaultsToFalse()
     {
         using var directory = new TemporaryTestDirectory();

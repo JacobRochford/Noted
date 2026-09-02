@@ -100,6 +100,10 @@ public sealed class NoteEditorSessionService : INoteEditorSessionService
                 left.ActiveFilePath,
                 right.ActiveFilePath,
                 StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(
+                left.SecondaryFilePath,
+                right.SecondaryFilePath,
+                StringComparison.OrdinalIgnoreCase) ||
             left.Tabs.Count != right.Tabs.Count)
         {
             return false;
