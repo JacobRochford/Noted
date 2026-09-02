@@ -66,6 +66,7 @@ public partial class MainWindow : Window {
     private const double DefaultPanelOpacity = 0.88;
     private const double DefaultGhostModeOpacity = 0.25;
     private const double MinimumPanelOpacity = 0.05;
+    private const double MinimumGhostHitTestOpacity = 1.0 / 255.0;
     private bool _ghostModeEnabled;
     private double _ghostModeOpacity;
     private double _defaultOpacity;
@@ -1251,8 +1252,12 @@ public partial class MainWindow : Window {
         CorrectOpacitySliderValue(GhostModeOpacitySlider, _ghostModeOpacity);
         _settingsService.SaveGhostModeOpacity(_ghostModeOpacity);
         UpdateGhostModeOpacityLabel();
-        if (NotesPanel.Visibility == Visibility.Visible)
-            AnimatePanelOpacity(_ghostModeOpacity, allowFullyTransparent: true);
+        if (NotesPanel.Visibility == Visibility.Visible) {
+            if (NotesPanel.IsMouseOver)
+                AnimatePanelOpacity(_defaultOpacity);
+            else
+                AnimatePanelOpacity(_ghostModeOpacity, allowFullyTransparent: true);
+        }
     }
 
 
@@ -1321,6 +1326,9 @@ public partial class MainWindow : Window {
             targetOpacity,
             allowFullyTransparent ? 0.0 : MinimumPanelOpacity,
             allowFullyTransparent ? DefaultGhostModeOpacity : DefaultPanelOpacity);
+        if (allowFullyTransparent)
+            normalizedTargetOpacity = Math.Max(normalizedTargetOpacity, MinimumGhostHitTestOpacity);
+
         var anim = new DoubleAnimation(
             NotesPanel.Opacity,
             normalizedTargetOpacity,
