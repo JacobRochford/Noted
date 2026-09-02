@@ -137,6 +137,16 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { TimestampPlacement = timestampPlacement });
     }
 
+    public int LoadTimestampLine() {
+        return LoadSetting(s => s.TimestampLine);
+    }
+
+    public void SaveTimestampLine(int lineNumber) {
+        if (lineNumber is < 1 or > 10000)
+            throw new ArgumentOutOfRangeException(nameof(lineNumber));
+        SaveSetting(s => s with { TimestampLine = lineNumber });
+    }
+
     public NewNoteMode LoadNewNoteMode() {
         return LoadSetting(s => s.NewNoteMode ?? NewNoteMode.Prompt);
     }
@@ -732,6 +742,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             TimestampPlacement = Enum.IsDefined(settings.TimestampPlacement)
                 ? settings.TimestampPlacement
                 : NoteTimestampPlacement.None,
+            TimestampLine = Math.Clamp(settings.TimestampLine, 1, 10000),
             NewNoteMode = mode,
             PromptForNoteName = null,
             PinnedNotes = settings.PinnedNotes?
@@ -876,6 +887,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         public DateTimeOffset? SavedUtc { get; init; }
         public string? NotesDirectory { get; init; }
         public NoteTimestampPlacement TimestampPlacement { get; init; } = NoteTimestampPlacement.None;
+        public int TimestampLine { get; init; } = 1;
         [JsonConverter(typeof(NewNoteModeJsonConverter))]
         public NewNoteMode? NewNoteMode { get; init; }
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

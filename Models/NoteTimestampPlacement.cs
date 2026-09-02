@@ -5,5 +5,6 @@ public enum NoteTimestampPlacement
 {
     None,
     Top,
-    Bottom
+    Bottom,
+    Line
 }

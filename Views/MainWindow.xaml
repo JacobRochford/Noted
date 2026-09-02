@@ -1495,12 +1495,33 @@
                                     </RadioButton>
                                     <RadioButton x:Name="TimestampBottomOption"
                                                  GroupName="TimestampPlacement"
+                                                 Margin="0,0,0,6"
                                                  Checked="TimestampPlacementOption_Checked"
                                                  HorizontalAlignment="Stretch">
                                         <TextBlock Text="Add timestamp to bottom of page"
                                                    TextWrapping="Wrap"
                                                    VerticalAlignment="Center"/>
                                     </RadioButton>
+                                    <StackPanel Orientation="Horizontal">
+                                        <RadioButton x:Name="TimestampLineOption"
+                                                     GroupName="TimestampPlacement"
+                                                     Checked="TimestampPlacementOption_Checked"
+                                                     VerticalAlignment="Center">
+                                            <TextBlock Text="Add timestamp on line"
+                                                       TextWrapping="Wrap"
+                                                       VerticalAlignment="Center"/>
+                                        </RadioButton>
+                                        <TextBox x:Name="TimestampLineTextBox"
+                                                 Width="54"
+                                                 Height="25"
+                                                 Margin="8,0,0,0"
+                                                 Padding="6,2"
+                                                 MaxLength="5"
+                                                 IsEnabled="{Binding ElementName=TimestampLineOption, Path=IsChecked}"
+                                                 VerticalContentAlignment="Center"
+                                                 Style="{StaticResource NotedTextInput}"
+                                                 LostFocus="TimestampLineTextBox_LostFocus"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
 
