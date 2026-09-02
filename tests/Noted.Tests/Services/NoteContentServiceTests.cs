@@ -16,7 +16,7 @@ public sealed class NoteContentServiceTests
         Directory.CreateDirectory(notesDirectory);
         var notePath = Path.Combine(notesDirectory, "note.txt");
         File.WriteAllText(notePath, "previous text");
-        var service = new NoteContentService(() => notesDirectory, directory.Path);
+        var service = new NoteContentService(directory.Path);
 
         var warning = service.Save(notePath, "current text");
 
@@ -39,11 +39,50 @@ public sealed class NoteContentServiceTests
         Directory.CreateDirectory(notesDirectory);
         var notePath = Path.Combine(notesDirectory, "note.txt");
         File.WriteAllText(notePath, "same text");
-        var service = new NoteContentService(() => notesDirectory, directory.Path);
+        var service = new NoteContentService(directory.Path);
 
         service.Save(notePath, "same text");
 
         Assert.IsFalse(Directory.Exists(directory.File("note-history")));
+    }
+
+    [TestMethod]
+    public void SaveAsCreatesAndVerifiesSupportedTextFile()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var notesDirectory = directory.File("notes");
+        Directory.CreateDirectory(notesDirectory);
+        var destination = Path.Combine(notesDirectory, "note.json");
+        var service = new NoteContentService(directory.Path);
+
+        var warning = service.SaveAs(destination, "{\"saved\":true}");
+
+        Assert.IsNull(warning);
+        Assert.AreEqual("{\"saved\":true}", File.ReadAllText(destination));
+    }
+
+    [TestMethod]
+    public void LoadAllowsSupportedTextFileOutsideNotesFolder()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var notesDirectory = directory.File("notes");
+        Directory.CreateDirectory(notesDirectory);
+        var externalPath = directory.File("external.log");
+        File.WriteAllText(externalPath, "external text");
+        var service = new NoteContentService(directory.Path);
+
+        Assert.AreEqual("external text", service.Load(externalPath));
+    }
+
+    [TestMethod]
+    public void LoadRejectsUnsupportedBinaryFile()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var binaryPath = directory.File("program.exe");
+        File.WriteAllBytes(binaryPath, [0x4D, 0x5A]);
+        var service = new NoteContentService(directory.Path);
+
+        Assert.ThrowsExactly<ArgumentException>(() => service.Load(binaryPath));
     }
 
     [TestMethod]
@@ -55,7 +94,7 @@ public sealed class NoteContentServiceTests
         var notePath = Path.Combine(notesDirectory, "note.txt");
         File.WriteAllText(notePath, "before");
         File.WriteAllText(directory.File("note-history"), "blocks history folder");
-        var service = new NoteContentService(() => notesDirectory, directory.Path);
+        var service = new NoteContentService(directory.Path);
 
         var warning = service.Save(notePath, "after");
 
@@ -73,7 +112,6 @@ public sealed class NoteContentServiceTests
         var notePath = Path.Combine(notesDirectory, "note.txt");
         File.WriteAllText(notePath, "zero");
         var service = new NoteContentService(
-            () => notesDirectory,
             directory.Path,
             TimeProvider.System,
             historyLimit: 2);
@@ -98,7 +136,7 @@ public sealed class NoteContentServiceTests
         Directory.CreateDirectory(notesDirectory);
         var notePath = Path.Combine(notesDirectory, "note.txt");
         File.WriteAllText(notePath, "before");
-        var service = new NoteContentService(() => notesDirectory, directory.Path);
+        var service = new NoteContentService(directory.Path);
 
         using (new FileStream(notePath, FileMode.Open, FileAccess.Read, FileShare.Read))
         {

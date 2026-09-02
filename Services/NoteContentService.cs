@@ -7,31 +7,25 @@ namespace Noted.Services;
 public sealed class NoteContentService : INoteContentService
 {
     private const int DefaultHistoryLimit = 20;
-    private readonly Func<string> _notesDirectoryProvider;
     private readonly string _historyDirectory;
     private readonly TimeProvider _clock;
     private readonly int _historyLimit;
 
-    public NoteContentService(
-        Func<string> notesDirectoryProvider,
-        string storageDirectory)
-        : this(notesDirectoryProvider, storageDirectory, TimeProvider.System, DefaultHistoryLimit)
+    public NoteContentService(string storageDirectory)
+        : this(storageDirectory, TimeProvider.System, DefaultHistoryLimit)
     {
     }
 
     internal NoteContentService(
-        Func<string> notesDirectoryProvider,
         string storageDirectory,
         TimeProvider clock,
         int historyLimit)
     {
-        ArgumentNullException.ThrowIfNull(notesDirectoryProvider);
         ArgumentException.ThrowIfNullOrWhiteSpace(storageDirectory);
         ArgumentNullException.ThrowIfNull(clock);
         if (historyLimit < 1)
             throw new ArgumentOutOfRangeException(nameof(historyLimit));
 
-        _notesDirectoryProvider = notesDirectoryProvider;
         _historyDirectory = Path.Combine(
             Path.GetFullPath(storageDirectory),
             "note-history");
@@ -90,6 +84,36 @@ public sealed class NoteContentService : INoteContentService
             : string.Join(" ", warnings);
     }
 
+    public string? SaveAs(string filePath, string content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        var validatedPath = ValidateNotePath(filePath);
+        if (File.Exists(validatedPath))
+            return Save(validatedPath, content);
+
+        FileWriter.WriteAllText(validatedPath, content);
+        string persistedContent;
+        try
+        {
+            persistedContent = File.ReadAllText(validatedPath, Encoding.UTF8);
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            throw new FileVerificationException(
+                $"'{Path.GetFileName(validatedPath)}' was written but could not be read back for verification.",
+                ex);
+        }
+
+        if (!string.Equals(persistedContent, content, StringComparison.Ordinal))
+        {
+            throw new FileVerificationException(
+                $"'{Path.GetFileName(validatedPath)}' did not match the text that was saved.");
+        }
+
+        return null;
+    }
+
     private void SaveHistoryEntry(string notePath, string content)
     {
         var noteHistoryDirectory = GetNoteHistoryDirectory(notePath);
@@ -133,25 +157,12 @@ public sealed class NoteContentService : INoteContentService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
 
-        var notesDirectory = _notesDirectoryProvider();
-        ArgumentException.ThrowIfNullOrWhiteSpace(notesDirectory);
-
-        var rootPath = Path.GetFullPath(notesDirectory);
         var fullPath = Path.GetFullPath(filePath);
 
         if (!NoteFileExtensions.IsSupported(fullPath))
             throw new ArgumentException(
-                "Only .txt, .md, and .markdown note files can be opened or saved.",
+                "Only supported text-based files can be opened or saved.",
                 nameof(filePath));
-
-        var relativePath = Path.GetRelativePath(rootPath, fullPath);
-        if (Path.IsPathRooted(relativePath) ||
-            relativePath.Equals("..", StringComparison.Ordinal) ||
-            relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
-            relativePath.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal))
-        {
-            throw new UnauthorizedAccessException("The note file must be inside the configured notes directory.");
-        }
 
         return fullPath;
     }

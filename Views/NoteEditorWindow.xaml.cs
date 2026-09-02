@@ -1,12 +1,15 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Security;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using Microsoft.Win32;
 using Noted.Helpers;
 using Noted.Models;
 using Noted.Services;
@@ -30,9 +33,12 @@ public partial class NoteEditorWindow : Window
     private readonly HashSet<string> _unsavedRecoveredPaths =
         new(StringComparer.OrdinalIgnoreCase);
     private OpenNoteDocument? _activeDocument;
+    private OpenNoteDocument? _secondaryDocument;
+    private OpenNoteDocument? _focusedDocument;
     private OpenNoteDocument? _draggedDocument;
     private Point _tabDragStart;
     private bool _isLoading;
+    private bool _isLoadingSecondary;
     private bool _hasLoaded;
     private bool _isMarkdownPreviewEnabled;
     private bool _isPreparedForApplicationClose;
@@ -84,10 +90,11 @@ public partial class NoteEditorWindow : Window
         ApplyTabsPanelState();
         SetWordWrapEnabled(windowState.WordWrapEnabled);
         ReopenTabsOnStartupMenuItem.IsChecked = _settingsService.LoadReopenEditorTabsOnStartup();
+        FileExplorerIntegrationMenuItem.IsChecked = FileExplorerIntegrationService.IsEnabled();
         UpdateEditorState();
     }
 
-    public string? OpenFilePath => _activeDocument?.FilePath;
+    public string? OpenFilePath => CurrentDocument?.FilePath;
     public bool IsDirty => _documents.Any(document => document.IsDirty);
     public bool IsWindowVisible => IsVisible;
     internal bool RecoveryBlocksBackup =>
@@ -97,6 +104,17 @@ public partial class NoteEditorWindow : Window
     public event EventHandler? NewNoteRequested;
     public event EventHandler<NoteDeleteRequestedEventArgs>? DeleteNoteRequested;
     public event EventHandler<NoteRenameRequestedEventArgs>? NoteRenameRequested;
+
+    private OpenNoteDocument? CurrentDocument => _focusedDocument ?? _activeDocument;
+    private TextBox CurrentEditorTextBox => ReferenceEquals(CurrentDocument, _secondaryDocument)
+        ? SecondaryEditorTextBox
+        : EditorTextBox;
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        AppThemeManager.ApplyTitleBar(this);
+    }
 
     public bool OpenNote(string filePath)
     {
@@ -200,6 +218,12 @@ public partial class NoteEditorWindow : Window
                         PathsEqual(document.FilePath, session.ActiveFilePath))
                     ?? _documents[0];
                 ActivateDocument(activeDocument);
+
+                var secondaryDocument = _documents.FirstOrDefault(document =>
+                    !ReferenceEquals(document, activeDocument) &&
+                    PathsEqual(document.FilePath, session.SecondaryFilePath));
+                if (secondaryDocument is not null)
+                    ShowSecondaryDocument(secondaryDocument, focusEditor: false, saveSession: false);
             }
         }
         finally
@@ -321,6 +345,8 @@ public partial class NoteEditorWindow : Window
         document.IsMissing = false;
         if (pathChanged && document.IsDirty)
             MoveRecoveryDraft(oldPath, document);
+        if (ReferenceEquals(document, _secondaryDocument))
+            SecondaryDocumentTitle.Text = document.TabLabel;
         SaveEditorSession();
         UpdateEditorState();
     }
@@ -590,9 +616,21 @@ public partial class NoteEditorWindow : Window
 
     private void ActivateDocument(OpenNoteDocument document, bool focusEditor = true)
     {
+        if (ReferenceEquals(_secondaryDocument, document))
+        {
+            OpenTabsList.SelectedItem = document;
+            _focusedDocument = document;
+            UpdateEditorState();
+            if (focusEditor)
+                SecondaryEditorTextBox.Focus();
+            return;
+        }
+
         if (ReferenceEquals(_activeDocument, document))
         {
             OpenTabsList.SelectedItem = document;
+            _focusedDocument = document;
+            UpdateEditorState();
             if (focusEditor)
                 FocusActiveSurface();
             return;
@@ -601,6 +639,7 @@ public partial class NoteEditorWindow : Window
         CaptureActiveDocument();
         TryFlushRecoveryDraft(out _);
         _activeDocument = document;
+        _focusedDocument = document;
 
         _isLoading = true;
         EditorTextBox.Text = document.Content;
@@ -621,13 +660,20 @@ public partial class NoteEditorWindow : Window
 
     private void CaptureActiveDocument()
     {
-        if (_isLoading || _activeDocument is null)
-            return;
+        if (!_isLoading && _activeDocument is not null)
+        {
+            _activeDocument.Content = EditorTextBox.Text;
+            _activeDocument.CaretIndex = EditorTextBox.CaretIndex;
+            _activeDocument.VerticalOffset = EditorTextBox.VerticalOffset;
+            _activeDocument.MarkdownPreviewEnabled = _isMarkdownPreviewEnabled;
+        }
 
-        _activeDocument.Content = EditorTextBox.Text;
-        _activeDocument.CaretIndex = EditorTextBox.CaretIndex;
-        _activeDocument.VerticalOffset = EditorTextBox.VerticalOffset;
-        _activeDocument.MarkdownPreviewEnabled = _isMarkdownPreviewEnabled;
+        if (!_isLoadingSecondary && _secondaryDocument is not null)
+        {
+            _secondaryDocument.Content = SecondaryEditorTextBox.Text;
+            _secondaryDocument.CaretIndex = SecondaryEditorTextBox.CaretIndex;
+            _secondaryDocument.VerticalOffset = SecondaryEditorTextBox.VerticalOffset;
+        }
     }
 
     private bool TryResolveDirtyDocuments(IEnumerable<OpenNoteDocument> documents)
@@ -650,12 +696,12 @@ public partial class NoteEditorWindow : Window
 
     private bool TrySaveCurrentNote()
     {
-        return _activeDocument is null || TrySaveDocument(_activeDocument);
+        return CurrentDocument is not { } document || TrySaveDocument(document);
     }
 
     private bool TrySaveDocument(OpenNoteDocument document)
     {
-        if (ReferenceEquals(document, _activeDocument))
+        if (ReferenceEquals(document, _activeDocument) || ReferenceEquals(document, _secondaryDocument))
             CaptureActiveDocument();
 
         if (document.IsMissing || !File.Exists(document.FilePath))
@@ -706,12 +752,14 @@ public partial class NoteEditorWindow : Window
 
             document.SavedContent = document.Content;
             document.IsDirty = false;
+            if (ReferenceEquals(document, _secondaryDocument))
+                SecondaryDocumentTitle.Text = document.TabLabel;
             _unsavedRecoveredPaths.Remove(document.FilePath);
             _discardedDocumentsPendingDraftDeletion.Remove(document);
             RefreshScheduledRecoveryDrafts();
             if (!TryDeleteRecoveryDraft(document.FilePath, out var cleanupError))
                 ShowRecoveryCleanupWarning(cleanupError!);
-            if (ReferenceEquals(document, _activeDocument))
+            if (ReferenceEquals(document, CurrentDocument))
                 UpdateEditorState();
             return true;
         }
@@ -762,6 +810,9 @@ public partial class NoteEditorWindow : Window
                 return false;
         }
 
+        if (ReferenceEquals(document, _secondaryDocument))
+            CloseSecondaryPane(saveSession: false);
+
         _discardedDocumentsPendingDraftDeletion.Remove(document);
         _unsavedRecoveredPaths.Remove(document.FilePath);
         _documents.Remove(document);
@@ -771,7 +822,12 @@ public partial class NoteEditorWindow : Window
         {
             _activeDocument = null;
             if (_documents.Count > 0)
-                ActivateDocument(_documents[Math.Clamp(index, 0, _documents.Count - 1)]);
+            {
+                var nextDocument = _documents[Math.Clamp(index, 0, _documents.Count - 1)];
+                if (ReferenceEquals(nextDocument, _secondaryDocument))
+                    CloseSecondaryPane(saveSession: false);
+                ActivateDocument(nextDocument);
+            }
             else
             {
                 ClearEditorSurface();
@@ -786,9 +842,11 @@ public partial class NoteEditorWindow : Window
 
     private void ClearEditorSurface()
     {
+        CloseSecondaryPane(saveSession: false);
         CloseFindPanel(focusEditor: false);
         RefreshScheduledRecoveryDrafts();
         _activeDocument = null;
+        _focusedDocument = null;
         _isLoading = true;
         EditorTextBox.Clear();
         ResetUndoHistory();
@@ -817,6 +875,12 @@ public partial class NoteEditorWindow : Window
         EditorTextBox.IsUndoEnabled = true;
     }
 
+    private void ResetSecondaryUndoHistory()
+    {
+        SecondaryEditorTextBox.IsUndoEnabled = false;
+        SecondaryEditorTextBox.IsUndoEnabled = true;
+    }
+
     private MessageBoxResult ShowSavePrompt(string noteName)
     {
         var message =
@@ -839,23 +903,27 @@ public partial class NoteEditorWindow : Window
     private void UpdateEditorState()
     {
         var hasDocument = _activeDocument is not null;
-        DirtyStatusText.Visibility = _activeDocument?.IsDirty == true
+        var currentDocument = CurrentDocument;
+        DirtyStatusText.Visibility = currentDocument?.IsDirty == true
             ? Visibility.Visible
             : Visibility.Collapsed;
-        DirtyStatusText.Text = _activeDocument?.IsMissing == true
+        DirtyStatusText.Text = currentDocument?.IsMissing == true
             ? "Recovered changes - original file missing"
             : "Unsaved changes";
         EditorTextBox.IsEnabled = hasDocument;
         EditorTextBox.IsReadOnly = _activeDocument?.IsMissing == true;
-        FindButton.IsEnabled = hasDocument;
-        FindPanel.IsEnabled = hasDocument;
-        ReplaceButton.IsEnabled = hasDocument && _activeDocument?.IsMissing != true;
-        ReplaceAllButton.IsEnabled = hasDocument && _activeDocument?.IsMissing != true;
-        SaveButton.IsEnabled = _activeDocument is { IsMissing: false } document &&
+        SecondaryEditorTextBox.IsEnabled = _secondaryDocument is not null;
+        SecondaryEditorTextBox.IsReadOnly = _secondaryDocument?.IsMissing == true;
+        FindButton.IsEnabled = currentDocument is not null;
+        FindPanel.IsEnabled = currentDocument is not null;
+        ReplaceButton.IsEnabled = currentDocument?.IsMissing == false;
+        ReplaceAllButton.IsEnabled = currentDocument?.IsMissing == false;
+        SaveButton.IsEnabled = currentDocument is { IsMissing: false } document &&
             (document.IsDirty || document.UsesGeneratedName);
-        Title = hasDocument
-            ? $"{(_activeDocument!.IsDirty ? "*" : string.Empty)}{_activeDocument.DisplayName} - Noted"
+        Title = currentDocument is not null
+            ? $"{(currentDocument.IsDirty ? "*" : string.Empty)}{currentDocument.DisplayName} - Noted"
             : "Noted";
+        UpdateDocumentFooter();
     }
 
     private void ScheduleRecoveryDraftSave()
@@ -960,7 +1028,8 @@ public partial class NoteEditorWindow : Window
                     MarkdownPreviewEnabled = document.MarkdownPreviewEnabled,
                     UsesGeneratedName = document.UsesGeneratedName
                 }).ToList(),
-                ActiveFilePath = _activeDocument?.FilePath
+                ActiveFilePath = _activeDocument?.FilePath,
+                SecondaryFilePath = _secondaryDocument?.FilePath
             });
             _sessionPersistenceError = warning;
             UpdatePersistenceErrorState();
@@ -1121,13 +1190,100 @@ public partial class NoteEditorWindow : Window
             return;
 
         StoreEditorChanges();
+        UpdateDocumentFooter();
         if (FindPanel.Visibility == Visibility.Visible)
             RefreshFindResults(selectMatch: false);
     }
 
+    private void EditorTextBox_SelectionChanged(object sender, RoutedEventArgs e)
+    {
+        UpdateDocumentFooter();
+    }
+
+    private void EditorTextBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        _focusedDocument = _activeDocument;
+        if (FindPanel.Visibility == Visibility.Visible)
+            PositionFindPanel();
+        UpdateEditorState();
+    }
+
+    private void SecondaryEditorTextBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        _focusedDocument = _secondaryDocument;
+        if (_secondaryDocument is not null)
+            OpenTabsList.SelectedItem = _secondaryDocument;
+        if (FindPanel.Visibility == Visibility.Visible)
+            PositionFindPanel();
+        UpdateEditorState();
+    }
+
+    private void SecondaryEditorTextBox_SelectionChanged(object sender, RoutedEventArgs e)
+    {
+        if (ReferenceEquals(CurrentDocument, _secondaryDocument))
+            UpdateDocumentFooter();
+    }
+
+    private void SecondaryEditorTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isLoadingSecondary || _isApplyingFindReplacement || _secondaryDocument is null)
+            return;
+
+        StoreSecondaryEditorChanges();
+        UpdateDocumentFooter();
+        if (FindPanel.Visibility == Visibility.Visible)
+            RefreshFindResults(selectMatch: false);
+    }
+
+    private void UpdateDocumentFooter()
+    {
+        var document = CurrentDocument;
+        var textBox = ReferenceEquals(document, _secondaryDocument)
+            ? SecondaryEditorTextBox
+            : EditorTextBox;
+        if (document is null)
+        {
+            DocumentCountText.Text = string.Empty;
+            DocumentTimeText.Text = string.Empty;
+            DocumentTimeText.ToolTip = null;
+            CaretPositionText.Text = string.Empty;
+            return;
+        }
+
+        var text = textBox.Text;
+        var wordCount = string.IsNullOrWhiteSpace(text)
+            ? 0
+            : Regex.Matches(text, @"\S+").Count;
+        DocumentCountText.Text =
+            $"Words {wordCount}   Characters {text.Length}   Lines {textBox.LineCount}";
+
+        var caretIndex = Math.Clamp(textBox.CaretIndex, 0, text.Length);
+        var lineIndex = textBox.GetLineIndexFromCharacterIndex(caretIndex);
+        var lineStart = lineIndex >= 0
+            ? textBox.GetCharacterIndexFromLineIndex(lineIndex)
+            : 0;
+        CaretPositionText.Text =
+            $"Ln {Math.Max(0, lineIndex) + 1}, Col {caretIndex - lineStart + 1}";
+
+        try
+        {
+            var created = File.GetCreationTime(document.FilePath);
+            var modified = File.GetLastWriteTime(document.FilePath);
+            DocumentTimeText.Text = $"Created {created:g}   Modified {modified:g}";
+            DocumentTimeText.ToolTip = document.FilePath;
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            DocumentTimeText.Text = document.IsMissing
+                ? "Original file missing"
+                : string.Empty;
+            DocumentTimeText.ToolTip = document.FilePath;
+        }
+    }
+
     private void StoreEditorChanges()
     {
-        if (_activeDocument is null)
+        if (CurrentDocument is null)
             return;
 
         _activeDocument.Content = EditorTextBox.Text;
@@ -1138,6 +1294,33 @@ public partial class NoteEditorWindow : Window
             StringComparison.Ordinal);
         ScheduleRecoveryDraftSave();
         UpdateMarkdownPreview();
+        UpdateEditorState();
+    }
+
+    private void StoreCurrentEditorChanges()
+    {
+        if (!ReferenceEquals(CurrentDocument, _secondaryDocument))
+        {
+            StoreEditorChanges();
+            return;
+        }
+
+        StoreSecondaryEditorChanges();
+    }
+
+    private void StoreSecondaryEditorChanges()
+    {
+        if (_secondaryDocument is null)
+            return;
+
+        _secondaryDocument.Content = SecondaryEditorTextBox.Text;
+        _secondaryDocument.CaretIndex = SecondaryEditorTextBox.CaretIndex;
+        _secondaryDocument.IsDirty = !string.Equals(
+            _secondaryDocument.Content,
+            _secondaryDocument.SavedContent,
+            StringComparison.Ordinal);
+        SecondaryDocumentTitle.Text = _secondaryDocument.TabLabel;
+        ScheduleRecoveryDraftSave();
         UpdateEditorState();
     }
 
@@ -1158,13 +1341,22 @@ public partial class NoteEditorWindow : Window
 
     private void OpenFindPanel(bool showReplace)
     {
-        if (_activeDocument is null)
+        var targetDocument = CurrentDocument;
+        if (targetDocument is null)
             return;
 
         if (_isMarkdownPreviewEnabled)
+        {
             SetMarkdownPreviewEnabled(false);
+            if (ReferenceEquals(targetDocument, _secondaryDocument))
+            {
+                _focusedDocument = targetDocument;
+                SecondaryEditorTextBox.Focus();
+            }
+        }
 
         var wasVisible = FindPanel.Visibility == Visibility.Visible;
+        PositionFindPanel();
         FindPanel.Visibility = Visibility.Visible;
         if (showReplace)
             ShowReplaceToggle.IsChecked = true;
@@ -1172,7 +1364,7 @@ public partial class NoteEditorWindow : Window
             ShowReplaceToggle.IsChecked = false;
         UpdateReplaceRowVisibility();
 
-        var selectedText = EditorTextBox.SelectedText;
+        var selectedText = CurrentEditorTextBox.SelectedText;
         if (!string.IsNullOrEmpty(selectedText)
             && selectedText.Length <= 200
             && selectedText.IndexOfAny(['\r', '\n']) < 0)
@@ -1196,8 +1388,15 @@ public partial class NoteEditorWindow : Window
         _findMatches = [];
         _currentFindMatchIndex = -1;
         FindResultText.Text = string.Empty;
-        if (focusEditor && _activeDocument is not null)
-            FocusActiveSurface();
+        if (focusEditor && CurrentDocument is not null)
+            CurrentEditorTextBox.Focus();
+    }
+
+    private void PositionFindPanel()
+    {
+        Grid.SetColumn(
+            FindPanel,
+            ReferenceEquals(CurrentDocument, _secondaryDocument) ? 2 : 0);
     }
 
     private void ShowReplaceToggle_Click(object sender, RoutedEventArgs e)
@@ -1258,7 +1457,7 @@ public partial class NoteEditorWindow : Window
         var selectedIndex = FindSelectedMatchIndex();
         var nextIndex = selectedIndex >= 0
             ? (selectedIndex + 1) % _findMatches.Count
-            : FindMatchAtOrAfter(EditorTextBox.SelectionStart);
+            : FindMatchAtOrAfter(CurrentEditorTextBox.SelectionStart);
         SelectFindMatch(nextIndex);
     }
 
@@ -1271,7 +1470,7 @@ public partial class NoteEditorWindow : Window
         var selectedIndex = FindSelectedMatchIndex();
         var previousIndex = selectedIndex >= 0
             ? (selectedIndex - 1 + _findMatches.Count) % _findMatches.Count
-            : FindMatchBefore(EditorTextBox.SelectionStart);
+            : FindMatchBefore(CurrentEditorTextBox.SelectionStart);
         SelectFindMatch(previousIndex);
     }
 
@@ -1291,7 +1490,7 @@ public partial class NoteEditorWindow : Window
 
         if (selectMatch)
         {
-            SelectFindMatch(FindMatchAtOrAfter(EditorTextBox.SelectionStart));
+            SelectFindMatch(FindMatchAtOrAfter(CurrentEditorTextBox.SelectionStart));
             return;
         }
 
@@ -1302,7 +1501,7 @@ public partial class NoteEditorWindow : Window
     private void LoadFindMatches()
     {
         _findMatches = PlainTextSearch.FindMatches(
-            EditorTextBox.Text,
+            CurrentEditorTextBox.Text,
             FindTextBox.Text,
             MatchCaseOption.IsChecked == true);
         if (_findMatches.Count == 0)
@@ -1319,8 +1518,8 @@ public partial class NoteEditorWindow : Window
         for (var index = 0; index < _findMatches.Count; index++)
         {
             var match = _findMatches[index];
-            if (match.Start == EditorTextBox.SelectionStart
-                && match.Length == EditorTextBox.SelectionLength)
+            if (match.Start == CurrentEditorTextBox.SelectionStart
+                && match.Length == CurrentEditorTextBox.SelectionLength)
                 return index;
         }
 
@@ -1355,10 +1554,10 @@ public partial class NoteEditorWindow : Window
             return;
 
         var match = _findMatches[index];
-        EditorTextBox.Select(match.Start, match.Length);
-        var lineIndex = EditorTextBox.GetLineIndexFromCharacterIndex(match.Start);
+        CurrentEditorTextBox.Select(match.Start, match.Length);
+        var lineIndex = CurrentEditorTextBox.GetLineIndexFromCharacterIndex(match.Start);
         if (lineIndex >= 0)
-            EditorTextBox.ScrollToLine(lineIndex);
+            CurrentEditorTextBox.ScrollToLine(lineIndex);
         _currentFindMatchIndex = index;
         UpdateFindResultText();
     }
@@ -1374,7 +1573,7 @@ public partial class NoteEditorWindow : Window
 
     private void ReplaceButton_Click(object sender, RoutedEventArgs e)
     {
-        if (EditorTextBox.IsReadOnly)
+        if (CurrentEditorTextBox.IsReadOnly)
             return;
 
         LoadFindMatches();
@@ -1394,7 +1593,7 @@ public partial class NoteEditorWindow : Window
 
     private void ReplaceAllButton_Click(object sender, RoutedEventArgs e)
     {
-        if (EditorTextBox.IsReadOnly)
+        if (CurrentEditorTextBox.IsReadOnly)
             return;
 
         LoadFindMatches();
@@ -1403,25 +1602,25 @@ public partial class NoteEditorWindow : Window
 
         var replacedCount = _findMatches.Count;
         _isApplyingFindReplacement = true;
-        EditorTextBox.BeginChange();
+        CurrentEditorTextBox.BeginChange();
         try
         {
             for (var index = _findMatches.Count - 1; index >= 0; index--)
             {
                 var match = _findMatches[index];
-                EditorTextBox.Select(match.Start, match.Length);
-                EditorTextBox.SelectedText = ReplaceTextBox.Text;
+                CurrentEditorTextBox.Select(match.Start, match.Length);
+                CurrentEditorTextBox.SelectedText = ReplaceTextBox.Text;
             }
         }
         finally
         {
-            EditorTextBox.EndChange();
+            CurrentEditorTextBox.EndChange();
             _isApplyingFindReplacement = false;
         }
 
-        StoreEditorChanges();
+        StoreCurrentEditorChanges();
         _findMatches = PlainTextSearch.FindMatches(
-            EditorTextBox.Text,
+            CurrentEditorTextBox.Text,
             FindTextBox.Text,
             MatchCaseOption.IsChecked == true);
         _currentFindMatchIndex = -1;
@@ -1431,24 +1630,138 @@ public partial class NoteEditorWindow : Window
     private void ReplaceText(int start, int length, string replacement)
     {
         _isApplyingFindReplacement = true;
-        EditorTextBox.BeginChange();
+        CurrentEditorTextBox.BeginChange();
         try
         {
-            EditorTextBox.Select(start, length);
-            EditorTextBox.SelectedText = replacement;
+            CurrentEditorTextBox.Select(start, length);
+            CurrentEditorTextBox.SelectedText = replacement;
         }
         finally
         {
-            EditorTextBox.EndChange();
+            CurrentEditorTextBox.EndChange();
             _isApplyingFindReplacement = false;
         }
 
-        StoreEditorChanges();
+        StoreCurrentEditorChanges();
     }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
         TrySaveCurrentNote();
+    }
+
+    private void SaveAsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        TrySaveCurrentNoteAs();
+    }
+
+    private bool TrySaveCurrentNoteAs()
+    {
+        if (CurrentDocument is not { } document)
+            return true;
+
+        CaptureActiveDocument();
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save Note As",
+            InitialDirectory = Path.GetDirectoryName(document.FilePath),
+            FileName = Path.GetFileName(document.FilePath),
+            DefaultExt = Path.GetExtension(document.FilePath),
+            AddExtension = true,
+            OverwritePrompt = true,
+            Filter = NoteFileExtensions.FileDialogFilter
+        };
+        if (dialog.ShowDialog(this) != true)
+            return false;
+
+        string newPath;
+        try
+        {
+            newPath = NormalizePath(dialog.FileName);
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            ShowError("Unable to save note", ex.Message);
+            return false;
+        }
+
+        if (PathsEqual(document.FilePath, newPath))
+            return TrySaveDocument(document);
+        if (FindDocument(newPath) is not null)
+        {
+            ShowError(
+                "Note is already open",
+                "Close the existing tab for that file before saving another note over it.");
+            return false;
+        }
+
+        try
+        {
+            var oldPath = document.FilePath;
+            _noteSaveWarning = _contentService.SaveAs(newPath, document.Content);
+            document.UpdateFilePath(newPath);
+            document.UsesGeneratedName = false;
+            document.SavedContent = document.Content;
+            document.IsDirty = false;
+            document.IsMissing = false;
+            if (ReferenceEquals(document, _secondaryDocument))
+                SecondaryDocumentTitle.Text = document.TabLabel;
+            _unsavedRecoveredPaths.Remove(oldPath);
+            _unsavedRecoveredPaths.Remove(newPath);
+            _discardedDocumentsPendingDraftDeletion.Remove(document);
+            RefreshScheduledRecoveryDrafts();
+            if (!TryDeleteRecoveryDraft(oldPath, out var cleanupError))
+                ShowRecoveryCleanupWarning(cleanupError!);
+            SaveEditorSession();
+            UpdateEditorState();
+            return true;
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            ShowError("Unable to save note", ex.Message);
+            return false;
+        }
+    }
+
+    private void ShowInFileExplorerMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        ShowActiveNoteInFileExplorer();
+    }
+
+    private void ShowActiveNoteInFileExplorer()
+    {
+        if (CurrentDocument is not { } document)
+            return;
+
+        try
+        {
+            var path = document.FilePath;
+            var arguments = File.Exists(path)
+                ? $"/select,\"{path}\""
+                : $"\"{Path.GetDirectoryName(path)}\"";
+            Process.Start(new ProcessStartInfo("explorer.exe", arguments)
+            {
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or IOException)
+        {
+            ShowError("Unable to open File Explorer", ex.Message);
+        }
+    }
+
+    private void FileExplorerIntegrationMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var enabled = FileExplorerIntegrationMenuItem.IsChecked;
+        try
+        {
+            FileExplorerIntegrationService.SetEnabled(enabled);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or SecurityException)
+        {
+            FileExplorerIntegrationMenuItem.IsChecked = !enabled;
+            ShowError("Unable to update File Explorer", ex.Message);
+        }
     }
 
     private void NewNoteButton_Click(object sender, RoutedEventArgs e)
@@ -1463,8 +1776,8 @@ public partial class NoteEditorWindow : Window
 
     private void DeleteActiveNoteMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        if (_activeDocument is not null)
-            RequestNoteDeletion(_activeDocument);
+        if (CurrentDocument is { } document)
+            RequestNoteDeletion(document);
     }
 
     private void DeleteTabNoteMenuItem_Click(object sender, RoutedEventArgs e)
@@ -1485,7 +1798,7 @@ public partial class NoteEditorWindow : Window
             return;
         }
 
-        if (ReferenceEquals(document, _activeDocument))
+        if (ReferenceEquals(document, _activeDocument) || ReferenceEquals(document, _secondaryDocument))
             CaptureActiveDocument();
         TryRenameNote(document, isFirstSave: false);
     }
@@ -1544,7 +1857,110 @@ public partial class NoteEditorWindow : Window
             return;
         }
 
-        DragDrop.DoDragDrop(OpenTabsList, _draggedDocument, DragDropEffects.Move);
+        SideBySideDropTarget.Visibility = Visibility.Visible;
+        try
+        {
+            DragDrop.DoDragDrop(OpenTabsList, _draggedDocument, DragDropEffects.Move);
+        }
+        finally
+        {
+            SideBySideDropTarget.Visibility = Visibility.Collapsed;
+            _draggedDocument = null;
+        }
+    }
+
+    private void SideBySideDropTarget_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(typeof(OpenNoteDocument))
+            ? DragDropEffects.Move
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void SideBySideDropTarget_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(typeof(OpenNoteDocument)) &&
+            e.Data.GetData(typeof(OpenNoteDocument)) is OpenNoteDocument document)
+        {
+            ShowSecondaryDocument(document, focusEditor: true, saveSession: true);
+            e.Effects = DragDropEffects.Move;
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+        }
+
+        e.Handled = true;
+    }
+
+    private void ShowSecondaryDocument(
+        OpenNoteDocument document,
+        bool focusEditor,
+        bool saveSession)
+    {
+        if (_documents.Count < 2)
+            return;
+
+        CaptureActiveDocument();
+        if (ReferenceEquals(document, _activeDocument))
+        {
+            var primaryDocument = _documents.FirstOrDefault(item => !ReferenceEquals(item, document));
+            if (primaryDocument is null)
+                return;
+            ActivateDocument(primaryDocument, focusEditor: false);
+        }
+
+        _secondaryDocument = document;
+        _isLoadingSecondary = true;
+        SecondaryEditorTextBox.Text = document.Content;
+        SecondaryEditorTextBox.CaretIndex = Math.Clamp(document.CaretIndex, 0, document.Content.Length);
+        SecondaryEditorTextBox.ScrollToVerticalOffset(Math.Max(0, document.VerticalOffset));
+        ResetSecondaryUndoHistory();
+        SecondaryDocumentTitle.Text = document.TabLabel;
+        _isLoadingSecondary = false;
+
+        EditorSplitterColumn.Width = new GridLength(5);
+        SecondaryEditorColumn.Width = new GridLength(1, GridUnitType.Star);
+        EditorSplitter.Visibility = Visibility.Visible;
+        SecondaryEditorPane.Visibility = Visibility.Visible;
+        if (focusEditor)
+        {
+            _focusedDocument = document;
+            OpenTabsList.SelectedItem = document;
+            SecondaryEditorTextBox.Focus();
+        }
+
+        UpdateEditorState();
+        if (saveSession)
+            SaveEditorSession();
+    }
+
+    private void CloseSecondaryPaneButton_Click(object sender, RoutedEventArgs e)
+    {
+        CloseSecondaryPane(saveSession: true);
+        FocusActiveSurface();
+    }
+
+    private void CloseSecondaryPane(bool saveSession)
+    {
+        if (_secondaryDocument is null)
+            return;
+
+        CaptureActiveDocument();
+        _secondaryDocument = null;
+        _focusedDocument = _activeDocument;
+        _isLoadingSecondary = true;
+        SecondaryEditorTextBox.Clear();
+        ResetSecondaryUndoHistory();
+        SecondaryDocumentTitle.Text = string.Empty;
+        _isLoadingSecondary = false;
+        EditorSplitterColumn.Width = new GridLength(0);
+        SecondaryEditorColumn.Width = new GridLength(0);
+        EditorSplitter.Visibility = Visibility.Collapsed;
+        SecondaryEditorPane.Visibility = Visibility.Collapsed;
+        UpdateEditorState();
+        if (saveSession)
+            SaveEditorSession();
     }
 
     private void OpenTabsList_Drop(object sender, DragEventArgs e)
@@ -1561,7 +1977,7 @@ public partial class NoteEditorWindow : Window
 
         var targetIndex = _documents.IndexOf(target);
         _documents.Move(_documents.IndexOf(source), targetIndex);
-        OpenTabsList.SelectedItem = _activeDocument;
+        OpenTabsList.SelectedItem = CurrentDocument;
         SaveEditorSession();
     }
 
@@ -1603,6 +2019,10 @@ public partial class NoteEditorWindow : Window
     {
         EditorTextBox.TextWrapping = enabled ? TextWrapping.Wrap : TextWrapping.NoWrap;
         EditorTextBox.HorizontalScrollBarVisibility = enabled
+            ? ScrollBarVisibility.Disabled
+            : ScrollBarVisibility.Auto;
+        SecondaryEditorTextBox.TextWrapping = enabled ? TextWrapping.Wrap : TextWrapping.NoWrap;
+        SecondaryEditorTextBox.HorizontalScrollBarVisibility = enabled
             ? ScrollBarVisibility.Disabled
             : ScrollBarVisibility.Auto;
         HeaderWordWrapMenuItem.IsChecked = enabled;
@@ -1822,9 +2242,23 @@ public partial class NoteEditorWindow : Window
             return;
         }
 
+        if (e.Key == Key.S && modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+        {
+            TrySaveCurrentNoteAs();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.S && modifiers == ModifierKeys.Control)
         {
             TrySaveCurrentNote();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.O && modifiers == ModifierKeys.Control)
+        {
+            ShowActiveNoteInFileExplorer();
             e.Handled = true;
             return;
         }
@@ -1843,10 +2277,10 @@ public partial class NoteEditorWindow : Window
             return;
         }
 
-        if (e.Key == Key.W && modifiers == ModifierKeys.Control && _activeDocument is not null)
+        if (e.Key == Key.W && modifiers == ModifierKeys.Control && CurrentDocument is { } currentDocument)
         {
-            if (!_activeDocument.IsDirty || TryResolveDirtyDocuments([_activeDocument]))
-                RemoveDocument(_activeDocument, deleteRecoveryDraft: true);
+            if (!currentDocument.IsDirty || TryResolveDirtyDocuments([currentDocument]))
+                RemoveDocument(currentDocument, deleteRecoveryDraft: true);
             e.Handled = true;
             return;
         }

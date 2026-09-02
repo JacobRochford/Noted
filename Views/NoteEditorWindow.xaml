@@ -34,7 +34,8 @@
             <Setter Property="Width" Value="20"/>
             <Setter Property="Height" Value="20"/>
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="10"/>
         </Style>
 
         <Style x:Key="EditorFindInput" TargetType="TextBox" BasedOn="{StaticResource NotedTextInput}">
@@ -161,6 +162,16 @@
                             <MenuItem Header="Save"
                                       InputGestureText="Ctrl+S"
                                       Click="SaveButton_Click"/>
+                            <MenuItem Header="Save As..."
+                                      InputGestureText="Ctrl+Shift+S"
+                                      Click="SaveAsMenuItem_Click"/>
+                            <MenuItem Header="Show in File Explorer"
+                                      InputGestureText="Ctrl+O"
+                                      Click="ShowInFileExplorerMenuItem_Click"/>
+                            <MenuItem x:Name="FileExplorerIntegrationMenuItem"
+                                      Header="Add 'Open with Noted' to File Explorer"
+                                      IsCheckable="True"
+                                      Click="FileExplorerIntegrationMenuItem_Click"/>
                             <Separator/>
                             <MenuItem Header="Delete Note..."
                                       Click="DeleteActiveNoteMenuItem_Click"/>
@@ -264,6 +275,36 @@
                        TextWrapping="Wrap"/>
         </Border>
 
+        <Border DockPanel.Dock="Bottom"
+                Margin="10,0,10,8"
+                Padding="6,3"
+                Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                BorderBrush="{DynamicResource NotedBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="5">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="DocumentCountText"
+                           Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                           FontSize="10"/>
+                <TextBlock x:Name="DocumentTimeText"
+                           Grid.Column="1"
+                           Margin="14,0"
+                           HorizontalAlignment="Center"
+                           Foreground="{DynamicResource NotedMutedTextBrush}"
+                           FontSize="10"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="CaretPositionText"
+                           Grid.Column="2"
+                           Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                           FontSize="10"/>
+            </Grid>
+        </Border>
+
         <Border Margin="10"
                 Padding="1"
                 Background="{DynamicResource NotedSurfaceBrush}"
@@ -293,21 +334,47 @@
                                        FontSize="10"
                                        FontWeight="SemiBold"
                                        Text="OPEN NOTES"/>
-                            <Button Grid.Column="1"
-                                    Width="22"
-                                    Height="22"
-                                    Padding="2"
-                                    Click="NewNoteButton_Click"
-                                    Style="{StaticResource HeaderIconButton}"
-                                    ToolTip="New note (Ctrl+N)"
-                                    AutomationProperties.Name="New note">
-                                <TextBlock Foreground="{DynamicResource NotedTextBrush}"
-                                           FontSize="17"
-                                           FontWeight="Normal"
-                                           LineHeight="17"
-                                           Text="+"/>
-                            </Button>
                         </Grid>
+
+                        <Button DockPanel.Dock="Bottom"
+                                Margin="0,5,0,0"
+                                Padding="8,6"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                Cursor="Hand"
+                                Click="NewNoteButton_Click"
+                                ToolTip="New note (Ctrl+N)"
+                                AutomationProperties.Name="New note">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="NewTabBackground"
+                                            Background="{TemplateBinding Background}"
+                                            CornerRadius="5"
+                                            Padding="{TemplateBinding Padding}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Margin="1,0,7,0"
+                                                       FontSize="16"
+                                                       LineHeight="16"
+                                                       Text="+"/>
+                                            <TextBlock VerticalAlignment="Center"
+                                                       FontSize="12"
+                                                       Text="New note"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="NewTabBackground"
+                                                    Property="Background"
+                                                    Value="{DynamicResource NotedAccentSoftBrush}"/>
+                                            <Setter Property="Foreground"
+                                                    Value="{DynamicResource NotedAccentBrush}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
 
                         <ListBox x:Name="OpenTabsList"
                                  AllowDrop="True"
@@ -388,7 +455,7 @@
                                         <Button Grid.Column="1"
                                                 Margin="7,0,0,0"
                                                 Click="CloseTabButton_Click"
-                                                Content="×"
+                                                Content="&#xE711;"
                                                 Style="{StaticResource TabCloseButton}"
                                                 ToolTip="Close tab"/>
                                     </Grid>
@@ -407,7 +474,16 @@
                               ResizeBehavior="PreviousAndNext"
                               ResizeDirection="Columns"/>
 
-                <Grid Grid.Column="2">
+                <Grid x:Name="EditorWorkspace"
+                      Grid.Column="2"
+                      AllowDrop="True">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition x:Name="EditorSplitterColumn" Width="0"/>
+                        <ColumnDefinition x:Name="SecondaryEditorColumn" Width="0"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid x:Name="PrimaryEditorPane" Grid.Column="0">
                     <TextBox x:Name="EditorTextBox"
                              Padding="12"
                              AcceptsReturn="True"
@@ -423,6 +499,8 @@
                              IsInactiveSelectionHighlightEnabled="True"
                              SelectionBrush="{DynamicResource NotedAccentSoftHoverBrush}"
                              SpellCheck.IsEnabled="True"
+                             GotKeyboardFocus="EditorTextBox_GotKeyboardFocus"
+                             SelectionChanged="EditorTextBox_SelectionChanged"
                              TextChanged="EditorTextBox_TextChanged"
                              TextWrapping="Wrap"
                              VerticalScrollBarVisibility="Auto">
@@ -486,8 +564,10 @@
                             </ContextMenu>
                         </FlowDocumentScrollViewer.ContextMenu>
                     </FlowDocumentScrollViewer>
+                    </Grid>
 
                     <Border x:Name="FindPanel"
+                            Grid.Column="0"
                             Panel.ZIndex="10"
                             Width="286"
                             Margin="8"
@@ -591,6 +671,116 @@
                                            Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                            FontSize="10"/>
                             </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <GridSplitter x:Name="EditorSplitter"
+                                  Grid.Column="1"
+                                  HorizontalAlignment="Stretch"
+                                  Background="{DynamicResource NotedBorderBrush}"
+                                  Cursor="SizeWE"
+                                  ResizeBehavior="PreviousAndNext"
+                                  ResizeDirection="Columns"
+                                  Visibility="Collapsed"/>
+
+                    <Border x:Name="SecondaryEditorPane"
+                            Grid.Column="2"
+                            Background="{DynamicResource NotedInputBackgroundBrush}"
+                            BorderBrush="{DynamicResource NotedAccentBrush}"
+                            BorderThickness="1,0,0,0"
+                            Visibility="Collapsed">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top"
+                                    Padding="9,5"
+                                    Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
+                                    BorderThickness="0,0,0,1">
+                                <Grid>
+                                    <TextBlock x:Name="SecondaryDocumentTitle"
+                                               Margin="0,0,28,0"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <Button HorizontalAlignment="Right"
+                                            Content="&#xE711;"
+                                            Click="CloseSecondaryPaneButton_Click"
+                                            Style="{StaticResource TabCloseButton}"
+                                            ToolTip="Close side-by-side view"/>
+                                </Grid>
+                            </Border>
+                            <TextBox x:Name="SecondaryEditorTextBox"
+                                     Padding="12"
+                                     AcceptsReturn="True"
+                                     AcceptsTab="True"
+                                     Background="{DynamicResource NotedInputBackgroundBrush}"
+                                     BorderThickness="0"
+                                     CaretBrush="{DynamicResource NotedAccentBrush}"
+                                     Foreground="{DynamicResource NotedTextBrush}"
+                                     FontFamily="Consolas"
+                                     FontSize="14"
+                                     HorizontalScrollBarVisibility="Disabled"
+                                     IsInactiveSelectionHighlightEnabled="True"
+                                     SelectionBrush="{DynamicResource NotedAccentSoftHoverBrush}"
+                                     SpellCheck.IsEnabled="True"
+                                     GotKeyboardFocus="SecondaryEditorTextBox_GotKeyboardFocus"
+                                     SelectionChanged="SecondaryEditorTextBox_SelectionChanged"
+                                     TextChanged="SecondaryEditorTextBox_TextChanged"
+                                     TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto">
+                                <TextBox.ContextMenu>
+                                    <ContextMenu Style="{StaticResource NotedContextMenu}">
+                                        <ContextMenu.Resources>
+                                            <Style TargetType="MenuItem"
+                                                   BasedOn="{StaticResource NotedContextMenuItem}"/>
+                                        </ContextMenu.Resources>
+                                        <MenuItem Header="Undo" Command="ApplicationCommands.Undo"/>
+                                        <MenuItem Header="Redo" Command="ApplicationCommands.Redo"/>
+                                        <Separator/>
+                                        <MenuItem Header="Cut" Command="ApplicationCommands.Cut"/>
+                                        <MenuItem Header="Copy" Command="ApplicationCommands.Copy"/>
+                                        <MenuItem Header="Paste" Command="ApplicationCommands.Paste"/>
+                                        <Separator/>
+                                        <MenuItem Header="Select All" Command="ApplicationCommands.SelectAll"/>
+                                        <Separator/>
+                                        <MenuItem Header="Delete Note..."
+                                                  Foreground="{DynamicResource NotedDangerBrush}"
+                                                  Click="DeleteActiveNoteMenuItem_Click"/>
+                                    </ContextMenu>
+                                </TextBox.ContextMenu>
+                            </TextBox>
+                        </DockPanel>
+                    </Border>
+
+                    <Border x:Name="SideBySideDropTarget"
+                            Panel.ZIndex="20"
+                            Width="190"
+                            Margin="10"
+                            Padding="12"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Stretch"
+                            AllowDrop="True"
+                            Background="{DynamicResource NotedAccentSoftBrush}"
+                            BorderBrush="{DynamicResource NotedAccentBrush}"
+                            BorderThickness="2"
+                            CornerRadius="8"
+                            DragOver="SideBySideDropTarget_DragOver"
+                            Drop="SideBySideDropTarget_Drop"
+                            Visibility="Collapsed">
+                        <StackPanel HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                            <TextBlock HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource NotedAccentBrush}"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="22"
+                                       Text="&#xE71D;"/>
+                            <TextBlock Margin="0,7,0,0"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource NotedTextBrush}"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       Text="Open side by side"/>
                         </StackPanel>
                     </Border>
                 </Grid>

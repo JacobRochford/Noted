@@ -3,8 +3,10 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Media;
 using Microsoft.Win32;
+using Noted.Helpers;
 using Noted.Models;
 
 namespace Noted.Services;
@@ -102,6 +104,39 @@ internal sealed class AppThemeManager : IDisposable
         SetBrush("NotedDangerBrush", ParseColor(dark ? "#FF8A8A" : "#B84F4F"));
         SetBrush("NotedWarningBrush", ParseColor(dark ? "#F2C572" : "#B8761F"));
         SetBrush("NotedSuccessBrush", ParseColor(dark ? "#78D3A2" : "#347052"));
+
+        ApplyTitleBars(window, text, dark);
+    }
+
+    internal static void ApplyTitleBar(Window window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        var background = Application.Current?.Resources["NotedWindowBackgroundBrush"] as SolidColorBrush;
+        var text = Application.Current?.Resources["NotedTextBrush"] as SolidColorBrush;
+        if (background is null || text is null)
+            return;
+
+        WindowInterop.SetTitleBarColors(
+            new WindowInteropHelper(window).Handle,
+            background.Color,
+            text.Color,
+            IsDark(background.Color));
+    }
+
+    private static void ApplyTitleBars(Color background, Color text, bool dark)
+    {
+        var windows = Application.Current?.Windows;
+        if (windows is null)
+            return;
+
+        foreach (Window window in windows)
+        {
+            WindowInterop.SetTitleBarColors(
+                new WindowInteropHelper(window).Handle,
+                background,
+                text,
+                dark);
+        }
     }
 
     private void TryListenForSystemChanges()
@@ -184,4 +219,7 @@ internal sealed class AppThemeManager : IDisposable
 
     private static bool UseDarkText(Color background) =>
         ((background.R * 299) + (background.G * 587) + (background.B * 114)) / 1000 >= 150;
+
+    private static bool IsDark(Color background) =>
+        ((background.R * 299) + (background.G * 587) + (background.B * 114)) / 1000 < 150;
 }

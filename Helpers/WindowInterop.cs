@@ -1,9 +1,14 @@
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Media;
 
 namespace Noted.Helpers;
 
 internal static class WindowInterop {
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    private const int DWMWA_CAPTION_COLOR = 35;
+    private const int DWMWA_TEXT_COLOR = 36;
     private const uint MONITOR_DEFAULTTONULL = 0;
 
     [StructLayout(LayoutKind.Sequential)]
@@ -72,6 +77,49 @@ internal static class WindowInterop {
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForSystem();
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(
+        IntPtr hwnd,
+        int attribute,
+        ref int value,
+        int valueSize);
+
+    internal static void SetTitleBarColors(
+        IntPtr hwnd,
+        Color background,
+        Color text,
+        bool useDarkControls)
+    {
+        if (hwnd == IntPtr.Zero || !OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17763))
+            return;
+
+        var value = useDarkControls ? 1 : 0;
+        var attribute = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 18985)
+            ? DWMWA_USE_IMMERSIVE_DARK_MODE
+            : DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1;
+        _ = DwmSetWindowAttribute(hwnd, attribute, ref value, sizeof(int));
+
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+            return;
+
+        var captionColor = ToColorRef(background);
+        _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_CAPTION_COLOR,
+            ref captionColor,
+            sizeof(int));
+
+        var textColor = ToColorRef(text);
+        _ = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_TEXT_COLOR,
+            ref textColor,
+            sizeof(int));
+    }
+
+    private static int ToColorRef(Color color) =>
+        color.R | (color.G << 8) | (color.B << 16);
 
     internal static void StripNoActivate(IntPtr hwnd)
     {

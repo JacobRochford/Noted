@@ -13,6 +13,7 @@ public sealed record NoteEditorSession
 {
     public IReadOnlyList<NoteEditorTabState> Tabs { get; init; } = [];
     public string? ActiveFilePath { get; init; }
+    public string? SecondaryFilePath { get; init; }
 }
 
 public sealed record NoteEditorSessionIssue(
