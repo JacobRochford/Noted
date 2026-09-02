@@ -104,7 +104,10 @@ public sealed class NoteFileService : INoteFileService {
             ? BuildUniqueFileName(now)
             : BuildRequestedFileName(requestedName!);
         var fullPath = Path.Combine(CurrentDirectory, filename);
-        var content = BuildNewNoteContent(now, _settingsService.LoadTimestampPlacement());
+        var content = BuildNewNoteContent(
+            now,
+            _settingsService.LoadTimestampPlacement(),
+            _settingsService.LoadTimestampLine());
         FileWriter.WriteAllText(fullPath, content);
         if (!string.Equals(File.ReadAllText(fullPath), content, StringComparison.Ordinal))
             throw new IOException("The new note was created but could not be verified.");
@@ -304,13 +307,20 @@ public sealed class NoteFileService : INoteFileService {
             : $"Modified: {lastWriteTime:MMM dd, yyyy  h:mm tt}";
     }
 
-    // build note content with timestamp (top/bottom/none)
-    private static string BuildNewNoteContent(DateTime timestamp, NoteTimestampPlacement timestampPlacement) {
+    // build note content with the configured timestamp placement
+    private static string BuildNewNoteContent(
+        DateTime timestamp,
+        NoteTimestampPlacement timestampPlacement,
+        int timestampLine) {
         var timestampText = timestamp.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
         return timestampPlacement switch {
             NoteTimestampPlacement.Top => timestampText + Environment.NewLine + Environment.NewLine + Environment.NewLine,
             NoteTimestampPlacement.Bottom => string.Join(Environment.NewLine, Enumerable.Repeat(string.Empty, 30)) + Environment.NewLine + timestampText,
+            NoteTimestampPlacement.Line =>
+                string.Join(Environment.NewLine, Enumerable.Repeat(string.Empty, Math.Max(0, timestampLine - 1))) +
+                (timestampLine > 1 ? Environment.NewLine : string.Empty) +
+                timestampText,
             _ => string.Empty
         };
     }

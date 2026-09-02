@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -589,6 +590,8 @@ public partial class MainWindow : Window {
             TimestampNoneOption.IsChecked = timestampPlacement == NoteTimestampPlacement.None;
             TimestampTopOption.IsChecked = timestampPlacement == NoteTimestampPlacement.Top;
             TimestampBottomOption.IsChecked = timestampPlacement == NoteTimestampPlacement.Bottom;
+            TimestampLineOption.IsChecked = timestampPlacement == NoteTimestampPlacement.Line;
+            TimestampLineTextBox.Text = _settingsService.LoadTimestampLine().ToString(CultureInfo.InvariantCulture);
             NotesFolderPathText.Text = _fileService.NotesDirectory;
             var showModified = _settingsService.LoadShowModifiedSubtitle();
             ShowModifiedSubtitleOption.IsChecked = showModified;
@@ -1984,10 +1987,28 @@ public partial class MainWindow : Window {
         var timestampPlacement = sender switch {
             RadioButton { Name: nameof(TimestampTopOption) } => NoteTimestampPlacement.Top,
             RadioButton { Name: nameof(TimestampBottomOption) } => NoteTimestampPlacement.Bottom,
+            RadioButton { Name: nameof(TimestampLineOption) } => NoteTimestampPlacement.Line,
             _ => NoteTimestampPlacement.None
         };
 
         _settingsService.SaveTimestampPlacement(timestampPlacement);
+    }
+
+    private void TimestampLineTextBox_LostFocus(object sender, RoutedEventArgs e) {
+        if (_isUpdatingSettingsView)
+            return;
+
+        if (!int.TryParse(
+                TimestampLineTextBox.Text,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var lineNumber)) {
+            lineNumber = _settingsService.LoadTimestampLine();
+        }
+
+        lineNumber = Math.Clamp(lineNumber, 1, 10000);
+        TimestampLineTextBox.Text = lineNumber.ToString(CultureInfo.InvariantCulture);
+        _settingsService.SaveTimestampLine(lineNumber);
     }
 
     private void DeleteNoteButton_Click(object sender, RoutedEventArgs e) {

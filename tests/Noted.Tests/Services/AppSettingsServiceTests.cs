@@ -12,6 +12,17 @@ namespace Noted.Tests.Services;
 public sealed class AppSettingsServiceTests
 {
     [TestMethod]
+    public void TimestampLineIsSavedAndLoaded()
+    {
+        using var directory = new TestDirectory();
+        var service = CreateService(directory.Path);
+
+        service.SaveTimestampLine(12);
+
+        Assert.AreEqual(12, CreateService(directory.Path).LoadTimestampLine());
+    }
+
+    [TestMethod]
     public void FirstSaveCreatesSettingsFileThatCanBeLoaded()
     {
         using var directory = new TestDirectory();

@@ -12,6 +12,8 @@ public interface IAppSettingsService {
     void SaveShowModifiedSubtitle(bool showModifiedSubtitle);
     NoteTimestampPlacement LoadTimestampPlacement();
     void SaveTimestampPlacement(NoteTimestampPlacement timestampPlacement);
+    int LoadTimestampLine();
+    void SaveTimestampLine(int lineNumber);
     NewNoteMode LoadNewNoteMode();
     void SaveNewNoteMode(NewNoteMode newNoteMode);
     bool LoadPromptForNoteName();
