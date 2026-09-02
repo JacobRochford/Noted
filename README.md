@@ -98,7 +98,7 @@ Run the focused service tests with:
 dotnet test tests/Noted.Tests/Noted.Tests.csproj
 ```
 
-The project currently has 69 automated tests. UI and window behavior still require manual testing on Windows.
+The project currently has 114 automated tests. UI and window behavior still require manual testing on Windows.
 
 ## Basic use
 

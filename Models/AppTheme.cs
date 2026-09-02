@@ -4,7 +4,8 @@ public enum AppThemeMode
 {
     System,
     Light,
-    Dark
+    Dark,
+    Midnight
 }
 
 public static class AppTheme

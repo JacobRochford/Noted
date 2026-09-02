@@ -66,18 +66,19 @@ internal sealed class AppThemeManager : IDisposable
 
     private void ApplyResources()
     {
-        var dark = _mode == AppThemeMode.Dark ||
+        var dark = _mode is AppThemeMode.Dark or AppThemeMode.Midnight ||
             (_mode == AppThemeMode.System && SystemUsesDarkMode());
+        var midnight = _mode == AppThemeMode.Midnight;
         var accent = ParseColor(_accentColor);
-        var window = ParseColor(dark ? "#17242C" : "#F5F9FC");
-        var surface = ParseColor(dark ? "#1F303A" : "#FFFFFF");
-        var subtleSurface = ParseColor(dark ? "#263A45" : "#F2F8FB");
-        var input = ParseColor(dark ? "#192932" : "#FFFFFF");
-        var border = ParseColor(dark ? "#3B5664" : "#C9DFEC");
-        var strongBorder = ParseColor(dark ? "#527386" : "#87CEEB");
-        var text = ParseColor(dark ? "#E6F1F5" : "#355A6E");
-        var secondaryText = ParseColor(dark ? "#A9C0CA" : "#78909C");
-        var mutedText = ParseColor(dark ? "#819AA6" : "#8BA5B2");
+        var window = ParseColor(midnight ? "#17242C" : dark ? "#1B1D1F" : "#F5F9FC");
+        var surface = ParseColor(midnight ? "#1F303A" : dark ? "#232629" : "#FFFFFF");
+        var subtleSurface = ParseColor(midnight ? "#263A45" : dark ? "#2B2F33" : "#F2F8FB");
+        var input = ParseColor(midnight ? "#192932" : dark ? "#17191B" : "#FFFFFF");
+        var border = ParseColor(midnight ? "#3B5664" : dark ? "#41464B" : "#C9DFEC");
+        var strongBorder = ParseColor(midnight ? "#527386" : dark ? "#5D646B" : "#87CEEB");
+        var text = ParseColor(midnight ? "#E6F1F5" : dark ? "#F0F2F4" : "#355A6E");
+        var secondaryText = ParseColor(midnight ? "#A9C0CA" : dark ? "#B5BBC1" : "#78909C");
+        var mutedText = ParseColor(midnight ? "#819AA6" : dark ? "#858D95" : "#8BA5B2");
         var accentSoft = Mix(accent, window, dark ? 0.76 : 0.82);
         var accentSoftHover = Mix(accent, window, dark ? 0.66 : 0.72);
 

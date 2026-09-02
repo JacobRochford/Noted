@@ -7,6 +7,7 @@
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
+        Foreground="{DynamicResource NotedTextBrush}"
         ShowInTaskbar="False"
         Topmost="True"
         Loaded="MainWindow_Loaded">
@@ -26,7 +27,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
-                        <Border Background="#91C5DE" CornerRadius="3" Margin="1,2"/>
+                        <Border Background="{DynamicResource NotedAccentBrush}" CornerRadius="3" Margin="1,2"/>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -36,7 +37,7 @@
         <Style x:Key="ModernScrollBar" TargetType="ScrollBar">
             <Setter Property="Width" Value="7"/>
             <Setter Property="MinWidth" Value="7"/>
-            <Setter Property="Background" Value="#E6F2F8"/>
+            <Setter Property="Background" Value="{DynamicResource NotedSubtleSurfaceBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
@@ -66,7 +67,7 @@
 
         <!-- Main launcher/header button styles -->
         <Style x:Key="PrimaryHeaderButtonStyle" TargetType="Button">
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{DynamicResource NotedAccentTextBrush}"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -78,7 +79,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="bg"
-                                Background="#5BA8C8"
+                                Background="{DynamicResource NotedAccentBrush}"
                                 CornerRadius="6"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center"
@@ -86,10 +87,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#4A97B7"/>
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#3F86A4"/>
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentPressedBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -101,7 +102,7 @@
             <Setter Property="Width" Value="30"/>
             <Setter Property="Height" Value="30"/>
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="Foreground" Value="#617A8A"/>
+            <Setter Property="Foreground" Value="{DynamicResource NotedSecondaryTextBrush}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -116,11 +117,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#E1EEF5"/>
-                                <Setter Property="Foreground" Value="#2C6E91"/>
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#D2E5EF"/>
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentSoftHoverBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -135,15 +136,15 @@
             <Setter Property="Height" Value="30"/>
             <Setter Property="Margin" Value="0"/>
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="Foreground" Value="#355A6E"/>
+            <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
 
         <!-- Tray context menu styles -->
         <Style x:Key="TrayContextMenuStyle" TargetType="ContextMenu">
-            <Setter Property="Background" Value="#F5F9FC"/>
-            <Setter Property="BorderBrush" Value="#A8CDE0"/>
+            <Setter Property="Background" Value="{DynamicResource NotedWindowBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource NotedStrongBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="4"/>
             <Setter Property="Template">
@@ -164,7 +165,7 @@
             </Setter>
         </Style>
         <Style x:Key="TrayMenuItemStyle" TargetType="MenuItem">
-            <Setter Property="Foreground" Value="#2C6E91"/>
+            <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Padding" Value="14,8"/>
             <Setter Property="Template">
@@ -177,10 +178,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#DFF0FA"/>
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#C4E2F2"/>
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentSoftHoverBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -188,7 +189,7 @@
             </Setter>
         </Style>
         <Style x:Key="TrayMenuSeparatorStyle" TargetType="Separator">
-            <Setter Property="Background" Value="#C8DFEC"/>
+            <Setter Property="Background" Value="{DynamicResource NotedBorderBrush}"/>
             <Setter Property="Height" Value="1"/>
             <Setter Property="Margin" Value="10,4"/>
             <Setter Property="Template">
@@ -219,8 +220,8 @@
             Focusable="True" Cursor="SizeAll">
 
         <Border x:Name="NotesPanel"
-            Background="#F5F9FC"
-            BorderBrush="#87CEEB"
+            Background="{DynamicResource NotedWindowBackgroundBrush}"
+            BorderBrush="{DynamicResource NotedStrongBorderBrush}"
             Opacity="0.88"
             BorderThickness="1"
             CornerRadius="8"
@@ -259,7 +260,7 @@
                                        Text="{Binding HeaderText, Mode=OneWay}"
                                        FontSize="16"
                                        FontWeight="SemiBold"
-                                       Foreground="#2C6E91"
+                                       Foreground="{DynamicResource NotedTextBrush}"
                                        VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis"
                                        Cursor="Hand"
@@ -284,7 +285,7 @@
                                      Text="{Binding HeaderTextEdit, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      FontSize="16"
                                      FontWeight="SemiBold"
-                                     Foreground="#2C6E91"
+                                     Foreground="{DynamicResource NotedTextBrush}"
                                      VerticalAlignment="Center"
                                      MinWidth="80"
                                      FocusVisualStyle="{x:Null}"
@@ -295,7 +296,7 @@
                             <TextBlock Text="Settings"
                                        FontSize="16"
                                        FontWeight="SemiBold"
-                                       Foreground="#2C6E91"
+                                       Foreground="{DynamicResource NotedTextBrush}"
                                        VerticalAlignment="Center"
                                        Visibility="{Binding IsSettingsVisible, Converter={StaticResource BoolToVisibility}}"/>
                             </Grid>
@@ -474,14 +475,25 @@
 
                 <!-- Separator -->
                 <Border DockPanel.Dock="Top"
-                    Height="1" Background="#D0E4EE" Margin="0,2,0,6"/>
+                    Height="1" Background="{DynamicResource NotedBorderBrush}" Margin="0,2,0,6"/>
 
                 <Grid>
                     <Border x:Name="NotesContentBackground"
-                        Background="#D9F5F9FC"
-                        BorderBrush="#D8E9F1"
-                        BorderThickness="1"
-                        CornerRadius="8"/>
+                            CornerRadius="8">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{DynamicResource NotedSurfaceBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource NotedBorderBrush}"/>
+                                <Setter Property="BorderThickness" Value="1"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSettingsVisible}" Value="True">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                    </Border>
 
                     <DockPanel x:Name="NotesListView"
                               Margin="8"
@@ -490,8 +502,8 @@
                         <!-- Navigation breadcrumb bar – visible when inside a subfolder -->
                         <Border DockPanel.Dock="Top"
                                 Margin="0,0,0,6"
-                                Background="#E8F4FA"
-                                BorderBrush="#C9DFEC"
+                                Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                BorderBrush="{DynamicResource NotedBorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="6"
                                 Padding="6,5">
@@ -515,7 +527,7 @@
                                         Content="&#xE72B;"
                                         FontFamily="Segoe MDL2 Assets"
                                         FontSize="12"
-                                        Foreground="#2C6E91"
+                                        Foreground="{DynamicResource NotedTextBrush}"
                                         Background="Transparent"
                                         BorderThickness="0"
                                         Padding="4,2"
@@ -533,7 +545,7 @@
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="bg" Property="Background" Value="#DCEEF8"/>
+                                                    <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
@@ -543,7 +555,7 @@
                                            Text="{Binding CurrentFolderName}"
                                            FontSize="12"
                                            FontWeight="SemiBold"
-                                           Foreground="#2C6E91"
+                                           Foreground="{DynamicResource NotedTextBrush}"
                                            VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis"
                                            Margin="4,0,0,0"/>
@@ -555,11 +567,11 @@
                             <Border BorderThickness="1" CornerRadius="6" Padding="8,0">
                                 <Border.Style>
                                     <Style TargetType="Border">
-                                        <Setter Property="Background" Value="White"/>
-                                        <Setter Property="BorderBrush" Value="#C9DFEC"/>
+                                        <Setter Property="Background" Value="{DynamicResource NotedInputBackgroundBrush}"/>
+                                        <Setter Property="BorderBrush" Value="{DynamicResource NotedBorderBrush}"/>
                                         <Style.Triggers>
                                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                                <Setter Property="BorderBrush" Value="#5BA8C8"/>
+                                                <Setter Property="BorderBrush" Value="{DynamicResource NotedAccentBrush}"/>
                                             </Trigger>
                                         </Style.Triggers>
                                     </Style>
@@ -576,7 +588,7 @@
                                                Text="&#xE721;"
                                                FontFamily="Segoe MDL2 Assets"
                                                FontSize="13"
-                                               Foreground="#7AAEC5"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                VerticalAlignment="Center"
                                                Margin="2,0,6,0"
                                                IsHitTestVisible="False"/>
@@ -586,7 +598,7 @@
                                                Text="Search notes..."
                                                FontSize="12"
                                                FontStyle="Italic"
-                                               Foreground="#A0B8C8"
+                                               Foreground="{DynamicResource NotedMutedTextBrush}"
                                                VerticalAlignment="Center"
                                                Padding="0,7"
                                                IsHitTestVisible="False">
@@ -606,7 +618,7 @@
                                     <TextBox x:Name="SearchBox"
                                              Grid.Column="1"
                                              FontSize="12"
-                                             Foreground="#333333"
+                                             Foreground="{DynamicResource NotedTextBrush}"
                                              Background="Transparent"
                                              BorderThickness="0"
                                              Padding="0,7"
@@ -619,13 +631,14 @@
                                             Content="&#xE711;"
                                             FontFamily="Segoe MDL2 Assets"
                                             FontSize="11"
-                                            Foreground="#7AAEC5"
+                                            Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                             Cursor="Hand"
                                             Padding="6,6"
                                             AutomationProperties.Name="Clear search"
                                             Click="ClearSearchButton_Click">
                                         <Button.Style>
-                                            <Style TargetType="Button">
+                                            <Style TargetType="Button"
+                                                   BasedOn="{StaticResource NotedHeaderIconButton}">
                                                 <Setter Property="Visibility" Value="Visible"/>
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
@@ -643,7 +656,7 @@
                                                 </Border>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="bg" Property="Background" Value="#E0F0FA"/>
+                                                        <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
@@ -658,7 +671,7 @@
                                    Text="No notes match your search."
                                    HorizontalAlignment="Center"
                                    Margin="0,16,0,0"
-                                   Foreground="#A0B8C8"
+                                   Foreground="{DynamicResource NotedMutedTextBrush}"
                                    FontStyle="Italic"
                                    FontSize="12"
                                    Visibility="{Binding HasNoFilterResults, Converter={StaticResource BoolToVisibility}}"/>
@@ -669,7 +682,7 @@
                                    TextWrapping="Wrap"
                                    TextAlignment="Center"
                                    Margin="16,20,16,0"
-                                   Foreground="#A0B8C8"
+                                   Foreground="{DynamicResource NotedMutedTextBrush}"
                                    FontStyle="Italic"
                                    FontSize="12"
                                    IsHitTestVisible="False"
@@ -677,7 +690,7 @@
 
                         <!-- File list -->
                         <ListBox x:Name="FileList"
-                                 Foreground="#333333"
+                                 Foreground="{DynamicResource NotedTextBrush}"
                                  Background="Transparent"
                                  BorderThickness="0"
                                  Padding="0"
@@ -704,7 +717,7 @@
                                                   InputGestureText="Enter"
                                                   ToolTip="Open this note (Enter)">
                                             <MenuItem.Icon>
-                                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8E5;" FontSize="14" Foreground="#2C6E91"/>
+                                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8E5;" FontSize="14" Foreground="{DynamicResource NotedTextBrush}"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                         <MenuItem x:Name="OpenFolderMenuItem"
@@ -713,7 +726,7 @@
                                                   InputGestureText="Enter"
                                                   ToolTip="Navigate into this folder (Enter)">
                                             <MenuItem.Icon>
-                                                <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="#2C6E91"/>
+                                                <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource NotedTextBrush}"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                         <MenuItem x:Name="RenameMenuItem"
@@ -722,7 +735,7 @@
                                                   InputGestureText="F2"
                                                   ToolTip="Rename (F2)">
                                             <MenuItem.Icon>
-                                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8AC;" FontSize="14" Foreground="#2C6E91"/>
+                                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8AC;" FontSize="14" Foreground="{DynamicResource NotedTextBrush}"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                         <MenuItem x:Name="CopyNameMenuItem"
@@ -731,7 +744,7 @@
                                                   InputGestureText="Ctrl+C"
                                                   ToolTip="Copy name to clipboard">
                                             <MenuItem.Icon>
-                                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8C8;" FontSize="14" Foreground="#2C6E91"/>
+                                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8C8;" FontSize="14" Foreground="{DynamicResource NotedTextBrush}"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                         <Separator x:Name="DeleteSeparator"/>
@@ -741,7 +754,7 @@
                                                   InputGestureText="Del"
                                                   ToolTip="Delete (Del)">
                                             <MenuItem.Icon>
-                                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE74D;" FontSize="14" Foreground="#2C6E91"/>
+                                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE74D;" FontSize="14" Foreground="{DynamicResource NotedTextBrush}"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                         <Separator/>
@@ -750,7 +763,7 @@
                                                   Click="NewFolderMenuItem_Click"
                                                   ToolTip="Create a new subfolder here">
                                             <MenuItem.Icon>
-                                                <TextBlock Text="&#xE8F4;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="#2C6E91"/>
+                                                <TextBlock Text="&#xE8F4;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource NotedTextBrush}"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                     </ContextMenu>
@@ -771,14 +784,15 @@
                                                         Content="&#xE718;"
                                                         ToolTip="Pin note"
                                                         AutomationProperties.Name="Pin note"
-                                                        Foreground="#C9302C"
+                                                        Foreground="{DynamicResource NotedDangerBrush}"
                                                         Cursor="Hand"
                                                         Background="Transparent"
                                                         BorderBrush="Transparent"
                                                         BorderThickness="1"
                                                         Click="PinNoteButton_Click">
                                                     <Button.Style>
-                                                        <Style TargetType="Button">
+                                                        <Style TargetType="Button"
+                                                               BasedOn="{StaticResource NotedHeaderIconButton}">
                                                             <Setter Property="Visibility" Value="Collapsed"/>
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsPinned}" Value="True">
@@ -804,7 +818,7 @@
                                                 <!-- Folder icon – visible only for folder rows; icon changes when expanded -->
                                                 <TextBlock FontFamily="Segoe MDL2 Assets"
                                                            FontSize="14"
-                                                           Foreground="#5BA8C8"
+                                                           Foreground="{DynamicResource NotedAccentBrush}"
                                                            VerticalAlignment="Center"
                                                            HorizontalAlignment="Left"
                                                            Margin="-6,0,0,0">
@@ -836,7 +850,7 @@
                                                     <TextBlock Text="{Binding Subtitle}"
                                                                Margin="0,2,0,0"
                                                                FontSize="11"
-                                                               Foreground="#7A93A0"
+                                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                                TextTrimming="CharacterEllipsis"
                                                                ToolTip="{Binding Subtitle}"
                                                                Visibility="{Binding DataContext.ShowModifiedSubtitle, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}"/>
@@ -845,8 +859,10 @@
                                                          Text="{Binding EditableName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                          Visibility="Collapsed"
                                                          Padding="2"
-                                                         Background="White"
-                                                         BorderBrush="#5BA8C8"
+                                                         Background="{DynamicResource NotedInputBackgroundBrush}"
+                                                         BorderBrush="{DynamicResource NotedAccentBrush}"
+                                                         Foreground="{DynamicResource NotedTextBrush}"
+                                                         CaretBrush="{DynamicResource NotedAccentBrush}"
                                                          BorderThickness="1"
                                                          KeyDown="RenameTextBox_KeyDown"
                                                          LostFocus="RenameTextBox_LostFocus"/>
@@ -875,17 +891,17 @@
                                                         Padding="8,4"
                                                         FontSize="11"
                                                         FontWeight="SemiBold"
-                                                        Foreground="#2C6E91"
+                                                        Foreground="{DynamicResource NotedTextBrush}"
                                                         Cursor="Hand"
                                                         Background="Transparent"
-                                                        BorderBrush="#9EC7DB"
+                                                        BorderBrush="{DynamicResource NotedStrongBorderBrush}"
                                                         BorderThickness="1"
                                                         MinWidth="40"
                                                         Visibility="{Binding RelativeSource={RelativeSource AncestorType=ListBox}, Path=ActualWidth, Converter={StaticResource WidthToActionButtonVisibilityConverter}, ConverterParameter=rename}">
                                                     <Button.Template>
                                                         <ControlTemplate TargetType="Button">
                                                             <Border x:Name="bg"
-                                                                    Background="#EFF7FB"
+                                                                    Background="{DynamicResource NotedSubtleSurfaceBrush}"
                                                                     BorderBrush="{TemplateBinding BorderBrush}"
                                                                     BorderThickness="{TemplateBinding BorderThickness}"
                                                                     CornerRadius="6"
@@ -895,7 +911,7 @@
                                                             </Border>
                                                             <ControlTemplate.Triggers>
                                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                                    <Setter TargetName="bg" Property="Background" Value="#DCEEF8"/>
+                                                                    <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
                                                                 </Trigger>
                                                             </ControlTemplate.Triggers>
                                                         </ControlTemplate>
@@ -911,16 +927,16 @@
                                                         Content="&#xE74D;"
                                                         ToolTip="Delete note"
                                                         AutomationProperties.Name="Delete"
-                                                        Foreground="#C9302C"
+                                                        Foreground="{DynamicResource NotedDangerBrush}"
                                                         Cursor="Hand"
                                                         Background="Transparent"
-                                                        BorderBrush="#E8B2AF"
+                                                        BorderBrush="{DynamicResource NotedDangerBrush}"
                                                         BorderThickness="1"
                                                         Visibility="{Binding RelativeSource={RelativeSource AncestorType=ListBox}, Path=ActualWidth, Converter={StaticResource WidthToActionButtonVisibilityConverter}, ConverterParameter=delete}">
                                                     <Button.Template>
                                                         <ControlTemplate TargetType="Button">
                                                             <Border x:Name="bg"
-                                                                    Background="#FFF4F3"
+                                                                    Background="{DynamicResource NotedSurfaceBrush}"
                                                                     BorderBrush="{TemplateBinding BorderBrush}"
                                                                     BorderThickness="{TemplateBinding BorderThickness}"
                                                                     CornerRadius="6"
@@ -930,7 +946,7 @@
                                                             </Border>
                                                             <ControlTemplate.Triggers>
                                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                                    <Setter TargetName="bg" Property="Background" Value="#FCE2E0"/>
+                                                                    <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
                                                                 </Trigger>
                                                             </ControlTemplate.Triggers>
                                                         </ControlTemplate>
@@ -967,13 +983,13 @@
                                                     </Border>
                                                     <ControlTemplate.Triggers>
                                                         <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="ItemBorder" Property="Background" Value="#E0F0FA"/>
+                                                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
                                                         </Trigger>
                                                         <Trigger Property="IsSelected" Value="True">
-                                                            <Setter TargetName="ItemBorder" Property="Background" Value="#C4E2F2"/>
+                                                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource NotedAccentSoftHoverBrush}"/>
                                                         </Trigger>
                                                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                                            <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#5BA8C8"/>
+                                                            <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource NotedAccentBrush}"/>
                                                         </Trigger>
                                                     </ControlTemplate.Triggers>
                                                 </ControlTemplate>
@@ -985,6 +1001,13 @@
                     </DockPanel>
 
                         <DockPanel x:Name="SettingsView" Margin="0,4,0,0">
+                            <DockPanel.Resources>
+                                <Style TargetType="Button" BasedOn="{StaticResource NotedSecondaryButton}"/>
+                                <Style TargetType="CheckBox" BasedOn="{StaticResource NotedCheckBox}"/>
+                                <Style TargetType="RadioButton" BasedOn="{StaticResource NotedRadioButton}"/>
+                                <Style TargetType="ComboBox" BasedOn="{StaticResource NotedComboBox}"/>
+                                <Style TargetType="Slider" BasedOn="{StaticResource NotedSlider}"/>
+                            </DockPanel.Resources>
                             <ScrollViewer DockPanel.Dock="Bottom"
                                           VerticalScrollBarVisibility="Auto">
                             <StackPanel>
@@ -1086,6 +1109,13 @@
                                                 Background="#C65D8B" Tag="#C65D8B"
                                                 ToolTip="Pink"
                                                 Click="AccentPresetButton_Click"/>
+                                        <Button Content="More colors..."
+                                                Height="27"
+                                                Margin="0,0,0,7"
+                                                Padding="8,2"
+                                                Style="{StaticResource NotedSecondaryButton}"
+                                                ToolTip="Choose any accent color"
+                                                Click="ChooseAccentColorButton_Click"/>
                                     </WrapPanel>
 
                                     <Grid>
@@ -1108,10 +1138,7 @@
                                                 Margin="8,0,0,0"
                                                 Padding="8,3"
                                                 MinHeight="28"
-                                                Background="Transparent"
-                                                BorderBrush="{DynamicResource NotedBorderBrush}"
-                                                Foreground="{DynamicResource NotedTextBrush}"
-                                                Cursor="Hand"
+                                                Style="{StaticResource NotedSecondaryButton}"
                                                 Click="ResetAppearanceButton_Click"/>
                                     </Grid>
                                     <TextBlock x:Name="AccentValidationText"
@@ -1149,8 +1176,8 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="#EFF7FB"
-                                    BorderBrush="#C9DFEC"
+                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="8"
                                     Padding="12"
@@ -1159,7 +1186,7 @@
                                     <TextBlock Text="Note Behavior"
                                                FontSize="12"
                                                FontWeight="SemiBold"
-                                               Foreground="#355A6E"
+                                               Foreground="{DynamicResource NotedTextBrush}"
                                                Margin="0,0,0,8"/>
                                     <RadioButton x:Name="NewNotePromptOption"
                                                  GroupName="NewNoteBehavior"
@@ -1189,7 +1216,7 @@
                                                    VerticalAlignment="Center"/>
                                     </RadioButton>
                                     <CheckBox x:Name="ShowModifiedSubtitleOption"
-                                            Foreground="#355A6E"
+                                            Foreground="{DynamicResource NotedTextBrush}"
                                             FontWeight="SemiBold"
                                             Margin="0,12,0,0"
                                             Checked="ShowModifiedSubtitleOption_Changed"
@@ -1200,7 +1227,7 @@
                                                VerticalAlignment="Center"/>
                                     </CheckBox>
                                     <CheckBox x:Name="ConfirmNoteDeletionOption"
-                                              Foreground="#355A6E"
+                                              Foreground="{DynamicResource NotedTextBrush}"
                                               FontWeight="SemiBold"
                                               Margin="0,10,0,0"
                                               Checked="ConfirmNoteDeletionOption_Changed"
@@ -1213,8 +1240,8 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="#EFF7FB"
-                                    BorderBrush="#C9DFEC"
+                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="8"
                                     Padding="12"
@@ -1223,11 +1250,11 @@
                                     <TextBlock Text="Folder Navigation"
                                                FontSize="12"
                                                FontWeight="SemiBold"
-                                               Foreground="#355A6E"
+                                               Foreground="{DynamicResource NotedTextBrush}"
                                                Margin="0,0,0,8"/>
                                     <TextBlock Text="How clicking a folder opens it"
                                                FontSize="11"
-                                               Foreground="#5F7480"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                TextWrapping="Wrap"
                                                Margin="0,0,0,8"/>
                                     <RadioButton x:Name="FolderNavDrillDownOption"
@@ -1250,8 +1277,8 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="#EFF7FB"
-                                    BorderBrush="#C9DFEC"
+                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="8"
                                     Padding="12"
@@ -1260,10 +1287,10 @@
                                     <TextBlock Text="Startup"
                                                FontSize="12"
                                                FontWeight="SemiBold"
-                                               Foreground="#355A6E"
+                                               Foreground="{DynamicResource NotedTextBrush}"
                                                Margin="0,0,0,8"/>
                                     <CheckBox x:Name="RunOnStartupOption"
-                                            Foreground="#355A6E"
+                                            Foreground="{DynamicResource NotedTextBrush}"
                                             FontWeight="SemiBold"
                                             Checked="RunOnStartupOption_Changed"
                                             Unchecked="RunOnStartupOption_Changed"
@@ -1275,8 +1302,8 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="#EFF7FB"
-                                    BorderBrush="#C9DFEC"
+                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="8"
                                     Padding="12"
@@ -1285,16 +1312,16 @@
                                     <TextBlock Text="Window Behavior"
                                                FontSize="12"
                                                FontWeight="SemiBold"
-                                               Foreground="#355A6E"
+                                               Foreground="{DynamicResource NotedTextBrush}"
                                                Margin="0,0,0,8"/>
                                     <TextBlock Text="Choose whether Hide also hides all other windows"
                                                FontSize="11"
-                                               Foreground="#5F7480"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                TextWrapping="Wrap"
                                                Margin="0,0,0,8"/>
                                     <TextBlock Text="Open Noted on"
                                                FontSize="11"
-                                               Foreground="#5F7480"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                Margin="0,0,0,4"/>
                                     <ComboBox x:Name="PreferredDisplayCombo"
                                               Margin="0,0,0,12"
@@ -1302,7 +1329,7 @@
                                               DisplayMemberPath="Label"
                                               SelectionChanged="PreferredDisplayCombo_SelectionChanged"/>
                                     <CheckBox x:Name="MainHideButtonHidesAllOption"
-                                            Foreground="#355A6E"
+                                            Foreground="{DynamicResource NotedTextBrush}"
                                             FontWeight="SemiBold"
                                             Checked="MainHideButtonHidesAllOption_Changed"
                                             Unchecked="MainHideButtonHidesAllOption_Changed"
@@ -1314,8 +1341,8 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="#EFF7FB"
-                                    BorderBrush="#C9DFEC"
+                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="8"
                                     Padding="12"
@@ -1324,7 +1351,7 @@
                                     <TextBlock Text="Ghost Mode"
                                                FontSize="12"
                                                FontWeight="SemiBold"
-                                               Foreground="#355A6E"
+                                               Foreground="{DynamicResource NotedTextBrush}"
                                                Margin="0,0,0,8"/>
 
                                     <!-- Default opacity (always active) -->
@@ -1336,14 +1363,14 @@
                                         <TextBlock Text="Default opacity"
                                                    Grid.Column="0"
                                                    FontSize="11"
-                                                   Foreground="#5F7480"
+                                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                    VerticalAlignment="Center"/>
                                         <TextBlock x:Name="DefaultOpacityLabel"
                                                    Grid.Column="1"
                                                    Text="88%"
                                                    FontSize="11"
                                                    FontWeight="SemiBold"
-                                                   Foreground="#2C6E91"
+                                                   Foreground="{DynamicResource NotedAccentBrush}"
                                                    VerticalAlignment="Center"
                                                    MinWidth="32"
                                                    TextAlignment="Right"/>
@@ -1360,7 +1387,7 @@
 
                                     <!-- Ghost mode toggle -->
                                     <CheckBox x:Name="GhostModeOption"
-                                            Foreground="#355A6E"
+                                            Foreground="{DynamicResource NotedTextBrush}"
                                             FontWeight="SemiBold"
                                             Checked="GhostModeOption_Changed"
                                             Unchecked="GhostModeOption_Changed"
@@ -1380,14 +1407,14 @@
                                         <TextBlock Text="Ghost opacity"
                                                    Grid.Column="0"
                                                    FontSize="11"
-                                                   Foreground="#5F7480"
+                                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                    VerticalAlignment="Center"/>
                                         <TextBlock x:Name="GhostModeOpacityLabel"
                                                    Grid.Column="1"
                                                    Text="25%"
                                                    FontSize="11"
                                                    FontWeight="SemiBold"
-                                                   Foreground="#2C6E91"
+                                                   Foreground="{DynamicResource NotedAccentBrush}"
                                                    VerticalAlignment="Center"
                                                    MinWidth="32"
                                                    TextAlignment="Right"/>
@@ -1404,8 +1431,8 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="#EFF7FB"
-                                    BorderBrush="#C9DFEC"
+                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="8"
                                     Padding="12"
@@ -1414,7 +1441,7 @@
                                     <TextBlock Text="New Note Timestamp"
                                                FontSize="12"
                                                FontWeight="SemiBold"
-                                              Foreground="#355A6E"
+                                              Foreground="{DynamicResource NotedTextBrush}"
                                                Margin="0,0,0,8"/>
                                     <RadioButton x:Name="TimestampNoneOption"
                                                  GroupName="TimestampPlacement"
@@ -1445,8 +1472,8 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="#EFF7FB"
-                                    BorderBrush="#C9DFEC"
+                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="8"
                                     Padding="12"
@@ -1456,24 +1483,22 @@
                                         <TextBlock Text="Notes Folder"
                                                    FontSize="12"
                                                    FontWeight="SemiBold"
-                                                   Foreground="#355A6E"
+                                                   Foreground="{DynamicResource NotedTextBrush}"
                                                    Margin="0,0,8,0"/>
                                         <Button x:Name="ToggleNotesFolderPathButton"
                                                 Content="Show Folder"
                                                 Click="ToggleNotesFolderPathButton_Click"
                                                 FontSize="11"
                                                 FontWeight="SemiBold"
-                                                Foreground="#2C6E91"
+                                                Foreground="{DynamicResource NotedTextBrush}"
                                                 Cursor="Hand"
                                                 Padding="6,2"
                                                 Margin="0,0,0,0"
-                                                Background="Transparent"
-                                                BorderBrush="#9EC7DB"
-                                                BorderThickness="1"/>
+                                                Style="{StaticResource NotedSecondaryButton}"/>
                                     </StackPanel>
                                     <TextBlock x:Name="NotesFolderPathText"
                                                FontSize="11"
-                                               Foreground="#5F7480"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                TextWrapping="Wrap"
                                                Margin="0,6,0,10"
                                                Visibility="{Binding ShowNotesDirectory, Converter={StaticResource BoolToVisibility}}"/>
@@ -1482,17 +1507,17 @@
                                             Click="ChangeFolderButton_Click"
                                             FontSize="11"
                                             FontWeight="SemiBold"
-                                            Foreground="#2C6E91"
+                                            Foreground="{DynamicResource NotedTextBrush}"
                                             Cursor="Hand"
                                             Padding="8,3"
                                             HorizontalAlignment="Left"
                                             Background="Transparent"
-                                            BorderBrush="#9EC7DB"
+                                            BorderBrush="{DynamicResource NotedStrongBorderBrush}"
                                             BorderThickness="1">
                                         <Button.Template>
                                             <ControlTemplate TargetType="Button">
                                                 <Border x:Name="bg"
-                                                        Background="#EFF7FB"
+                                                        Background="{DynamicResource NotedSubtleSurfaceBrush}"
                                                         BorderBrush="{TemplateBinding BorderBrush}"
                                                         BorderThickness="{TemplateBinding BorderThickness}"
                                                         CornerRadius="6"
@@ -1502,7 +1527,7 @@
                                                 </Border>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="bg" Property="Background" Value="#DCEEF8"/>
+                                                        <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
@@ -1511,8 +1536,8 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="#EFF7FB"
-                                    BorderBrush="#C9DFEC"
+                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="8"
                                     Padding="12"
@@ -1521,11 +1546,11 @@
                                     <TextBlock Text="Data Protection"
                                                FontSize="12"
                                                FontWeight="SemiBold"
-                                               Foreground="#355A6E"
+                                               Foreground="{DynamicResource NotedTextBrush}"
                                                Margin="0,0,0,6"/>
                                     <TextBlock Text="Create a verified backup of your notes, settings, checklist, dictionary, Scratchpad, MiniPad, and open-note recovery. View it before restoring, export a copy, or import one from another Noted installation. Noted changes this backup only when you choose Update Backup."
                                                FontSize="11"
-                                               Foreground="#5F7480"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                TextWrapping="Wrap"
                                                Margin="0,0,0,10"/>
                                     <WrapPanel Margin="0,0,0,8">
@@ -1534,72 +1559,62 @@
                                                 Click="CreateOrUpdateBackupButton_Click"
                                                 FontSize="11"
                                                 FontWeight="SemiBold"
-                                                Foreground="#2C6E91"
+                                                Foreground="{DynamicResource NotedTextBrush}"
                                                 Cursor="Hand"
                                                 Padding="8,3"
                                                 Margin="0,0,8,6"
-                                                Background="Transparent"
-                                                BorderBrush="#9EC7DB"
-                                                BorderThickness="1"/>
+                                                Style="{StaticResource NotedSecondaryButton}"/>
                                         <Button x:Name="ViewBackupButton"
                                                 Content="View Backup"
                                                 Click="ViewBackupButton_Click"
                                                 FontSize="11"
                                                 FontWeight="SemiBold"
-                                                Foreground="#2C6E91"
+                                                Foreground="{DynamicResource NotedTextBrush}"
                                                 Cursor="Hand"
                                                 Padding="8,3"
                                                 Margin="0,0,8,6"
-                                                Background="Transparent"
-                                                BorderBrush="#9EC7DB"
-                                                BorderThickness="1"/>
+                                                Style="{StaticResource NotedSecondaryButton}"/>
                                         <Button x:Name="ExportBackupButton"
                                                 Content="Export"
                                                 Click="ExportBackupButton_Click"
                                                 FontSize="11"
                                                 FontWeight="SemiBold"
-                                                Foreground="#2C6E91"
+                                                Foreground="{DynamicResource NotedTextBrush}"
                                                 Cursor="Hand"
                                                 Padding="8,3"
                                                 Margin="0,0,8,6"
-                                                Background="Transparent"
-                                                BorderBrush="#9EC7DB"
-                                                BorderThickness="1"/>
+                                                Style="{StaticResource NotedSecondaryButton}"/>
                                         <Button x:Name="ImportBackupButton"
                                                 Content="Import"
                                                 Click="ImportBackupButton_Click"
                                                 FontSize="11"
                                                 FontWeight="SemiBold"
-                                                Foreground="#2C6E91"
+                                                Foreground="{DynamicResource NotedTextBrush}"
                                                 Cursor="Hand"
                                                 Padding="8,3"
                                                 Margin="0,0,8,6"
-                                                Background="Transparent"
-                                                BorderBrush="#9EC7DB"
-                                                BorderThickness="1"/>
+                                                Style="{StaticResource NotedSecondaryButton}"/>
                                         <Button x:Name="RestoreBackupButton"
                                                 Content="Restore Backup"
                                                 Click="RestoreBackupButton_Click"
                                                 FontSize="11"
                                                 FontWeight="SemiBold"
-                                                Foreground="#2C6E91"
+                                                Foreground="{DynamicResource NotedTextBrush}"
                                                 Cursor="Hand"
                                                 Padding="8,3"
                                                 Margin="0,0,0,6"
-                                                Background="Transparent"
-                                                BorderBrush="#9EC7DB"
-                                                BorderThickness="1"/>
+                                                Style="{StaticResource NotedSecondaryButton}"/>
                                     </WrapPanel>
                                     <TextBlock x:Name="BackupStatusText"
                                                Text="No full backup has been created yet."
                                                FontSize="10"
-                                               Foreground="#5F7480"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="#EFF7FB"
-                                    BorderBrush="#C9DFEC"
+                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="8"
                                     Padding="12"
@@ -1608,11 +1623,11 @@
                                     <TextBlock Text="Hotkeys"
                                                FontSize="12"
                                                FontWeight="SemiBold"
-                                               Foreground="#355A6E"
+                                               Foreground="{DynamicResource NotedTextBrush}"
                                                Margin="0,0,0,4"/>
                                     <TextBlock Text="Show or hide a window with a keyboard shortcut"
                                                FontSize="11"
-                                               Foreground="#5F7480"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                TextWrapping="Wrap"
                                                Margin="0,0,0,8"/>
 
@@ -1623,11 +1638,11 @@
                                             <ColumnDefinition Width="30"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Notes"
-                                                   Foreground="#355A6E"
+                                                   Foreground="{DynamicResource NotedTextBrush}"
                                                    VerticalAlignment="Center"/>
                                         <TextBlock x:Name="CurrentNotesHotkeyDisplay"
                                                    Grid.Column="1"
-                                                   Foreground="#2C6E91"
+                                                   Foreground="{DynamicResource NotedAccentBrush}"
                                                    FontWeight="SemiBold"
                                                    TextTrimming="CharacterEllipsis"
                                                    VerticalAlignment="Center"
@@ -1642,7 +1657,7 @@
                                             <TextBlock Text="✎" FontSize="13"/>
                                         </Button>
                                     </Grid>
-                                    <Border Height="1" Background="#D8E8F1"/>
+                                    <Border Height="1" Background="{DynamicResource NotedBorderBrush}"/>
                                     <Grid Height="32">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="78"/>
@@ -1650,11 +1665,11 @@
                                             <ColumnDefinition Width="30"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Checklist"
-                                                   Foreground="#355A6E"
+                                                   Foreground="{DynamicResource NotedTextBrush}"
                                                    VerticalAlignment="Center"/>
                                         <TextBlock x:Name="CurrentChecklistHotkeyDisplay"
                                                    Grid.Column="1"
-                                                   Foreground="#2C6E91"
+                                                   Foreground="{DynamicResource NotedAccentBrush}"
                                                    FontWeight="SemiBold"
                                                    TextTrimming="CharacterEllipsis"
                                                    VerticalAlignment="Center"
@@ -1669,7 +1684,7 @@
                                             <TextBlock Text="✎" FontSize="13"/>
                                         </Button>
                                     </Grid>
-                                    <Border Height="1" Background="#D8E8F1"/>
+                                    <Border Height="1" Background="{DynamicResource NotedBorderBrush}"/>
                                     <Grid Height="32">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="78"/>
@@ -1677,11 +1692,11 @@
                                             <ColumnDefinition Width="30"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Dictionary"
-                                                   Foreground="#355A6E"
+                                                   Foreground="{DynamicResource NotedTextBrush}"
                                                    VerticalAlignment="Center"/>
                                         <TextBlock x:Name="CurrentDictionaryHotkeyDisplay"
                                                    Grid.Column="1"
-                                                   Foreground="#2C6E91"
+                                                   Foreground="{DynamicResource NotedAccentBrush}"
                                                    FontWeight="SemiBold"
                                                    TextTrimming="CharacterEllipsis"
                                                    VerticalAlignment="Center"
@@ -1706,8 +1721,8 @@
                                            Closed="HotkeyEditorPopup_Closed">
                                         <Border Width="250"
                                                 Padding="12"
-                                                Background="#F5F9FC"
-                                                BorderBrush="#87CEEB"
+                                                Background="{DynamicResource NotedWindowBackgroundBrush}"
+                                                BorderBrush="{DynamicResource NotedStrongBorderBrush}"
                                                 BorderThickness="1"
                                                 CornerRadius="7">
                                             <Border.Effect>
@@ -1719,32 +1734,33 @@
                                             <StackPanel>
                                                 <TextBlock x:Name="HotkeyEditorTitle"
                                                            Margin="0,0,0,9"
-                                                           Foreground="#2C6E91"
+                                                           Foreground="{DynamicResource NotedAccentBrush}"
                                                            FontSize="12"
                                                            FontWeight="SemiBold"/>
                                                 <WrapPanel Margin="0,0,0,9">
-                                                    <CheckBox x:Name="HotkeyModifierCtrl" Content="Ctrl" Margin="0,0,12,5"/>
-                                                    <CheckBox x:Name="HotkeyModifierAlt" Content="Alt" Margin="0,0,12,5"/>
-                                                    <CheckBox x:Name="HotkeyModifierShift" Content="Shift" Margin="0,0,12,5"/>
-                                                    <CheckBox x:Name="HotkeyModifierWin" Content="Win" Margin="0,0,0,5"/>
+                                                    <CheckBox x:Name="HotkeyModifierCtrl" Content="Ctrl" Margin="0,0,12,5"
+                                                              Style="{StaticResource NotedCheckBox}"/>
+                                                    <CheckBox x:Name="HotkeyModifierAlt" Content="Alt" Margin="0,0,12,5"
+                                                              Style="{StaticResource NotedCheckBox}"/>
+                                                    <CheckBox x:Name="HotkeyModifierShift" Content="Shift" Margin="0,0,12,5"
+                                                              Style="{StaticResource NotedCheckBox}"/>
+                                                    <CheckBox x:Name="HotkeyModifierWin" Content="Win" Margin="0,0,0,5"
+                                                              Style="{StaticResource NotedCheckBox}"/>
                                                 </WrapPanel>
                                                 <ComboBox x:Name="HotkeyKeyCombo"
-                                                          Foreground="#355A6E"
-                                                          Background="#FFFFFF"
-                                                          BorderBrush="#C9DFEC"
-                                                          BorderThickness="1"
+                                                          Style="{StaticResource NotedComboBox}"
                                                           Padding="8,5"
                                                           FontSize="11"
                                                           Margin="0,0,0,8"/>
-                                                <Border BorderBrush="#C9DFEC"
+                                                <Border BorderBrush="{DynamicResource NotedBorderBrush}"
                                                         BorderThickness="1"
-                                                        Background="#FFFFFF"
+                                                        Background="{DynamicResource NotedInputBackgroundBrush}"
                                                         Padding="8,5"
                                                         Margin="0,0,0,10">
                                                     <TextBlock x:Name="HotkeyPreview"
                                                                Text="Select modifiers and a key"
                                                                FontSize="11"
-                                                               Foreground="#355A6E"/>
+                                                               Foreground="{DynamicResource NotedTextBrush}"/>
                                                 </Border>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
@@ -1755,32 +1771,29 @@
                                                     <Button Content="Reset"
                                                             Click="ResetHotkeyButton_Click"
                                                             FontSize="11"
-                                                            Foreground="#5F7480"
+                                                            Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                             Cursor="Hand"
                                                             Padding="4,3"
                                                             HorizontalAlignment="Left"
-                                                            Background="Transparent"
-                                                            BorderThickness="0"/>
+                                                            Style="{StaticResource NotedSecondaryButton}"/>
                                                     <Button Grid.Column="1"
                                                             Content="Cancel"
                                                             Click="CancelHotkeyButton_Click"
                                                             FontSize="11"
-                                                            Foreground="#5F7480"
+                                                            Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                             Cursor="Hand"
                                                             Padding="7,3"
                                                             Margin="0,0,5,0"
-                                                            Background="Transparent"
-                                                            BorderThickness="0"/>
+                                                            Style="{StaticResource NotedSecondaryButton}"/>
                                                     <Button Grid.Column="2"
                                                             Content="Apply"
                                                             Click="ApplyHotkeyButton_Click"
                                                             FontSize="11"
                                                             FontWeight="SemiBold"
-                                                            Foreground="White"
+                                                            Foreground="{DynamicResource NotedAccentTextBrush}"
                                                             Cursor="Hand"
                                                             Padding="9,4"
-                                                            Background="#5BA8C8"
-                                                            BorderThickness="0"/>
+                                                            Style="{StaticResource NotedPrimaryButton}"/>
                                                 </Grid>
                                             </StackPanel>
                                         </Border>
@@ -1802,11 +1815,9 @@
             Width="96" Height="48"
                 Canvas.Right="20" Canvas.Bottom="20"
                 FontSize="16" FontWeight="SemiBold"
-            Foreground="White">
-
-            <Button.Background>
-                <SolidColorBrush Color="#87CEEB" Opacity="0.45"/>
-            </Button.Background>
+            Foreground="{DynamicResource NotedAccentTextBrush}"
+            Background="{DynamicResource NotedAccentSoftBrush}"
+            BorderBrush="{DynamicResource NotedStrongBorderBrush}">
 
             <Button.Style>
                 <Style TargetType="Button">
@@ -1824,19 +1835,11 @@
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="border" Property="Background">
-                                            <Setter.Value>
-                                                <SolidColorBrush Color="#A0D8F0" Opacity="0.70"/>
-                                            </Setter.Value>
-                                        </Setter>
+                                        <Setter TargetName="border" Property="Background" Value="{DynamicResource NotedAccentSoftHoverBrush}"/>
                                         <Setter Property="Cursor" Value="Hand"/>
                                     </Trigger>
                                     <Trigger Property="IsPressed" Value="True">
-                                        <Setter TargetName="border" Property="Background">
-                                            <Setter.Value>
-                                                <SolidColorBrush Color="#B0E0F6" Opacity="0.85"/>
-                                            </Setter.Value>
-                                        </Setter>
+                                        <Setter TargetName="border" Property="Background" Value="{DynamicResource NotedAccentBrush}"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>

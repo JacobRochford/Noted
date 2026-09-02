@@ -14,117 +14,29 @@
         Background="Transparent"
         FontFamily="Segoe UI">
     <Window.Resources>
-        <Style x:Key="HeaderIconButton" TargetType="Button">
+        <Style x:Key="HeaderIconButton"
+               TargetType="Button"
+               BasedOn="{StaticResource NotedHeaderIconButton}">
             <Setter Property="Width" Value="30"/>
             <Setter Property="Height" Value="30"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Foreground" Value="#5F7480"/>
             <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonBackground"
-                                Background="{TemplateBinding Background}"
-                                CornerRadius="5">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ButtonBackground"
-                                        Property="Background" Value="#DCEEF6"/>
-                                <Setter Property="Foreground" Value="#2C6E91"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="ButtonBackground"
-                                        Property="Background" Value="#C9E4F0"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
-        <Style x:Key="DialogButton" TargetType="Button">
+        <Style x:Key="DialogButton"
+               TargetType="Button"
+               BasedOn="{StaticResource NotedSecondaryButton}">
             <Setter Property="MinWidth" Value="82"/>
             <Setter Property="Height" Value="32"/>
             <Setter Property="Padding" Value="13,4"/>
-            <Setter Property="Background" Value="#EEF5F8"/>
-            <Setter Property="Foreground" Value="#355A6E"/>
-            <Setter Property="BorderBrush" Value="#B7D4E2"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonBackground"
-                                Padding="{TemplateBinding Padding}"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="5">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ButtonBackground"
-                                        Property="Background" Value="#DCEEF6"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="ButtonBackground"
-                                        Property="Background" Value="#C9E5F2"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
         <Style x:Key="PrimaryDialogButton" TargetType="Button"
-               BasedOn="{StaticResource DialogButton}">
-            <Setter Property="Background" Value="#5BA8C8"/>
-            <Setter Property="BorderBrush" Value="#5BA8C8"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonBackground"
-                                Padding="{TemplateBinding Padding}"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="5">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ButtonBackground"
-                                        Property="Background" Value="#4A97B7"/>
-                                <Setter TargetName="ButtonBackground"
-                                        Property="BorderBrush" Value="#4A97B7"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="ButtonBackground"
-                                        Property="Background" Value="#3E839F"/>
-                                <Setter TargetName="ButtonBackground"
-                                        Property="BorderBrush" Value="#3E839F"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="ButtonBackground"
-                                        Property="Background" Value="#AFC7D2"/>
-                                <Setter TargetName="ButtonBackground"
-                                        Property="BorderBrush" Value="#AFC7D2"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+               BasedOn="{StaticResource NotedPrimaryButton}">
+            <Setter Property="MinWidth" Value="82"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="13,4"/>
         </Style>
 
         <Style x:Key="BackupFileItem" TargetType="ListBoxItem">
@@ -147,11 +59,11 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="ItemBackground"
-                                        Property="Background" Value="#E5F2F8"/>
+                                        Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="ItemBackground"
-                                        Property="Background" Value="#CFE8F4"/>
+                                        Property="Background" Value="{DynamicResource NotedAccentSoftHoverBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -171,7 +83,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="{Binding DisplayPath}"
-                           Foreground="#284B5E"
+                           Foreground="{DynamicResource NotedTextBrush}"
                            FontSize="12"
                            FontWeight="SemiBold"
                            TextTrimming="CharacterEllipsis"/>
@@ -188,12 +100,12 @@
                 <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
                            Margin="0,2,0,0"
                            Text="{Binding Category}"
-                           Foreground="#5F7480"
+                           Foreground="{DynamicResource NotedSecondaryTextBrush}"
                            FontSize="10"/>
                 <TextBlock Grid.Row="2" Grid.ColumnSpan="2"
                            Margin="0,1,0,0"
                            Text="{Binding Details}"
-                           Foreground="#78909C"
+                           Foreground="{DynamicResource NotedMutedTextBrush}"
                            FontSize="10"/>
             </Grid>
         </DataTemplate>
@@ -201,8 +113,8 @@
 
     <Grid Background="Transparent">
         <Border Margin="10"
-                Background="#F5F9FC"
-                BorderBrush="#87CEEB"
+                Background="{DynamicResource NotedWindowBackgroundBrush}"
+                BorderBrush="{DynamicResource NotedStrongBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="10">
             <Border.Effect>
@@ -231,13 +143,13 @@
                                     IsHitTestVisible="False">
                             <TextBlock Text="&#xE753;"
                                        FontFamily="Segoe MDL2 Assets"
-                                       Foreground="#5BA8C8"
+                                       Foreground="{DynamicResource NotedAccentBrush}"
                                        FontSize="16"
                                        VerticalAlignment="Center"
                                        Margin="0,0,9,0"/>
                             <TextBlock x:Name="DialogTitleText"
                                        Text="Backup contents"
-                                       Foreground="#2C6E91"
+                                       Foreground="{DynamicResource NotedAccentBrush}"
                                        FontSize="16"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Center"/>
@@ -253,23 +165,23 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Border BorderBrush="#D0E4EE" BorderThickness="0,1,0,0"/>
+                    <Border BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="0,1,0,0"/>
                     <StackPanel Margin="0,9,0,0">
                         <TextBlock x:Name="BackupDateText"
-                                   Foreground="#355A6E"
+                                   Foreground="{DynamicResource NotedTextBrush}"
                                    FontSize="12"
                                    FontWeight="SemiBold"/>
                         <TextBlock x:Name="BackupSummaryText"
                                    Margin="0,2,0,0"
-                                   Foreground="#6B8795"
+                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                    FontSize="11"/>
                     </StackPanel>
                     <Border x:Name="VerificationBadge"
                             Grid.Column="1" Margin="12,9,0,0"
-                            Padding="8,3" Background="#DDF2E7"
+                            Padding="8,3" Background="{DynamicResource NotedSubtleSurfaceBrush}"
                             CornerRadius="9" VerticalAlignment="Center">
                         <TextBlock x:Name="VerificationText" Text="Verified"
-                                   Foreground="#347052"
+                                   Foreground="{DynamicResource NotedSuccessBrush}"
                                    FontSize="10"
                                    FontWeight="SemiBold"/>
                     </Border>
@@ -282,8 +194,8 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <Border Background="#EDF5F9"
-                            BorderBrush="#C9DFEC"
+                    <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                            BorderBrush="{DynamicResource NotedBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="7"
                             Padding="6">
@@ -298,8 +210,8 @@
                     </Border>
 
                     <Border Grid.Column="2"
-                            Background="White"
-                            BorderBrush="#C9DFEC"
+                            Background="{DynamicResource NotedSurfaceBrush}"
+                            BorderBrush="{DynamicResource NotedBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="7"
                             ClipToBounds="True">
@@ -309,12 +221,12 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
                             <Border Padding="11,8"
-                                    Background="#EDF5F9"
-                                    BorderBrush="#D8E8F1"
+                                    Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="0,0,0,1">
                                 <TextBlock x:Name="SelectedFileText"
                                            Text="Select a file"
-                                           Foreground="#355A6E"
+                                           Foreground="{DynamicResource NotedTextBrush}"
                                            FontSize="11"
                                            FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis"/>
@@ -324,8 +236,8 @@
                                          IsReadOnly="True"
                                          IsDocumentEnabled="False"
                                          BorderThickness="0"
-                                         Background="White"
-                                         Foreground="#2D3E48"
+                                         Background="{DynamicResource NotedInputBackgroundBrush}"
+                                         Foreground="{DynamicResource NotedTextBrush}"
                                          FontFamily="Consolas"
                                          FontSize="12"
                                          Padding="10"
@@ -338,7 +250,7 @@
                 <Grid Grid.Row="3" Margin="0,13,0,0">
                     <TextBlock x:Name="FooterText"
                                Text="Preview is read-only. Restore verifies every file again."
-                               Foreground="#6B8795"
+                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                FontSize="10"
                                VerticalAlignment="Center"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

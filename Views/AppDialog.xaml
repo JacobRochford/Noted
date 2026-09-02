@@ -8,60 +8,46 @@
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
         ShowInTaskbar="False"
-        Background="#F5F9FC"
+        Background="Transparent"
+        Foreground="{DynamicResource NotedTextBrush}"
         FontFamily="Segoe UI">
     <Window.Resources>
-        <Style x:Key="DialogButton" TargetType="Button">
+        <Style x:Key="DialogButton"
+               TargetType="Button"
+               BasedOn="{StaticResource NotedSecondaryButton}">
             <Setter Property="MinWidth" Value="84"/>
             <Setter Property="Height" Value="32"/>
             <Setter Property="Margin" Value="8,0,0,0"/>
             <Setter Property="Padding" Value="14,4"/>
-            <Setter Property="Background" Value="#EEF5F8"/>
-            <Setter Property="Foreground" Value="#355A6E"/>
-            <Setter Property="BorderBrush" Value="#B7D4E2"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonBackground"
-                                Padding="{TemplateBinding Padding}"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="5">
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ButtonBackground" Property="Background" Value="#DCEEF6"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="ButtonBackground" Property="Background" Value="#C9E5F2"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
         <Style x:Key="PrimaryDialogButton"
                TargetType="Button"
-               BasedOn="{StaticResource DialogButton}">
-            <Setter Property="Background" Value="#5BA8C8"/>
-            <Setter Property="BorderBrush" Value="#5BA8C8"/>
-            <Setter Property="Foreground" Value="White"/>
+               BasedOn="{StaticResource NotedPrimaryButton}">
+            <Setter Property="MinWidth" Value="84"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="Padding" Value="14,4"/>
         </Style>
     </Window.Resources>
 
-    <Border Background="#F5F9FC"
-            BorderBrush="#C9DFEC"
-            BorderThickness="1"
-            CornerRadius="9">
-        <Grid Margin="18">
+    <Grid Background="Transparent">
+        <Border Margin="8"
+                Background="{DynamicResource NotedWindowBackgroundBrush}"
+                BorderBrush="{DynamicResource NotedStrongBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="9">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="14"
+                                  ShadowDepth="3"
+                                  Opacity="0.2"
+                                  Color="#000000"/>
+            </Border.Effect>
+            <Grid Margin="18">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -79,14 +65,14 @@
                         Height="34"
                         Margin="0,0,14,0"
                         VerticalAlignment="Top"
-                        Background="#E0F0F7"
-                        BorderBrush="#91C5DE"
+                        Background="{DynamicResource NotedAccentSoftBrush}"
+                        BorderBrush="{DynamicResource NotedAccentSoftHoverBrush}"
                         BorderThickness="1"
                         CornerRadius="17">
                     <TextBlock x:Name="IconText"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"
-                               Foreground="#2C6E91"
+                               Foreground="{DynamicResource NotedAccentBrush}"
                                FontSize="20"
                                FontWeight="Bold"
                                Text="i"/>
@@ -95,14 +81,14 @@
                 <StackPanel Grid.Column="1">
                     <TextBlock x:Name="TitleText"
                                Margin="0,1,0,8"
-                               Foreground="#1F4E63"
+                               Foreground="{DynamicResource NotedTextBrush}"
                                FontSize="17"
                                FontWeight="SemiBold"
                                TextWrapping="Wrap"/>
                     <ScrollViewer MaxHeight="390"
                                   VerticalScrollBarVisibility="Auto">
                         <TextBlock x:Name="MessageText"
-                                   Foreground="#355A6E"
+                                   Foreground="{DynamicResource NotedTextBrush}"
                                    FontSize="13"
                                    LineHeight="20"
                                    TextWrapping="Wrap"/>
@@ -113,19 +99,20 @@
             <CheckBox x:Name="SuppressionCheckBox"
                       Grid.Row="1"
                       Margin="48,14,0,0"
-                      Foreground="#355A6E"
+                      Style="{StaticResource NotedCheckBox}"
                       FontSize="12"
                       Visibility="Collapsed"/>
 
             <Border Grid.Row="2"
                     Height="1"
                     Margin="0,16,0,12"
-                    Background="#D7E8F1"/>
+                    Background="{DynamicResource NotedBorderBrush}"/>
 
             <StackPanel x:Name="ButtonsPanel"
                         Grid.Row="3"
                         HorizontalAlignment="Right"
                         Orientation="Horizontal"/>
-        </Grid>
-    </Border>
+            </Grid>
+        </Border>
+    </Grid>
 </Window>

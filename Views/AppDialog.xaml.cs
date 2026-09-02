@@ -123,10 +123,10 @@ public partial class AppDialog : Window
     {
         (IconText.Text, IconText.Foreground) = image switch
         {
-            MessageBoxImage.Error => ("×", new SolidColorBrush(Color.FromRgb(183, 65, 65))),
-            MessageBoxImage.Warning => ("!", new SolidColorBrush(Color.FromRgb(184, 118, 31))),
-            MessageBoxImage.Question => ("?", new SolidColorBrush(Color.FromRgb(44, 110, 145))),
-            _ => ("i", new SolidColorBrush(Color.FromRgb(44, 110, 145)))
+            MessageBoxImage.Error => ("×", (Brush)FindResource("NotedDangerBrush")),
+            MessageBoxImage.Warning => ("!", (Brush)FindResource("NotedWarningBrush")),
+            MessageBoxImage.Question => ("?", (Brush)FindResource("NotedAccentBrush")),
+            _ => ("i", (Brush)FindResource("NotedAccentBrush"))
         };
     }
 

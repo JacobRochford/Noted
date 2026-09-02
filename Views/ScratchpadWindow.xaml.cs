@@ -520,7 +520,9 @@ public partial class ScratchpadWindow : OverlayWindow
             Editor.Selection.ApplyPropertyValue(TextElement.BackgroundProperty,
                 brush == Brushes.Transparent ? null : (object)brush);
             _activeHighlightColor = brush;
-            HighlightColorBar.Background = brush == Brushes.Transparent ? Brushes.LightGray : brush;
+            HighlightColorBar.Background = brush == Brushes.Transparent
+                ? (Brush)FindResource("NotedBorderBrush")
+                : brush;
             Editor.Focus();
         });
     }
@@ -536,9 +538,11 @@ public partial class ScratchpadWindow : OverlayWindow
             var swatch = new Border
             {
                 Width = 14, Height = 14,
-                Background = brush == Brushes.Transparent ? Brushes.White : brush,
+                Background = brush == Brushes.Transparent
+                    ? (Brush)FindResource("NotedSurfaceBrush")
+                    : brush,
                 CornerRadius = new CornerRadius(2),
-                BorderBrush = Brushes.LightGray,
+                BorderBrush = (Brush)FindResource("NotedBorderBrush"),
                 BorderThickness = new Thickness(0.5),
                 Margin = new Thickness(0, 0, 8, 0)
             };
