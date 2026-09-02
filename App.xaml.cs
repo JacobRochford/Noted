@@ -101,10 +101,11 @@ public partial class App : Application
             var settings = new AppSettingsService();
             settings.PersistenceWarning += Settings_PersistenceWarning;
             _settingsService = settings;
-            _themeManager = new AppThemeManager(
+            var themeManager = new AppThemeManager(
                 Resources,
                 settings.LoadAppThemeMode(),
                 settings.LoadAccentColor());
+            _themeManager = themeManager;
             _miniPadRecoveryService = new MiniPadRecoveryService(settings.AppDataDirectory);
             var fileService = new NoteFileService(settings);
             startupFileService = fileService;
@@ -131,7 +132,8 @@ public partial class App : Application
                 ReadBackupImportFile,
                 ExportUserBackup,
                 RequestUserBackupRestore,
-                RequestBackupImportRestore);
+                RequestBackupImportRestore,
+                themeManager.Apply);
             _fileService = fileService;
             _noteEditorWindow = noteEditor;
             _mainWindow = mainWindow;
