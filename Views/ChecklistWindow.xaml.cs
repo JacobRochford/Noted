@@ -501,6 +501,16 @@ public partial class ChecklistWindow : OverlayWindow
         }
     }
 
+    private void ChecklistItem_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { ContextMenu: { } contextMenu } itemRoot)
+            return;
+
+        contextMenu.PlacementTarget = itemRoot;
+        contextMenu.IsOpen = true;
+        e.Handled = true;
+    }
+
     private void DuplicateItemMenuItem_Click(object sender, RoutedEventArgs e)
     {
         var item = GetItemFromContextMenu(sender as MenuItem);

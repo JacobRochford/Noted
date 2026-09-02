@@ -198,6 +198,16 @@ public partial class DictionaryWindow : OverlayWindow
         }
     }
 
+    private void DictionaryItem_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { ContextMenu: { } contextMenu } itemRoot)
+            return;
+
+        contextMenu.PlacementTarget = itemRoot;
+        contextMenu.IsOpen = true;
+        e.Handled = true;
+    }
+
     private void EditDefinitionButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement control || control.Tag is not DictionaryItem item)
