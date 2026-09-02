@@ -412,7 +412,8 @@
 
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Background="Transparent">
+                                    <Grid Background="Transparent"
+                                          PreviewMouseRightButtonDown="ChecklistItem_PreviewMouseRightButtonDown">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>

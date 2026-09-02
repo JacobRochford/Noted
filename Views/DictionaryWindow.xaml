@@ -149,7 +149,8 @@
                                           FocusVisualStyle="{x:Null}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Margin="0,1" Padding="5,0,4,0" CornerRadius="6">
+                                        <Border Margin="0,1" Padding="5,0,4,0" CornerRadius="6"
+                                                PreviewMouseRightButtonDown="DictionaryItem_PreviewMouseRightButtonDown">
                                             <Border.Style>
                                                 <Style TargetType="Border">
                                                     <Setter Property="Background" Value="Transparent"/>
