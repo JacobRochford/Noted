@@ -6,19 +6,32 @@ on:
       - 'v[0-9]*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
+  release:
     runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore Noted.sln
+
+      - name: Build
+        run: dotnet build Noted.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/Noted.Tests/Noted.Tests.csproj --configuration Release --no-build --no-restore
 
       - name: Get version from tag
         id: version
@@ -41,8 +54,6 @@ jobs:
             -p:PublishSingleFile=true `
             -p:IncludeNativeLibrariesForSelfExtract=true `
             -p:Version=${{ steps.version.outputs.VERSION }} `
-            -p:AssemblyVersion=${{ steps.version.outputs.VERSION }}.0 `
-            -p:FileVersion=${{ steps.version.outputs.VERSION }}.0 `
             -o publish
 
       - name: Zip artifact
@@ -50,7 +61,7 @@ jobs:
         run: Compress-Archive -Path publish\* -DestinationPath "Noted-${{ steps.version.outputs.VERSION }}-win-x64.zip"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@e598afbe1493e6b1bafb1f389cabb956eab91231 # v3.0.3
         with:
           files: Noted-${{ steps.version.outputs.VERSION }}-win-x64.zip
           prerelease: ${{ steps.version.outputs.PRERELEASE }}
