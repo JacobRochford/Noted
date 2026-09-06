@@ -45,7 +45,7 @@ public partial class MainWindow : Window {
     private HotkeyRegistration? _additionalChecklistHotkeyRegistration;
     private HotkeyRegistration? _dictionaryHotkeyRegistration;
     private HotkeyRegistration? _additionalDictionaryHotkeyRegistration;
-    private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _trayIcon;
+    private TrayIcon? _trayIcon;
 
     // UI state
     private bool _isUpdatingSettingsView;
@@ -145,19 +145,12 @@ public partial class MainWindow : Window {
         _viewModel = new MainWindowViewModel(_fileService, _settingsService, action => Dispatcher.Invoke(action));
         DataContext = _viewModel;
 
-        InitializeTrayIcon();
         InitializeSettings();
 
         InitializeEventHandlers();
         InitializeNotesView();
         InitializeHotkeyEditor();
         RefreshUserBackupControls();
-    }
-
-    private void InitializeTrayIcon()
-    {
-        _trayIcon = (Hardcodet.Wpf.TaskbarNotification.TaskbarIcon)Resources["TrayIcon"];
-        _trayIcon.TrayRightMouseUp += TrayIcon_TrayRightMouseUp;
     }
 
     private void InitializeSettings()
@@ -298,6 +291,7 @@ public partial class MainWindow : Window {
             WindowInterop.SWP_NOMOVE | WindowInterop.SWP_NOSIZE | WindowInterop.SWP_NOACTIVATE);
         // NonRudeHWND: opt out of rude app detection
         WindowInterop.SetProp(hwnd, "NonRudeHWND", new IntPtr(1));
+        _trayIcon = TrayIcon.TryCreate(hwnd, "Noted.", TrayIcon_RightClicked);
     }
 
 
@@ -2708,7 +2702,7 @@ public partial class MainWindow : Window {
     #endregion
 
     #region System Tray Icon
-    private void TrayIcon_TrayRightMouseUp(object sender, RoutedEventArgs e) {
+    private void TrayIcon_RightClicked() {
         var hwnd = new WindowInteropHelper(this).Handle;
         // Temporarily remove WS_EX_NOACTIVATE so SetForegroundWindow works, then restore on close
         int exStyle = WindowInterop.GetWindowLong(hwnd, WindowInterop.GWL_EXSTYLE);
@@ -2762,11 +2756,8 @@ public partial class MainWindow : Window {
         _notesPanelResizer.Dispose();
 
         // cleanup tray icon
-        if (_trayIcon is not null) {
-            _trayIcon.TrayRightMouseUp -= TrayIcon_TrayRightMouseUp;
-            _trayIcon?.Dispose();
-            _trayIcon = null;
-        }
+        _trayIcon?.Dispose();
+        _trayIcon = null;
 
         // event handlers
         FloatingNotesButton.PreviewMouseLeftButtonDown -= FloatingNotesButton_MouseLeftButtonDown;
