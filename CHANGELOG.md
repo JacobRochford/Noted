@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Editor
+
+- Replace Windows Notepad integration with a built-in tabbed editor
+- Add Markdown preview, find and replace, adjustable tabs, side-by-side editing, and additional safe file operations
+- Restore editor sessions and keep separate recovery drafts and saved-content history for each note
+- Improve generated note names, first-save naming, tab renaming, and deletion from editor tabs
+
+### Built-in tools
+
+- Add Checklist, Dictionary, Scratchpad, and MiniPad windows with independent visibility and startup restoration
+- Add custom checklist tabs, configurable priority colors, dictionary search, and persistent Scratchpad and MiniPad content
+- Add separate global hotkeys for Notes, Checklist, and Dictionary
+
+### Appearance and windows
+
+- Add light, dark, and midnight themes with custom accent colors
+- Add edge and corner resizing and improve narrow-window layouts
+- Add display selection, ghost-mode settings, and consistent themed dialogs and menus
+
+### Data protection
+
+- Add verified atomic writes, rolling backups, note recovery, and startup recovery for application data
+- Add full-backup preview, export, import, and protected restore operations
+- Preserve previous note versions and prevent overwriting notes changed outside Noted
+
+## 1.1.2 - 2026-05-03
+
+- Avoid an error when the application icon cannot be loaded
+
+## 1.1.1 - 2026-05-03
+
+- Improve the opacity sliders in Settings
+
+## 1.1.0 - 2026-05-03
+
+- Rename the application from MyNotes to Noted
+- Add global hotkeys, system-tray controls, opacity settings, and update checks
+- Add folders, pinned notes, custom headers, responsive controls, and multi-display positioning
+- Add the first tagged-release workflow
+
 ## 1.0.0 - 2026-04-18
 
 ### Note management
