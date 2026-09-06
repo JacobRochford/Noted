@@ -53,6 +53,40 @@ public sealed class FileWriterTests
     }
 
     [TestMethod]
+    public void ReplacementCreatesRollingBackupWhenNoneExists()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("content.txt");
+        var backupPath = directory.File("content.txt.bak");
+        File.WriteAllText(path, "first");
+
+        var result = FileWriter.WriteAllText(path, "second", backupPath);
+
+        Assert.AreEqual("second", File.ReadAllText(path));
+        Assert.AreEqual("first", File.ReadAllText(backupPath));
+        Assert.IsTrue(result.FileUpdated);
+        Assert.IsTrue(result.BackupUpdated);
+        Assert.IsNull(result.Warning);
+    }
+
+    [TestMethod]
+    public void BackupOutsideDestinationDirectoryIsRejectedWithoutChangingFile()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("content.txt");
+        var otherDirectory = directory.File("other");
+        Directory.CreateDirectory(otherDirectory);
+        var backupPath = Path.Combine(otherDirectory, "content.txt.bak");
+        File.WriteAllText(path, "existing");
+
+        Assert.ThrowsExactly<ArgumentException>(
+            () => FileWriter.WriteAllText(path, "replacement", backupPath));
+
+        Assert.AreEqual("existing", File.ReadAllText(path));
+        Assert.HasCount(0, Directory.GetFiles(directory.Path, "*.tmp"));
+    }
+
+    [TestMethod]
     public void LockedBackupKeepsSavedFileAndPreservesRollbackCopy()
     {
         using var directory = new TemporaryTestDirectory();
@@ -87,6 +121,19 @@ public sealed class FileWriterTests
         }
 
         Assert.AreEqual("existing", File.ReadAllText(path));
+        Assert.HasCount(0, Directory.GetFiles(directory.Path, "*.tmp"));
+    }
+
+    [TestMethod]
+    public void InitialMoveFailureCleansTemporaryFile()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("destination-conflict.txt");
+        Directory.CreateDirectory(path);
+
+        Assert.ThrowsExactly<IOException>(() => FileWriter.WriteAllText(path, "content"));
+
+        Assert.IsTrue(Directory.Exists(path));
         Assert.HasCount(0, Directory.GetFiles(directory.Path, "*.tmp"));
     }
 }
