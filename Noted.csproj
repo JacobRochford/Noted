@@ -10,14 +10,7 @@
     <AssemblyName>Noted</AssemblyName>
     <RootNamespace>Noted</RootNamespace>
     <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
-    <InformationalVersion>1.0.0</InformationalVersion>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
-  </ItemGroup>
 
   <ItemGroup>
     <Compile Remove="tests\Noted.Tests\**\*.cs" />
