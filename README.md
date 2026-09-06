@@ -51,7 +51,7 @@ Clicking outside Notes or pressing `Esc` hides Notes and the editor.
 
 ## Download and run
 
-Download the latest `Noted-*-win-x64.zip` from the [Releases](../../releases) page, extract it, and run `Noted.exe`. The ZIP is self-contained, so no installer or separate .NET runtime is needed.
+When a packaged build is available, download the latest `Noted-*-win-x64.zip` from the [Releases](../../releases) page, extract it, and run `Noted.exe`. The ZIP is self-contained, so no installer or separate .NET runtime is needed. Until then, use the instructions under **Running from source**.
 
 If you have not chosen a notes folder, Noted creates a `Notes` folder beside `Noted.exe`. On startup, it also tries to create a desktop shortcut named `Noted.lnk` and checks GitHub Releases for updates.
 
@@ -98,7 +98,7 @@ Run the focused service tests with:
 dotnet test tests/Noted.Tests/Noted.Tests.csproj
 ```
 
-The project currently has 120 automated tests. UI and window behavior still require manual testing on Windows.
+The project currently has 123 automated test cases. UI and window behavior still require manual testing on Windows.
 
 ## Basic use
 
