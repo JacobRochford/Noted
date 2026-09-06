@@ -1,8 +1,6 @@
 # =========================
 # Build outputs
 # =========================
-bin/
-obj/
 [Bb]in/
 [Oo]bj/
 
@@ -53,11 +51,6 @@ $RECYCLE.BIN/
 *.lnk
 
 # =========================
-# PowerShell
-# =========================
-*.ps1xml
-
-# =========================
 # Secrets / configs
 # =========================
 appsettings.Development.json
@@ -70,3 +63,16 @@ secrets.json
 *.publish.xml
 
 *.zip
+
+# =========================
+# Private local data
+# =========================
+*.notedbackup
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pem
+*.key
+*.snk
