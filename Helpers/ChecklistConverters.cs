@@ -5,15 +5,6 @@ using System.Windows.Media;
 
 namespace Noted.Helpers;
 
-public sealed class BoolToStrikethroughConverter : IValueConverter
-{
-    public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        => value is true ? TextDecorations.Strikethrough : null;
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => throw new NotSupportedException();
-}
-
 public sealed class DueDateToTextConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -43,16 +34,6 @@ public sealed class DueDateToColorConverter : IValueConverter
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
-}
-
-// Binds a RadioButton's IsChecked to an enum value via ConverterParameter
-public sealed class EnumToBoolConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        => value?.Equals(parameter) ?? false;
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        => value is true ? parameter : Binding.DoNothing;
 }
 
 // null → Collapsed, non-null → Visible
