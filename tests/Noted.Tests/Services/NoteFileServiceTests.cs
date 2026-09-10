@@ -9,6 +9,23 @@ namespace Noted.Tests.Services;
 public sealed class NoteFileServiceTests
 {
     [TestMethod]
+    public void AcceptingSuggestedDateNameCountsAsAnExplicitName()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var notes = directory.File("notes");
+        Directory.CreateDirectory(notes);
+        var settings = new AppSettingsService(directory.File("app-data"));
+        settings.SaveNotesDirectory(notes);
+        using var service = new NoteFileService(settings);
+        var suggestion = service.SuggestNoteName();
+        var created = service.CreateNote(suggestion);
+        Assert.IsFalse(created.UsesGeneratedName);
+        Assert.AreEqual(suggestion + ".txt", created.FileName);
+        Assert.AreNotEqual(suggestion, service.SuggestNoteName());
+        Assert.IsTrue(service.RenameNote(created.FileName, suggestion).Success);
+    }
+
+    [TestMethod]
     public void CreateNoteWritesCompleteInitialContent()
     {
         using var directory = new TemporaryTestDirectory();

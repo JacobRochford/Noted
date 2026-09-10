@@ -7,4 +7,6 @@ public interface INoteContentService
     string? Save(string filePath, string content);
 
     string? SaveAs(string filePath, string content);
+
+    string? SaveNewNoteAs(string initialPath, string destinationPath, string content, string initialContent);
 }

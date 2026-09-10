@@ -96,6 +96,8 @@ public sealed class NoteFileService : INoteFileService {
         return $"./{relativePath}";
     }
 
+    public string SuggestNoteName() => Path.GetFileNameWithoutExtension(BuildUniqueFileName(DateTime.Now));
+
     public CreatedNote CreateNote(string? requestedName = null) {
         // create new note, optionally with user-supplied name
         var now = DateTime.Now;
@@ -111,7 +113,7 @@ public sealed class NoteFileService : INoteFileService {
         FileWriter.WriteAllText(fullPath, content);
         if (!string.Equals(File.ReadAllText(fullPath), content, StringComparison.Ordinal))
             throw new IOException("The new note was created but could not be verified.");
-        return new CreatedNote(filename, usesGeneratedName);
+        return new CreatedNote(filename, usesGeneratedName, content);
     }
 
     public bool ChangeNotesDirectory(string newDirectory) {

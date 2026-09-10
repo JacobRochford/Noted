@@ -1,6 +1,9 @@
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 
 namespace Noted.Services;
 
@@ -113,6 +116,63 @@ public sealed class NoteContentService : INoteContentService
 
         return null;
     }
+
+    public string? SaveNewNoteAs(string initialPath, string destinationPath, string content, string initialContent)
+    {
+        var source = ValidateNotePath(initialPath);
+        var destination = ValidateNotePath(destinationPath);
+        var warning = SaveAs(destination, content);
+        if (string.Equals(source, destination, StringComparison.OrdinalIgnoreCase)) return warning;
+
+        try
+        {
+            // Hold the exact source file against writes and replacement while comparing and deleting it.
+            // DELETE access is needed for FileDispositionInfo; no deletion occurs just by opening this handle.
+            using var handle = OpenInitialFile(source, GenericRead | DeleteAccess, ShareRead,
+                IntPtr.Zero, OpenExisting, NormalAttributes, IntPtr.Zero);
+            if (handle.IsInvalid)
+            {
+                var error = Marshal.GetLastWin32Error();
+                if (error is 2 or 3) return warning;
+                throw new IOException(new Win32Exception(error).Message);
+            }
+            using var stream = new FileStream(handle, FileAccess.Read);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            if (!string.Equals(reader.ReadToEnd(), initialContent, StringComparison.Ordinal))
+                throw new IOException("Its content changed after the note was created.");
+
+            var disposition = new FileDispositionInfo { DeleteFile = 1 };
+            if (!SetFileInformationByHandle(handle, FileDispositionInfoClass, ref disposition, 1))
+                throw new IOException(new Win32Exception(Marshal.GetLastWin32Error()).Message);
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            var cleanupWarning = $"The note was saved as '{Path.GetFileName(destination)}', but the original file " +
+                $"'{source}' was kept: {ex.Message}";
+            return string.IsNullOrWhiteSpace(warning) ? cleanupWarning : $"{warning} {cleanupWarning}";
+        }
+        return warning;
+    }
+
+    private const uint GenericRead = 0x80000000;
+    private const uint DeleteAccess = 0x00010000;
+    private const uint ShareRead = 1;
+    private const uint OpenExisting = 3;
+    private const uint NormalAttributes = 0x80;
+    private const int FileDispositionInfoClass = 4;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileDispositionInfo { public byte DeleteFile; }
+
+    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle OpenInitialFile(string path, uint desiredAccess, uint shareMode,
+        IntPtr securityAttributes, uint creationDisposition, uint flags, IntPtr templateFile);
+
+    // https://learn.microsoft.com/windows/win32/api/fileapi/nf-fileapi-setfileinformationbyhandle
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetFileInformationByHandle(SafeFileHandle handle, int informationClass,
+        ref FileDispositionInfo information, uint size);
 
     private void SaveHistoryEntry(string notePath, string content)
     {

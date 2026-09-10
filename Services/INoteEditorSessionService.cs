@@ -7,6 +7,7 @@ public sealed record NoteEditorTabState
     public double VerticalOffset { get; init; }
     public bool MarkdownPreviewEnabled { get; init; }
     public bool UsesGeneratedName { get; init; }
+    public string? InitialFileContent { get; init; }
 }
 
 public sealed record NoteEditorSession

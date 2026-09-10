@@ -20,7 +20,8 @@ public sealed class OpenNoteDocument : INotifyPropertyChanged
         double verticalOffset = 0,
         bool markdownPreviewEnabled = false,
         bool isMissing = false,
-        bool usesGeneratedName = false)
+        bool usesGeneratedName = false,
+        string? initialFileContent = null)
     {
         _filePath = Path.GetFullPath(filePath);
         Content = content;
@@ -31,6 +32,7 @@ public sealed class OpenNoteDocument : INotifyPropertyChanged
         VerticalOffset = verticalOffset;
         MarkdownPreviewEnabled = markdownPreviewEnabled;
         UsesGeneratedName = usesGeneratedName;
+        InitialFileContent = initialFileContent;
     }
 
     public string FilePath => _filePath;
@@ -45,6 +47,8 @@ public sealed class OpenNoteDocument : INotifyPropertyChanged
     public double VerticalOffset { get; set; }
     public bool MarkdownPreviewEnabled { get; set; }
     public bool UsesGeneratedName { get; set; }
+    // Non-null only for a file created by this app that has not been explicitly saved yet.
+    public string? InitialFileContent { get; set; }
 
     public bool IsDirty
     {

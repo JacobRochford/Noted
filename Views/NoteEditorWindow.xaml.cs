@@ -127,9 +127,9 @@ public partial class NoteEditorWindow : Window
         return OpenNoteCore(filePath, usesGeneratedName: false);
     }
 
-    internal bool OpenCreatedNote(string filePath, bool usesGeneratedName)
+    internal bool OpenCreatedNote(string filePath, bool usesGeneratedName, string initialContent)
     {
-        return OpenNoteCore(filePath, usesGeneratedName);
+        return OpenNoteCore(filePath, usesGeneratedName, initialContent);
     }
 
     internal bool TryPrepareToCloseAllDocuments()
@@ -464,7 +464,7 @@ public partial class NoteEditorWindow : Window
         FocusActiveSurface();
     }
 
-    private bool OpenNoteCore(string filePath, bool usesGeneratedName)
+    private bool OpenNoteCore(string filePath, bool usesGeneratedName, string? initialFileContent = null)
     {
         string normalizedPath;
         try
@@ -482,8 +482,9 @@ public partial class NoteEditorWindow : Window
         {
             if (usesGeneratedName)
                 existingDocument.UsesGeneratedName = true;
+            if (initialFileContent is not null) existingDocument.InitialFileContent = initialFileContent;
             ActivateDocument(existingDocument);
-            if (usesGeneratedName)
+            if (usesGeneratedName || initialFileContent is not null)
                 SaveEditorSession();
             ShowWindow();
             return true;
@@ -509,7 +510,8 @@ public partial class NoteEditorWindow : Window
                 recoveredContent,
                 persistedContent,
                 isDirty: !string.Equals(recoveredContent, persistedContent, StringComparison.Ordinal),
-                usesGeneratedName: usesGeneratedName);
+                usesGeneratedName: usesGeneratedName,
+                initialFileContent: initialFileContent);
             _documents.Add(document);
             ActivateDocument(document);
             SaveEditorSession();
@@ -551,7 +553,8 @@ public partial class NoteEditorWindow : Window
                     verticalOffset: tabState.VerticalOffset,
                     markdownPreviewEnabled: tabState.MarkdownPreviewEnabled,
                     isMissing: true,
-                    usesGeneratedName: tabState.UsesGeneratedName);
+                    usesGeneratedName: tabState.UsesGeneratedName,
+                    initialFileContent: tabState.InitialFileContent);
                 return true;
             }
 
@@ -572,7 +575,8 @@ public partial class NoteEditorWindow : Window
                 caretIndex: Math.Clamp(tabState.CaretIndex, 0, content.Length),
                 verticalOffset: tabState.VerticalOffset,
                 markdownPreviewEnabled: tabState.MarkdownPreviewEnabled,
-                usesGeneratedName: tabState.UsesGeneratedName);
+                usesGeneratedName: tabState.UsesGeneratedName,
+                    initialFileContent: tabState.InitialFileContent);
             return true;
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
@@ -760,6 +764,7 @@ public partial class NoteEditorWindow : Window
                     document.Content);
             }
 
+            document.InitialFileContent = null;
             document.SavedContent = document.Content;
             document.IsDirty = false;
             _documentTimeText.Remove(document.FilePath);
@@ -770,6 +775,7 @@ public partial class NoteEditorWindow : Window
             RefreshScheduledRecoveryDrafts();
             if (!TryDeleteRecoveryDraft(document.FilePath, out var cleanupError))
                 ShowRecoveryCleanupWarning(cleanupError!);
+            SaveEditorSession();
             if (ReferenceEquals(document, CurrentDocument))
                 UpdateEditorState();
             return true;
@@ -1038,7 +1044,8 @@ public partial class NoteEditorWindow : Window
                     CaretIndex = document.CaretIndex,
                     VerticalOffset = document.VerticalOffset,
                     MarkdownPreviewEnabled = document.MarkdownPreviewEnabled,
-                    UsesGeneratedName = document.UsesGeneratedName
+                    UsesGeneratedName = document.UsesGeneratedName,
+                    InitialFileContent = document.InitialFileContent
                 }).ToList(),
                 ActiveFilePath = _activeDocument?.FilePath,
                 SecondaryFilePath = _secondaryDocument?.FilePath
@@ -1722,11 +1729,14 @@ public partial class NoteEditorWindow : Window
         try
         {
             var oldPath = document.FilePath;
-            _noteSaveWarning = _contentService.SaveAs(newPath, document.Content);
+            _noteSaveWarning = document.InitialFileContent is { } initialContent
+                ? _contentService.SaveNewNoteAs(oldPath, newPath, document.Content, initialContent)
+                : _contentService.SaveAs(newPath, document.Content);
             document.UpdateFilePath(newPath);
             _documentTimeText.Remove(oldPath);
             _documentTimeText.Remove(newPath);
             document.UsesGeneratedName = false;
+            document.InitialFileContent = null;
             document.SavedContent = document.Content;
             document.IsDirty = false;
             document.IsMissing = false;

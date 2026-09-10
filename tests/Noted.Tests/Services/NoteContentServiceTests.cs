@@ -9,6 +9,94 @@ namespace Noted.Tests.Services;
 public sealed class NoteContentServiceTests
 {
     [TestMethod]
+    public void FirstSaveAsToTheSamePathNeverRemovesTheSavedFile()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("new note.txt");
+        File.WriteAllText(path, "initial");
+        var service = new NoteContentService(directory.Path);
+
+        Assert.IsNull(service.SaveNewNoteAs(path, path, "edited", "initial"));
+        Assert.AreEqual("edited", File.ReadAllText(path));
+    }
+
+    [TestMethod]
+    public void FirstSaveAsRemovesOnlyTheUnchangedInitialFile()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var source = directory.File("new note.txt");
+        var destination = directory.File("chosen name.txt");
+        const string initial = "2026-09-08 12:00:00";
+        File.WriteAllText(source, initial);
+        var service = new NoteContentService(directory.Path);
+
+        Assert.IsNull(service.SaveNewNoteAs(source, destination, "written note", initial));
+
+        Assert.IsFalse(File.Exists(source));
+        Assert.AreEqual("written note", File.ReadAllText(destination));
+    }
+
+    [TestMethod]
+    public void FirstSaveAsKeepsAnExternallyChangedInitialFile()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var source = directory.File("new note.txt");
+        var destination = directory.File("chosen name.txt");
+        File.WriteAllText(source, "external edits");
+        var service = new NoteContentService(directory.Path);
+
+        var warning = service.SaveNewNoteAs(source, destination, "editor text", "");
+
+        Assert.IsNotNull(warning);
+        Assert.AreEqual("external edits", File.ReadAllText(source));
+        Assert.AreEqual("editor text", File.ReadAllText(destination));
+    }
+
+    [TestMethod]
+    public void FailedFirstSaveAsKeepsTheInitialFile()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var source = directory.File("new note.txt");
+        var destination = directory.File("blocked.txt");
+        File.WriteAllText(source, "initial");
+        Directory.CreateDirectory(destination);
+        var service = new NoteContentService(directory.Path);
+
+        Assert.Throws<Exception>(() => service.SaveNewNoteAs(source, destination, "edited", "initial"));
+        Assert.AreEqual("initial", File.ReadAllText(source));
+    }
+
+    [TestMethod]
+    public void SaveAsForAnEstablishedNoteStillKeepsTheOriginal()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var source = directory.File("original.txt");
+        var destination = directory.File("copy.txt");
+        File.WriteAllText(source, "original text");
+        var service = new NoteContentService(directory.Path);
+
+        service.SaveAs(destination, "edited copy");
+
+        Assert.AreEqual("original text", File.ReadAllText(source));
+        Assert.AreEqual("edited copy", File.ReadAllText(destination));
+    }
+
+    [TestMethod]
+    public void FirstSaveAsWarnsIfTheInitialFileIsInUse()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var source = directory.File("new note.txt");
+        var destination = directory.File("chosen name.txt");
+        File.WriteAllText(source, "");
+        using var held = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var service = new NoteContentService(directory.Path);
+
+        Assert.IsNotNull(service.SaveNewNoteAs(source, destination, "edited", ""));
+        Assert.IsTrue(File.Exists(source));
+        Assert.AreEqual("edited", File.ReadAllText(destination));
+    }
+
+    [TestMethod]
     public void SaveVerifiesCurrentNoteAndKeepsPreviousTextInHistory()
     {
         using var directory = new TemporaryTestDirectory();

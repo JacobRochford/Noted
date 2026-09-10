@@ -1817,9 +1817,7 @@ public partial class MainWindow : Window {
     private void NoteEditor_NoteRenameRequested(
         object? sender,
         NoteRenameRequestedEventArgs e) {
-        var attemptedName = e.IsFirstSave
-            ? string.Empty
-            : Path.GetFileNameWithoutExtension(e.FilePath);
+        var attemptedName = Path.GetFileNameWithoutExtension(e.FilePath);
         var oldFileName = Path.GetFileName(e.FilePath);
         var containingDirectory = Path.GetDirectoryName(e.FilePath) ?? _fileService.CurrentDirectory;
         var oldNoteKey = _fileService.GetNoteKey(e.FilePath);
@@ -1871,7 +1869,7 @@ public partial class MainWindow : Window {
             var filePath = Path.Combine(_fileService.CurrentDirectory, createdNote.FileName);
             _viewModel.LoadNotes(_fileService.GetNoteKey(filePath));
             // OnNotesLoaded fires synchronously above, so selection is already set.
-            OpenCreatedNoteInEditor(filePath, createdNote.UsesGeneratedName);
+            OpenCreatedNoteInEditor(filePath, createdNote.UsesGeneratedName, createdNote.InitialContent);
         } catch (Exception ex) {
             AppDialog.Show(owner, $"Failed to create note:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -1883,7 +1881,7 @@ public partial class MainWindow : Window {
             var createdNote = _fileService.CreateNote();
             var filePath = Path.Combine(_fileService.CurrentDirectory, createdNote.FileName);
             _viewModel.LoadNotes(_fileService.GetNoteKey(filePath));
-            OpenCreatedNoteInEditor(filePath, createdNote.UsesGeneratedName);
+            OpenCreatedNoteInEditor(filePath, createdNote.UsesGeneratedName, createdNote.InitialContent);
         } catch (Exception ex) {
             AppDialog.Show($"Failed to create quick note:\n{ex.Message}",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -1897,8 +1895,8 @@ public partial class MainWindow : Window {
         if (mode == NewNoteMode.Quick)
             return _fileService.CreateNote();
 
-        // In "Prompt" or "Both" modes, show the dialog
-        var attemptedName = string.Empty;
+        // In "Prompt" or "Both" modes, offer a date name that can be accepted or replaced.
+        var attemptedName = _fileService.SuggestNoteName();
         while (true) {
             var dialog = new NewNoteNameDialog(attemptedName) {
                 Owner = owner
@@ -2405,8 +2403,8 @@ public partial class MainWindow : Window {
         return false;
     }
 
-    private bool OpenCreatedNoteInEditor(string filePath, bool usesGeneratedName) {
-        if (!_noteEditor.OpenCreatedNote(filePath, usesGeneratedName)) {
+    private bool OpenCreatedNoteInEditor(string filePath, bool usesGeneratedName, string initialContent) {
+        if (!_noteEditor.OpenCreatedNote(filePath, usesGeneratedName, initialContent)) {
             RestoreSelectionToOpenEditorNote();
             return false;
         }

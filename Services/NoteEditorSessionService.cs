@@ -117,7 +117,8 @@ public sealed class NoteEditorSessionService : INoteEditorSessionService
                 leftTab.CaretIndex != rightTab.CaretIndex ||
                 !leftTab.VerticalOffset.Equals(rightTab.VerticalOffset) ||
                 leftTab.MarkdownPreviewEnabled != rightTab.MarkdownPreviewEnabled ||
-                leftTab.UsesGeneratedName != rightTab.UsesGeneratedName)
+                leftTab.UsesGeneratedName != rightTab.UsesGeneratedName ||
+                !string.Equals(leftTab.InitialFileContent, rightTab.InitialFileContent, StringComparison.Ordinal))
             {
                 return false;
             }

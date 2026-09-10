@@ -9,6 +9,22 @@ namespace Noted.Tests.Services;
 public sealed class NoteEditorSessionServiceTests
 {
     [TestMethod]
+    public void CreationProvenanceSurvivesRestartAndIsRemovedAfterFirstSave()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var service = new NoteEditorSessionService(directory.Path);
+        var session = new NoteEditorSession
+        {
+            Tabs = [new NoteEditorTabState { FilePath = directory.File("new.txt"), InitialFileContent = "" }]
+        };
+        service.Save(session);
+        Assert.AreEqual("", new NoteEditorSessionService(directory.Path).Load().Session.Tabs[0].InitialFileContent);
+
+        service.Save(session with { Tabs = [session.Tabs[0] with { InitialFileContent = null }] });
+        Assert.IsNull(new NoteEditorSessionService(directory.Path).Load().Session.Tabs[0].InitialFileContent);
+    }
+
+    [TestMethod]
     public void DuplicateSessionDoesNotRotateRollingBackup()
     {
         using var directory = new TemporaryTestDirectory();
