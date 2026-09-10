@@ -1,6 +1,7 @@
 <noted:OverlayWindow x:Class="Noted.ChecklistWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:s="clr-namespace:Noted.Services"
         xmlns:noted="clr-namespace:Noted"
         xmlns:h="clr-namespace:Noted.Helpers"
         xmlns:m="clr-namespace:Noted.Models"
@@ -637,10 +638,10 @@
                     </WrapPanel>
                     <StackPanel Grid.Column="1" Margin="8,0,0,0"
                                 Orientation="Horizontal" VerticalAlignment="Center">
-                        <CheckBox Content="Ghost" Margin="0,0,8,0"
-                                  IsChecked="{Binding GhostModeEnabled, Mode=TwoWay}"
+                        <CheckBox Content="Always visible" ToolTip="Use the app visible opacity even when this window is inactive" Margin="0,0,8,0"
+                                  IsChecked="{Binding Path=(s:WindowAppearance.AlwaysVisible), RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                  Style="{StaticResource NotedCheckBox}"
+                                  Style="{StaticResource NotedToggleSwitch}"
                                   FontSize="11" VerticalAlignment="Center"/>
                         <Button Content="+ Add" Style="{StaticResource PrimaryBtn}"
                                 IsEnabled="{Binding CanAddItem}"

@@ -19,7 +19,8 @@ internal enum ResizeEdge
 
 internal static class ResizeEdgeHitTest
 {
-    internal const double DefaultThickness = 6;
+    internal const double DefaultThickness = 10;
+    internal const double CornerReach = 24;
 
     internal static ResizeEdge Find(Point point, double width, double height, double thickness)
     {
@@ -37,6 +38,15 @@ internal static class ResizeEdgeHitTest
         else if (point.Y >= height - thickness)
             edge |= ResizeEdge.Bottom;
 
+        // Extend diagonal targets along the perimeter, without covering interior controls.
+        if (edge != ResizeEdge.None)
+        {
+            var reach = Math.Min(CornerReach, Math.Min(width, height) / 2);
+            if (point.X <= reach) edge |= ResizeEdge.Left;
+            else if (point.X >= width - reach) edge |= ResizeEdge.Right;
+            if (point.Y <= reach) edge |= ResizeEdge.Top;
+            else if (point.Y >= height - reach) edge |= ResizeEdge.Bottom;
+        }
         return edge;
     }
 

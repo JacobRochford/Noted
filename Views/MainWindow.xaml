@@ -1,6 +1,7 @@
 <Window x:Class="Noted.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:s="clr-namespace:Noted.Services"
         xmlns:local="clr-namespace:Noted.Helpers"
         Title="Noted."
         Icon="/Resources/notes.ico"
@@ -1376,7 +1377,7 @@
                                     Padding="12"
                                     Margin="0,0,0,10">
                                 <StackPanel>
-                                    <TextBlock Text="Notes Opacity"
+                                    <TextBlock Text="App Opacity"
                                                FontSize="12"
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource NotedTextBrush}"
@@ -1421,10 +1422,13 @@
                                             Unchecked="GhostModeOption_Changed"
                                             Margin="0,0,0,10"
                                             HorizontalAlignment="Stretch">
-                                        <TextBlock Text="Fade notes when not hovered"
+                                        <TextBlock Text="Fade windows when inactive"
                                                    TextWrapping="Wrap"
                                                    VerticalAlignment="Center"/>
                                     </CheckBox>
+
+                                    <CheckBox Style="{StaticResource NotedToggleSwitch}" Content="Always keep this window visible" ToolTip="Use the app visible opacity even when this window is inactive" Margin="0,0,0,10"
+                                              IsChecked="{Binding Path=(s:WindowAppearance.AlwaysVisible), RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"/>
 
                                     <!-- Idle opacity (disabled when idle fade is off) -->
                                     <Grid Margin="0,0,0,4">

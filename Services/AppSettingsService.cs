@@ -209,12 +209,36 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { DictionaryHotkeyModifiers = modifiers, DictionaryHotkeyKey = key });
     }
 
+    public event EventHandler? AppearanceChanged;
+
+    public bool LoadWindowAlwaysVisible(string windowType) =>
+        LoadSetting(s => s.AlwaysVisibleWindows?.Contains(windowType) == true);
+
+    public void SaveWindowAlwaysVisible(string windowType, bool alwaysVisible)
+    {
+        SaveSetting(s => {
+            var windows = new HashSet<string>(s.AlwaysVisibleWindows ?? []);
+            if (alwaysVisible) windows.Add(windowType); else windows.Remove(windowType);
+            return s with { AlwaysVisibleWindows = windows.ToArray() };
+        });
+        AppearanceChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     public bool LoadGhostModeEnabled() => LoadSetting(s => s.GhostModeEnabled);
-    public void SaveGhostModeEnabled(bool enabled) => SaveSetting(s => s with { GhostModeEnabled = enabled });
+    public void SaveGhostModeEnabled(bool enabled) {
+        SaveSetting(s => s with { GhostModeEnabled = enabled });
+        AppearanceChanged?.Invoke(this, EventArgs.Empty);
+    }
     public double LoadGhostModeOpacity() => LoadSetting(s => s.GhostModeOpacity);
-    public void SaveGhostModeOpacity(double opacity) => SaveSetting(s => s with { GhostModeOpacity = opacity });
+    public void SaveGhostModeOpacity(double opacity) {
+        SaveSetting(s => s with { GhostModeOpacity = opacity });
+        AppearanceChanged?.Invoke(this, EventArgs.Empty);
+    }
     public double LoadDefaultOpacity() => LoadSetting(s => s.DefaultOpacity);
-    public void SaveDefaultOpacity(double opacity) => SaveSetting(s => s with { DefaultOpacity = opacity });
+    public void SaveDefaultOpacity(double opacity) {
+        SaveSetting(s => s with { DefaultOpacity = opacity });
+        AppearanceChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     public AppThemeMode LoadAppThemeMode() => LoadSetting(s => s.AppThemeMode);
 
@@ -903,6 +927,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         public string ChecklistHotkeyKey { get; init; } = "C";
         public string DictionaryHotkeyModifiers { get; init; } = "Alt";
         public string DictionaryHotkeyKey { get; init; } = "D";
+        public string[]? AlwaysVisibleWindows { get; init; }
         public bool GhostModeEnabled { get; init; } = false;
         public double GhostModeOpacity { get; init; } = 0.25;
         public double DefaultOpacity { get; init; } = 0.88;

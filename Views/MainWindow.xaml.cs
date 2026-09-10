@@ -66,7 +66,6 @@ public partial class MainWindow : Window {
     private const double DefaultPanelOpacity = 0.88;
     private const double DefaultGhostModeOpacity = 0.25;
     private const double MinimumPanelOpacity = 0.05;
-    private const double MinimumGhostHitTestOpacity = 1.0 / 255.0;
     private bool _ghostModeEnabled;
     private double _ghostModeOpacity;
     private double _defaultOpacity;
@@ -185,8 +184,6 @@ public partial class MainWindow : Window {
         MainCanvas.MouseLeftButtonDown += MainCanvas_MouseLeftButtonDown;
         PreviewMouseDown += MainWindow_PreviewMouseDown;
         KeyDown += MainWindow_KeyDown;
-        NotesPanel.MouseEnter += NotesPanel_MouseEnter;
-        NotesPanel.MouseLeave += NotesPanel_MouseLeave;
         GhostModeOpacitySlider.ValueChanged += GhostModeOpacitySlider_ValueChanged;
         DefaultOpacitySlider.ValueChanged += DefaultOpacitySlider_ValueChanged;
         SourceInitialized += MainWindow_SourceInitialized;
@@ -312,10 +309,7 @@ public partial class MainWindow : Window {
 
         InitializeGlobalHotkeys();
 
-        if (_ghostModeEnabled && NotesPanel.Visibility == Visibility.Visible)
-            AnimatePanelOpacity(_ghostModeOpacity, allowFullyTransparent: true);
-        else
-            AnimatePanelOpacity(_defaultOpacity);
+        WindowAppearance.Refresh(this);
     }
 
     private void InitializeGlobalHotkeys()
@@ -565,9 +559,7 @@ public partial class MainWindow : Window {
         UpdateNotesDirectoryDisplay();
         // Restore correct opacity when closing settings (slider may have previewed a value)
         if (!setVisible)
-            AnimatePanelOpacity(
-                _ghostModeEnabled ? _ghostModeOpacity : _defaultOpacity,
-                allowFullyTransparent: _ghostModeEnabled);
+            WindowAppearance.Refresh(this);
     }
 
     private void UpdateSettingsView() {
@@ -1231,9 +1223,9 @@ public partial class MainWindow : Window {
         _settingsService.SaveGhostModeEnabled(_ghostModeEnabled);
         // fade panel if toggled
         if (!_ghostModeEnabled)
-            AnimatePanelOpacity(_defaultOpacity);
+            WindowAppearance.Refresh(this);
         else if (NotesPanel.Visibility == Visibility.Visible && !NotesPanel.IsMouseOver)
-            AnimatePanelOpacity(_ghostModeOpacity, allowFullyTransparent: true);
+            WindowAppearance.Refresh(this);
     }
 
 
@@ -1247,10 +1239,7 @@ public partial class MainWindow : Window {
         _settingsService.SaveGhostModeOpacity(_ghostModeOpacity);
         UpdateGhostModeOpacityLabel();
         if (NotesPanel.Visibility == Visibility.Visible) {
-            if (NotesPanel.IsMouseOver)
-                AnimatePanelOpacity(_defaultOpacity);
-            else
-                AnimatePanelOpacity(_ghostModeOpacity, allowFullyTransparent: true);
+            WindowAppearance.Refresh(this);
         }
     }
 
@@ -1271,7 +1260,7 @@ public partial class MainWindow : Window {
         UpdateDefaultOpacityLabel();
         // only fade if panel is visible and not in ghost mode
         if (NotesPanel.Visibility == Visibility.Visible && (!_ghostModeEnabled || NotesPanel.IsMouseOver))
-            AnimatePanelOpacity(_defaultOpacity);
+            WindowAppearance.Refresh(this);
     }
 
 
@@ -1300,45 +1289,11 @@ public partial class MainWindow : Window {
     }
 
 
-    private void NotesPanel_MouseEnter(object sender, MouseEventArgs e) {
-        // fade in on hover if ghost mode
-        if (_ghostModeEnabled)
-            AnimatePanelOpacity(_defaultOpacity);
-    }
-
-
-    private void NotesPanel_MouseLeave(object sender, MouseEventArgs e) {
-        // fade out on leave if ghost mode
-        if (_ghostModeEnabled)
-            AnimatePanelOpacity(_ghostModeOpacity, allowFullyTransparent: true);
-    }
-
-
-    private void AnimatePanelOpacity(double targetOpacity, bool allowFullyTransparent = false) {
-        // fade panel
-        var normalizedTargetOpacity = NormalizeOpacity(
-            targetOpacity,
-            allowFullyTransparent ? 0.0 : MinimumPanelOpacity,
-            allowFullyTransparent ? DefaultGhostModeOpacity : DefaultPanelOpacity);
-        if (allowFullyTransparent)
-            normalizedTargetOpacity = Math.Max(normalizedTargetOpacity, MinimumGhostHitTestOpacity);
-
-        var anim = new DoubleAnimation(
-            NotesPanel.Opacity,
-            normalizedTargetOpacity,
-            new Duration(TimeSpan.FromMilliseconds(200)));
-        NotesPanel.BeginAnimation(UIElement.OpacityProperty, anim);
-    }
-
-
     internal bool IsNotesPanelVisible => NotesPanel.Visibility == Visibility.Visible;
 
     internal void ShowNotesPanel() {
         NotesPanel.Visibility = Visibility.Visible;
-        if (_ghostModeEnabled)
-            AnimatePanelOpacity(_ghostModeOpacity, allowFullyTransparent: true);
-        else
-            AnimatePanelOpacity(_defaultOpacity);
+        WindowAppearance.Refresh(this);
         // force focus for overlay
         var hwnd = TemporarilyAllowWindowActivation();
         try {
@@ -2767,8 +2722,6 @@ public partial class MainWindow : Window {
         NotesPanel.PreviewMouseLeftButtonDown -= NotesPanel_PreviewMouseLeftButtonDown;
         NotesPanel.PreviewMouseMove -= NotesPanel_PreviewMouseMove;
         NotesPanel.PreviewMouseLeftButtonUp -= NotesPanel_PreviewMouseLeftButtonUp;
-        NotesPanel.MouseEnter -= NotesPanel_MouseEnter;
-        NotesPanel.MouseLeave -= NotesPanel_MouseLeave;
 
         GhostModeOpacitySlider.ValueChanged -= GhostModeOpacitySlider_ValueChanged;
         DefaultOpacitySlider.ValueChanged -= DefaultOpacitySlider_ValueChanged;

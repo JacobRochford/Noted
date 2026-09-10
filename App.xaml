@@ -23,6 +23,36 @@
         <SolidColorBrush x:Key="NotedWarningBrush" Color="#B8761F"/>
         <SolidColorBrush x:Key="NotedSuccessBrush" Color="#347052"/>
 
+        <Style x:Key="NotedToggleSwitch" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal" Background="Transparent">
+                            <Border x:Name="Track" Width="28" Height="16" CornerRadius="8" VerticalAlignment="Center"
+                                    Background="{DynamicResource NotedStrongBorderBrush}">
+                                <Ellipse x:Name="Knob" Width="12" Height="12" Margin="2" HorizontalAlignment="Left"
+                                         Fill="{DynamicResource NotedSurfaceBrush}"/>
+                            </Border>
+                            <ContentPresenter Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="{DynamicResource NotedAccentBrush}"/>
+                                <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource NotedTextBrush}"/>
+                                <Setter TargetName="Track" Property="BorderThickness" Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="NotedScrollBarThumb" TargetType="Thumb">
             <Setter Property="MinHeight" Value="20"/>
             <Setter Property="MinWidth" Value="20"/>

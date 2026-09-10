@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
-using System.Windows.Media.Animation;
 using Noted.Helpers;
 
 namespace Noted;
@@ -20,15 +19,13 @@ public abstract class OverlayWindow : Window
     protected void InitializeOverlay(bool ghostModeEnabled, double ghostModeOpacity, double defaultOpacity)
     {
         _edgeResizer ??= new WindowEdgeResizer(this, SaveWindowState);
+        // Retain legacy state fields for persistence; WindowAppearance owns the live opacity.
         _ghostModeEnabled = ghostModeEnabled;
         _ghostModeOpacity = NormalizeOpacity(ghostModeOpacity, 0.25);
         _defaultOpacity = NormalizeOpacity(defaultOpacity, 0.88);
-        Opacity = ghostModeEnabled ? _ghostModeOpacity : _defaultOpacity;
 
         Loaded += OnOverlayLoaded;
         Closing += OnOverlayClosing;
-        MouseEnter += OnOverlayMouseEnter;
-        MouseLeave += OnOverlayMouseLeave;
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -65,21 +62,9 @@ public abstract class OverlayWindow : Window
         SaveWindowState();
     }
 
-    private void OnOverlayMouseEnter(object sender, MouseEventArgs e)
-    {
-        if (_ghostModeEnabled)
-            AnimateOpacity(_defaultOpacity);
-    }
-
-    private void OnOverlayMouseLeave(object sender, MouseEventArgs e)
-    {
-        if (_ghostModeEnabled)
-            AnimateOpacity(_ghostModeOpacity);
-    }
-
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.Source is Button) return;
+        if (VisualTreeHelpers.FindAncestor<System.Windows.Controls.Primitives.ButtonBase>(e.OriginalSource as DependencyObject) is not null) return;
 
         if (e.ClickCount == 2)
         {
@@ -100,13 +85,6 @@ public abstract class OverlayWindow : Window
     protected void ApplyGhostMode(bool enabled)
     {
         _ghostModeEnabled = enabled;
-        AnimateOpacity(enabled && !IsMouseOver ? _ghostModeOpacity : _defaultOpacity);
-    }
-
-    protected void AnimateOpacity(double opacity)
-    {
-        var animation = new DoubleAnimation(Opacity, opacity, TimeSpan.FromMilliseconds(300));
-        BeginAnimation(OpacityProperty, animation);
     }
 
     private static double NormalizeOpacity(double opacity, double fallback) =>

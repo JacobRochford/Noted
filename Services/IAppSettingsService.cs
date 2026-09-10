@@ -26,6 +26,8 @@ public interface IAppSettingsService {
     void SaveChecklistHotkey(string modifiers, string key);
     (string modifiers, string key) LoadDictionaryHotkey();
     void SaveDictionaryHotkey(string modifiers, string key);
+    bool LoadWindowAlwaysVisible(string windowType);
+    void SaveWindowAlwaysVisible(string windowType, bool alwaysVisible);
     bool LoadGhostModeEnabled();
     void SaveGhostModeEnabled(bool enabled);
     double LoadGhostModeOpacity();

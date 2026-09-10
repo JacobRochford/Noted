@@ -110,6 +110,7 @@ public partial class App : Application
             TryCreateDesktopShortcut();
 
             var settings = new AppSettingsService();
+            WindowAppearance.Initialize(settings);
             settings.PersistenceWarning += Settings_PersistenceWarning;
             _settingsService = settings;
             var themeManager = new AppThemeManager(

@@ -1,6 +1,7 @@
 <noted:OverlayWindow x:Class="Noted.ScratchpadWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:s="clr-namespace:Noted.Services"
         xmlns:noted="clr-namespace:Noted"
         Title="Scratchpad"
         WindowStyle="None"
@@ -277,11 +278,12 @@
                 </Border>
 
                 <Grid Grid.Row="4" Margin="1,8,1,0">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="0" Grid.ColumnSpan="2" Orientation="Vertical" VerticalAlignment="Center">
                         <TextBlock Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="11">
                             <Run Text="Words "/>
                             <Run Text="{Binding WordCount, Mode=OneWay}" Foreground="{DynamicResource NotedAccentBrush}" FontWeight="SemiBold"/>
@@ -293,10 +295,10 @@
                         <TextBlock Text="{Binding FindResultText}" Margin="12,0,0,0"
                                    Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="11" VerticalAlignment="Center"/>
                     </StackPanel>
-                    <CheckBox Grid.Column="1" Content="Ghost"
-                              IsChecked="{Binding GhostModeEnabled, Mode=TwoWay}"
+                    <CheckBox Grid.Row="1" Grid.Column="1" Margin="0,5,0,0" Content="Always visible" ToolTip="Use the app visible opacity even when this window is inactive"
+                              IsChecked="{Binding Path=(s:WindowAppearance.AlwaysVisible), RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                              Style="{StaticResource NotedCheckBox}"
+                              Style="{StaticResource NotedToggleSwitch}"
                               FontSize="11" VerticalAlignment="Center"/>
                 </Grid>
             </Grid>
