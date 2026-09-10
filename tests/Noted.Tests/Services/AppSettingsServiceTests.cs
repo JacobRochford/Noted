@@ -12,6 +12,24 @@ namespace Noted.Tests.Services;
 public sealed class AppSettingsServiceTests
 {
     [TestMethod]
+    public void WindowAppearanceOverridesAndEditorPreferencesSurviveReload()
+    {
+        using var directory = new TestDirectory();
+        var service = CreateService(directory.Path);
+        service.SaveWindowAlwaysVisible("MiniPadWindow", true);
+        service.SaveWindowAlwaysVisible("ChecklistWindow", true);
+        service.SaveWindowAlwaysVisible("ChecklistWindow", false);
+        service.SaveNoteEditorWindowState(new NoteEditorWindowState { ShowLineNumbers = false, ScrollSpeed = 3 });
+        service.SaveMiniPadWindowState(new MiniPadWindowState { WordWrapEnabled = false });
+        var restored = CreateService(directory.Path);
+        Assert.IsTrue(restored.LoadWindowAlwaysVisible("MiniPadWindow"));
+        Assert.IsFalse(restored.LoadWindowAlwaysVisible("ChecklistWindow"));
+        Assert.IsFalse(restored.LoadNoteEditorWindowState().ShowLineNumbers);
+        Assert.AreEqual(3, restored.LoadNoteEditorWindowState().ScrollSpeed);
+        Assert.IsFalse(restored.LoadMiniPadWindowState().WordWrapEnabled);
+    }
+
+    [TestMethod]
     public void TimestampLineIsSavedAndLoaded()
     {
         using var directory = new TestDirectory();

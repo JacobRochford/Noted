@@ -43,6 +43,7 @@ public partial class NoteEditorWindow : Window
     private bool _isLoadingSecondary;
     private bool _hasLoaded;
     private bool _isMarkdownPreviewEnabled;
+    private int _scrollSpeed = 2;
     private bool _isPreparedForApplicationClose;
     private double _tabsPanelWidth = DefaultTabsPanelWidth;
     private bool _isTabsPanelCollapsed;
@@ -91,6 +92,9 @@ public partial class NoteEditorWindow : Window
         _reopenOnStartup = windowState.ReopenOnStartup;
         ApplyTabsPanelState();
         SetWordWrapEnabled(windowState.WordWrapEnabled);
+        SetLineNumbers(windowState.ShowLineNumbers);
+        SetScrollSpeed(windowState.ScrollSpeed);
+        AlwaysVisibleMenuItem.IsChecked = settingsService.LoadWindowAlwaysVisible(nameof(NoteEditorWindow));
         ReopenTabsOnStartupMenuItem.IsChecked = _settingsService.LoadReopenEditorTabsOnStartup();
         FileExplorerIntegrationMenuItem.IsChecked = FileExplorerIntegrationService.IsEnabled();
         UpdateEditorState();
@@ -1183,6 +1187,8 @@ public partial class NoteEditorWindow : Window
                 TabsPanelWidth = _tabsPanelWidth,
                 IsTabsPanelCollapsed = _isTabsPanelCollapsed,
                 WordWrapEnabled = EditorTextBox.TextWrapping == TextWrapping.Wrap,
+                ShowLineNumbers = LineNumbersMenuItem.IsChecked,
+                ScrollSpeed = _scrollSpeed,
                 ReopenOnStartup = _reopenOnStartup
             });
         }
@@ -1262,14 +1268,13 @@ public partial class NoteEditorWindow : Window
         var wordCount = string.IsNullOrWhiteSpace(text)
             ? 0
             : Regex.Matches(text, @"\S+").Count;
+        var lines = new TextLineMap(text);
         DocumentCountText.Text =
-            $"Words {wordCount}   Characters {text.Length}   Lines {textBox.LineCount}";
+            $"Words {wordCount}   Characters {text.Length}   Lines {lines.Starts.Length}";
 
         var caretIndex = Math.Clamp(textBox.CaretIndex, 0, text.Length);
-        var lineIndex = textBox.GetLineIndexFromCharacterIndex(caretIndex);
-        var lineStart = lineIndex >= 0
-            ? textBox.GetCharacterIndexFromLineIndex(lineIndex)
-            : 0;
+        var lineIndex = lines.LineAt(caretIndex);
+        var lineStart = lines.Starts[lineIndex];
         CaretPositionText.Text =
             $"Ln {Math.Max(0, lineIndex) + 1}, Col {caretIndex - lineStart + 1}";
 
@@ -2031,6 +2036,49 @@ public partial class NoteEditorWindow : Window
         return RemoveDocument(document, deleteRecoveryDraft: true);
     }
 
+    private void LineNumbersMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        SetLineNumbers(LineNumbersMenuItem.IsChecked);
+        SaveWindowSize();
+    }
+
+    private void SetLineNumbers(bool visible)
+    {
+        LineNumbersMenuItem.IsChecked = visible;
+        PrimaryLineNumbers.Visibility = SecondaryLineNumbers.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ScrollSpeedMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string value } && int.TryParse(value, out var speed))
+        {
+            SetScrollSpeed(speed);
+            SaveWindowSize();
+        }
+    }
+
+    private void SetScrollSpeed(int speed)
+    {
+        _scrollSpeed = speed is >= 1 and <= 3 ? speed : 2;
+        NormalScrollMenuItem.IsChecked = _scrollSpeed == 1;
+        FastScrollMenuItem.IsChecked = _scrollSpeed == 2;
+        FasterScrollMenuItem.IsChecked = _scrollSpeed == 3;
+    }
+
+    private void AlwaysVisibleMenuItem_Click(object sender, RoutedEventArgs e) =>
+        WindowAppearance.SetAlwaysVisible(this, AlwaysVisibleMenuItem.IsChecked);
+
+    private void Editor_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        // Leave modified gestures and fine-grained touchpad deltas to the editor.
+        if (sender is not TextBox editor || _scrollSpeed == 1 || Keyboard.Modifiers != ModifierKeys.None || e.Delta % 120 != 0) return;
+        var lines = SystemParameters.WheelScrollLines;
+        if (lines == 0) return;
+        var distance = lines < 0 ? editor.ViewportHeight : lines * editor.FontSize * 1.2;
+        editor.ScrollToVerticalOffset(editor.VerticalOffset - e.Delta / 120.0 * distance * _scrollSpeed);
+        e.Handled = true;
+    }
+
     private void WordWrapMenuItem_Click(object sender, RoutedEventArgs e)
     {
         SetWordWrapEnabled(sender is MenuItem { IsChecked: true });
@@ -2161,7 +2209,7 @@ public partial class NoteEditorWindow : Window
         HeaderMarkdownMenuItem.IsChecked = enabled;
         ContextMarkdownMenuItem.IsChecked = enabled;
         PreviewMarkdownMenuItem.IsChecked = enabled;
-        EditorTextBox.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
+        PrimaryTextEditor.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
         MarkdownPreview.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
 
         if (enabled)
