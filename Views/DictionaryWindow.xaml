@@ -180,26 +180,46 @@
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="30"/>
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBox x:Name="WordTextBox" Grid.Column="0"
-                                                             Style="{StaticResource DictionaryTextBox}"
-                                                             Text="{Binding Word, UpdateSourceTrigger=PropertyChanged}"
-                                                             FontSize="13" FontWeight="SemiBold"/>
+                                                    <Grid Grid.Column="0">
+                                                        <Button Content="{Binding Word}" Click="ViewDefinition_Click"
+                                                                HorizontalContentAlignment="Left" Padding="5,4"
+                                                                Background="Transparent" BorderThickness="0"
+                                                                Foreground="{DynamicResource NotedTextBrush}" FontWeight="SemiBold">
+                                                            <Button.Style><Style TargetType="Button">
+                                                                <Setter Property="Cursor" Value="Hand"/>
+                                                                <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+                                                                    <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+                                                                    </Border>
+                                                                </ControlTemplate></Setter.Value></Setter>
+                                                                <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsEditing}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                                            </Style.Triggers></Style></Button.Style>
+                                                            <Button.ContentTemplate><DataTemplate><TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"/></DataTemplate></Button.ContentTemplate>
+                                                        </Button>
+                                                        <TextBox x:Name="WordTextBox" Text="{Binding DraftWord, UpdateSourceTrigger=PropertyChanged}"
+                                                                 FontSize="13" FontWeight="SemiBold" LostFocus="WordTextBox_LostFocus">
+                                                            <TextBox.Style><Style TargetType="TextBox" BasedOn="{StaticResource DictionaryTextBox}">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                <Style.Triggers><DataTrigger Binding="{Binding IsEditing}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers>
+                                                            </Style></TextBox.Style>
+                                                        </TextBox>
+                                                    </Grid>
                                                     <Button Grid.Column="1" Style="{StaticResource DetailsButtonStyle}"
-                                                            Tag="{Binding}" Click="EditDefinitionButton_Click"
-                                                            ToolTip="Edit definition"/>
+                                                            Tag="{Binding}" Click="EditDefinitionButton_Click" ToolTip="Edit word and definition"/>
                                                 </Grid>
 
                                                 <Border Grid.Row="1" Margin="5,0,5,7" Padding="10,8"
                                                         Background="{DynamicResource NotedSubtleSurfaceBrush}"
                                                         BorderBrush="{DynamicResource NotedBorderBrush}"
                                                         BorderThickness="1" CornerRadius="6"
-                                                        Visibility="{Binding Visibility, ElementName=DefinitionBox}">
+                                                        Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}">
                                                     <StackPanel>
                                                         <TextBlock Text="DEFINITION" Margin="1,0,0,5"
                                                                    Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="10"
                                                                    FontWeight="SemiBold"/>
                                                         <TextBox x:Name="DefinitionBox"
-                                                                 Text="{Binding Definition, UpdateSourceTrigger=PropertyChanged}"
+                                                                 Text="{Binding DraftDefinition, UpdateSourceTrigger=PropertyChanged}"
                                                                  MinHeight="48" MaxHeight="130"
                                                                  Padding="7,5"
                                                                  Background="{DynamicResource NotedInputBackgroundBrush}"
@@ -210,7 +230,19 @@
                                                                  FontSize="12" TextWrapping="Wrap"
                                                                  AcceptsReturn="True"
                                                                  VerticalScrollBarVisibility="Auto"
-                                                                 Visibility="Collapsed"/>
+                                                                 Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"/>
+                                                        <TextBox Text="{Binding Definition, Mode=OneWay}" IsReadOnly="True"
+                                                                 TextWrapping="Wrap" MaxHeight="200" VerticalScrollBarVisibility="Auto"
+                                                                 BorderThickness="0" Background="Transparent">
+                                                            <TextBox.Style><Style TargetType="TextBox" BasedOn="{StaticResource NotedTextInput}"><Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsEditing}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                                            </Style.Triggers></Style></TextBox.Style>
+                                                        </TextBox>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
+                                                                    Visibility="{Binding ShowEditActions, Converter={StaticResource BoolToVisibility}}">
+                                                            <Button Content="Save" Click="SaveEntry_Click" Style="{StaticResource NotedPrimaryButton}"/>
+                                                            <Button Content="Cancel" Click="CancelEntry_Click" Margin="6,0,0,0" Style="{StaticResource NotedSecondaryButton}"/>
+                                                        </StackPanel>
                                                     </StackPanel>
                                                 </Border>
                                             </Grid>

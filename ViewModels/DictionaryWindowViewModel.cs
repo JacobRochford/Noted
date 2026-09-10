@@ -115,15 +115,17 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposa
 
     private void Item_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is not (nameof(DictionaryItem.Word) or nameof(DictionaryItem.Definition))) return;
         if (!string.IsNullOrWhiteSpace(SearchText))
             FilteredItems.Refresh();
         SaveItems();
     }
 
-    public DictionaryItem AddItem()
+    public DictionaryItem AddItem(bool beginEdit = false, bool autoSave = false)
     {
         SearchText = "";
-        var newItem = new DictionaryItem { Word = "", Definition = "" };
+        var newItem = new DictionaryItem { Word = "", Definition = "", IsNew = beginEdit && !autoSave };
+        if (beginEdit) newItem.BeginEdit(autoSave);
         _uiThreadInvoke(() =>
         {
             Items.Add(newItem);
@@ -184,6 +186,8 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposa
     private void SaveItems()
     {
         _saveScheduler.Schedule(Items
+            .Where(item => !item.IsNew && (!item.IsAutoSaving ||
+                !string.IsNullOrWhiteSpace(item.Word) || !string.IsNullOrWhiteSpace(item.Definition)))
             .Select(item => new DictionaryItemState
             {
                 Word = item.Word,

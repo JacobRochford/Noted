@@ -16,7 +16,6 @@ public partial class DictionaryWindow : OverlayWindow
 {
     private readonly IAppSettingsService _settingsService;
     private readonly DictionaryWindowViewModel _viewModel;
-    private readonly Dictionary<DictionaryItem, bool> _definitionExpandedState = new();
     private string? _lastPersistenceWarning;
     private bool _reopenOnStartup;
     private bool _preserveOpenStateOnClose;
@@ -62,6 +61,8 @@ public partial class DictionaryWindow : OverlayWindow
 
     protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
     {
+        var clickedItem = VisualTreeHelpers.FindAncestor<FrameworkElement>(e.OriginalSource as DependencyObject)?.DataContext as DictionaryItem;
+        FinishNewEntries(except: clickedItem);
         if (Keyboard.FocusedElement is TextBox textBox &&
             !ReferenceEquals(
                 VisualTreeHelpers.FindAncestor<TextBox>(e.OriginalSource as DependencyObject),
@@ -96,6 +97,12 @@ public partial class DictionaryWindow : OverlayWindow
 
     internal bool TryFlushPendingContent(out string? error)
     {
+        FinishNewEntries();
+        if (_viewModel.Items.Any(item => item.HasPendingEdit))
+        {
+            error = "Save or cancel the dictionary entry being edited first.";
+            return false;
+        }
         var success = _viewModel.TryFlushPendingItems(out error);
         if (success && !_viewModel.HasPersistenceError)
             _lastPersistenceWarning = null;
@@ -129,7 +136,7 @@ public partial class DictionaryWindow : OverlayWindow
 
     private void AddButton_Click(object sender, RoutedEventArgs e)
     {
-        var item = _viewModel.AddItem();
+        var item = _viewModel.AddItem(beginEdit: true, autoSave: true);
         Dispatcher.BeginInvoke(
             System.Windows.Threading.DispatcherPriority.Input,
             new Action(() =>
@@ -142,6 +149,8 @@ public partial class DictionaryWindow : OverlayWindow
                 wordBox?.BringIntoView();
                 wordBox?.Focus();
                 wordBox?.SelectAll();
+                ItemsList.UpdateLayout();
+                (container as FrameworkElement)?.BringIntoView();
             }));
     }
 
@@ -193,7 +202,6 @@ public partial class DictionaryWindow : OverlayWindow
     {
         if (sender is FrameworkElement fe && fe.DataContext is DictionaryItem item)
         {
-            _definitionExpandedState.Remove(item);
             _viewModel.RemoveItem(item);
         }
     }
@@ -208,27 +216,59 @@ public partial class DictionaryWindow : OverlayWindow
         e.Handled = true;
     }
 
+    private void FinishNewEntries(DictionaryItem? except = null)
+    {
+        foreach (var item in _viewModel.Items.Where(item => item.IsAutoSaving && !ReferenceEquals(item, except)).ToList())
+        {
+            var empty = string.IsNullOrWhiteSpace(item.Word) && string.IsNullOrWhiteSpace(item.Definition);
+            item.FinishAutoSave();
+            if (empty) _viewModel.RemoveItem(item);
+        }
+    }
+
+    private void ViewDefinition_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: DictionaryItem item })
+            item.IsExpanded = !item.IsExpanded;
+    }
+
     private void EditDefinitionButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement control || control.Tag is not DictionaryItem item)
-            return;
-
-        // Toggle stored expanded state
-        var isExpanded = !_definitionExpandedState.TryGetValue(item, out var expanded) ? true : !expanded;
-        _definitionExpandedState[item] = isExpanded;
-
-        // Find the DataTemplate root border for this item
-        var container = VisualTreeHelpers.FindAncestor<Border>(control);
-        if (container != null) {
-            var definitionBox = VisualTreeHelpers.FindDescendant<TextBox>(container, "DefinitionBox");
-            if (definitionBox != null) {
-                definitionBox.Visibility = isExpanded ? Visibility.Visible : Visibility.Collapsed;
-                if (isExpanded)
-                    definitionBox.Focus();
+        if (sender is not FrameworkElement { DataContext: DictionaryItem item }) return;
+        item.FinishAutoSave();
+        item.BeginEdit();
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (ItemsList.ItemContainerGenerator.ContainerFromItem(item) is DependencyObject container)
+            {
+                var wordBox = VisualTreeHelpers.FindDescendant<TextBox>(container, "WordTextBox");
+                wordBox?.Focus();
+                wordBox?.SelectAll();
             }
-        }
+        });
+    }
 
-        e.Handled = true;
+    private void SaveEntry_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: DictionaryItem item }) return;
+        item.SaveEdit();
+        if (!_viewModel.TryFlushPendingItems(out var error)) ShowPersistenceWarningOnce(error);
+    }
+
+    private void CancelEntry_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: DictionaryItem item }) return;
+        item.CancelEdit();
+        if (item.IsNew) _viewModel.RemoveItem(item);
+    }
+
+    private void WordTextBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox textBox)
+        {
+            textBox.Select(0, 0);
+            textBox.ScrollToHorizontalOffset(0);
+        }
     }
 
     protected override void SaveWindowState()
