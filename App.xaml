@@ -23,6 +23,22 @@
         <SolidColorBrush x:Key="NotedWarningBrush" Color="#B8761F"/>
         <SolidColorBrush x:Key="NotedSuccessBrush" Color="#347052"/>
 
+        <SolidColorBrush x:Key="NotedSelectionBrush" Color="#397B99"/>
+        <SolidColorBrush x:Key="NotedSelectionTextBrush" Color="White"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#397B99"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="White"/>
+        <Style TargetType="TextBox">
+            <Setter Property="CaretBrush" Value="{DynamicResource NotedTextBrush}"/>
+            <Setter Property="SelectionBrush" Value="{DynamicResource NotedSelectionBrush}"/>
+            <Setter Property="SelectionTextBrush" Value="{DynamicResource NotedSelectionTextBrush}"/>
+            <Setter Property="SelectionOpacity" Value="1"/>
+        </Style>
+        <Style TargetType="RichTextBox">
+            <Setter Property="CaretBrush" Value="{DynamicResource NotedTextBrush}"/>
+            <Setter Property="SelectionBrush" Value="{DynamicResource NotedSelectionBrush}"/>
+            <Setter Property="SelectionOpacity" Value="0.4"/>
+        </Style>
+
         <Style x:Key="NotedToggleSwitch" TargetType="CheckBox">
             <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -202,14 +218,14 @@
             </Setter>
         </Style>
 
-        <Style x:Key="NotedTextInput" TargetType="TextBox">
+        <Style x:Key="NotedTextInput" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
             <Setter Property="Background" Value="{DynamicResource NotedInputBackgroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource NotedBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
-            <Setter Property="CaretBrush" Value="{DynamicResource NotedAccentBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource NotedTextBrush}"/>
             <Setter Property="Padding" Value="7,5"/>
-            <Setter Property="SelectionBrush" Value="{DynamicResource NotedAccentSoftHoverBrush}"/>
+            <Setter Property="SelectionBrush" Value="{DynamicResource NotedSelectionBrush}"/>
             <Style.Triggers>
                 <Trigger Property="IsKeyboardFocusWithin" Value="True">
                     <Setter Property="BorderBrush" Value="{DynamicResource NotedAccentBrush}"/>

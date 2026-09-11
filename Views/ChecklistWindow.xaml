@@ -335,9 +335,9 @@
                             <TextBox x:Name="SearchBox"
                                      Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                                      Padding="0,7" Background="Transparent" BorderThickness="0"
-                                     CaretBrush="{DynamicResource NotedAccentBrush}"
+                                     CaretBrush="{DynamicResource NotedTextBrush}"
                                      Foreground="{DynamicResource NotedTextBrush}"
-                                     SelectionBrush="{DynamicResource NotedAccentSoftHoverBrush}"
+                                     SelectionBrush="{DynamicResource NotedSelectionBrush}"
                                      FontSize="12"
                                      VerticalContentAlignment="Center" KeyDown="SearchBox_KeyDown"/>
                             <TextBlock Text="Search checklist..." Foreground="{DynamicResource NotedMutedTextBrush}"
@@ -485,7 +485,7 @@
                                                      VerticalContentAlignment="Center" KeyDown="ItemTextBox_KeyDown"
                                                      GotFocus="ItemTextBox_GotFocus" LostFocus="ItemTextBox_LostFocus">
                                                 <TextBox.Style>
-                                                    <Style TargetType="TextBox">
+                                                    <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                                         <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
                                                         <Setter Property="Cursor" Value="Hand"/>
                                                         <Style.Triggers>
@@ -535,8 +535,8 @@
                                                          Background="{DynamicResource NotedInputBackgroundBrush}"
                                                          BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="1"
                                                          Foreground="{DynamicResource NotedTextBrush}"
-                                                         CaretBrush="{DynamicResource NotedAccentBrush}"
-                                                         SelectionBrush="{DynamicResource NotedAccentSoftHoverBrush}"
+                                                         CaretBrush="{DynamicResource NotedTextBrush}"
+                                                         SelectionBrush="{DynamicResource NotedSelectionBrush}"
                                                          FontSize="12"
                                                          VerticalScrollBarVisibility="Auto"/>
                                                 <Grid Margin="0,9,0,0">
@@ -555,10 +555,10 @@
                                                                 Foreground="{DynamicResource NotedTextBrush}"
                                                                 FontSize="12">
                                                         <DatePicker.Resources>
-                                                            <Style TargetType="DatePickerTextBox">
+                                                            <Style TargetType="DatePickerTextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                                                 <Setter Property="Background" Value="{DynamicResource NotedInputBackgroundBrush}"/>
                                                                 <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
-                                                                <Setter Property="CaretBrush" Value="{DynamicResource NotedAccentBrush}"/>
+                                                                <Setter Property="CaretBrush" Value="{DynamicResource NotedTextBrush}"/>
                                                                 <Setter Property="BorderThickness" Value="0"/>
                                                             </Style>
                                                             <Style TargetType="Calendar">
@@ -714,8 +714,8 @@
                              BorderBrush="{DynamicResource NotedStrongBorderBrush}"
                              BorderThickness="1"
                              Foreground="{DynamicResource NotedTextBrush}"
-                             CaretBrush="{DynamicResource NotedAccentBrush}"
-                             SelectionBrush="{DynamicResource NotedAccentSoftHoverBrush}"
+                             CaretBrush="{DynamicResource NotedTextBrush}"
+                             SelectionBrush="{DynamicResource NotedSelectionBrush}"
                              FontSize="12"
                              KeyDown="TabNameTextBox_KeyDown"/>
                     <StackPanel Margin="0,8,0,0"

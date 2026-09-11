@@ -559,7 +559,12 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void ItemTextBox_LostFocus(object sender, RoutedEventArgs e)
     {
-        (sender as TextBox)?.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        if (sender is TextBox textBox)
+        {
+            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            textBox.Select(0, 0);
+            textBox.ScrollToHorizontalOffset(0);
+        }
     }
 
     // Drag-drop reordering

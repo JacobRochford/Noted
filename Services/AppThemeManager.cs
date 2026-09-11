@@ -99,6 +99,17 @@ internal sealed class AppThemeManager : IDisposable
         SetBrush("NotedAccentSoftBrush", accentSoft);
         SetBrush("NotedAccentSoftHoverBrush", accentSoftHover);
         SetBrush("NotedAccentTextBrush", UseDarkText(accent) ? ParseColor("#18252D") : Colors.White);
+        // Keep selections distinct even when a custom accent is close to the input color.
+        var selection = accent;
+        for (var i = 0; i < 20 && Contrast(selection, input) < 3; i++)
+            selection = Mix(selection, dark ? Colors.White : Colors.Black, 0.12);
+        var selectionText = Contrast(selection, Colors.White) >= Contrast(selection, Colors.Black)
+            ? Colors.White
+            : Colors.Black;
+        SetBrush("NotedSelectionBrush", selection);
+        SetBrush("NotedSelectionTextBrush", selectionText);
+        SetBrush(SystemColors.InactiveSelectionHighlightBrushKey, selection);
+        SetBrush(SystemColors.InactiveSelectionHighlightTextBrushKey, selectionText);
 
         // Status colors deliberately do not follow the user-selected accent.
         SetBrush("NotedDangerBrush", ParseColor(dark ? "#FF8A8A" : "#B84F4F"));
@@ -195,7 +206,7 @@ internal sealed class AppThemeManager : IDisposable
         }
     }
 
-    private void SetBrush(string key, Color color)
+    private void SetBrush(object key, Color color)
     {
         var brush = new SolidColorBrush(color);
         brush.Freeze();
@@ -219,6 +230,17 @@ internal sealed class AppThemeManager : IDisposable
 
     private static bool UseDarkText(Color background) =>
         ((background.R * 299) + (background.G * 587) + (background.B * 114)) / 1000 >= 150;
+
+    internal static double Contrast(Color first, Color second)
+    {
+        static double Channel(byte value) => value / 255.0 <= 0.04045
+            ? value / 255.0 / 12.92 : Math.Pow((value / 255.0 + 0.055) / 1.055, 2.4);
+        static double Luminance(Color value) =>
+            0.2126 * Channel(value.R) + 0.7152 * Channel(value.G) + 0.0722 * Channel(value.B);
+        var a = Luminance(first);
+        var b = Luminance(second);
+        return (Math.Max(a, b) + 0.05) / (Math.Min(a, b) + 0.05);
+    }
 
     private static bool IsDark(Color background) =>
         ((background.R * 299) + (background.G * 587) + (background.B * 114)) / 1000 < 150;

@@ -24,6 +24,7 @@ public sealed class WindowConstructionTests
             try
             {
                 using var directory = new TemporaryTestDirectory();
+                System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(App).TypeHandle);
                 VerifyRenderingDuringDocumentChanges();
                 var app = new App();
                 app.InitializeComponent();
@@ -71,7 +72,8 @@ public sealed class WindowConstructionTests
             AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Consolas"),
             FontSize = 14, Padding = new Thickness(12), BorderThickness = new Thickness(0),
             Background = Brushes.White, Foreground = Brushes.Black,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            SelectionBrush = Brushes.Teal, SelectionTextBrush = Brushes.White, SelectionOpacity = 1,
+            IsInactiveSelectionHighlightEnabled = true, VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
         var gutter = new LineNumberGutter { Editor = textBox };
         var panel = new DockPanel { Width = 420, Height = 160 };
@@ -98,6 +100,16 @@ public sealed class WindowConstructionTests
             Render(panel);
         }
 
+        textBox.Text = "MMMMMMMM";
+        textBox.SelectAll();
+        panel.UpdateLayout();
+        var selectedLetters = Render(textBox);
+        textBox.Text = "        ";
+        textBox.SelectAll();
+        panel.UpdateLayout();
+        var selectedSpaces = Render(textBox);
+        Assert.IsTrue(selectedLetters.Where((value, index) => value != selectedSpaces[index]).Count() > 30,
+            "The selection must leave the selected glyphs visible.");
     }
 
     private static byte[] Render(FrameworkElement element)

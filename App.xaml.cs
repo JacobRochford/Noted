@@ -12,6 +12,12 @@ namespace Noted;
 
 public partial class App : Application
 {
+    static App()
+    {
+        // Draw TextBox selections behind the glyphs so SelectionTextBrush is honored.
+        AppContext.SetSwitch("Switch.System.Windows.Controls.Text.UseAdornerForTextboxSelectionRendering", false);
+    }
+
     private const string SingleInstanceMutexName = "Noted.SingleInstance";
     private static readonly TimeSpan RecentBackupInterval = TimeSpan.FromHours(24);
     private Mutex? _singleInstanceMutex;

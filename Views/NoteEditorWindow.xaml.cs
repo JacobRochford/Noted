@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using Noted.Helpers;
 using Noted.Models;
@@ -57,6 +58,7 @@ public partial class NoteEditorWindow : Window
     private IReadOnlyList<TextMatch> _findMatches = [];
     private int _currentFindMatchIndex = -1;
     private bool _isApplyingFindReplacement;
+    private int _findRefreshVersion;
 
     public NoteEditorWindow(
         INoteContentService contentService,
@@ -1415,6 +1417,7 @@ public partial class NoteEditorWindow : Window
 
     private void CloseFindPanel(bool focusEditor)
     {
+        _findRefreshVersion++;
         FindPanel.Visibility = Visibility.Collapsed;
         _findMatches = [];
         _currentFindMatchIndex = -1;
@@ -1447,8 +1450,20 @@ public partial class NoteEditorWindow : Window
 
     private void FindTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (FindPanel.Visibility == Visibility.Visible)
-            RefreshFindResults(selectMatch: true);
+        if (FindPanel.Visibility != Visibility.Visible)
+            return;
+
+        var refreshVersion = ++_findRefreshVersion;
+        _ = Dispatcher.InvokeAsync(
+            () =>
+            {
+                if (refreshVersion == _findRefreshVersion
+                    && FindPanel.Visibility == Visibility.Visible)
+                {
+                    RefreshFindResults(selectMatch: true);
+                }
+            },
+            DispatcherPriority.Background);
     }
 
     private void FindTextBox_PreviewKeyDown(object sender, KeyEventArgs e)

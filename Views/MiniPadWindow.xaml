@@ -101,7 +101,7 @@
                                 </WrapPanel>
                             </StackPanel>
                         </Border>
-                    <TextBox x:Name="Editor"
+                    <TextBox x:Name="Editor" IsInactiveSelectionHighlightEnabled="True"
                              AcceptsReturn="True"
                              AcceptsTab="True"
                              TextWrapping="Wrap"
@@ -111,8 +111,8 @@
                              Padding="11,9"
                              Background="{DynamicResource NotedInputBackgroundBrush}"
                              Foreground="{DynamicResource NotedTextBrush}"
-                             CaretBrush="{DynamicResource NotedAccentBrush}"
-                             SelectionBrush="{DynamicResource NotedAccentSoftHoverBrush}"
+                             CaretBrush="{DynamicResource NotedTextBrush}"
+                             SelectionBrush="{DynamicResource NotedSelectionBrush}"
                              FontFamily="Segoe UI"
                              FontSize="13"
                              SpellCheck.IsEnabled="True"/>

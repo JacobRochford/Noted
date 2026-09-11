@@ -859,7 +859,7 @@
                                                          Background="{DynamicResource NotedInputBackgroundBrush}"
                                                          BorderBrush="{DynamicResource NotedAccentBrush}"
                                                          Foreground="{DynamicResource NotedTextBrush}"
-                                                         CaretBrush="{DynamicResource NotedAccentBrush}"
+                                                         CaretBrush="{DynamicResource NotedTextBrush}"
                                                          BorderThickness="1"
                                                          KeyDown="RenameTextBox_KeyDown"
                                                          LostFocus="RenameTextBox_LostFocus"/>
@@ -1159,7 +1159,7 @@
                                                  Background="{DynamicResource NotedInputBackgroundBrush}"
                                                  BorderBrush="{DynamicResource NotedBorderBrush}"
                                                  Foreground="{DynamicResource NotedTextBrush}"
-                                                 CaretBrush="{DynamicResource NotedAccentBrush}"
+                                                 CaretBrush="{DynamicResource NotedTextBrush}"
                                                  TextChanged="AccentHexTextBox_TextChanged"
                                                  LostKeyboardFocus="AccentHexTextBox_LostKeyboardFocus"/>
                                         <Button Grid.Column="1"

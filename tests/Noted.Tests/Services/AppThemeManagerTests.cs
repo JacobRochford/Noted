@@ -10,6 +10,24 @@ namespace Noted.Tests.Services;
 public sealed class AppThemeManagerTests
 {
     [TestMethod]
+    public void SelectionRemainsDistinctAndReadableForExtremeAccentsInEveryTheme()
+    {
+        var resources = new ResourceDictionary();
+        using var manager = new AppThemeManager(resources, AppThemeMode.Light, "#FFFFFF");
+        foreach (var theme in new[] { AppThemeMode.Light, AppThemeMode.Dark, AppThemeMode.Midnight })
+        foreach (var accent in new[] { "#FFFFFF", "#000000", "#FF0000", "#FFFF00", "#5BA8C8" })
+        {
+            manager.Apply(theme, accent);
+            var selection = GetColor(resources, "NotedSelectionBrush");
+            var selectionText = GetColor(resources, "NotedSelectionTextBrush");
+            Assert.IsGreaterThanOrEqualTo(3.0, AppThemeManager.Contrast(selection, GetColor(resources, "NotedInputBackgroundBrush")));
+            Assert.IsGreaterThanOrEqualTo(4.5, AppThemeManager.Contrast(selection, selectionText));
+            Assert.AreEqual(selection, GetColor(resources, SystemColors.InactiveSelectionHighlightBrushKey));
+            Assert.AreEqual(selectionText, GetColor(resources, SystemColors.InactiveSelectionHighlightTextBrushKey));
+        }
+    }
+
+    [TestMethod]
     public void ApplyUpdatesSharedThemeResources()
     {
         var resources = new ResourceDictionary();
@@ -60,6 +78,6 @@ public sealed class AppThemeManagerTests
         Assert.AreEqual(warning, GetColor(resources, "NotedWarningBrush"));
     }
 
-    private static Color GetColor(ResourceDictionary resources, string key) =>
+    private static Color GetColor(ResourceDictionary resources, object key) =>
         ((SolidColorBrush)resources[key]).Color;
 }

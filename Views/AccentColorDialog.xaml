@@ -160,7 +160,7 @@
                                  Background="{DynamicResource NotedInputBackgroundBrush}"
                                  BorderBrush="{DynamicResource NotedBorderBrush}"
                                  Foreground="{DynamicResource NotedTextBrush}"
-                                 CaretBrush="{DynamicResource NotedAccentBrush}"
+                                 CaretBrush="{DynamicResource NotedTextBrush}"
                                  TextChanged="HexTextBox_TextChanged"/>
                     </Grid>
                     <TextBlock x:Name="ValidationText"
