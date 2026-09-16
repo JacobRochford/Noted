@@ -33,8 +33,8 @@ public sealed class WindowConstructionTests
                 var editor = new NoteEditorWindow(new NoteContentService(directory.Path), settings,
                     new NoteRecoveryService(directory.Path), new NoteEditorSessionService(directory.Path));
                 var miniPad = new MiniPadWindow(new MiniPadRecoveryService(directory.Path), settings);
-                var dictionary = new DictionaryWindow(settings, new DictionaryContentService(directory.Path, settings));
-                var checklist = new ChecklistWindow(settings, new ChecklistContentService(directory.Path, settings));
+                var dictionary = new DictionaryWindow(settings, new DictionaryContentService(directory.Path));
+                var checklist = new ChecklistWindow(settings, new ChecklistContentService(directory.Path));
                 var scratchpad = new ScratchpadWindow(new ScratchpadWindowViewModel(settings, new ScratchpadContentService(directory.Path)));
                 foreach (var window in new Window[] { editor, miniPad, dictionary, checklist, scratchpad })
                 {

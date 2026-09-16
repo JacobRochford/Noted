@@ -48,7 +48,6 @@ public sealed class AppSettingsService : IAppSettingsService {
     private static readonly JsonSerializerOptions SettingsJsonOptions = new() { WriteIndented = true };
     private readonly string _settingsFilePath;
     private readonly string _backupFilePath;
-    private readonly string _legacyBackupFilePath;
     private readonly string _settingsHistoryDirectory;
     private readonly TimeProvider _timeProvider;
     private readonly TimeSpan _settingsHistoryInterval;
@@ -88,7 +87,6 @@ public sealed class AppSettingsService : IAppSettingsService {
             : Path.GetFullPath(appDataDirectory);
         _settingsFilePath = Path.Combine(AppDataDirectory, "settings.json");
         _backupFilePath = $"{_settingsFilePath}.bak";
-        _legacyBackupFilePath = Path.Combine(AppDataDirectory, "settings.previous.json");
         _settingsHistoryDirectory = Path.Combine(AppDataDirectory, "backups");
         _timeProvider = timeProvider;
         _settingsHistoryInterval = settingsHistoryInterval;
@@ -158,14 +156,6 @@ public sealed class AppSettingsService : IAppSettingsService {
         }
 
         SaveSetting(s => s with { NewNoteMode = newNoteMode });
-    }
-
-    public bool LoadPromptForNoteName() {
-        return LoadNewNoteMode() == NewNoteMode.Prompt;
-    }
-
-    public void SavePromptForNoteName(bool promptForNoteName) {
-        SaveNewNoteMode(promptForNoteName ? NewNoteMode.Prompt : NewNoteMode.Quick);
     }
 
     public string? LoadCustomHeader() {
@@ -279,16 +269,6 @@ public sealed class AppSettingsService : IAppSettingsService {
     public FolderNavigationMode LoadFolderNavigationMode() => LoadSetting(s => s.FolderNavigationMode);
     public void SaveFolderNavigationMode(FolderNavigationMode mode) => SaveSetting(s => s with { FolderNavigationMode = mode });
 
-    public IReadOnlyList<ChecklistItemState>? LoadLegacyChecklistItems()
-    {
-        return LoadSetting(s => s.ChecklistItems?.ToList());
-    }
-
-    public void ClearLegacyChecklistItems()
-    {
-        SaveSetting(s => s with { ChecklistItems = null });
-    }
-
     public ChecklistWindowState LoadChecklistWindowState()
     {
         return LoadSetting(s => s.ChecklistWindowState ?? new ChecklistWindowState());
@@ -297,16 +277,6 @@ public sealed class AppSettingsService : IAppSettingsService {
     public void SaveChecklistWindowState(ChecklistWindowState state)
     {
         SaveSetting(s => s with { ChecklistWindowState = state });
-    }
-
-    public IReadOnlyList<DictionaryItemState>? LoadLegacyDictionaryItems()
-    {
-        return LoadSetting(s => s.DictionaryItems?.ToList());
-    }
-
-    public void ClearLegacyDictionaryItems()
-    {
-        SaveSetting(s => s with { DictionaryItems = null });
     }
 
     public DictionaryWindowState LoadDictionaryWindowState()
@@ -523,9 +493,6 @@ public sealed class AppSettingsService : IAppSettingsService {
             var currentPendingPaths = Directory.GetFiles(
                     AppDataDirectory,
                     $"{Path.GetFileName(_backupFilePath)}.pending-*");
-            var legacyPendingPaths = Directory.GetFiles(
-                AppDataDirectory,
-                $"{Path.GetFileName(_legacyBackupFilePath)}.pending-*");
             string[] historyFiles;
             try {
                 historyFiles = Directory.GetFiles(_settingsHistoryDirectory, "settings_*.json");
@@ -535,8 +502,6 @@ public sealed class AppSettingsService : IAppSettingsService {
 
             return currentPendingPaths
                 .Concat([_backupFilePath])
-                .Concat(legacyPendingPaths)
-                .Concat([_legacyBackupFilePath])
                 .Concat(historyFiles)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Select(path => new RecoveryFileInfo(
@@ -751,12 +716,7 @@ public sealed class AppSettingsService : IAppSettingsService {
     }
 
     private static AppSettings NormalizeSettings(AppSettings settings) {
-        var mode = settings.NewNoteMode
-            ?? (settings.PromptForNoteName.HasValue
-                ? settings.PromptForNoteName.Value
-                    ? NewNoteMode.Prompt
-                    : NewNoteMode.Quick
-                : NewNoteMode.Prompt);
+        var mode = settings.NewNoteMode ?? NewNoteMode.Prompt;
 
         return settings with {
             SchemaVersion = CurrentSettingsSchemaVersion,
@@ -768,7 +728,6 @@ public sealed class AppSettingsService : IAppSettingsService {
                 : NoteTimestampPlacement.None,
             TimestampLine = Math.Clamp(settings.TimestampLine, 1, 10000),
             NewNoteMode = mode,
-            PromptForNoteName = null,
             PinnedNotes = settings.PinnedNotes?
                 .Where(note => note is not null)
                 .ToList(),
@@ -787,20 +746,11 @@ public sealed class AppSettingsService : IAppSettingsService {
             FolderNavigationMode = Enum.IsDefined(settings.FolderNavigationMode)
                 ? settings.FolderNavigationMode
                 : FolderNavigationMode.DrillDown,
-            ChecklistItems = settings.ChecklistItems?
-                .Where(item => item is not null)
-                .Select(item => Enum.IsDefined(item.Priority)
-                    ? item
-                    : item with { Priority = ChecklistPriority.None })
-                .ToList(),
             ChecklistWindowState = (settings.ChecklistWindowState ?? new ChecklistWindowState()) with
             {
                 PriorityColors = ChecklistColors.Normalize(
                     settings.ChecklistWindowState?.PriorityColors)
-            },
-            DictionaryItems = settings.DictionaryItems?
-                .Where(item => item is not null)
-                .ToList()
+            }
         };
     }
 
@@ -813,10 +763,6 @@ public sealed class AppSettingsService : IAppSettingsService {
             throw new JsonException("The note creation mode is not recognized.");
         if (settings.PinnedNotes?.Any(note => note is null) == true)
             throw new JsonException("Pinned notes cannot contain an empty entry.");
-        if (settings.ChecklistItems?.Any(item => item is null || !Enum.IsDefined(item.Priority)) == true)
-            throw new JsonException("Legacy checklist items contain an invalid entry.");
-        if (settings.DictionaryItems?.Any(item => item is null) == true)
-            throw new JsonException("Legacy dictionary items contain an invalid entry.");
     }
 
     private static double NormalizeOpacity(double value, double minimum, double fallback) =>
@@ -914,8 +860,6 @@ public sealed class AppSettingsService : IAppSettingsService {
         public int TimestampLine { get; init; } = 1;
         [JsonConverter(typeof(NewNoteModeJsonConverter))]
         public NewNoteMode? NewNoteMode { get; init; }
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public bool? PromptForNoteName { get; init; }
         public bool ShowModifiedSubtitle { get; init; } = true;
         public string? CustomHeader { get; init; }
         public List<string>? PinnedNotes { get; init; }
@@ -934,11 +878,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         public AppThemeMode AppThemeMode { get; init; } = AppThemeMode.System;
         public string AccentColor { get; init; } = AppTheme.DefaultAccentColor;
         public FolderNavigationMode FolderNavigationMode { get; init; } = FolderNavigationMode.DrillDown;
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public List<ChecklistItemState>? ChecklistItems { get; init; }
         public ChecklistWindowState? ChecklistWindowState { get; init; }
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public List<DictionaryItemState>? DictionaryItems { get; init; }
         public DictionaryWindowState? DictionaryWindowState { get; init; }
         [JsonPropertyName("HideButtonClosesAll")]
         public bool MainHideButtonHidesAll { get; init; } = true;

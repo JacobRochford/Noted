@@ -29,8 +29,6 @@ internal sealed class JsonCollectionFileStore<TItem>
         _contentName = contentName;
     }
 
-    internal string PrimaryFilePath => _primaryFilePath;
-
     internal JsonCollectionFileLoadResult<TItem> Load()
     {
         var issues = new List<PersistenceFileIssue>();
@@ -109,11 +107,6 @@ internal sealed class JsonCollectionFileStore<TItem>
 
         _preserveBackupOnNextSave = false;
         return writeResult.Warning;
-    }
-
-    internal void WriteAndVerify(IReadOnlyList<TItem> items)
-    {
-        Write(items);
     }
 
     private static ItemReadResult ReadItems(string path)

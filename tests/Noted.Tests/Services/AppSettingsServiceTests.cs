@@ -142,14 +142,11 @@ public sealed class AppSettingsServiceTests
         Directory.CreateDirectory(directory.File("backups"));
         var pending = directory.File("settings.json.bak.pending-good");
         var rolling = directory.File("settings.json.bak");
-        var legacy = directory.File("settings.previous.json");
         var historyFile = directory.File("backups", "settings_20260101_000000_000.json");
         File.WriteAllText(pending, ValidJson("pending"));
         File.WriteAllText(rolling, ValidJson("rolling"));
-        File.WriteAllText(legacy, ValidJson("legacy"));
         File.WriteAllText(historyFile, ValidJson("history"));
         SetUtcWriteTime(historyFile, 1);
-        SetUtcWriteTime(legacy, 2);
         SetUtcWriteTime(rolling, 3);
         SetUtcWriteTime(pending, 4);
         var pendingOriginal = File.ReadAllText(pending);
@@ -162,20 +159,26 @@ public sealed class AppSettingsServiceTests
     }
 
     [TestMethod]
-    public void MissingSettingsFileUsesRollingBeforeLegacyAndHistory()
+    public void SettingsPreviousFileIsIgnoredDuringRecovery()
     {
         using var directory = new TestDirectory();
         Directory.CreateDirectory(directory.File("backups"));
-        File.WriteAllText(directory.File("settings.json.bak"), ValidJson("rolling"));
-        File.WriteAllText(directory.File("settings.previous.json"), ValidJson("legacy"));
-        File.WriteAllText(
-            directory.File("backups", "settings_20260101_000000_000.json"),
-            ValidJson("history"));
-        SetUtcWriteTime(directory.File("backups", "settings_20260101_000000_000.json"), 1);
-        SetUtcWriteTime(directory.File("settings.previous.json"), 2);
-        SetUtcWriteTime(directory.File("settings.json.bak"), 3);
+        var rolling = directory.File("settings.json.bak");
+        var legacy = directory.File("settings.previous.json");
+        var history = directory.File("backups", "settings_20260101_000000_000.json");
+        File.WriteAllText(rolling, ValidJson("rolling"));
+        File.WriteAllText(legacy, ValidJson("stale legacy"));
+        File.WriteAllText(history, ValidJson("history"));
+        SetUtcWriteTime(history, 1);
+        SetUtcWriteTime(rolling, 3);
+        SetUtcWriteTime(legacy, 5);
+        var legacyBytes = File.ReadAllBytes(legacy);
 
-        Assert.AreEqual("rolling", CreateService(directory.Path).LoadCustomHeader());
+        var service = CreateService(directory.Path);
+
+        Assert.AreEqual("rolling", service.LoadCustomHeader());
+        CollectionAssert.AreEqual(legacyBytes, File.ReadAllBytes(legacy));
+        Assert.IsFalse(service.RecoveryNotice?.Contains("settings.previous.json", StringComparison.OrdinalIgnoreCase) == true);
     }
 
     [TestMethod]
@@ -241,19 +244,16 @@ public sealed class AppSettingsServiceTests
         var settingsFilePath = directory.File("settings.json");
         var pending = directory.File("settings.json.bak.pending-invalid");
         var rolling = directory.File("settings.json.bak");
-        var legacy = directory.File("settings.previous.json");
         var newestHistoryFile = directory.File("backups", "settings_20260105_000000_000.json");
         var validHistoryFile = directory.File("backups", "settings_20260104_000000_000.json");
         var olderHistoryFile = directory.File("backups", "settings_20260101_000000_000.json");
         File.WriteAllText(settingsFilePath, "{settings broken");
         File.WriteAllText(pending, "{pending broken");
         File.WriteAllText(rolling, ValidJson("older rolling"));
-        File.WriteAllText(legacy, ValidJson("older legacy"));
         File.WriteAllText(newestHistoryFile, "{history broken");
         File.WriteAllText(validHistoryFile, ValidJson("newest valid history"));
         File.WriteAllText(olderHistoryFile, ValidJson("older history"));
         SetUtcWriteTime(olderHistoryFile, 1);
-        SetUtcWriteTime(legacy, 2);
         SetUtcWriteTime(rolling, 3);
         SetUtcWriteTime(validHistoryFile, 4);
         SetUtcWriteTime(newestHistoryFile, 5);
@@ -261,7 +261,6 @@ public sealed class AppSettingsServiceTests
         var recoveryFileInventory = CaptureInventory(
             pending,
             rolling,
-            legacy,
             newestHistoryFile,
             validHistoryFile,
             olderHistoryFile);
@@ -363,7 +362,6 @@ public sealed class AppSettingsServiceTests
         File.WriteAllText(directory.File("settings.json"), "{settings broken");
         File.WriteAllText(directory.File("settings.json.bak.pending-invalid"), "{pending broken");
         File.WriteAllText(directory.File("settings.json.bak"), "{rolling broken");
-        File.WriteAllText(directory.File("settings.previous.json"), "{legacy broken");
         File.WriteAllText(
             directory.File("backups", "settings_20260101_000000_000.json"),
             "{history broken");

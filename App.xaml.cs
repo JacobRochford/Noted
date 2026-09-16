@@ -319,7 +319,7 @@ public partial class App : Application
             ?? throw new InvalidOperationException("Application settings are not initialized.");
         var window = new ChecklistWindow(
             settings,
-            new ChecklistContentService(settings.AppDataDirectory, settings));
+            new ChecklistContentService(settings.AppDataDirectory));
         _checklistShutdownRegistration = _shutdownFlushCoordinator.Register(
             "Checklist",
             () =>
@@ -349,7 +349,7 @@ public partial class App : Application
             ?? throw new InvalidOperationException("Application settings are not initialized.");
         var window = new DictionaryWindow(
             settings,
-            new DictionaryContentService(settings.AppDataDirectory, settings));
+            new DictionaryContentService(settings.AppDataDirectory));
         _dictionaryShutdownRegistration = _shutdownFlushCoordinator.Register(
             "Dictionary",
             () =>

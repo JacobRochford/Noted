@@ -16,8 +16,6 @@ public interface IAppSettingsService {
     void SaveTimestampLine(int lineNumber);
     NewNoteMode LoadNewNoteMode();
     void SaveNewNoteMode(NewNoteMode newNoteMode);
-    bool LoadPromptForNoteName();
-    void SavePromptForNoteName(bool promptForNoteName);
     string? LoadCustomHeader();
     void SaveCustomHeader(string? customHeader);
     (string modifiers, string key) LoadNotesHotkey();
@@ -41,12 +39,8 @@ public interface IAppSettingsService {
     void SaveAppTheme(AppThemeMode mode, string accentColor);
     FolderNavigationMode LoadFolderNavigationMode();
     void SaveFolderNavigationMode(FolderNavigationMode mode);
-    IReadOnlyList<ChecklistItemState>? LoadLegacyChecklistItems();
-    void ClearLegacyChecklistItems();
     ChecklistWindowState LoadChecklistWindowState();
     void SaveChecklistWindowState(ChecklistWindowState state);
-    IReadOnlyList<DictionaryItemState>? LoadLegacyDictionaryItems();
-    void ClearLegacyDictionaryItems();
     DictionaryWindowState LoadDictionaryWindowState();
     void SaveDictionaryWindowState(DictionaryWindowState state);
     bool LoadMainHideButtonHidesAll();
