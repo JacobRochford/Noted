@@ -5,14 +5,13 @@ using System.Text;
 namespace Noted.Services;
 
 internal readonly record struct FileWriteResult(
-    bool FileUpdated,
     bool BackupUpdated,
     string? PreservedBackupPath,
     string? Warning);
 
 internal static class FileWriter
 {
-    private static readonly Encoding Utf8WithoutBom =
+    private static readonly Encoding s_utf8WithoutBom =
         new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     internal static FileWriteResult WriteAllText(
@@ -68,7 +67,7 @@ internal static class FileWriter
                 if (fullBackupPath is null)
                 {
                     File.Replace(temporaryPath, fullDestinationPath, null);
-                    return new FileWriteResult(true, false, null, null);
+                    return new FileWriteResult(false, null, null);
                 }
 
                 var rollbackPath = CreateRollbackPath(fullBackupPath);
@@ -77,7 +76,7 @@ internal static class FileWriter
             }
 
             File.Move(temporaryPath, fullDestinationPath);
-            return new FileWriteResult(true, false, null, null);
+            return new FileWriteResult(false, null, null);
         }
         finally
         {
@@ -128,7 +127,7 @@ internal static class FileWriter
             else
                 File.Move(rollbackPath, backupPath);
 
-            return new FileWriteResult(true, true, null, null);
+            return new FileWriteResult(true, null, null);
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
@@ -142,7 +141,7 @@ internal static class FileWriter
                 $"The destination file was saved, but its rolling backup could not be updated: {ex.Message}" +
                 preservationMessage;
             System.Diagnostics.Debug.WriteLine(warning);
-            return new FileWriteResult(true, false, preservedPath, warning);
+            return new FileWriteResult(false, preservedPath, warning);
         }
     }
 
@@ -157,7 +156,7 @@ internal static class FileWriter
             FileOptions.WriteThrough);
         using var writer = new StreamWriter(
             stream,
-            Utf8WithoutBom,
+            s_utf8WithoutBom,
             bufferSize: 4096,
             leaveOpen: true);
         writer.Write(content);

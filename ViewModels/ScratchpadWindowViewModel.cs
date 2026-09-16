@@ -1,13 +1,11 @@
-using System.ComponentModel;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Security;
 using Noted.Models;
 using Noted.Services;
 
 namespace Noted.ViewModels;
 
-public sealed class ScratchpadWindowViewModel : INotifyPropertyChanged
+public sealed class ScratchpadWindowViewModel : ObservableObject
 {
     private readonly IAppSettingsService _settingsService;
     private readonly IScratchpadContentService _contentService;
@@ -89,7 +87,7 @@ public sealed class ScratchpadWindowViewModel : INotifyPropertyChanged
         _wordWrapEnabled = _windowState.WordWrapEnabled;
         _fontSize = _windowState.FontSize;
 
-        var loadResult = _contentService.TryLoadContent();
+        var loadResult = _contentService.LoadContent();
         RecoveryIssuesFoundThisRun =
             !loadResult.Success || !string.IsNullOrWhiteSpace(loadResult.Warning);
         InitialContentLoadSucceeded = loadResult.Success;
@@ -148,7 +146,7 @@ public sealed class ScratchpadWindowViewModel : INotifyPropertyChanged
 
     public bool TrySaveContent(string rtfContent)
     {
-        var result = _contentService.TrySaveContent(rtfContent);
+        var result = _contentService.SaveContent(rtfContent);
         if (!result.Success)
         {
             SetContentPersistenceError($"Scratchpad content could not be saved: {result.Error}");
@@ -242,8 +240,4 @@ public sealed class ScratchpadWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(HasPersistenceError));
     }
 
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    private void OnPropertyChanged([CallerMemberName] string? name = null)
-        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

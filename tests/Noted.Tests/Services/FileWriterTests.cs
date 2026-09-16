@@ -16,7 +16,6 @@ public sealed class FileWriterTests
         var result = FileWriter.WriteAllText(path, "first");
 
         Assert.AreEqual("first", File.ReadAllText(path));
-        Assert.IsTrue(result.FileUpdated);
         Assert.IsFalse(result.BackupUpdated);
         Assert.HasCount(0, Directory.GetFiles(directory.Path, "*.tmp"));
     }
@@ -31,7 +30,6 @@ public sealed class FileWriterTests
         var result = FileWriter.WriteAllBytes(path, [0, 255, 4, 8]);
 
         CollectionAssert.AreEqual(new byte[] { 0, 255, 4, 8 }, File.ReadAllBytes(path));
-        Assert.IsTrue(result.FileUpdated);
         Assert.HasCount(0, Directory.GetFiles(directory.Path, "*.tmp"));
     }
 
@@ -64,7 +62,6 @@ public sealed class FileWriterTests
 
         Assert.AreEqual("second", File.ReadAllText(path));
         Assert.AreEqual("first", File.ReadAllText(backupPath));
-        Assert.IsTrue(result.FileUpdated);
         Assert.IsTrue(result.BackupUpdated);
         Assert.IsNull(result.Warning);
     }

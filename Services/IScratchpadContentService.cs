@@ -14,6 +14,6 @@ public sealed record ScratchpadContentSaveResult(
 
 public interface IScratchpadContentService
 {
-    ScratchpadContentLoadResult TryLoadContent();
-    ScratchpadContentSaveResult TrySaveContent(string content);
+    ScratchpadContentLoadResult LoadContent();
+    ScratchpadContentSaveResult SaveContent(string content);
 }

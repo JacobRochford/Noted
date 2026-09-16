@@ -33,9 +33,7 @@ public interface IAppSettingsService {
     double LoadDefaultOpacity();
     void SaveDefaultOpacity(double opacity);
     AppThemeMode LoadAppThemeMode();
-    void SaveAppThemeMode(AppThemeMode mode);
     string LoadAccentColor();
-    void SaveAccentColor(string color);
     void SaveAppTheme(AppThemeMode mode, string accentColor);
     FolderNavigationMode LoadFolderNavigationMode();
     void SaveFolderNavigationMode(FolderNavigationMode mode);

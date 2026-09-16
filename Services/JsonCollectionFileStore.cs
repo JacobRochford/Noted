@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.Json;
 
 namespace Noted.Services;
 
@@ -131,37 +130,21 @@ internal sealed class JsonCollectionFileStore<TItem>
         JsonFileReadStatus status,
         ICollection<PersistenceFileIssue> issues)
     {
-        if (status != JsonFileReadStatus.Corrupt || !File.Exists(path))
-            return null;
-
-        var preservedPath =
-            $"{path}.corrupt-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}";
-        try
+        var result = JsonFileStore.PreserveCorruptFile(path, status);
+        if (result.PreservedPath is not null)
         {
-            File.Move(path, preservedPath);
             issues.Add(new PersistenceFileIssue(
                 path,
-                $"The corrupt content file was preserved as '{Path.GetFileName(preservedPath)}'."));
-            return preservedPath;
+                $"The corrupt content file was preserved as '{Path.GetFileName(result.PreservedPath)}'."));
         }
-        catch (Exception ex) when (IsExpectedFileException(ex))
+        else if (result.Error is not null)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
             issues.Add(new PersistenceFileIssue(
                 path,
-                $"The corrupt content file could not be preserved under a new name: {ex.Message}"));
-            return null;
+                $"The corrupt content file could not be preserved under a new name: {result.Error.Message}"));
         }
-    }
 
-    private static bool IsExpectedFileException(Exception exception)
-    {
-        return exception is IOException or
-            UnauthorizedAccessException or
-            System.Security.SecurityException or
-            JsonException or
-            ArgumentException or
-            NotSupportedException;
+        return result.PreservedPath;
     }
 
     private sealed record ItemReadResult(

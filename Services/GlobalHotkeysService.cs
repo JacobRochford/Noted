@@ -27,19 +27,10 @@ internal sealed record HotkeyValidationResult(
 internal sealed record HotkeyRegistrationResult(
     bool Success,
     HotkeyRegistration? Registration,
-    string? RequestedModifiers,
-    string? RequestedKey,
-    bool InProcessConflict,
-    string? ConflictingFeature,
-    bool OperatingSystemRejected,
-    int? NativeError,
     string Description);
 
 internal sealed record HotkeyUnregistrationResult(
     bool Success,
-    bool AlreadyAbsent,
-    HotkeyRegistration? Registration,
-    int? NativeError,
     string Description);
 
 internal sealed record HotkeyReplacementResult(
@@ -47,11 +38,6 @@ internal sealed record HotkeyReplacementResult(
     bool NoChange,
     HotkeyRegistration? ActiveRegistration,
     HotkeyRegistration? AdditionalActiveRegistration,
-    HotkeyRegistrationResult? NewRegistrationResult,
-    bool RollbackAttempted,
-    bool RollbackSucceeded,
-    int? PreviousUnregisterError,
-    int? NewRegistrationRollbackError,
     string Description)
 {
     public bool HasDualActiveRegistrations =>
@@ -129,27 +115,19 @@ public sealed class GlobalHotkeysService : IDisposable
         if (_disposed)
         {
             return RegistrationFailure(
-                "The global hotkey service has already been disposed.",
-                modifiers,
-                key);
+                "The global hotkey service has already been disposed.");
         }
 
         if (string.IsNullOrWhiteSpace(featureName))
-            return RegistrationFailure("A hotkey feature name is required.", modifiers, key);
+            return RegistrationFailure("A hotkey feature name is required.");
 
         if (!TryNormalize(modifiers, key, out var normalized, out var validationError))
-            return RegistrationFailure(validationError, modifiers, key);
+            return RegistrationFailure(validationError);
 
         if (_registrationIdsByCombination.TryGetValue(normalized.Combination, out var conflictingId)
             && _registrationsById.TryGetValue(conflictingId, out var conflictingRegistration))
         {
             return new HotkeyRegistrationResult(
-                false,
-                null,
-                normalized.Modifiers,
-                normalized.Key,
-                true,
-                conflictingRegistration.Registration.FeatureName,
                 false,
                 null,
                 $"{featureName} hotkey {normalized.Modifiers}+{normalized.Key} conflicts with the active {conflictingRegistration.Registration.FeatureName} hotkey.");
@@ -171,12 +149,6 @@ public sealed class GlobalHotkeysService : IDisposable
             return new HotkeyRegistrationResult(
                 false,
                 null,
-                normalized.Modifiers,
-                normalized.Key,
-                false,
-                null,
-                true,
-                nativeError,
                 description);
         }
 
@@ -196,12 +168,6 @@ public sealed class GlobalHotkeysService : IDisposable
         return new HotkeyRegistrationResult(
             true,
             registration,
-            normalized.Modifiers,
-            normalized.Key,
-            false,
-            null,
-            false,
-            null,
             string.Empty);
     }
 
@@ -230,11 +196,6 @@ public sealed class GlobalHotkeysService : IDisposable
                 false,
                 ownedForFeature[0],
                 ownedForFeature[1],
-                null,
-                false,
-                false,
-                null,
-                null,
                 $"{featureName} has multiple active registrations. Restart Noted before attempting another replacement.");
         }
 
@@ -244,11 +205,6 @@ public sealed class GlobalHotkeysService : IDisposable
                 false,
                 false,
                 ownedForFeature[0],
-                null,
-                null,
-                false,
-                false,
-                null,
                 null,
                 $"The active {featureName} registration is not synchronized with the window state.");
         }
@@ -267,18 +223,13 @@ public sealed class GlobalHotkeysService : IDisposable
                     false,
                     ownedForFeature.SingleOrDefault(),
                     null,
-                    null,
-                    false,
-                    false,
-                    null,
-                    null,
                     $"The previous {featureName} registration is no longer owned by the hotkey service.");
             }
         }
 
         if (!TryNormalize(modifiers, key, out var normalized, out var validationError))
         {
-            var failedRegistration = RegistrationFailure(validationError, modifiers, key);
+            var failedRegistration = RegistrationFailure(validationError);
             return ReplacementFailure(currentOwned?.Registration, failedRegistration);
         }
 
@@ -288,11 +239,6 @@ public sealed class GlobalHotkeysService : IDisposable
                 true,
                 true,
                 currentOwned.Registration,
-                null,
-                null,
-                false,
-                false,
-                null,
                 null,
                 string.Empty);
         }
@@ -313,11 +259,6 @@ public sealed class GlobalHotkeysService : IDisposable
                 false,
                 newRegistration,
                 null,
-                newRegistrationResult,
-                false,
-                false,
-                null,
-                null,
                 string.Empty);
         }
 
@@ -328,11 +269,6 @@ public sealed class GlobalHotkeysService : IDisposable
                 true,
                 false,
                 newRegistration,
-                null,
-                newRegistrationResult,
-                false,
-                false,
-                null,
                 null,
                 string.Empty);
         }
@@ -345,11 +281,6 @@ public sealed class GlobalHotkeysService : IDisposable
                 false,
                 currentOwned.Registration,
                 null,
-                newRegistrationResult,
-                true,
-                true,
-                previousUnregistration.NativeError,
-                null,
                 $"The new {featureName} hotkey was registered, but the previous hotkey could not be released. The new registration was rolled back and the previous registration remains active. {previousUnregistration.Description}");
         }
 
@@ -358,11 +289,6 @@ public sealed class GlobalHotkeysService : IDisposable
             false,
             currentOwned.Registration,
             newRegistration,
-            newRegistrationResult,
-            true,
-            false,
-            previousUnregistration.NativeError,
-            newRegistrationRollback.NativeError,
             $"The previous {featureName} hotkey and new hotkey could not be released. Both {currentOwned.Registration.Combination} and {newRegistration.Combination} may remain active until Noted exits. Previous release: {previousUnregistration.Description} New registration rollback: {newRegistrationRollback.Description}");
     }
 
@@ -372,9 +298,6 @@ public sealed class GlobalHotkeysService : IDisposable
         {
             return new HotkeyUnregistrationResult(
                 true,
-                true,
-                null,
-                null,
                 "The registration is already absent.");
         }
 
@@ -382,9 +305,6 @@ public sealed class GlobalHotkeysService : IDisposable
         {
             return new HotkeyUnregistrationResult(
                 false,
-                false,
-                ownedRegistration.Registration,
-                null,
                 "The global hotkey service has already been disposed.");
         }
 
@@ -400,9 +320,6 @@ public sealed class GlobalHotkeysService : IDisposable
 
                 return new HotkeyUnregistrationResult(
                     false,
-                    false,
-                    ownedRegistration.Registration,
-                    nativeError,
                     description);
             }
         }
@@ -412,9 +329,6 @@ public sealed class GlobalHotkeysService : IDisposable
             Debug.WriteLine(description);
             return new HotkeyUnregistrationResult(
                 false,
-                false,
-                ownedRegistration.Registration,
-                null,
                 description);
         }
 
@@ -429,9 +343,6 @@ public sealed class GlobalHotkeysService : IDisposable
 
         return new HotkeyUnregistrationResult(
             true,
-            false,
-            ownedRegistration.Registration,
-            null,
             string.Empty);
     }
 
@@ -498,21 +409,9 @@ public sealed class GlobalHotkeysService : IDisposable
         return _nextRegistrationId++;
     }
 
-    private static HotkeyRegistrationResult RegistrationFailure(
-        string description,
-        string? requestedModifiers,
-        string? requestedKey)
+    private static HotkeyRegistrationResult RegistrationFailure(string description)
     {
-        return new HotkeyRegistrationResult(
-            false,
-            null,
-            requestedModifiers,
-            requestedKey,
-            false,
-            null,
-            false,
-            null,
-            description);
+        return new HotkeyRegistrationResult(false, null, description);
     }
 
     private static HotkeyReplacementResult ReplacementFailure(
@@ -523,11 +422,6 @@ public sealed class GlobalHotkeysService : IDisposable
             false,
             false,
             activeRegistration,
-            null,
-            newRegistrationResult,
-            false,
-            false,
-            null,
             null,
             newRegistrationResult.Description);
     }

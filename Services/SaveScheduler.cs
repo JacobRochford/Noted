@@ -20,7 +20,7 @@ internal readonly record struct PersistenceSaveResult(
 
 internal sealed class SaveScheduler<TSnapshot> : IDisposable
 {
-    private static readonly TimeSpan MinimumTimerInterval = TimeSpan.FromMilliseconds(1);
+    private static readonly TimeSpan s_minimumTimerInterval = TimeSpan.FromMilliseconds(1);
 
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _timer;
@@ -56,13 +56,11 @@ internal sealed class SaveScheduler<TSnapshot> : IDisposable
         _timer.Tick += Timer_Tick;
     }
 
-    internal bool HasPendingSave => _hasPendingSnapshot;
 
     internal string? LastError { get; private set; }
 
     internal string? LastWarning { get; private set; }
 
-    internal long LastSavedRevision { get; private set; }
 
     internal event EventHandler? StateChanged;
 
@@ -99,7 +97,6 @@ internal sealed class SaveScheduler<TSnapshot> : IDisposable
         var result = _saveSnapshot(snapshot);
         if (result.Success)
         {
-            LastSavedRevision = revision;
             LastError = null;
             LastWarning = result.Warning;
             if (_pendingRevision == revision)
@@ -174,7 +171,7 @@ internal sealed class SaveScheduler<TSnapshot> : IDisposable
         _timer.Stop();
         _timer.Interval = interval > TimeSpan.Zero
             ? interval
-            : MinimumTimerInterval;
+            : s_minimumTimerInterval;
         _timer.Start();
     }
 

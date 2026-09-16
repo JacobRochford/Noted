@@ -256,32 +256,6 @@ public partial class NoteEditorWindow : Window
         }
     }
 
-    public bool IsEditingFile(string filePath)
-    {
-        try
-        {
-            var normalizedPath = NormalizePath(filePath);
-            return _documents.Any(document => PathsEqual(document.FilePath, normalizedPath));
-        }
-        catch (Exception ex) when (IsExpectedFileException(ex))
-        {
-            return false;
-        }
-    }
-
-    public bool IsEditingWithinDirectory(string directoryPath)
-    {
-        try
-        {
-            var normalizedDirectory = NormalizePath(directoryPath);
-            return _documents.Any(document => IsPathWithin(document.FilePath, normalizedDirectory));
-        }
-        catch (Exception ex) when (IsExpectedFileException(ex))
-        {
-            return false;
-        }
-    }
-
     public bool TryPrepareForFileRemoval(string filePath)
     {
         var document = FindDocument(filePath);
@@ -406,7 +380,7 @@ public partial class NoteEditorWindow : Window
         SaveEditorSession();
     }
 
-    public void ShowWindow()
+    private void ShowWindow()
     {
         _isHiddenTogether = false;
         _reopenOnStartup = true;

@@ -232,23 +232,7 @@ public sealed class AppSettingsService : IAppSettingsService {
 
     public AppThemeMode LoadAppThemeMode() => LoadSetting(s => s.AppThemeMode);
 
-    public void SaveAppThemeMode(AppThemeMode mode)
-    {
-        if (!Enum.IsDefined(mode))
-            throw new ArgumentOutOfRangeException(nameof(mode), mode, "Undefined application theme mode.");
-
-        SaveSetting(s => s with { AppThemeMode = mode });
-    }
-
     public string LoadAccentColor() => LoadSetting(s => s.AccentColor);
-
-    public void SaveAccentColor(string color)
-    {
-        if (!AppTheme.TryNormalizeAccentColor(color, out var normalized))
-            throw new ArgumentException("The accent color must use six hexadecimal digits.", nameof(color));
-
-        SaveSetting(s => s with { AccentColor = normalized });
-    }
 
     public void SaveAppTheme(AppThemeMode mode, string accentColor)
     {

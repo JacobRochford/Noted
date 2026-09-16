@@ -18,7 +18,7 @@ public sealed class ScratchpadContentService : IScratchpadContentService
         _backupFilePath = $"{_contentFilePath}.bak";
     }
 
-    public ScratchpadContentLoadResult TryLoadContent()
+    public ScratchpadContentLoadResult LoadContent()
     {
         var primary = ReadText(_contentFilePath);
         if (primary.Success)
@@ -47,7 +47,7 @@ public sealed class ScratchpadContentService : IScratchpadContentService
             : new ScratchpadContentLoadResult(false, false, null, failure.Error, null);
     }
 
-    public ScratchpadContentSaveResult TrySaveContent(string content)
+    public ScratchpadContentSaveResult SaveContent(string content)
     {
         ArgumentNullException.ThrowIfNull(content);
         if (_writesBlocked)

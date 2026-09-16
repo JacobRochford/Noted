@@ -634,8 +634,7 @@ public sealed class AppSettingsServiceTests
         using var directory = new TestDirectory();
         var service = CreateService(directory.Path);
 
-        service.SaveAppThemeMode(AppThemeMode.Midnight);
-        service.SaveAccentColor("3366aa");
+        service.SaveAppTheme(AppThemeMode.Midnight, "3366aa");
 
         var reloaded = CreateService(directory.Path);
         Assert.AreEqual(AppThemeMode.Midnight, reloaded.LoadAppThemeMode());
@@ -663,7 +662,8 @@ public sealed class AppSettingsServiceTests
         using var directory = new TestDirectory();
         var service = CreateService(directory.Path);
 
-        Assert.ThrowsExactly<ArgumentException>(() => service.SaveAccentColor("blue"));
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            service.SaveAppTheme(AppThemeMode.System, "blue"));
         Assert.IsFalse(File.Exists(directory.File("settings.json")));
     }
 
