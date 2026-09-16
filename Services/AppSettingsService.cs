@@ -44,8 +44,8 @@ internal sealed class NewNoteModeJsonConverter : JsonConverter<NewNoteMode?> {
 public sealed class AppSettingsService : IAppSettingsService {
     private const int CurrentSettingsSchemaVersion = 1;
     private const int DefaultMaxSettingsHistoryFiles = 10;
-    private static readonly TimeSpan DefaultSettingsHistoryInterval = TimeSpan.FromHours(6);
-    private static readonly JsonSerializerOptions SettingsJsonOptions = new() { WriteIndented = true };
+    private static readonly TimeSpan s_defaultSettingsHistoryInterval = TimeSpan.FromHours(6);
+    private static readonly JsonSerializerOptions s_settingsJsonOptions = new() { WriteIndented = true };
     private readonly string _settingsFilePath;
     private readonly string _backupFilePath;
     private readonly string _settingsHistoryDirectory;
@@ -65,7 +65,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         : this(
             appDataDirectory,
             TimeProvider.System,
-            DefaultSettingsHistoryInterval,
+            s_defaultSettingsHistoryInterval,
             DefaultMaxSettingsHistoryFiles) {
     }
 
@@ -757,7 +757,7 @@ public sealed class AppSettingsService : IAppSettingsService {
     private static SettingsReadResult ReadSettingsFile(string path) {
         try {
             var json = File.ReadAllText(path, Encoding.UTF8);
-            var settings = JsonSerializer.Deserialize<AppSettings>(json, SettingsJsonOptions)
+            var settings = JsonSerializer.Deserialize<AppSettings>(json, s_settingsJsonOptions)
                 ?? throw new JsonException("The settings document did not contain a JSON object.");
             if (settings.SchemaVersion > CurrentSettingsSchemaVersion) {
                 return new SettingsReadResult(
@@ -788,7 +788,7 @@ public sealed class AppSettingsService : IAppSettingsService {
     }
 
     private static string SerializeSettings(AppSettings settings) =>
-        JsonSerializer.Serialize(settings, SettingsJsonOptions);
+        JsonSerializer.Serialize(settings, s_settingsJsonOptions);
 
     private static bool SettingsContentEquals(AppSettings left, AppSettings right) =>
         string.Equals(

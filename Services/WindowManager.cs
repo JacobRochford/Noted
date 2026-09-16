@@ -11,7 +11,7 @@ namespace Noted.Services
             bool MiniPad,
             bool Editor);
 
-        private static NotedWindowVisibility? _hiddenNotedWindows;
+        private static NotedWindowVisibility? s_hiddenNotedWindows;
 
         public static MainWindow? Main { get; set; }
         public static ChecklistWindow? Checklist { get; set; }
@@ -42,7 +42,7 @@ namespace Noted.Services
                 Scratchpad?.IsWindowVisible == true,
                 MiniPad?.IsWindowVisible == true,
                 Editor?.IsWindowVisible == true);
-            _hiddenNotedWindows = visibleWindows;
+            s_hiddenNotedWindows = visibleWindows;
 
             if (visibleWindows.Notes)
                 Main?.HideNotesPanel();
@@ -117,8 +117,8 @@ namespace Noted.Services
                 return;
             }
 
-            var visibilityToRestore = _hiddenNotedWindows;
-            _hiddenNotedWindows = null;
+            var visibilityToRestore = s_hiddenNotedWindows;
+            s_hiddenNotedWindows = null;
             if (visibilityToRestore is null)
             {
                 ShowNotesPanel();
@@ -183,7 +183,7 @@ namespace Noted.Services
             DictionaryProvider = null;
             ScratchpadProvider = null;
             MiniPadProvider = null;
-            _hiddenNotedWindows = null;
+            s_hiddenNotedWindows = null;
         }
     }
 }

@@ -85,15 +85,17 @@ internal sealed record BackupFileContent(
 
 internal sealed partial class FullBackupService
 {
+    // Backup paths and identifiers are part of the versioned backup format. Keep them
+    // independent from current runtime storage names unless the backup schema is migrated.
     private const int BackupSchemaVersion = 1;
     private const int SupportedSettingsSchemaVersion = 1;
     private const string ManifestFileName = "manifest.json";
     private const string FilesDirectoryName = "files";
     private const string RestoreRequestFileName = "restore-request.json";
     private const long MaximumPreviewFileSize = 4 * 1024 * 1024;
-    private static readonly Guid MiniPadDraftId =
+    private static readonly Guid s_miniPadDraftId =
         new("A6CB4208-79C0-4C08-9D07-9CDF33F31337");
-    private static readonly JsonSerializerOptions BackupJsonOptions = CreateJsonOptions();
+    private static readonly JsonSerializerOptions s_backupJsonOptions = CreateJsonOptions();
 
     private readonly string _appDataDirectory;
     private string _notesDirectory;
@@ -188,7 +190,7 @@ internal sealed partial class FullBackupService
         var path = GetBackupPath(FullBackupType.User);
         var manifestResult = JsonFileStore.Read<FullBackupManifest>(
             Path.Combine(path, ManifestFileName),
-            BackupJsonOptions);
+            s_backupJsonOptions);
         var manifest = manifestResult.Value;
         if (!manifestResult.Success ||
             manifest is null ||
@@ -313,7 +315,7 @@ internal sealed partial class FullBackupService
             JsonFileStore.Write(
                 GetRestoreRequestPath(),
                 request,
-                options: BackupJsonOptions);
+                options: s_backupJsonOptions);
             return new FullBackupResult(
                 FullBackupStatus.RestoreScheduled,
                 FullBackupType.User,
@@ -336,7 +338,7 @@ internal sealed partial class FullBackupService
         var requestPath = GetRestoreRequestPath();
         var requestResult = JsonFileStore.Read<FullBackupRestoreRequest>(
             requestPath,
-            BackupJsonOptions);
+            s_backupJsonOptions);
         if (requestResult.Status == JsonFileReadStatus.Missing)
         {
             return new FullBackupResult(
@@ -443,7 +445,7 @@ internal sealed partial class FullBackupService
         var requestPath = GetRestoreRequestPath();
         var requestResult = JsonFileStore.Read<FullBackupRestoreRequest>(
             requestPath,
-            BackupJsonOptions);
+            s_backupJsonOptions);
         FileWriter.DeleteIfExists(requestPath);
         if (requestResult.Success && requestResult.Value?.ImportId is Guid importId)
             TryDeleteImportDirectory(GetPendingImportPath(importId));
@@ -697,7 +699,7 @@ internal sealed partial class FullBackupService
         if (Directory.Exists(miniPadDirectory))
             ThrowIfDirectoryIsLink(miniPadDirectory);
 
-        var miniPadPath = Path.Combine(miniPadDirectory, $"{MiniPadDraftId:N}.json");
+        var miniPadPath = Path.Combine(miniPadDirectory, $"{s_miniPadDraftId:N}.json");
         if (File.Exists(miniPadPath))
             AddRecoveryFile(sources, miniPadPath, bytes => ValidateMiniPadDraft(bytes, miniPadPath));
     }
@@ -824,7 +826,7 @@ internal sealed partial class FullBackupService
         JsonFileStore.Write(
             Path.Combine(buildPath, ManifestFileName),
             manifest,
-            options: BackupJsonOptions);
+            options: s_backupJsonOptions);
 
         var verification = ReadBackup(buildPath, backupType);
         if (verification.Status != BackupReadStatus.Valid)
@@ -976,7 +978,7 @@ internal sealed partial class FullBackupService
 
             var manifestResult = JsonFileStore.Read<FullBackupManifest>(
                 Path.Combine(path, ManifestFileName),
-                BackupJsonOptions);
+                s_backupJsonOptions);
             if (!manifestResult.Success)
             {
                 return new BackupReadResult(
@@ -1213,7 +1215,7 @@ internal sealed partial class FullBackupService
     {
         var draft = JsonSerializer.Deserialize<MiniPadRecoveryDraft>(bytes)
             ?? throw new JsonException("The MiniPad recovery file contains no value.");
-        if (draft.Id != MiniPadDraftId ||
+        if (draft.Id != s_miniPadDraftId ||
             !string.Equals(
                 Path.GetFileNameWithoutExtension(path),
                 draft.Id.ToString("N"),

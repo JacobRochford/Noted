@@ -1,6 +1,4 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Windows.Data;
 using System.Windows.Threading;
 using Noted.Models;
@@ -9,7 +7,7 @@ using Noted.Services;
 namespace Noted.ViewModels;
 
 
-public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
+public sealed class MainWindowViewModel : ObservableObject, IDisposable {
     private const string DefaultHeaderText = "Notes";
     private bool _isSettingsVisible;
     private readonly INoteFileService _fileService;
@@ -139,7 +137,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
 
     public string? SelectedNoteKey { get; set; }
     public event EventHandler? NotesLoaded;
-    public event PropertyChangedEventHandler? PropertyChanged;
 
     public MainWindowViewModel(INoteFileService fileService, IAppSettingsService settingsService, Action<Action> uiThreadInvoke) {
         _fileService = fileService;
@@ -416,7 +413,4 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged, IDisposable {
         _fileService.FilesChanged -= OnFilesChanged;
     }
 
-    private void OnPropertyChanged([CallerMemberName] string? propertyName = null) {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
 }

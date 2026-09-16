@@ -6,7 +6,7 @@ public sealed class MiniPadRecoveryService : IMiniPadRecoveryService
 {
     private const string PrimaryFileSuffix = ".json";
     private const string BackupFileSuffix = ".json.bak";
-    private static readonly Guid MiniPadDraftId =
+    private static readonly Guid s_miniPadDraftId =
         new("A6CB4208-79C0-4C08-9D07-9CDF33F31337");
     private readonly string _recoveryDirectory;
     private bool _preserveBackupOnNextSave;
@@ -46,7 +46,7 @@ public sealed class MiniPadRecoveryService : IMiniPadRecoveryService
             return null;
 
         var draft = new MiniPadRecoveryDraft(
-            MiniPadDraftId,
+            s_miniPadDraftId,
             content,
             DateTime.UtcNow);
         var preserveBackup = _preserveBackupOnNextSave;
@@ -123,7 +123,7 @@ public sealed class MiniPadRecoveryService : IMiniPadRecoveryService
             return new DraftReadResult(path, result.Status, null, result.Error?.Message);
 
         var draft = result.Value!;
-        if (draft.Id == Guid.Empty || draft.Id != MiniPadDraftId)
+        if (draft.Id == Guid.Empty || draft.Id != s_miniPadDraftId)
         {
             return new DraftReadResult(
                 path,
@@ -158,10 +158,10 @@ public sealed class MiniPadRecoveryService : IMiniPadRecoveryService
     }
 
     private string GetDraftFilePath() =>
-        Path.Combine(_recoveryDirectory, $"{MiniPadDraftId:N}{PrimaryFileSuffix}");
+        Path.Combine(_recoveryDirectory, $"{s_miniPadDraftId:N}{PrimaryFileSuffix}");
 
     private string GetBackupFilePath() =>
-        Path.Combine(_recoveryDirectory, $"{MiniPadDraftId:N}{BackupFileSuffix}");
+        Path.Combine(_recoveryDirectory, $"{s_miniPadDraftId:N}{BackupFileSuffix}");
 
 
     private sealed record DraftReadResult(

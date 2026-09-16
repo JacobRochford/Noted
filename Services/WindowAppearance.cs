@@ -6,9 +6,9 @@ namespace Noted.Services;
 
 public static class WindowAppearance
 {
-    private static AppSettingsService? _settings;
-    private static readonly Dictionary<Window, FrameworkElement> Targets = new();
-    private static bool _registered;
+    private static AppSettingsService? s_settings;
+    private static readonly Dictionary<Window, FrameworkElement> s_targets = new();
+    private static bool s_registered;
 
     public static readonly DependencyProperty AlwaysVisibleProperty = DependencyProperty.RegisterAttached(
         "AlwaysVisible", typeof(bool), typeof(WindowAppearance), new PropertyMetadata(false, AlwaysVisibleChanged));
@@ -18,11 +18,11 @@ public static class WindowAppearance
 
     internal static void Initialize(AppSettingsService settings)
     {
-        if (_settings is not null) _settings.AppearanceChanged -= SettingsChanged;
-        _settings = settings;
+        if (s_settings is not null) s_settings.AppearanceChanged -= SettingsChanged;
+        s_settings = settings;
         settings.AppearanceChanged += SettingsChanged;
-        if (_registered) return;
-        _registered = true;
+        if (s_registered) return;
+        s_registered = true;
         EventManager.RegisterClassHandler(typeof(Window), FrameworkElement.LoadedEvent, new RoutedEventHandler(WindowLoaded));
         EventManager.RegisterClassHandler(typeof(ContextMenu), ContextMenu.OpenedEvent, new RoutedEventHandler(MenuOpened));
         EventManager.RegisterClassHandler(typeof(ContextMenu), ContextMenu.ClosedEvent, new RoutedEventHandler(MenuClosed));
@@ -30,11 +30,11 @@ public static class WindowAppearance
 
     private static void WindowLoaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not Window window || !ReferenceEquals(e.OriginalSource, window) || Targets.ContainsKey(window)) return;
+        if (sender is not Window window || !ReferenceEquals(e.OriginalSource, window) || s_targets.ContainsKey(window)) return;
         var target = window is MainWindow ? window.FindName("NotesPanel") as FrameworkElement : window;
         if (target is null) return;
-        window.SetCurrentValue(AlwaysVisibleProperty, _settings?.LoadWindowAlwaysVisible(window.GetType().Name) == true);
-        Targets.Add(window, target);
+        window.SetCurrentValue(AlwaysVisibleProperty, s_settings?.LoadWindowAlwaysVisible(window.GetType().Name) == true);
+        s_targets.Add(window, target);
         if (window.WindowStyle != WindowStyle.None && window.ResizeMode is ResizeMode.CanResize or ResizeMode.CanResizeWithGrip)
             _ = new Noted.Helpers.NativeWindowResizer(window);
         target.MouseEnter += (_, _) => Refresh(window);
@@ -46,11 +46,11 @@ public static class WindowAppearance
         window.IsVisibleChanged += (_, _) => Refresh(window);
         window.AddHandler(ContextMenuService.ContextMenuOpeningEvent, new ContextMenuEventHandler((_, _) => SetMenuOpen(window, true)), true);
         window.AddHandler(ContextMenuService.ContextMenuClosingEvent, new ContextMenuEventHandler((_, _) => SetMenuOpen(window, false)), true);
-        window.Closed += (_, _) => { Targets.Remove(window); OpenMenus.Remove(window); RefreshAll(); };
+        window.Closed += (_, _) => { s_targets.Remove(window); s_openMenus.Remove(window); RefreshAll(); };
         RefreshAll();
     }
 
-    private static readonly HashSet<Window> OpenMenus = new();
+    private static readonly HashSet<Window> s_openMenus = new();
     private static void MenuOpened(object sender, RoutedEventArgs e)
     {
         if (sender is ContextMenu { PlacementTarget: { } placement } && Window.GetWindow(placement) is Window window)
@@ -65,30 +65,30 @@ public static class WindowAppearance
 
     private static void SetMenuOpen(Window window, bool open)
     {
-        if (open) OpenMenus.Add(window); else OpenMenus.Remove(window);
+        if (open) s_openMenus.Add(window); else s_openMenus.Remove(window);
         Refresh(window);
     }
 
     private static void AlwaysVisibleChanged(DependencyObject target, DependencyPropertyChangedEventArgs e)
     {
-        if (target is Window window && Targets.ContainsKey(window))
-            _settings?.SaveWindowAlwaysVisible(window.GetType().Name, (bool)e.NewValue);
+        if (target is Window window && s_targets.ContainsKey(window))
+            s_settings?.SaveWindowAlwaysVisible(window.GetType().Name, (bool)e.NewValue);
     }
 
     private static void SettingsChanged(object? sender, EventArgs e) => RefreshAll();
     private static void RefreshAll()
     {
-        foreach (var window in Targets.Keys.ToArray()) Refresh(window);
+        foreach (var window in s_targets.Keys.ToArray()) Refresh(window);
     }
 
     internal static void Refresh(Window window)
     {
-        if (_settings is null || !Targets.TryGetValue(window, out var target)) return;
+        if (s_settings is null || !s_targets.TryGetValue(window, out var target)) return;
         var supportsIdle = window is MainWindow or OverlayWindow or NoteEditorWindow;
         var active = target.IsMouseOver || window.IsActive ||
-            OpenMenus.Contains(window) || window.OwnedWindows.Cast<Window>().Any(child => child.IsVisible);
-        var idle = supportsIdle && _settings.LoadGhostModeEnabled() && !GetAlwaysVisible(window) && !active;
-        var opacity = idle ? _settings.LoadGhostModeOpacity() : _settings.LoadDefaultOpacity();
+            s_openMenus.Contains(window) || window.OwnedWindows.Cast<Window>().Any(child => child.IsVisible);
+        var idle = supportsIdle && s_settings.LoadGhostModeEnabled() && !GetAlwaysVisible(window) && !active;
+        var opacity = idle ? s_settings.LoadGhostModeOpacity() : s_settings.LoadDefaultOpacity();
         // A truly transparent target cannot reliably receive the hover that restores it.
         opacity = Math.Clamp(double.IsFinite(opacity) ? opacity : 0.88, 1.0 / 255, 1);
         target.BeginAnimation(UIElement.OpacityProperty,

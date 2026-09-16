@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Security;
 using System.Windows.Data;
 using System.Windows.Threading;
@@ -11,10 +10,10 @@ using Noted.Services;
 
 namespace Noted.ViewModels;
 
-public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposable
+public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
 {
-    private static readonly TimeSpan SaveQuietPeriod = TimeSpan.FromMilliseconds(750);
-    private static readonly TimeSpan SaveMaximumDelay = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan s_saveQuietPeriod = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan s_saveMaximumDelay = TimeSpan.FromSeconds(2);
 
     private readonly IDictionaryContentService _contentService;
     private readonly SaveScheduler<IReadOnlyList<DictionaryItemState>> _saveScheduler;
@@ -83,8 +82,8 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposa
         _contentService = contentService;
         _saveScheduler = new SaveScheduler<IReadOnlyList<DictionaryItemState>>(
             dispatcher,
-            SaveQuietPeriod,
-            SaveMaximumDelay,
+            s_saveQuietPeriod,
+            s_saveMaximumDelay,
             SaveItemsSnapshot);
         _uiThreadInvoke = uiThreadInvoke;
         Items = new ObservableCollection<DictionaryItem>();
@@ -230,10 +229,4 @@ public sealed class DictionaryWindowViewModel : INotifyPropertyChanged, IDisposa
             NotSupportedException;
     }
 
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    private void OnPropertyChanged([CallerMemberName] string propertyName = "")
-    {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
 }

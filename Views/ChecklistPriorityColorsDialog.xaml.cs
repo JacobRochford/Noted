@@ -7,7 +7,7 @@ namespace Noted;
 
 public partial class ChecklistPriorityColorsDialog : Window
 {
-    private static readonly IReadOnlyList<ChecklistColorChoice> ColorChoices =
+    private static readonly IReadOnlyList<ChecklistColorChoice> s_colorChoices =
         ChecklistColors.Choices;
 
     public ChecklistPriorityColors SelectedColors => new()
@@ -20,9 +20,9 @@ public partial class ChecklistPriorityColorsDialog : Window
     public ChecklistPriorityColorsDialog(ChecklistPriorityColors colors)
     {
         InitializeComponent();
-        HighColorComboBox.ItemsSource = ColorChoices;
-        MediumColorComboBox.ItemsSource = ColorChoices;
-        LowColorComboBox.ItemsSource = ColorChoices;
+        HighColorComboBox.ItemsSource = s_colorChoices;
+        MediumColorComboBox.ItemsSource = s_colorChoices;
+        LowColorComboBox.ItemsSource = s_colorChoices;
         SetSelections(ChecklistColors.Normalize(colors));
     }
 
@@ -61,7 +61,7 @@ public partial class ChecklistPriorityColorsDialog : Window
 
     private static void SelectColor(ComboBox comboBox, string hex)
     {
-        comboBox.SelectedItem = ColorChoices.First(choice =>
+        comboBox.SelectedItem = s_colorChoices.First(choice =>
             string.Equals(choice.Hex, hex, StringComparison.OrdinalIgnoreCase));
     }
 

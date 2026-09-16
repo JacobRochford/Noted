@@ -4,7 +4,7 @@ namespace Noted.Services;
 
 internal static class NoteFileExtensions
 {
-    internal static readonly string[] Supported =
+    internal static readonly IReadOnlyList<string> SupportedExtensions =
     [
         ".txt", ".md", ".markdown", ".log", ".csv", ".tsv", ".json", ".xml",
         ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".sql", ".cs",
@@ -12,15 +12,15 @@ internal static class NoteFileExtensions
         ".bat", ".cmd"
     ];
 
-    private static readonly string SupportedPattern =
-        string.Join(';', Supported.Select(extension => $"*{extension}"));
+    private static readonly string s_supportedPattern =
+        string.Join(';', SupportedExtensions.Select(extension => $"*{extension}"));
 
     internal static string FileDialogFilter =>
-        $"Supported text files ({SupportedPattern})|{SupportedPattern}";
+        $"Supported text files ({s_supportedPattern})|{s_supportedPattern}";
 
     internal static bool IsSupported(string filePath)
     {
         var extension = Path.GetExtension(filePath);
-        return Supported.Contains(extension, StringComparer.OrdinalIgnoreCase);
+        return SupportedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
     }
 }

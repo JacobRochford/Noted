@@ -33,7 +33,7 @@ internal static class FileExplorerIntegrationService
                 return false;
             }
 
-            foreach (var extension in NoteFileExtensions.Supported)
+            foreach (var extension in NoteFileExtensions.SupportedExtensions)
             {
                 using var extensionCommandKey = Registry.CurrentUser.OpenSubKey(
                     $@"Software\Classes\SystemFileAssociations\{extension}\shell\{ExplorerVerbName}\command");
@@ -78,14 +78,14 @@ internal static class FileExplorerIntegrationService
 
         using (var supportedTypes = Registry.CurrentUser.CreateSubKey($@"{ApplicationKeyPath}\SupportedTypes"))
         {
-            foreach (var extension in NoteFileExtensions.Supported)
+            foreach (var extension in NoteFileExtensions.SupportedExtensions)
                 supportedTypes.SetValue(extension, string.Empty);
         }
 
         using (var commandKey = Registry.CurrentUser.CreateSubKey($@"{ApplicationKeyPath}\shell\open\command"))
             commandKey.SetValue(null, BuildOpenCommand());
 
-        foreach (var extension in NoteFileExtensions.Supported)
+        foreach (var extension in NoteFileExtensions.SupportedExtensions)
         {
             using var verbKey = Registry.CurrentUser.CreateSubKey(
                 $@"Software\Classes\SystemFileAssociations\{extension}\shell\{ExplorerVerbName}");
@@ -101,7 +101,7 @@ internal static class FileExplorerIntegrationService
     private static void Unregister()
     {
         Registry.CurrentUser.DeleteSubKeyTree(ApplicationKeyPath, throwOnMissingSubKey: false);
-        foreach (var extension in NoteFileExtensions.Supported)
+        foreach (var extension in NoteFileExtensions.SupportedExtensions)
         {
             Registry.CurrentUser.DeleteSubKeyTree(
                 $@"Software\Classes\SystemFileAssociations\{extension}\shell\{ExplorerVerbName}",

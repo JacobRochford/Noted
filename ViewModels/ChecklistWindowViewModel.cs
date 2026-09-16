@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Security;
 using System.Windows.Threading;
 using Noted.Models;
@@ -12,10 +11,10 @@ namespace Noted.ViewModels;
 
 public enum ChecklistSortMode  { Manual, Priority, DueDate, Alphabetical }
 
-public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposable
+public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 {
-    private static readonly TimeSpan SaveQuietPeriod = TimeSpan.FromMilliseconds(750);
-    private static readonly TimeSpan SaveMaximumDelay = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan s_saveQuietPeriod = TimeSpan.FromMilliseconds(750);
+    private static readonly TimeSpan s_saveMaximumDelay = TimeSpan.FromSeconds(2);
 
     private readonly IChecklistContentService _contentService;
     private readonly SaveScheduler<IReadOnlyList<ChecklistItemState>> _saveScheduler;
@@ -146,8 +145,8 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
         _contentService = contentService;
         _saveScheduler = new SaveScheduler<IReadOnlyList<ChecklistItemState>>(
             dispatcher,
-            SaveQuietPeriod,
-            SaveMaximumDelay,
+            s_saveQuietPeriod,
+            s_saveMaximumDelay,
             SaveItemsSnapshot);
         _uiThreadInvoke = uiThreadInvoke;
         _ghostModeEnabled = ghostModeEnabled;
@@ -787,7 +786,4 @@ public sealed class ChecklistWindowViewModel : INotifyPropertyChanged, IDisposab
             NotSupportedException;
     }
 
-    public event PropertyChangedEventHandler? PropertyChanged;
-    private void OnPropertyChanged([CallerMemberName] string name = "")
-        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

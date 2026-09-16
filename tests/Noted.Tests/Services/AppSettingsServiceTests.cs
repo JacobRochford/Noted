@@ -14,7 +14,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void WindowAppearanceOverridesAndEditorPreferencesSurviveReload()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
         service.SaveWindowAlwaysVisible("MiniPadWindow", true);
         service.SaveWindowAlwaysVisible("ChecklistWindow", true);
@@ -32,7 +32,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void TimestampLineIsSavedAndLoaded()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
 
         service.SaveTimestampLine(12);
@@ -43,7 +43,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void FirstSaveCreatesSettingsFileThatCanBeLoaded()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
 
         service.SaveCustomHeader("first");
@@ -55,7 +55,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void ReplacementPreservesPreviousSettingsInRollingBackup()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
         service.SaveCustomHeader("first");
         var previousSettings = File.ReadAllText(directory.File("settings.json"));
@@ -69,7 +69,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void DuplicateSaveDoesNotRotateBackupOrCreateAnotherHistoryFile()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
         service.SaveCustomHeader("same");
 
@@ -82,7 +82,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void RenamedSettingsKeepTheirExistingJsonNames()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
         service.SaveNotesHotkey("Alt", "N");
         service.SaveMainHideButtonHidesAll(false);
@@ -110,7 +110,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void RecoverableOutOfRangeSettingIsNormalizedWithoutRollingBackSettings()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
         service.SaveCustomHeader("valid");
         service.SaveDefaultOpacity(2);
@@ -124,7 +124,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void ValidSettingsFileWinsOverNewerRecoveryFiles()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         File.WriteAllText(directory.File("settings.json"), ValidJson("current settings"));
         File.WriteAllText(directory.File("settings.json.bak.pending-newer"), ValidJson("pending"));
         File.WriteAllText(directory.File("settings.json.bak"), ValidJson("backup"));
@@ -138,7 +138,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void MissingSettingsFileUsesNewestPendingRecoveryFileAcrossRecoveryTypes()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         Directory.CreateDirectory(directory.File("backups"));
         var pending = directory.File("settings.json.bak.pending-good");
         var rolling = directory.File("settings.json.bak");
@@ -161,7 +161,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void SettingsPreviousFileIsIgnoredDuringRecovery()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         Directory.CreateDirectory(directory.File("backups"));
         var rolling = directory.File("settings.json.bak");
         var legacy = directory.File("settings.previous.json");
@@ -184,7 +184,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void HighestRevisionWinsWhenItsFileTimestampIsOlder()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         Directory.CreateDirectory(directory.File("backups"));
         var rolling = directory.File("settings.json.bak");
         var historyFile = directory.File("backups", "settings_20260101_000000_000.json");
@@ -202,7 +202,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void ConflictingFilesAtHighestRevisionBlockAutomaticRecovery()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         Directory.CreateDirectory(directory.File("backups"));
         File.WriteAllText(directory.File("settings.json"), "{broken");
         File.WriteAllText(
@@ -221,7 +221,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void NewerSettingsSchemaBlocksAutomaticDowngrade()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         File.WriteAllText(
             directory.File("settings.json"),
             "{\"SchemaVersion\":2,\"Revision\":10,\"CustomHeader\":\"future\"}");
@@ -238,7 +238,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void InvalidSettingsFileRecoversFromNewestValidHistoryWithoutChangingFiles()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var historyDirectory = directory.File("backups");
         Directory.CreateDirectory(historyDirectory);
         var settingsFilePath = directory.File("settings.json");
@@ -280,7 +280,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void InvalidNewestPendingRecoveryFileIsSkippedForOlderValidPendingRecoveryFile()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         File.WriteAllText(directory.File("settings.json"), "{broken");
         var older = directory.File("settings.json.bak.pending-older");
         var newer = directory.File("settings.json.bak.pending-newer");
@@ -298,7 +298,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void InvalidSettingsFileIsPreservedExactlyAndRecoveryFileIsUnchanged()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         const string corruptJson = "{\"CustomHeader\":\"damaged\"";
         var recoveryFile = directory.File("settings.json.bak");
         var recoveryJson = ValidJson("recovered");
@@ -319,7 +319,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void MissingSettingsFileWithoutRecoveryFilesReturnsDefaultsWithoutCreatingAFile()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
 
         Assert.IsNull(service.LoadCustomHeader());
@@ -329,7 +329,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void UnreadableSettingsHistoryBlocksRecoveryWithoutChangingFiles()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         File.WriteAllText(directory.File("settings.json"), "{settings broken");
         File.WriteAllText(directory.File("settings.json.bak"), ValidJson("would recover"));
         File.WriteAllText(directory.File("backups"), "not a readable history directory");
@@ -343,7 +343,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void InvalidRecoveryFileDoesNotCreateOrReplaceSettingsFile()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var recoveryFile = directory.File("settings.json.bak");
         File.WriteAllText(recoveryFile, "{broken");
         var originalRecoveryFile = File.ReadAllText(recoveryFile);
@@ -357,7 +357,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void RepeatedFailedStartupsNeverChangeInvalidRecoveryFiles()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         Directory.CreateDirectory(directory.File("backups"));
         File.WriteAllText(directory.File("settings.json"), "{settings broken");
         File.WriteAllText(directory.File("settings.json.bak.pending-invalid"), "{pending broken");
@@ -378,7 +378,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void SuccessfulRecoveryIsIdempotentOnNextStartup()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         File.WriteAllText(directory.File("settings.json"), "{broken");
         File.WriteAllText(directory.File("settings.json.bak"), ValidJson("restored"));
         var first = CreateService(directory.Path);
@@ -397,7 +397,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void SettingsHistoryIsLimitedByTime()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var clock = new ManualTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
         var service = CreateService(directory.Path, clock, TimeSpan.FromHours(6));
         service.SaveCustomHeader("one");
@@ -414,7 +414,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void SettingsHistoryRecordsAStateThatReturnsAtANewerRevision()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var clock = new ManualTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
         var service = CreateService(directory.Path, clock, TimeSpan.FromHours(6));
         service.SaveCustomHeader("one");
@@ -435,7 +435,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void SettingsHistoryKeepsConfiguredNumberOfFiles()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var clock = new ManualTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
         var service = CreateService(directory.Path, clock, TimeSpan.Zero, maxSettingsHistoryFiles: 3);
         for (var i = 0; i < 5; i++)
@@ -455,7 +455,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void SettingsHistoryFailureWarnsWithoutFailingSettingsSave()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
         service.SaveCustomHeader("before");
         Directory.Delete(directory.File("backups"), recursive: true);
@@ -475,7 +475,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void ThrowingWarningSubscriberCannotTurnSuccessfulSaveIntoFailure()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
         service.SaveCustomHeader("before");
         Directory.Delete(directory.File("backups"), recursive: true);
@@ -493,7 +493,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void LockedRollingBackupLeavesSettingsFileSavedAndPreviousSettingsPending()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var clock = new ManualTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
         var service = CreateService(directory.Path, clock, TimeSpan.FromHours(6));
         service.SaveCustomHeader("one");
@@ -519,7 +519,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void LockedSettingsFileBlocksUpdateWithoutChangingFilesAndLaterRecovers()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var settingsFilePath = directory.File("settings.json");
         var backupPath = directory.File("settings.json.bak");
         File.WriteAllText(settingsFilePath, "{broken");
@@ -543,7 +543,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void RecoverableTypedValuesAreNormalizedWithoutRollingBackSettings()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         File.WriteAllText(
             directory.File("settings.json"),
             "{\"CustomHeader\":\"newer\",\"DefaultOpacity\":2,\"NewNoteMode\":999,\"TimestampPlacement\":999,\"FolderNavigationMode\":999}");
@@ -559,7 +559,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void StructurallyInvalidSettingsFileRecoversFromValidRecoveryFile()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         File.WriteAllText(directory.File("settings.json"), "{\"DefaultOpacity\":\"opaque\"}");
         File.WriteAllText(directory.File("settings.json.bak"), ValidJson("valid backup"));
 
@@ -569,7 +569,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void WindowVisibilitySettingsPersistIndependentlyFromWindowContent()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
 
         service.SaveNoteEditorWindowState(new NoteEditorWindowState
@@ -596,7 +596,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void ChecklistPriorityColorsPersistWithWindowSettings()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
 
         service.SaveChecklistWindowState(new ChecklistWindowState
@@ -621,7 +621,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void ThemeSettingsUseTheNotedDefaults()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
 
         Assert.AreEqual(AppThemeMode.System, service.LoadAppThemeMode());
@@ -631,7 +631,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void ThemeSettingsPersistNormalizedAccentColor()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
 
         service.SaveAppTheme(AppThemeMode.Midnight, "3366aa");
@@ -644,7 +644,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void InvalidStoredThemeSettingsUseTheNotedDefaults()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         File.WriteAllText(
             directory.File("settings.json"),
             "{\"NewNoteMode\":0,\"AppThemeMode\":99,\"AccentColor\":\"not-a-color\"}");
@@ -659,7 +659,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void InvalidAccentColorIsNotSaved()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
 
         Assert.ThrowsExactly<ArgumentException>(() =>
@@ -670,7 +670,7 @@ public sealed class AppSettingsServiceTests
     [TestMethod]
     public void ThemeModeAndAccentCanBeSavedTogether()
     {
-        using var directory = new TestDirectory();
+        using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
 
         service.SaveAppTheme(AppThemeMode.Light, "#C65D8B");
@@ -796,33 +796,4 @@ public sealed class AppSettingsServiceTests
 
     private sealed record FileFingerprint(long Length, string Sha256);
 
-    private sealed class TestDirectory : IDisposable
-    {
-        public TestDirectory()
-        {
-            Path = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                $"Noted.SettingsTests.{Guid.NewGuid():N}");
-            Directory.CreateDirectory(Path);
-        }
-
-        public string Path { get; }
-
-        public string File(params string[] parts) =>
-            parts.Aggregate(Path, System.IO.Path.Combine);
-
-        public void Dispose()
-        {
-            try
-            {
-                Directory.Delete(Path, recursive: true);
-            }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
-        }
-    }
 }

@@ -8,17 +8,17 @@ namespace Noted;
 
 internal static partial class MarkdownRenderer
 {
-    private static readonly Brush TextBrush = new SolidColorBrush(Color.FromRgb(51, 51, 51));
-    private static readonly Brush AccentBrush = new SolidColorBrush(Color.FromRgb(44, 110, 145));
-    private static readonly Brush MutedBrush = new SolidColorBrush(Color.FromRgb(91, 113, 125));
-    private static readonly Brush CodeBackground = new SolidColorBrush(Color.FromRgb(238, 244, 247));
+    private static readonly Brush s_textBrush = new SolidColorBrush(Color.FromRgb(51, 51, 51));
+    private static readonly Brush s_accentBrush = new SolidColorBrush(Color.FromRgb(44, 110, 145));
+    private static readonly Brush s_mutedBrush = new SolidColorBrush(Color.FromRgb(91, 113, 125));
+    private static readonly Brush s_codeBackground = new SolidColorBrush(Color.FromRgb(238, 244, 247));
 
     internal static FlowDocument Render(string markdown)
     {
         var document = new FlowDocument
         {
             Background = Brushes.White,
-            Foreground = TextBrush,
+            Foreground = s_textBrush,
             FontFamily = new FontFamily("Segoe UI"),
             FontSize = 14,
             LineHeight = 21,
@@ -84,7 +84,7 @@ internal static partial class MarkdownRenderer
 
         document.Blocks.Add(new Paragraph(new Run(string.Join(Environment.NewLine, codeLines)))
         {
-            Background = CodeBackground,
+            Background = s_codeBackground,
             FontFamily = new FontFamily("Consolas"),
             FontSize = 13,
             Margin = new Thickness(0, 5, 0, 10),
@@ -102,7 +102,7 @@ internal static partial class MarkdownRenderer
         var level = match.Groups[1].Length;
         var paragraph = new Paragraph
         {
-            Foreground = AccentBrush,
+            Foreground = s_accentBrush,
             FontSize = level switch
             {
                 1 => 28,
@@ -126,9 +126,9 @@ internal static partial class MarkdownRenderer
 
         var paragraph = new Paragraph
         {
-            BorderBrush = AccentBrush,
+            BorderBrush = s_accentBrush,
             BorderThickness = new Thickness(3, 0, 0, 0),
-            Foreground = MutedBrush,
+            Foreground = s_mutedBrush,
             Margin = new Thickness(0, 4, 0, 8),
             Padding = new Thickness(10, 2, 0, 2)
         };
@@ -236,7 +236,7 @@ internal static partial class MarkdownRenderer
             {
                 inlines.Add(new Run(token[1..^1])
                 {
-                    Background = CodeBackground,
+                    Background = s_codeBackground,
                     FontFamily = new FontFamily("Consolas")
                 });
             }

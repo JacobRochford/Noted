@@ -205,7 +205,7 @@ internal sealed partial class FullBackupService
             JsonFileStore.Write(
                 Path.Combine(buildPath, ManifestFileName),
                 manifest,
-                options: BackupJsonOptions);
+                options: s_backupJsonOptions);
             VerifyBackupFolder(buildPath, FullBackupType.User);
 
             pendingPath = GetPendingImportPath(importId.Value);
@@ -221,7 +221,7 @@ internal sealed partial class FullBackupService
             JsonFileStore.Write(
                 GetRestoreRequestPath(),
                 request,
-                options: BackupJsonOptions);
+                options: s_backupJsonOptions);
 
             return new FullBackupResult(
                 FullBackupStatus.RestoreScheduled,
@@ -285,7 +285,7 @@ internal sealed partial class FullBackupService
         var manifestHash = Convert.ToHexString(SHA256.HashData(manifestBytes));
         var manifest = JsonSerializer.Deserialize<FullBackupManifest>(
                 manifestBytes,
-                BackupJsonOptions)
+                s_backupJsonOptions)
             ?? throw new InvalidDataException("The selected backup manifest contains no value.");
         ValidateImportedManifest(manifest);
 
@@ -497,7 +497,7 @@ internal sealed partial class FullBackupService
             var settings = JsonNode.Parse(bytes) as JsonObject
                 ?? throw new JsonException("The imported Settings file does not contain a JSON object.");
             settings["NotesDirectory"] = _notesDirectory;
-            transformed = JsonSerializer.SerializeToUtf8Bytes(settings, BackupJsonOptions);
+            transformed = JsonSerializer.SerializeToUtf8Bytes(settings, s_backupJsonOptions);
             details = ValidateSettings(transformed);
         }
         else if (sourcePath.Equals("app/checklist.json", StringComparison.OrdinalIgnoreCase))
@@ -536,13 +536,13 @@ internal sealed partial class FullBackupService
                     ? null
                     : RebaseNotePath(session.ActiveFilePath, manifest.NotesRoot)
             };
-            transformed = JsonSerializer.SerializeToUtf8Bytes(importedSession, BackupJsonOptions);
+            transformed = JsonSerializer.SerializeToUtf8Bytes(importedSession, s_backupJsonOptions);
             _ = ValidateEditorSession(transformed);
             details = new BackupContentDetails(null, null);
         }
         else if (sourcePath.StartsWith("app/recovery/micro-scratchpads/", StringComparison.OrdinalIgnoreCase))
         {
-            var expectedPath = $"app/recovery/micro-scratchpads/{MiniPadDraftId:N}.json";
+            var expectedPath = $"app/recovery/micro-scratchpads/{s_miniPadDraftId:N}.json";
             if (!sourcePath.Equals(expectedPath, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"The imported backup contains an unsupported MiniPad file: '{sourcePath}'.");
             details = ValidateMiniPadDraft(bytes, sourcePath);
@@ -561,7 +561,7 @@ internal sealed partial class FullBackupService
             {
                 FilePath = RebaseNotePath(draft.FilePath, manifest.NotesRoot)
             };
-            transformed = JsonSerializer.SerializeToUtf8Bytes(importedDraft, BackupJsonOptions);
+            transformed = JsonSerializer.SerializeToUtf8Bytes(importedDraft, s_backupJsonOptions);
             var fileName = Path.GetFileName(sourcePath).Equals(
                 "editor-draft.json",
                 StringComparison.OrdinalIgnoreCase)
@@ -586,7 +586,7 @@ internal sealed partial class FullBackupService
             {
                 NotePath = RebaseNotePath(history.NotePath, manifest.NotesRoot)
             };
-            transformed = JsonSerializer.SerializeToUtf8Bytes(importedHistory, BackupJsonOptions);
+            transformed = JsonSerializer.SerializeToUtf8Bytes(importedHistory, s_backupJsonOptions);
             logicalPath = $"app/note-history/{GetPathHash(importedHistory.NotePath)}/{sourceParts[3]}";
             details = ValidateNoteHistoryEntry(transformed);
         }
@@ -760,7 +760,7 @@ internal sealed partial class FullBackupService
 
             var request = JsonFileStore.Read<FullBackupRestoreRequest>(
                 GetRestoreRequestPath(),
-                BackupJsonOptions);
+                s_backupJsonOptions);
             if (request.Status != JsonFileReadStatus.Missing && !request.Success)
                 return;
 
@@ -792,7 +792,7 @@ internal sealed partial class FullBackupService
         {
             var request = JsonFileStore.Read<FullBackupRestoreRequest>(
                 requestPath,
-                BackupJsonOptions);
+                s_backupJsonOptions);
             if (request.Status == JsonFileReadStatus.Missing ||
                 !request.Success ||
                 request.Value?.ImportId == importId)

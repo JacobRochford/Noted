@@ -13,8 +13,8 @@ public sealed class NoteFileService : INoteFileService {
     private FileSystemWatcher? _directoryWatcher;
     private readonly Stack<string> _backHistory = new();
     private readonly Stack<string> _forwardHistory = new();
-    private static readonly TimeSpan DeletedNoteRetention = TimeSpan.FromDays(14); // how long to keep deleted notes
-    private static readonly HashSet<string> ReservedFileNames = new(StringComparer.OrdinalIgnoreCase) {
+    private static readonly TimeSpan s_deletedNoteRetention = TimeSpan.FromDays(14); // how long to keep deleted notes
+    private static readonly HashSet<string> s_reservedFileNames = new(StringComparer.OrdinalIgnoreCase) {
         // windows reserved names
         "CON", "PRN", "AUX", "NUL",
         "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
@@ -348,7 +348,7 @@ public sealed class NoteFileService : INoteFileService {
         if (!Directory.Exists(DeletedNotesDirectory))
             return;
 
-        var cutoff = DateTime.Now - DeletedNoteRetention;
+        var cutoff = DateTime.Now - s_deletedNoteRetention;
         foreach (var path in EnumerateNoteFiles(DeletedNotesDirectory)) {
             try {
                 if (TryGetDeletionTime(path, out var deletedAt) && deletedAt < cutoff)
@@ -411,7 +411,7 @@ public sealed class NoteFileService : INoteFileService {
         if (string.IsNullOrWhiteSpace(sanitized))
             return null;
 
-        var extension = NoteFileExtensions.Supported
+        var extension = NoteFileExtensions.SupportedExtensions
             .FirstOrDefault(supportedExtension =>
                 sanitized.EndsWith(supportedExtension, StringComparison.OrdinalIgnoreCase));
         if (extension is not null)
@@ -437,7 +437,7 @@ public sealed class NoteFileService : INoteFileService {
                 IncludeSubdirectories = true,
                 EnableRaisingEvents = false
             };
-            foreach (var extension in NoteFileExtensions.Supported)
+            foreach (var extension in NoteFileExtensions.SupportedExtensions)
                 fileWatcher.Filters.Add($"*{extension}");
             fileWatcher.EnableRaisingEvents = true;
             directoryWatcher = new FileSystemWatcher(notesDirectory) {
@@ -652,7 +652,7 @@ public sealed class NoteFileService : INoteFileService {
             return null;
 
         var deviceName = sanitized.Split('.', 2)[0].TrimEnd();
-        if (ReservedFileNames.Contains(deviceName))
+        if (s_reservedFileNames.Contains(deviceName))
             return null;
 
         return sanitized;

@@ -12,21 +12,21 @@ public static class UpdateService
     private const string LatestReleaseApiUrl = "https://api.github.com/repos/JacobRochford/Noted/releases/latest";
     private const string ReleasesPageUrl = "https://github.com/JacobRochford/Noted/releases/latest";
 
-    private static readonly HttpClient _httpClient = new()
+    private static readonly HttpClient s_httpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(10)
     };
 
     static UpdateService()
     {
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Noted-UpdateChecker/1.0");
+        s_httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Noted-UpdateChecker/1.0");
     }
 
     public static async Task CheckForUpdatesAsync()
     {
         try
         {
-            var release = await _httpClient
+            var release = await s_httpClient
                 .GetFromJsonAsync<GitHubRelease>(LatestReleaseApiUrl)
                 .ConfigureAwait(false);
 

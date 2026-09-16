@@ -13,11 +13,11 @@ namespace Noted;
 
 internal sealed class BackupPreviewRow
 {
-    private static readonly Brush GreenForeground = CreateBrush(52, 112, 82);
-    private static readonly Brush AmberForeground = CreateBrush(145, 99, 28);
-    private static readonly Brush RedForeground = CreateBrush(160, 70, 70);
-    private static readonly Brush GrayBackground = CreateBrush(231, 238, 242);
-    private static readonly Brush GrayForeground = CreateBrush(95, 116, 128);
+    private static readonly Brush s_greenForeground = CreateBrush(52, 112, 82);
+    private static readonly Brush s_amberForeground = CreateBrush(145, 99, 28);
+    private static readonly Brush s_redForeground = CreateBrush(160, 70, 70);
+    private static readonly Brush s_grayBackground = CreateBrush(231, 238, 242);
+    private static readonly Brush s_grayForeground = CreateBrush(95, 116, 128);
 
     internal BackupPreviewRow(BackupFileSummary file)
     {
@@ -36,14 +36,14 @@ internal sealed class BackupPreviewRow
         _ => "Can't compare"
     };
 
-    public Brush StatusBackground => GetThemeBrush("NotedSubtleSurfaceBrush", GrayBackground);
+    public Brush StatusBackground => GetThemeBrush("NotedSubtleSurfaceBrush", s_grayBackground);
 
     public Brush StatusForeground => File.Comparison switch
     {
-        BackupFileComparison.Unchanged => GetThemeBrush("NotedSuccessBrush", GreenForeground),
-        BackupFileComparison.Changed => GetThemeBrush("NotedWarningBrush", AmberForeground),
-        BackupFileComparison.Missing => GetThemeBrush("NotedDangerBrush", RedForeground),
-        _ => GetThemeBrush("NotedSecondaryTextBrush", GrayForeground)
+        BackupFileComparison.Unchanged => GetThemeBrush("NotedSuccessBrush", s_greenForeground),
+        BackupFileComparison.Changed => GetThemeBrush("NotedWarningBrush", s_amberForeground),
+        BackupFileComparison.Missing => GetThemeBrush("NotedDangerBrush", s_redForeground),
+        _ => GetThemeBrush("NotedSecondaryTextBrush", s_grayForeground)
     };
 
     private static string BuildDetails(BackupFileSummary file)
@@ -80,8 +80,8 @@ internal sealed class BackupPreviewRow
 
 public partial class BackupPreviewDialog : Window
 {
-    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
-    private static readonly JsonSerializerOptions PreviewJsonOptions = new()
+    private static readonly UTF8Encoding s_strictUtf8 = new(false, true);
+    private static readonly JsonSerializerOptions s_previewJsonOptions = new()
     {
         WriteIndented = true
     };
@@ -167,7 +167,7 @@ public partial class BackupPreviewDialog : Window
                     ShowJson(content.Data);
                     break;
                 default:
-                    ShowText(StrictUtf8.GetString(content.Data));
+                    ShowText(s_strictUtf8.GetString(content.Data));
                     break;
             }
         }
@@ -184,7 +184,7 @@ public partial class BackupPreviewDialog : Window
     private void ShowJson(byte[] data)
     {
         using var document = JsonDocument.Parse(data);
-        ShowText(JsonSerializer.Serialize(document.RootElement, PreviewJsonOptions));
+        ShowText(JsonSerializer.Serialize(document.RootElement, s_previewJsonOptions));
     }
 
     private void ShowRichText(byte[] data)

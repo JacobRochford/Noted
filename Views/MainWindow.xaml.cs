@@ -76,9 +76,9 @@ public partial class MainWindow : Window {
     private bool _isDragging;
     private double _dragInitialLeft;
     private double _dragInitialTop;
-    private const double _dragThreshold = 5.0;
+    private const double DragThreshold = 5.0;
 
-    private static readonly string[] FallbackHotkeyModifiers =
+    private static readonly string[] s_fallbackHotkeyModifiers =
         { "Alt+Shift", "Ctrl+Alt", "Win+Alt", "Ctrl+Shift" };
 
     private sealed record InitialHotkeyResult(
@@ -90,7 +90,7 @@ public partial class MainWindow : Window {
 
     private sealed record AppearanceOption(AppThemeMode Mode, string Label);
 
-    private static readonly AppearanceOption[] AppearanceOptions =
+    private static readonly AppearanceOption[] s_appearanceOptions =
     [
         new(AppThemeMode.System, "Use Windows setting"),
         new(AppThemeMode.Light, "Light"),
@@ -154,7 +154,7 @@ public partial class MainWindow : Window {
 
     private void InitializeSettings()
     {
-        AppearanceModeCombo.ItemsSource = AppearanceOptions;
+        AppearanceModeCombo.ItemsSource = s_appearanceOptions;
         _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
         _ghostModeOpacity = NormalizeOpacity(
             _settingsService.LoadGhostModeOpacity(),
@@ -419,14 +419,14 @@ public partial class MainWindow : Window {
         {
             (requestedModifiers, requestedKey),
             (defaultFallbackModifiers, defaultFallbackKey),
-            (FallbackHotkeyModifiers[0], requestedKey),
-            (FallbackHotkeyModifiers[1], requestedKey),
-            (FallbackHotkeyModifiers[2], requestedKey),
-            (FallbackHotkeyModifiers[3], requestedKey),
-            (FallbackHotkeyModifiers[0], defaultFallbackKey),
-            (FallbackHotkeyModifiers[1], defaultFallbackKey),
-            (FallbackHotkeyModifiers[2], defaultFallbackKey),
-            (FallbackHotkeyModifiers[3], defaultFallbackKey)
+            (s_fallbackHotkeyModifiers[0], requestedKey),
+            (s_fallbackHotkeyModifiers[1], requestedKey),
+            (s_fallbackHotkeyModifiers[2], requestedKey),
+            (s_fallbackHotkeyModifiers[3], requestedKey),
+            (s_fallbackHotkeyModifiers[0], defaultFallbackKey),
+            (s_fallbackHotkeyModifiers[1], defaultFallbackKey),
+            (s_fallbackHotkeyModifiers[2], defaultFallbackKey),
+            (s_fallbackHotkeyModifiers[3], defaultFallbackKey)
         };
 
         var attemptedCombinations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2568,7 +2568,7 @@ public partial class MainWindow : Window {
             return;
 
         var delta = e.GetPosition(MainCanvas) - _dragStart.Value;
-        if (delta.Length <= _dragThreshold)
+        if (delta.Length <= DragThreshold)
             return;
 
         if (!_isDragging) {
