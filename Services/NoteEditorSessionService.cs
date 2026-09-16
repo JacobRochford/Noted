@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.Json;
 
 namespace Noted.Services;
 
@@ -151,37 +150,21 @@ public sealed class NoteEditorSessionService : INoteEditorSessionService
         JsonFileReadStatus status,
         ICollection<NoteEditorSessionIssue> issues)
     {
-        if (status != JsonFileReadStatus.Corrupt || !File.Exists(path))
-            return null;
-
-        var preservedPath =
-            $"{path}.corrupt-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}";
-        try
+        var result = JsonFileStore.PreserveCorruptFile(path, status);
+        if (result.PreservedPath is not null)
         {
-            File.Move(path, preservedPath);
             issues.Add(new NoteEditorSessionIssue(
                 path,
-                $"The corrupt note editor session was preserved as '{Path.GetFileName(preservedPath)}'."));
-            return preservedPath;
+                $"The corrupt note editor session was preserved as '{Path.GetFileName(result.PreservedPath)}'."));
         }
-        catch (Exception ex) when (IsExpectedSessionException(ex))
+        else if (result.Error is not null)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
             issues.Add(new NoteEditorSessionIssue(
                 path,
-                $"The corrupt note editor session could not be preserved under a new name: {ex.Message}"));
-            return null;
+                $"The corrupt note editor session could not be preserved under a new name: {result.Error.Message}"));
         }
-    }
 
-    private static bool IsExpectedSessionException(Exception exception)
-    {
-        return exception is IOException or
-            UnauthorizedAccessException or
-            System.Security.SecurityException or
-            JsonException or
-            ArgumentException or
-            NotSupportedException;
+        return result.PreservedPath;
     }
 
     private sealed record SessionReadResult(

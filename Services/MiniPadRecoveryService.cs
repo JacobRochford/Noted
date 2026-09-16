@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.Json;
 
 namespace Noted.Services;
 
@@ -141,27 +140,21 @@ public sealed class MiniPadRecoveryService : IMiniPadRecoveryService
         JsonFileReadStatus status,
         ICollection<MiniPadRecoveryIssue> issues)
     {
-        if (status != JsonFileReadStatus.Corrupt || !File.Exists(path))
-            return null;
+        var result = JsonFileStore.PreserveCorruptFile(path, status);
+        if (result.PreservedPath is not null)
+        {
+            issues.Add(new MiniPadRecoveryIssue(
+                path,
+                $"The corrupt recovery file was preserved as '{Path.GetFileName(result.PreservedPath)}'."));
+        }
+        else if (result.Error is not null)
+        {
+            issues.Add(new MiniPadRecoveryIssue(
+                path,
+                $"The corrupt recovery file could not be preserved under a new name: {result.Error.Message}"));
+        }
 
-        var preservedPath =
-            $"{path}.corrupt-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}";
-        try
-        {
-            File.Move(path, preservedPath);
-            issues.Add(new MiniPadRecoveryIssue(
-                path,
-                $"The corrupt recovery file was preserved as '{Path.GetFileName(preservedPath)}'."));
-            return preservedPath;
-        }
-        catch (Exception ex) when (IsExpectedRecoveryException(ex))
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-            issues.Add(new MiniPadRecoveryIssue(
-                path,
-                $"The corrupt recovery file could not be preserved under a new name: {ex.Message}"));
-            return null;
-        }
+        return result.PreservedPath;
     }
 
     private string GetDraftFilePath() =>
@@ -170,15 +163,6 @@ public sealed class MiniPadRecoveryService : IMiniPadRecoveryService
     private string GetBackupFilePath() =>
         Path.Combine(_recoveryDirectory, $"{MiniPadDraftId:N}{BackupFileSuffix}");
 
-    private static bool IsExpectedRecoveryException(Exception exception)
-    {
-        return exception is IOException or
-            UnauthorizedAccessException or
-            System.Security.SecurityException or
-            JsonException or
-            ArgumentException or
-            NotSupportedException;
-    }
 
     private sealed record DraftReadResult(
         string Path,

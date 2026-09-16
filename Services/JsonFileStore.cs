@@ -21,6 +21,10 @@ internal sealed record JsonFileReadResult<T>(
     internal bool Success => Status == JsonFileReadStatus.Success;
 }
 
+internal readonly record struct CorruptFilePreservationResult(
+    string? PreservedPath,
+    Exception? Error);
+
 internal sealed class FileVerificationException : IOException
 {
     internal FileVerificationException(string message, Exception? innerException = null)
@@ -108,6 +112,28 @@ internal static class JsonFileStore
         }
 
         return writeResult;
+    }
+
+    internal static CorruptFilePreservationResult PreserveCorruptFile(
+        string path,
+        JsonFileReadStatus status)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        if (status != JsonFileReadStatus.Corrupt || !File.Exists(path))
+            return new CorruptFilePreservationResult(null, null);
+
+        var preservedPath =
+            $"{path}.corrupt-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}";
+        try
+        {
+            File.Move(path, preservedPath);
+            return new CorruptFilePreservationResult(preservedPath, null);
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+            return new CorruptFilePreservationResult(null, ex);
+        }
     }
 
     private static bool IsExpectedFileException(Exception exception)

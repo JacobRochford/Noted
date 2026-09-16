@@ -282,27 +282,21 @@ public sealed class NoteRecoveryService : INoteRecoveryService
         JsonFileReadStatus status,
         ICollection<NoteRecoveryIssue> issues)
     {
-        if (status != JsonFileReadStatus.Corrupt || !File.Exists(path))
-            return null;
+        var result = JsonFileStore.PreserveCorruptFile(path, status);
+        if (result.PreservedPath is not null)
+        {
+            issues.Add(new NoteRecoveryIssue(
+                path,
+                $"The corrupt note recovery file was preserved as '{Path.GetFileName(result.PreservedPath)}'."));
+        }
+        else if (result.Error is not null)
+        {
+            issues.Add(new NoteRecoveryIssue(
+                path,
+                $"The corrupt note recovery file could not be preserved under a new name: {result.Error.Message}"));
+        }
 
-        var preservedPath =
-            $"{path}.corrupt-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}";
-        try
-        {
-            File.Move(path, preservedPath);
-            issues.Add(new NoteRecoveryIssue(
-                path,
-                $"The corrupt note recovery file was preserved as '{Path.GetFileName(preservedPath)}'."));
-            return preservedPath;
-        }
-        catch (Exception ex) when (IsExpectedRecoveryException(ex))
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-            issues.Add(new NoteRecoveryIssue(
-                path,
-                $"The corrupt note recovery file could not be preserved under a new name: {ex.Message}"));
-            return null;
-        }
+        return result.PreservedPath;
     }
 
     private static void DeleteFile(string path, ICollection<Exception> failures)
