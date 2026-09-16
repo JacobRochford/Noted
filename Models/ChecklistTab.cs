@@ -1,6 +1,3 @@
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
-
 namespace Noted.Models;
 
 public enum ChecklistTabKind
@@ -11,7 +8,7 @@ public enum ChecklistTabKind
     Custom
 }
 
-public sealed class ChecklistTab : INotifyPropertyChanged
+public sealed class ChecklistTab : ObservableObject
 {
     public const string AllId = "all";
     public const string UrgentId = "urgent";
@@ -39,38 +36,19 @@ public sealed class ChecklistTab : INotifyPropertyChanged
     public string Name
     {
         get => _name;
-        set
-        {
-            if (_name == value) return;
-            _name = value;
-            OnPropertyChanged();
-        }
+        set => SetProperty(ref _name, value);
     }
 
     public bool IsVisible
     {
         get => _isVisible;
-        set
-        {
-            if (_isVisible == value) return;
-            _isVisible = value;
-            OnPropertyChanged();
-        }
+        set => SetProperty(ref _isVisible, value);
     }
 
     public bool IsSelected
     {
         get => _isSelected;
-        set
-        {
-            if (_isSelected == value) return;
-            _isSelected = value;
-            OnPropertyChanged();
-        }
+        set => SetProperty(ref _isSelected, value);
     }
 
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    private void OnPropertyChanged([CallerMemberName] string propertyName = "")
-        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }

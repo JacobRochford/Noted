@@ -1,11 +1,9 @@
-using System.ComponentModel;
 using System.IO;
-using System.Runtime.CompilerServices;
 using Noted.Helpers;
 
 namespace Noted.Models;
 
-public sealed class OpenNoteDocument : INotifyPropertyChanged
+public sealed class OpenNoteDocument : ObservableObject
 {
     private string _filePath;
     private bool _isDirty;
@@ -55,12 +53,8 @@ public sealed class OpenNoteDocument : INotifyPropertyChanged
         get => _isDirty;
         set
         {
-            if (_isDirty == value)
-                return;
-
-            _isDirty = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(TabLabel));
+            if (SetProperty(ref _isDirty, value))
+                OnPropertyChanged(nameof(TabLabel));
         }
     }
 
@@ -69,12 +63,8 @@ public sealed class OpenNoteDocument : INotifyPropertyChanged
         get => _isMissing;
         set
         {
-            if (_isMissing == value)
-                return;
-
-            _isMissing = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(TabLabel));
+            if (SetProperty(ref _isMissing, value))
+                OnPropertyChanged(nameof(TabLabel));
         }
     }
 
@@ -90,10 +80,4 @@ public sealed class OpenNoteDocument : INotifyPropertyChanged
         OnPropertyChanged(nameof(TabLabel));
     }
 
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-    {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
 }

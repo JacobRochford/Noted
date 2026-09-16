@@ -1,10 +1,8 @@
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
-
 namespace Noted.Models;
 
-public sealed class NoteItem : INotifyPropertyChanged {
-        private bool _isPinned;
+public sealed class NoteItem : ObservableObject
+{
+    private bool _isPinned;
     private string _displayName = "";
     private string _editableName = "";
     private string _subtitle = "";
@@ -15,87 +13,54 @@ public sealed class NoteItem : INotifyPropertyChanged {
     public string FileName { get; init; } = "";
     public string NoteKey { get; init; } = "";
     public DateTime LastModified { get; set; }
-    public bool IsPinned {
+
+    public bool IsPinned
+    {
         get => _isPinned;
-        set {
-            if (_isPinned != value) {
-                _isPinned = value;
-                OnPropertyChanged();
-            }
-        }
+        set => SetProperty(ref _isPinned, value);
     }
-    
-    public string DisplayName {
+
+    public string DisplayName
+    {
         get => _displayName;
-        set {
-            if (_displayName != value) {
-                _displayName = value;
-                OnPropertyChanged();
-            }
-        }
+        set => SetProperty(ref _displayName, value);
     }
 
-    public string EditableName {
+    public string EditableName
+    {
         get => _editableName;
-        set {
-            if (_editableName != value) {
-                _editableName = value;
-                OnPropertyChanged();
-            }
-        }
+        set => SetProperty(ref _editableName, value);
     }
 
-    public string Subtitle {
+    public string Subtitle
+    {
         get => _subtitle;
-        set {
-            if (_subtitle != value) {
-                _subtitle = value;
-                OnPropertyChanged();
-            }
-        }
+        set => SetProperty(ref _subtitle, value);
     }
 
-    public bool IsEditing {
+    public bool IsEditing
+    {
         get => _isEditing;
-        set {
-            if (_isEditing != value) {
-                _isEditing = value;
-                OnPropertyChanged();
-            }
-        }
+        set => SetProperty(ref _isEditing, value);
     }
 
     public bool IsFolder { get; set; }
 
-    // only for folders, tracks expand/collapse in tree
-    public bool IsExpanded {
+    // Only for folders, tracks expand/collapse in the tree.
+    public bool IsExpanded
+    {
         get => _isExpanded;
-        set {
-            if (_isExpanded != value) {
-                _isExpanded = value;
-                OnPropertyChanged();
-            }
-        }
+        set => SetProperty(ref _isExpanded, value);
     }
 
-    public int IndentLevel {
+    public int IndentLevel
+    {
         get => _indentLevel;
-        set {
-            if (_indentLevel != value) {
-                _indentLevel = value;
-                OnPropertyChanged();
-            }
-        }
+        set => SetProperty(ref _indentLevel, value);
     }
 
-    // used for actions on child notes in expand mode
+    // Used for actions on child notes in expand mode.
     public string? FullPath { get; set; }
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    private void OnPropertyChanged([CallerMemberName] string? propertyName = null) {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
 
     public override string ToString() => DisplayName;
 }

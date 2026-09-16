@@ -1,6 +1,3 @@
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
-
 namespace Noted.Models;
 
 public enum ChecklistPriority
@@ -11,7 +8,7 @@ public enum ChecklistPriority
     High = 3
 }
 
-public sealed class ChecklistItem : INotifyPropertyChanged
+public sealed class ChecklistItem : ObservableObject
 {
     private string _text = "";
     private bool _isChecked;
@@ -26,50 +23,44 @@ public sealed class ChecklistItem : INotifyPropertyChanged
     public string Text
     {
         get => _text;
-        set { if (_text != value) { _text = value; OnPropertyChanged(); } }
+        set => SetProperty(ref _text, value);
     }
 
     public bool IsChecked
     {
         get => _isChecked;
-        set { if (_isChecked != value) { _isChecked = value; OnPropertyChanged(); } }
+        set => SetProperty(ref _isChecked, value);
     }
 
     public ChecklistPriority Priority
     {
         get => _priority;
-        set { if (_priority != value) { _priority = value; OnPropertyChanged(); } }
+        set => SetProperty(ref _priority, value);
     }
 
     public string? TabId
     {
         get => _tabId;
-        set { if (_tabId != value) { _tabId = value; OnPropertyChanged(); } }
+        set => SetProperty(ref _tabId, value);
     }
 
     public DateTime? DueDate
     {
         get => _dueDate;
-        set { if (_dueDate != value) { _dueDate = value; OnPropertyChanged(); } }
+        set => SetProperty(ref _dueDate, value);
     }
 
     public string Notes
     {
         get => _notes;
-        set { if (_notes != value) { _notes = value; OnPropertyChanged(); } }
+        set => SetProperty(ref _notes, value);
     }
 
     // UI-only state — not persisted
     public bool IsExpanded
     {
         get => _isExpanded;
-        set { if (_isExpanded != value) { _isExpanded = value; OnPropertyChanged(); } }
+        set => SetProperty(ref _isExpanded, value);
     }
 
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    private void OnPropertyChanged([CallerMemberName] string propertyName = "")
-    {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
 }
