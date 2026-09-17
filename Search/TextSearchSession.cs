@@ -2,14 +2,6 @@ namespace Noted.Search;
 
 internal sealed class TextSearchSession
 {
-    private readonly TextSearchService _searchService;
-
-    internal TextSearchSession(TextSearchService searchService)
-    {
-        ArgumentNullException.ThrowIfNull(searchService);
-        _searchService = searchService;
-    }
-
     internal string Query { get; private set; } = string.Empty;
 
     internal TextSearchOptions Options { get; private set; }
@@ -55,7 +47,14 @@ internal sealed class TextSearchSession
         Options = options;
         SourceSnapshot = sourceSnapshot;
         SourceIdentity = sourceIdentity;
-        Matches = _searchService.FindMatches(sourceSnapshot, query, options);
+        Matches = FindMatches(sourceSnapshot, query, options);
+
+        if (queryChanged && !optionsChanged && !sourceChanged && !identityChanged &&
+            previousCurrentMatch is { } previousQueryMatch &&
+            TryPreserveCurrentOccurrence(previousQueryMatch, navigationAnchor))
+        {
+            return;
+        }
 
         if (!queryChanged && !optionsChanged && !identityChanged && sourceChanged &&
             previousCurrentMatch is { } currentMatch &&
@@ -69,14 +68,14 @@ internal sealed class TextSearchSession
         }
 
         PreferredNavigationPosition = navigationAnchor;
-        SetCurrent(_searchService.FindNextMatch(Matches, navigationAnchor));
+        SetCurrent(FindNextMatch(Matches, navigationAnchor));
     }
 
     internal TextSearchMatch? Next(int? navigationAnchor = null)
     {
         var anchor = navigationAnchor ?? CurrentMatch?.End ?? PreferredNavigationPosition;
         PreferredNavigationPosition = anchor;
-        var match = _searchService.FindNextMatch(Matches, anchor);
+        var match = FindNextMatch(Matches, anchor);
         SetCurrent(match);
         return match;
     }
@@ -85,7 +84,7 @@ internal sealed class TextSearchSession
     {
         var anchor = navigationAnchor ?? CurrentMatch?.Start ?? PreferredNavigationPosition;
         PreferredNavigationPosition = anchor;
-        var match = _searchService.FindPreviousMatch(Matches, anchor);
+        var match = FindPreviousMatch(Matches, anchor);
         SetCurrent(match);
         return match;
     }
@@ -139,6 +138,23 @@ internal sealed class TextSearchSession
         return true;
     }
 
+    private bool TryPreserveCurrentOccurrence(
+        TextSearchMatch previousMatch,
+        int navigationAnchor)
+    {
+        for (var index = 0; index < Matches.Count; index++)
+        {
+            if (Matches[index].Start != previousMatch.Start)
+                continue;
+
+            CurrentMatchIndex = index;
+            PreferredNavigationPosition = navigationAnchor;
+            return true;
+        }
+
+        return false;
+    }
+
     private void SetCurrent(TextSearchMatch? match)
     {
         CurrentMatchIndex = match is { } value
@@ -156,6 +172,60 @@ internal sealed class TextSearchSession
         }
 
         return -1;
+    }
+
+    private static IReadOnlyList<TextSearchMatch> FindMatches(
+        string text,
+        string query,
+        TextSearchOptions options)
+    {
+        if (text.Length == 0 || query.Length == 0 || query.Length > text.Length)
+            return [];
+
+        var comparison = options.MatchCase
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
+        var matches = new List<TextSearchMatch>();
+        var searchStart = 0;
+
+        while (searchStart <= text.Length - query.Length)
+        {
+            var matchStart = text.IndexOf(query, searchStart, comparison);
+            if (matchStart < 0)
+                break;
+
+            matches.Add(new TextSearchMatch(matchStart, query.Length));
+            searchStart = matchStart + query.Length;
+        }
+
+        return matches;
+    }
+
+    private static TextSearchMatch? FindNextMatch(
+        IReadOnlyList<TextSearchMatch> matches,
+        int position)
+    {
+        foreach (var match in matches)
+        {
+            if (match.End > position)
+                return match;
+        }
+
+        return matches.Count > 0 ? matches[0] : null;
+    }
+
+    private static TextSearchMatch? FindPreviousMatch(
+        IReadOnlyList<TextSearchMatch> matches,
+        int position)
+    {
+        for (var index = matches.Count - 1; index >= 0; index--)
+        {
+            var match = matches[index];
+            if (match.Start < position)
+                return match;
+        }
+
+        return matches.Count > 0 ? matches[^1] : null;
     }
 
     private static TextChange FindChange(string oldText, string newText)
