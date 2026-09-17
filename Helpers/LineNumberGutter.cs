@@ -9,6 +9,7 @@ namespace Noted.Helpers;
 public sealed class LineNumberGutter : FrameworkElement
 {
     private TextLineMap _lines = new("");
+    private bool _needsLayoutRefresh;
     public static readonly DependencyProperty EditorProperty = DependencyProperty.Register(
         nameof(Editor), typeof(TextBox), typeof(LineNumberGutter), new PropertyMetadata(null, EditorChanged));
     public TextBox? Editor { get => (TextBox?)GetValue(EditorProperty); set => SetValue(EditorProperty, value); }
@@ -29,12 +30,16 @@ public sealed class LineNumberGutter : FrameworkElement
         {
             oldEditor.TextChanged -= gutter.TextChanged;
             oldEditor.SizeChanged -= gutter.SizeChangedHandler;
+            oldEditor.Loaded -= gutter.EditorLoaded;
+            oldEditor.LayoutUpdated -= gutter.EditorLayoutUpdated;
             oldEditor.RemoveHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(gutter.ScrollChanged));
         }
         if (e.NewValue is TextBox editor)
         {
             editor.TextChanged += gutter.TextChanged;
             editor.SizeChanged += gutter.SizeChangedHandler;
+            editor.Loaded += gutter.EditorLoaded;
+            editor.LayoutUpdated += gutter.EditorLayoutUpdated;
             editor.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(gutter.ScrollChanged));
         }
         gutter.RebuildLines();
@@ -43,10 +48,21 @@ public sealed class LineNumberGutter : FrameworkElement
     private void TextChanged(object sender, TextChangedEventArgs e) => RebuildLines();
     private void SizeChangedHandler(object sender, SizeChangedEventArgs e) => InvalidateVisual();
     private void ScrollChanged(object sender, ScrollChangedEventArgs e) => InvalidateVisual();
+    private void EditorLoaded(object sender, RoutedEventArgs e) => InvalidateVisual();
+
+    private void EditorLayoutUpdated(object? sender, EventArgs e)
+    {
+        if (!_needsLayoutRefresh || Editor is not { IsMeasureValid: true, IsArrangeValid: true })
+            return;
+
+        _needsLayoutRefresh = false;
+        InvalidateVisual();
+    }
 
     private void RebuildLines()
     {
         _lines = new TextLineMap(Editor?.Text ?? "");
+        _needsLayoutRefresh = true;
         Width = Math.Max(30, Format(_lines.Starts.Length.ToString(CultureInfo.InvariantCulture)).Width + 14);
         InvalidateVisual();
     }
@@ -60,21 +76,34 @@ public sealed class LineNumberGutter : FrameworkElement
     {
         base.OnRender(drawingContext);
         var editor = Editor;
-        if (editor is null || !editor.IsLoaded || editor.ActualHeight <= 0) return;
+        if (editor is null || !editor.IsLoaded || editor.ActualHeight <= 0)
+        {
+            _needsLayoutRefresh = true;
+            return;
+        }
         // SelectionChanged can cause a render before TextChanged updates our index during a tab switch.
         if (!string.Equals(editor.Text, _lines.Text, StringComparison.Ordinal))
         {
             RebuildLines();
             return;
         }
-        if (!editor.IsMeasureValid || !editor.IsArrangeValid) return;
+        if (!editor.IsMeasureValid || !editor.IsArrangeValid)
+        {
+            _needsLayoutRefresh = true;
+            return;
+        }
         var lines = _lines;
         // Viewport line indices can still describe the previous document. Use bounded character positions instead.
         var firstCharacter = editor.GetCharacterIndexFromPoint(new Point(editor.Padding.Left, editor.Padding.Top), true);
         var lastCharacter = editor.GetCharacterIndexFromPoint(new Point(
             Math.Max(editor.Padding.Left, editor.ActualWidth - editor.Padding.Right - SystemParameters.VerticalScrollBarWidth),
             Math.Max(editor.Padding.Top, editor.ActualHeight - editor.Padding.Bottom)), true);
-        if (firstCharacter < 0 || lastCharacter < 0) return;
+        if (firstCharacter < 0 || lastCharacter < 0)
+        {
+            _needsLayoutRefresh = true;
+            return;
+        }
+        _needsLayoutRefresh = false;
         var lastLine = lines.LineAt(Math.Max(firstCharacter, lastCharacter));
         for (var line = lines.LineAt(firstCharacter); line <= lastLine; line++)
         {
