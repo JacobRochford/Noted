@@ -3,9 +3,9 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Noted.Helpers;
 using System.Windows.Threading;
 using Noted.Models;
+using Noted.Search;
 using Noted.Services;
 
 namespace Noted;
@@ -15,9 +15,8 @@ public partial class MiniPadWindow : OverlayWindow
     private readonly IMiniPadRecoveryService _recoveryService;
     private readonly IAppSettingsService _settingsService;
     private readonly SaveScheduler<string> _saveScheduler;
-    private IReadOnlyList<TextMatch> _findMatches = [];
-    private string _findSource = string.Empty;
-    private int _findIndex = -1;
+    private readonly TextSearchSession _findSession = new();
+    private TextBoxSearchPresenter? _findPresenter;
     private bool _keepDraftOnClose;
     private bool _preserveOpenStateOnClose;
     private bool _reopenOnStartup;
@@ -35,6 +34,7 @@ public partial class MiniPadWindow : OverlayWindow
         _reopenOnStartup = settingsService.LoadMiniPadWindowState().ReopenOnStartup;
 
         InitializeComponent();
+        _findPresenter = new TextBoxSearchPresenter(Editor);
         InitializeOverlay(false, settingsService.LoadGhostModeOpacity(), settingsService.LoadDefaultOpacity());
         SetWordWrap(settingsService.LoadMiniPadWindowState().WordWrapEnabled);
         AlwaysVisibleMenuItem.IsChecked = settingsService.LoadWindowAlwaysVisible(nameof(MiniPadWindow));
@@ -126,7 +126,30 @@ public partial class MiniPadWindow : OverlayWindow
     private void Editor_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
     {
         _saveScheduler.Schedule(Editor.Text);
-        if (FindPanel.IsVisible) RefreshFind(selectMatch: false);
+        if (FindPanel.IsVisible) RefreshFindResults(revealCurrent: false);
+    }
+
+    private void Editor_PreviewMouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left)
+            return;
+
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Input,
+            new Action(TrimTrailingDoubleClickWhitespace));
+    }
+
+    private void TrimTrailingDoubleClickWhitespace()
+    {
+        if (Editor.SelectionLength <= 0)
+            return;
+
+        var selectedText = Editor.SelectedText;
+        var trimmedLength = selectedText.TrimEnd(' ', '\t').Length;
+        if (trimmedLength <= 0 || trimmedLength == selectedText.Length)
+            return;
+
+        Editor.Select(Editor.SelectionStart, trimmedLength);
     }
 
     private PersistenceSaveResult SaveDraftSnapshot(string content)
@@ -183,6 +206,7 @@ public partial class MiniPadWindow : OverlayWindow
     {
         _saveScheduler.StateChanged -= SaveScheduler_StateChanged;
         _saveScheduler.Dispose();
+        _findPresenter?.Dispose();
         Editor.TextChanged -= Editor_TextChanged;
         Loaded -= MiniPadWindow_Loaded;
         IsVisibleChanged -= MiniPadWindow_IsVisibleChanged;
@@ -210,6 +234,7 @@ public partial class MiniPadWindow : OverlayWindow
         WordWrapMenuItem.IsChecked = enabled;
         Editor.TextWrapping = enabled ? TextWrapping.Wrap : TextWrapping.NoWrap;
         Editor.HorizontalScrollBarVisibility = enabled ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
+        _findPresenter?.InvalidateLayout();
     }
 
     private void AlwaysVisibleMenuItem_Click(object sender, RoutedEventArgs e) =>
@@ -218,17 +243,22 @@ public partial class MiniPadWindow : OverlayWindow
     private void FindMenuItem_Click(object sender, RoutedEventArgs e) => OpenFind();
     private void OpenFind()
     {
+        var openingFind = FindPanel.Visibility != Visibility.Visible;
         FindPanel.Visibility = Visibility.Visible;
+        if (openingFind)
+            _findPresenter?.BeginFind();
         if (Editor.SelectionLength > 0 && !Editor.SelectedText.Contains('\n')) FindTextBox.Text = Editor.SelectedText;
-        RefreshFind(selectMatch: true);
+        RefreshFindResults(revealCurrent: true);
         FindTextBox.Focus();
         FindTextBox.SelectAll();
     }
 
-    private void CloseFind_Click(object sender, RoutedEventArgs e) => CloseFind();
+    private void CloseFindButton_Click(object sender, RoutedEventArgs e) => CloseFind();
     private void CloseFind()
     {
         FindPanel.Visibility = Visibility.Collapsed;
+        _findPresenter?.EndFind(_findSession.CurrentMatch);
+        _findSession.Reset();
         Editor.Focus();
     }
 
@@ -237,51 +267,81 @@ public partial class MiniPadWindow : OverlayWindow
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control) OpenFind();
         else if (e.Key == Key.Escape && FindPanel.Visibility == Visibility.Visible) CloseFind();
         else if (e.Key == Key.F3 || (e.Key == Key.Enter && FindTextBox.IsKeyboardFocusWithin))
-            MoveFind(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? -1 : 1);
+        {
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+                FindPrevious();
+            else
+                FindNext();
+        }
         else return;
         e.Handled = true;
     }
 
-    private void FindTextBox_TextChanged(object sender, TextChangedEventArgs e) => RefreshFind(selectMatch: true);
-    private void RefreshFind(bool selectMatch)
+    private void FindTextBox_TextChanged(object sender, TextChangedEventArgs e) =>
+        RefreshFindResults(revealCurrent: true);
+
+    private void RefreshFindResults(bool revealCurrent)
     {
-        if (Editor is null || FindResultText is null) return;
-        _findSource = Editor.Text;
-        _findMatches = PlainTextSearch.FindMatches(_findSource, FindTextBox.Text, matchCase: false);
-        _findIndex = -1;
-        if (selectMatch && _findMatches.Count > 0)
+        if (Editor is null || FindResultText is null || _findPresenter is null) return;
+        _findSession.Refresh(
+            Editor.Text,
+            Editor,
+            FindTextBox.Text,
+            new TextSearchOptions { MatchCase = false },
+            _findPresenter.GetQueryRefreshAnchor());
+        _findPresenter.Present(
+            _findSession,
+            bringCurrentIntoView: revealCurrent);
+        _findPresenter.RequestRenderInvalidation();
+        UpdateFindResultText();
+    }
+
+    private void FindPreviousButton_Click(object sender, RoutedEventArgs e) =>
+        FindPrevious();
+
+    private void FindNextButton_Click(object sender, RoutedEventArgs e) =>
+        FindNext();
+
+    private void FindNext() => MoveFind(forward: true);
+
+    private void FindPrevious() => MoveFind(forward: false);
+
+    private void MoveFind(bool forward)
+    {
+        if (_findPresenter is null)
+            return;
+
+        _findSession.Refresh(
+            Editor.Text,
+            Editor,
+            FindTextBox.Text,
+            new TextSearchOptions { MatchCase = false },
+            _findPresenter.GetQueryRefreshAnchor());
+        if (_findSession.Matches.Count == 0)
         {
-            _findIndex = 0;
-            for (var i = 0; i < _findMatches.Count; i++)
-                if (_findMatches[i].Start >= Editor.SelectionStart) { _findIndex = i; break; }
-            SelectFindMatch();
+            UpdateFindResultText();
+            return;
         }
-        else UpdateFindResult();
+
+        var manualAnchor = _findPresenter.ConsumePendingManualNavigationAnchor(forward);
+        if (forward)
+            _findSession.Next(manualAnchor);
+        else
+            _findSession.Previous(manualAnchor);
+        _findPresenter.Present(
+            _findSession,
+            bringCurrentIntoView: true);
+        UpdateFindResultText();
     }
 
-    private void FindPrevious_Click(object sender, RoutedEventArgs e) => MoveFind(-1);
-    private void FindNext_Click(object sender, RoutedEventArgs e) => MoveFind(1);
-    private void MoveFind(int direction)
+    private void UpdateFindResultText()
     {
-        if (!string.Equals(_findSource, Editor.Text, StringComparison.Ordinal)) RefreshFind(selectMatch: false);
-        if (_findMatches.Count == 0) return;
-        _findIndex = _findIndex < 0 ? (direction > 0 ? 0 : _findMatches.Count - 1)
-            : (_findIndex + direction + _findMatches.Count) % _findMatches.Count;
-        SelectFindMatch();
+        FindResultText.Text = string.IsNullOrEmpty(FindTextBox.Text)
+            ? string.Empty
+            : _findSession.Matches.Count == 0
+                ? "Not found"
+                : $"{_findSession.CurrentMatchIndex + 1} of {_findSession.Matches.Count}";
     }
-
-    private void SelectFindMatch()
-    {
-        var match = _findMatches[_findIndex];
-        Editor.Select(match.Start, match.Length);
-        var line = Editor.GetLineIndexFromCharacterIndex(match.Start);
-        if (line >= 0) Editor.ScrollToLine(line);
-        UpdateFindResult();
-    }
-
-    private void UpdateFindResult() => FindResultText.Text = string.IsNullOrEmpty(FindTextBox.Text) ? ""
-        : _findMatches.Count == 0 ? "Not found"
-        : _findIndex < 0 ? $"{_findMatches.Count} matches" : $"{_findIndex + 1} of {_findMatches.Count}";
 
     private static bool IsExpectedRecoveryException(Exception exception)
     {

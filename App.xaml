@@ -25,6 +25,10 @@
 
         <SolidColorBrush x:Key="NotedSelectionBrush" Color="#397B99"/>
         <SolidColorBrush x:Key="NotedSelectionTextBrush" Color="White"/>
+        <SolidColorBrush x:Key="NotedSearchMatchBrush" Color="#595BA8C8"/>
+        <SolidColorBrush x:Key="NotedSearchCurrentBrush" Color="#8C5BA8C8"/>
+        <SolidColorBrush x:Key="NotedSearchCurrentBorderBrush" Color="#397B99"/>
+        <SolidColorBrush x:Key="NotedSearchCurrentLineBrush" Color="#205BA8C8"/>
         <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#397B99"/>
         <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="White"/>
         <Style TargetType="TextBox">

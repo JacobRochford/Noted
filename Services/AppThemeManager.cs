@@ -108,6 +108,10 @@ internal sealed class AppThemeManager : IDisposable
             : Colors.Black;
         SetBrush("NotedSelectionBrush", selection);
         SetBrush("NotedSelectionTextBrush", selectionText);
+        SetBrush("NotedSearchMatchBrush", WithAlpha(accent, 0x59));
+        SetBrush("NotedSearchCurrentBrush", WithAlpha(accent, 0x8C));
+        SetBrush("NotedSearchCurrentBorderBrush", selection);
+        SetBrush("NotedSearchCurrentLineBrush", WithAlpha(accent, 0x20));
         SetBrush(SystemColors.InactiveSelectionHighlightBrushKey, selection);
         SetBrush(SystemColors.InactiveSelectionHighlightTextBrushKey, selectionText);
 
@@ -227,6 +231,9 @@ internal sealed class AppThemeManager : IDisposable
             (byte)Math.Round(first.G + ((second.G - first.G) * weight)),
             (byte)Math.Round(first.B + ((second.B - first.B) * weight)));
     }
+
+    private static Color WithAlpha(Color color, byte alpha) =>
+        Color.FromArgb(alpha, color.R, color.G, color.B);
 
     private static bool UseDarkText(Color background) =>
         ((background.R * 299) + (background.G * 587) + (background.B * 114)) / 1000 >= 150;

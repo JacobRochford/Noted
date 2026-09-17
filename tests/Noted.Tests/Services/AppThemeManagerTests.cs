@@ -48,6 +48,30 @@ public sealed class AppThemeManagerTests
     }
 
     [TestMethod]
+    public void SearchHighlightResources_FollowTheAccentAndRemainVisuallyDistinct()
+    {
+        var resources = new ResourceDictionary();
+        using var manager = new AppThemeManager(
+            resources,
+            AppThemeMode.Dark,
+            "#3366AA");
+
+        var match = GetColor(resources, "NotedSearchMatchBrush");
+        var current = GetColor(resources, "NotedSearchCurrentBrush");
+        var currentLine = GetColor(resources, "NotedSearchCurrentLineBrush");
+
+        Assert.AreEqual(Color.FromRgb(0x33, 0x66, 0xAA), Color.FromRgb(match.R, match.G, match.B));
+        Assert.AreEqual(match.R, current.R);
+        Assert.AreEqual(match.G, current.G);
+        Assert.AreEqual(match.B, current.B);
+        Assert.IsTrue(current.A > match.A);
+        Assert.IsTrue(match.A > currentLine.A);
+        Assert.AreEqual(
+            GetColor(resources, "NotedSelectionBrush"),
+            GetColor(resources, "NotedSearchCurrentBorderBrush"));
+    }
+
+    [TestMethod]
     public void MidnightKeepsTheBlueDarkPalette()
     {
         var resources = new ResourceDictionary();

@@ -94,28 +94,32 @@
                                 <TextBox x:Name="FindTextBox" Style="{StaticResource NotedTextInput}" TextChanged="FindTextBox_TextChanged"
                                          ToolTip="Find text (Enter: next, Shift+Enter: previous)"/>
                                 <WrapPanel Margin="0,4,0,0">
-                                    <Button Content="Previous" Click="FindPrevious_Click" Padding="4,2" Style="{StaticResource NotedSecondaryButton}"/>
-                                    <Button Content="Next" Click="FindNext_Click" Padding="4,2" Margin="4,0,0,0" Style="{StaticResource NotedSecondaryButton}"/>
-                                    <Button Content="Close" Click="CloseFind_Click" Padding="4,2" Margin="4,0,0,0" Style="{StaticResource NotedSecondaryButton}"/>
+                                    <Button Content="Previous" Click="FindPreviousButton_Click" Padding="4,2" Style="{StaticResource NotedSecondaryButton}"/>
+                                    <Button Content="Next" Click="FindNextButton_Click" Padding="4,2" Margin="4,0,0,0" Style="{StaticResource NotedSecondaryButton}"/>
+                                    <Button Content="Close" Click="CloseFindButton_Click" Padding="4,2" Margin="4,0,0,0" Style="{StaticResource NotedSecondaryButton}"/>
                                     <TextBlock x:Name="FindResultText" Margin="4,3" Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="11"/>
                                 </WrapPanel>
                             </StackPanel>
                         </Border>
-                    <TextBox x:Name="Editor" IsInactiveSelectionHighlightEnabled="True"
-                             AcceptsReturn="True"
-                             AcceptsTab="True"
-                             TextWrapping="Wrap"
-                             HorizontalScrollBarVisibility="Disabled"
-                             VerticalScrollBarVisibility="Auto"
-                             BorderThickness="0"
-                             Padding="11,9"
-                             Background="{DynamicResource NotedInputBackgroundBrush}"
-                             Foreground="{DynamicResource NotedTextBrush}"
-                             CaretBrush="{DynamicResource NotedTextBrush}"
-                             SelectionBrush="{DynamicResource NotedSelectionBrush}"
-                             FontFamily="Segoe UI"
-                             FontSize="13"
-                             SpellCheck.IsEnabled="True"/>
+                        <AdornerDecorator>
+                            <TextBox x:Name="Editor" IsInactiveSelectionHighlightEnabled="True"
+                                     AcceptsReturn="True"
+                                     AcceptsTab="True"
+                                     TextWrapping="Wrap"
+                                     HorizontalScrollBarVisibility="Disabled"
+                                     VerticalScrollBarVisibility="Auto"
+                                     BorderThickness="0"
+                                     Padding="11,7,8,8"
+                                     Margin="0,0,3,0"
+                                     Background="Transparent"
+                                     Foreground="{DynamicResource NotedTextBrush}"
+                                     CaretBrush="{DynamicResource NotedTextBrush}"
+                                     SelectionBrush="{DynamicResource NotedSelectionBrush}"
+                                     PreviewMouseDoubleClick="Editor_PreviewMouseDoubleClick"
+                                     FontFamily="Segoe UI"
+                                     FontSize="13"
+                                     SpellCheck.IsEnabled="True"/>
+                        </AdornerDecorator>
                     </DockPanel>
                 </Border>
 
