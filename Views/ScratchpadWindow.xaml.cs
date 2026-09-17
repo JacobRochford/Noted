@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Noted.Helpers;
 using Noted.Models;
+using Noted.Search;
 using Noted.Services;
 using Noted.ViewModels;
 
@@ -18,13 +19,19 @@ namespace Noted;
 public partial class ScratchpadWindow : OverlayWindow
 {
     // With a responsive UI thread and successful I/O, content waits at most two seconds before saving.
-    private static readonly TimeSpan ContentSaveQuietPeriod = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan ContentSaveMaximumDelay = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan s_contentSaveQuietPeriod = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan s_contentSaveMaximumDelay = TimeSpan.FromSeconds(2);
 
     private readonly ScratchpadWindowViewModel _viewModel;
     private readonly SaveScheduler<long> _contentSaveScheduler;
     private readonly DispatcherTimer _windowStateSaveTimer;
-    private TextPointer? _lastFindEnd;
+    private readonly TextSearchSession _findSession = new();
+    private SearchTextSnapshot? _findSnapshot;
+    private int _findUserSelectionStart;
+    private int _findUserSelectionLength;
+    private bool _hasPendingFindManualAnchor;
+    private bool _applyingFindSelection;
+    private bool _isApplyingFindReplacement;
     private bool _suppressFontSizeChange;
     private bool _isInitializing = true;
     private bool _isRestoringContent;
@@ -41,7 +48,7 @@ public partial class ScratchpadWindow : OverlayWindow
     private Brush _activeTextColor = Brushes.Black;
     private Brush _activeHighlightColor = Brushes.Yellow;
 
-    private static readonly double[] FontSizes = { 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 36, 48 };
+    private static readonly double[] s_fontSizes = { 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 36, 48 };
 
     private const double MinimumWidth = 300;
     private const double MinimumHeight = 250;
@@ -70,14 +77,14 @@ public partial class ScratchpadWindow : OverlayWindow
 
         _contentSaveScheduler = new SaveScheduler<long>(
             Dispatcher,
-            ContentSaveQuietPeriod,
-            ContentSaveMaximumDelay,
+            s_contentSaveQuietPeriod,
+            s_contentSaveMaximumDelay,
             SaveContentRevision);
 
         _windowStateSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _windowStateSaveTimer.Tick += WindowStateSaveTimer_Tick;
 
-        FontSizeCombo.ItemsSource = FontSizes;
+        FontSizeCombo.ItemsSource = s_fontSizes;
         _suppressFontSizeChange = true;
         FontSizeCombo.SelectedValue = _viewModel.FontSize;
         _suppressFontSizeChange = false;
@@ -157,6 +164,10 @@ public partial class ScratchpadWindow : OverlayWindow
             case nameof(ScratchpadWindowViewModel.WordWrapEnabled):
                 ApplyWordWrap(_viewModel.WordWrapEnabled);
                 break;
+            case nameof(ScratchpadWindowViewModel.FindText):
+                if (_viewModel.IsFindBarVisible)
+                    RefreshFindResults(revealCurrent: true);
+                break;
         }
     }
 
@@ -221,7 +232,7 @@ public partial class ScratchpadWindow : OverlayWindow
         var ghostModeOpacity = IsFinite(state.GhostModeOpacity)
             ? Math.Clamp(state.GhostModeOpacity, 0, 1)
             : 0.25;
-        var fontSize = IsFinite(state.FontSize) && FontSizes.Contains(state.FontSize)
+        var fontSize = IsFinite(state.FontSize) && s_fontSizes.Contains(state.FontSize)
             ? state.FontSize
             : FallbackFontSize;
 
@@ -417,15 +428,87 @@ public partial class ScratchpadWindow : OverlayWindow
 
         _isContentDirty = true;
         _contentSaveScheduler.Schedule(checked(++_contentRevision));
+
+        if (_viewModel.IsFindBarVisible && !_isApplyingFindReplacement)
+            RefreshFindResults(revealCurrent: false);
     }
 
-    private void Editor_SelectionChanged(object sender, RoutedEventArgs e) => UpdateToolbarState();
+    private void Editor_SelectionChanged(object sender, RoutedEventArgs e)
+    {
+        UpdateToolbarState();
+        if (_viewModel.IsFindBarVisible && !_applyingFindSelection)
+            CaptureFindUserSelection(markPending: true);
+    }
+
+    private void Editor_PreviewMouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left)
+            return;
+
+        _ = Dispatcher.BeginInvoke(
+            DispatcherPriority.Input,
+            new Action(TrimTrailingDoubleClickWhitespace));
+    }
+
+    private void TrimTrailingDoubleClickWhitespace()
+    {
+        if (Editor.Selection.IsEmpty)
+            return;
+
+        var selectedText = Editor.Selection.Text;
+        var trimmedLength = selectedText.TrimEnd(' ', '\t').Length;
+        var trailingLength = selectedText.Length - trimmedLength;
+        if (trimmedLength <= 0 || trailingLength <= 0)
+            return;
+
+        var trimmedEnd = MoveTextPointerBackwardByTextCharacters(
+            Editor.Selection.End,
+            trailingLength);
+        if (trimmedEnd is not null && trimmedEnd.CompareTo(Editor.Selection.Start) > 0)
+            Editor.Selection.Select(Editor.Selection.Start, trimmedEnd);
+    }
+
+    private static TextPointer? MoveTextPointerBackwardByTextCharacters(
+        TextPointer position,
+        int characterCount)
+    {
+        var current = position;
+        var remaining = characterCount;
+        while (remaining > 0)
+        {
+            if (current.GetPointerContext(LogicalDirection.Backward) == TextPointerContext.Text)
+            {
+                var text = current.GetTextInRun(LogicalDirection.Backward);
+                var move = Math.Min(remaining, text.Length);
+                current = current.GetPositionAtOffset(-move, LogicalDirection.Backward) ?? current;
+                remaining -= move;
+                continue;
+            }
+
+            var previous = current.GetNextContextPosition(LogicalDirection.Backward);
+            if (previous is null)
+                return null;
+            current = previous;
+        }
+
+        return current;
+    }
 
     private void Editor_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
         {
-            ToggleFindBar(show: true);
+            OpenFind();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.F3 && _viewModel.IsFindBarVisible)
+        {
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+                FindPrevious();
+            else
+                FindNext();
             e.Handled = true;
         }
     }
@@ -601,38 +684,53 @@ public partial class ScratchpadWindow : OverlayWindow
 
     // Find and replace
 
-    private void FindButton_Click(object sender, RoutedEventArgs e) => ToggleFindBar();
+    private void FindButton_Click(object sender, RoutedEventArgs e) => ToggleFind();
 
-    private void ToggleFindBar(bool? show = null)
+    private void ToggleFind()
     {
-        _viewModel.IsFindBarVisible = show ?? !_viewModel.IsFindBarVisible;
         if (_viewModel.IsFindBarVisible)
-            Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() => FindBox.Focus()));
+            CloseFind();
         else
-        {
-            ClearFindState();
-            Editor.Focus();
-        }
+            OpenFind();
     }
 
-    private void CloseFindBar_Click(object sender, RoutedEventArgs e)
+    private void OpenFind()
+    {
+        _viewModel.IsFindBarVisible = true;
+        _findSession.Reset();
+        _findSnapshot = BuildSearchTextSnapshot();
+        CaptureFindUserSelection(markPending: false);
+        RefreshFindResults(revealCurrent: true);
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Render,
+            new Action(() => FindTextBox.Focus()));
+    }
+
+    private void CloseFindButton_Click(object sender, RoutedEventArgs e) => CloseFind();
+
+    private void CloseFind()
     {
         _viewModel.IsFindBarVisible = false;
-        ClearFindState();
+        _findSession.Reset();
+        _findSnapshot = null;
+        _hasPendingFindManualAnchor = false;
+        _viewModel.FindResultText = string.Empty;
         Editor.Focus();
     }
 
-    private void FindBox_KeyDown(object sender, KeyEventArgs e)
+    private void FindTextBox_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter)
+        if (e.Key == Key.Enter || e.Key == Key.F3)
         {
-            if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0) FindPrevious();
-            else FindNext();
+            if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0)
+                FindPrevious();
+            else
+                FindNext();
             e.Handled = true;
         }
         else if (e.Key == Key.Escape)
         {
-            ToggleFindBar(show: false);
+            CloseFind();
             e.Handled = true;
         }
     }
@@ -640,91 +738,153 @@ public partial class ScratchpadWindow : OverlayWindow
     private void FindNextButton_Click(object sender, RoutedEventArgs e) => FindNext();
     private void FindPreviousButton_Click(object sender, RoutedEventArgs e) => FindPrevious();
 
-    private void FindNext()
+    private void FindNext() => MoveFind(forward: true);
+
+    private void FindPrevious() => MoveFind(forward: false);
+
+    private void MoveFind(bool forward)
     {
-        if (string.IsNullOrEmpty(_viewModel.FindText)) return;
-        var matches = FindAll(_viewModel.FindText);
-        if (matches.Count == 0)
+        RefreshFindResults(revealCurrent: false);
+        if (_findSession.Matches.Count == 0)
+            return;
+
+        var manualAnchor = ConsumePendingFindManualAnchor(forward);
+        if (forward)
+            _findSession.Next(manualAnchor);
+        else
+            _findSession.Previous(manualAnchor);
+        PresentCurrentFindMatch(revealCurrent: true);
+    }
+
+    private void RefreshFindResults(
+        bool revealCurrent,
+        int? navigationAnchor = null)
+    {
+        _findSnapshot = BuildSearchTextSnapshot();
+        _findSession.Refresh(
+            _findSnapshot.Text,
+            Editor.Document,
+            _viewModel.FindText,
+            new TextSearchOptions { MatchCase = false },
+            Math.Clamp(
+                navigationAnchor ?? _findUserSelectionStart,
+                0,
+                _findSnapshot.Text.Length));
+        PresentCurrentFindMatch(revealCurrent);
+    }
+
+    private void PresentCurrentFindMatch(bool revealCurrent)
+    {
+        UpdateFindResultText();
+        if (_findSession.CurrentMatch is not { } match || _findSnapshot is null)
+            return;
+
+        var range = _findSnapshot.CreateRange(match);
+        _applyingFindSelection = true;
+        try
+        {
+            Editor.Selection.Select(range.Start, range.End);
+        }
+        finally
+        {
+            _applyingFindSelection = false;
+        }
+
+        if (revealCurrent)
+            range.Start.Paragraph?.BringIntoView();
+    }
+
+    private void CaptureFindUserSelection(bool markPending)
+    {
+        var snapshot = BuildSearchTextSnapshot();
+        _findSnapshot = snapshot;
+        var start = snapshot.GetOffset(Editor.Selection.Start, preferEnd: false);
+        var end = snapshot.GetOffset(Editor.Selection.End, preferEnd: true);
+        _findUserSelectionStart = Math.Clamp(start, 0, snapshot.Text.Length);
+        _findUserSelectionLength = Math.Clamp(
+            end - _findUserSelectionStart,
+            0,
+            snapshot.Text.Length - _findUserSelectionStart);
+        _hasPendingFindManualAnchor = markPending;
+    }
+
+    private int? ConsumePendingFindManualAnchor(bool forward)
+    {
+        if (!_hasPendingFindManualAnchor)
+            return null;
+
+        _hasPendingFindManualAnchor = false;
+        return forward
+            ? _findUserSelectionStart + _findUserSelectionLength
+            : _findUserSelectionStart;
+    }
+
+    private void ReplaceButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(_viewModel.FindText))
+            return;
+
+        RefreshFindResults(revealCurrent: false);
+        if (_findSession.CurrentMatch is not { } match || _findSnapshot is null)
+        {
+            FindNext();
+            return;
+        }
+
+        var range = _findSnapshot.CreateRange(match);
+        _isApplyingFindReplacement = true;
+        try
+        {
+            range.Text = _viewModel.ReplaceText;
+        }
+        finally
+        {
+            _isApplyingFindReplacement = false;
+        }
+
+        _hasPendingFindManualAnchor = false;
+        RefreshFindResults(
+            revealCurrent: true,
+            navigationAnchor: match.Start + _viewModel.ReplaceText.Length);
+    }
+
+    private void ReplaceAllButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(_viewModel.FindText))
+            return;
+
+        RefreshFindResults(revealCurrent: false);
+        if (_findSession.Matches.Count == 0 || _findSnapshot is null)
         {
             _viewModel.FindResultText = "Not found";
             return;
         }
 
-        var start = _lastFindEnd ?? Editor.Document.ContentStart;
-        var hit = matches.FirstOrDefault(match => match.Start.CompareTo(start) >= 0)
-                  ?? matches[0];
-        Editor.Selection.Select(hit.Start, hit.End);
-        hit.Start.Paragraph?.BringIntoView();
-        _lastFindEnd = hit.End;
-        _viewModel.FindResultText = string.Empty;
-    }
-
-    private void FindPrevious()
-    {
-        if (string.IsNullOrEmpty(_viewModel.FindText)) return;
-        var all = FindAll(_viewModel.FindText);
-        if (all.Count == 0) { _viewModel.FindResultText = "Not found"; return; }
-
-        var refPos = _lastFindEnd ?? Editor.Selection.Start;
-        var before = all.Where(r => r.End.CompareTo(refPos) < 0).ToList();
-        var hit = before.Count > 0 ? before.Last() : all.Last(); // wrap around
-        Editor.Selection.Select(hit.Start, hit.End);
-        hit.Start.Paragraph?.BringIntoView();
-        _lastFindEnd = hit.Start;
-        _viewModel.FindResultText = string.Empty;
-    }
-
-    private void ReplaceButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (string.IsNullOrEmpty(_viewModel.FindText)) return;
-        if (!Editor.Selection.IsEmpty &&
-            string.Equals(Editor.Selection.Text, _viewModel.FindText, StringComparison.OrdinalIgnoreCase))
+        var matches = _findSession.Matches.ToArray();
+        _isApplyingFindReplacement = true;
+        try
         {
-            Editor.Selection.Text = _viewModel.ReplaceText;
-            _lastFindEnd = Editor.Selection.End;
+            for (var index = matches.Length - 1; index >= 0; index--)
+                _findSnapshot.CreateRange(matches[index]).Text = _viewModel.ReplaceText;
         }
-        FindNext();
-    }
-
-    private void ReplaceAllButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (string.IsNullOrEmpty(_viewModel.FindText)) return;
-        var matches = FindAll(_viewModel.FindText);
-        for (var index = matches.Count - 1; index >= 0; index--)
+        finally
         {
-            matches[index].Text = _viewModel.ReplaceText;
+            _isApplyingFindReplacement = false;
         }
 
-        _lastFindEnd = null;
-        _viewModel.FindResultText = matches.Count > 0
-            ? $"Replaced {matches.Count}"
-            : "Not found";
+        _hasPendingFindManualAnchor = false;
+        _findSession.Reset();
+        RefreshFindResults(revealCurrent: false);
+        _viewModel.FindResultText = $"Replaced {matches.Length}";
     }
 
-    private void ClearFindState()
+    private void UpdateFindResultText()
     {
-        _lastFindEnd = null;
-        _viewModel.FindResultText = string.Empty;
-    }
-
-    private List<TextRange> FindAll(string search)
-    {
-        var snapshot = BuildSearchTextSnapshot();
-        var results = new List<TextRange>();
-        var offset = 0;
-        while (offset <= snapshot.Text.Length - search.Length)
-        {
-            var matchIndex = snapshot.Text.IndexOf(
-                search,
-                offset,
-                StringComparison.OrdinalIgnoreCase);
-            if (matchIndex < 0)
-                break;
-
-            results.Add(snapshot.CreateRange(matchIndex, search.Length));
-            offset = matchIndex + search.Length;
-        }
-        return results;
+        _viewModel.FindResultText = string.IsNullOrEmpty(_viewModel.FindText)
+            ? string.Empty
+            : _findSession.Matches.Count == 0
+                ? "Not found"
+                : $"{_findSession.CurrentMatchIndex + 1} of {_findSession.Matches.Count}";
     }
 
     private SearchTextSnapshot BuildSearchTextSnapshot()
@@ -769,11 +929,25 @@ public partial class ScratchpadWindow : OverlayWindow
 
         internal string Text { get; }
 
-        internal TextRange CreateRange(int startIndex, int length)
+        internal TextRange CreateRange(TextSearchMatch match)
         {
             return new TextRange(
-                _characterStarts[startIndex],
-                _characterEnds[startIndex + length - 1]);
+                _characterStarts[match.Start],
+                _characterEnds[match.End - 1]);
+        }
+
+        internal int GetOffset(TextPointer position, bool preferEnd)
+        {
+            for (var index = 0; index < _characterStarts.Count; index++)
+            {
+                if (position.CompareTo(_characterStarts[index]) <= 0)
+                    return index;
+
+                if (position.CompareTo(_characterEnds[index]) <= 0)
+                    return preferEnd ? index + 1 : index;
+            }
+
+            return Text.Length;
         }
     }
 }

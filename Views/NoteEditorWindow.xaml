@@ -44,6 +44,7 @@
             <Setter Property="Height" Value="27"/>
             <Setter Property="Padding" Value="7,3"/>
             <Setter Property="FontSize" Value="12"/>
+            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
 
@@ -118,9 +119,7 @@
     <DockPanel Background="{DynamicResource NotedWindowBackgroundBrush}">
         <Border DockPanel.Dock="Top"
                 Padding="10,6"
-                Background="{DynamicResource NotedSubtleSurfaceBrush}"
-                BorderBrush="{DynamicResource NotedBorderBrush}"
-                BorderThickness="0,0,0,1">
+                Background="{DynamicResource NotedSubtleSurfaceBrush}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -286,12 +285,8 @@
         </Border>
 
         <Border DockPanel.Dock="Bottom"
-                Margin="10,0,10,8"
-                Padding="6,3"
-                Background="{DynamicResource NotedSubtleSurfaceBrush}"
-                BorderBrush="{DynamicResource NotedBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="5">
+                Margin="16,2,16,8"
+                Padding="0,2">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -315,12 +310,8 @@
             </Grid>
         </Border>
 
-        <Border Margin="10"
-                Padding="1"
-                Background="{DynamicResource NotedSurfaceBrush}"
-                BorderBrush="{DynamicResource NotedBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="8">
+        <Border Margin="10,8,10,6"
+                Background="{DynamicResource NotedSurfaceBrush}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition x:Name="TabsColumn" Width="190"/>
@@ -478,7 +469,7 @@
                 <GridSplitter x:Name="TabsSplitter"
                               Grid.Column="1"
                               HorizontalAlignment="Stretch"
-                              Background="{DynamicResource NotedBorderBrush}"
+                              Background="Transparent"
                               Cursor="SizeWE"
                               DragCompleted="TabsSplitter_DragCompleted"
                               ResizeBehavior="PreviousAndNext"
@@ -496,7 +487,7 @@
                     <Grid x:Name="PrimaryEditorPane" Grid.Column="0">
                     <Grid x:Name="PrimaryTextEditor">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Border Background="{DynamicResource NotedSubtleSurfaceBrush}">
+                        <Border Background="{DynamicResource NotedInputBackgroundBrush}">
                             <h:LineNumberGutter x:Name="PrimaryLineNumbers" Editor="{Binding ElementName=EditorTextBox}"
                                                 Foreground="{DynamicResource NotedSecondaryTextBrush}"/>
                         </Border>
@@ -507,7 +498,6 @@
                              Background="{DynamicResource NotedInputBackgroundBrush}"
                              BorderThickness="0"
                              CaretBrush="{DynamicResource NotedTextBrush}"
-                             PreviewMouseDoubleClick="EditorTextBox_PreviewMouseDoubleClick"
                              Foreground="{DynamicResource NotedTextBrush}"
                              FontFamily="Consolas"
                              FontSize="14"
@@ -517,6 +507,7 @@
                              SelectionBrush="{DynamicResource NotedSelectionBrush}"
                              SpellCheck.IsEnabled="True"
                              GotKeyboardFocus="EditorTextBox_GotKeyboardFocus"
+                             PreviewMouseDoubleClick="EditorTextBox_PreviewMouseDoubleClick"
                              SelectionChanged="EditorTextBox_SelectionChanged"
                              TextChanged="EditorTextBox_TextChanged"
                              TextWrapping="Wrap"
@@ -593,8 +584,6 @@
                             HorizontalAlignment="Right"
                             VerticalAlignment="Top"
                             Background="{DynamicResource NotedSurfaceBrush}"
-                            BorderBrush="{DynamicResource NotedAccentBrush}"
-                            BorderThickness="1"
                             CornerRadius="7"
                             Visibility="Collapsed">
                         <Border.Effect>
@@ -704,8 +693,6 @@
                     <Border x:Name="SecondaryEditorPane"
                             Grid.Column="2"
                             Background="{DynamicResource NotedInputBackgroundBrush}"
-                            BorderBrush="{DynamicResource NotedAccentBrush}"
-                            BorderThickness="1,0,0,0"
                             Visibility="Collapsed">
                         <DockPanel>
                             <Border DockPanel.Dock="Top"
@@ -730,13 +717,12 @@
                             </Border>
                             <Grid x:Name="SecondaryTextEditor">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Border Background="{DynamicResource NotedSubtleSurfaceBrush}">
+                        <Border Background="{DynamicResource NotedInputBackgroundBrush}">
                             <h:LineNumberGutter x:Name="SecondaryLineNumbers" Editor="{Binding ElementName=SecondaryEditorTextBox}"
                                                 Foreground="{DynamicResource NotedSecondaryTextBrush}"/>
                         </Border>
                         <TextBox x:Name="SecondaryEditorTextBox" Grid.Column="1" PreviewMouseWheel="Editor_PreviewMouseWheel"
                                      Padding="12"
-                                     PreviewMouseDoubleClick="EditorTextBox_PreviewMouseDoubleClick"
                                      AcceptsReturn="True"
                                      AcceptsTab="True"
                                      Background="{DynamicResource NotedInputBackgroundBrush}"
@@ -750,6 +736,7 @@
                                      SelectionBrush="{DynamicResource NotedSelectionBrush}"
                                      SpellCheck.IsEnabled="True"
                                      GotKeyboardFocus="SecondaryEditorTextBox_GotKeyboardFocus"
+                                     PreviewMouseDoubleClick="EditorTextBox_PreviewMouseDoubleClick"
                                      SelectionChanged="SecondaryEditorTextBox_SelectionChanged"
                                      TextChanged="SecondaryEditorTextBox_TextChanged"
                                      TextWrapping="Wrap"

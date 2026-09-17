@@ -22,23 +22,36 @@
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
         <local:IndentLevelToMarginConverter x:Key="IndentLevelToMarginConverter"/>
         
-        <!-- Scrollbar thumb style -->
+        <!-- Low-emphasis scrollbar: neutral at rest, accent on interaction -->
         <Style x:Key="ScrollBarThumbStyle" TargetType="Thumb">
             <Setter Property="MinHeight" Value="20"/>
+            <Setter Property="Background" Value="{DynamicResource NotedStrongBorderBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
-                        <Border Background="{DynamicResource NotedAccentBrush}" CornerRadius="3" Margin="1,2"/>
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="3"
+                                Margin="1,2"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background"
+                                        Value="{DynamicResource NotedAccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter Property="Background"
+                                        Value="{DynamicResource NotedAccentPressedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
-        
+
         <!-- Modern scrollbar styling -->
         <Style x:Key="ModernScrollBar" TargetType="ScrollBar">
-            <Setter Property="Width" Value="7"/>
-            <Setter Property="MinWidth" Value="7"/>
-            <Setter Property="Background" Value="{DynamicResource NotedSubtleSurfaceBrush}"/>
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="MinWidth" Value="6"/>
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
@@ -49,7 +62,8 @@
                                                   Background="Transparent" BorderThickness="0" Opacity="0"/>
                                 </Track.DecreaseRepeatButton>
                                 <Track.Thumb>
-                                    <Thumb Style="{StaticResource ScrollBarThumbStyle}"/>
+                                    <Thumb x:Name="ScrollThumb"
+                                           Style="{StaticResource ScrollBarThumbStyle}"/>
                                 </Track.Thumb>
                                 <Track.IncreaseRepeatButton>
                                     <RepeatButton Command="ScrollBar.PageDownCommand"
@@ -57,11 +71,27 @@
                                 </Track.IncreaseRepeatButton>
                             </Track>
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- ValueChanged also fires for mouse-wheel, keyboard, and page scrolling. -->
+                            <EventTrigger RoutedEvent="RangeBase.ValueChanged">
+                                <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ScrollThumb"
+                                                                       Storyboard.TargetProperty="Background"
+                                                                       Duration="0:0:0.45"
+                                                                       FillBehavior="Stop">
+                                            <DiscreteObjectKeyFrame KeyTime="0"
+                                                                    Value="{StaticResource NotedAccentBrush}"/>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
-        
+
         <!-- Apply modern scrollbar style globally -->
         <Style TargetType="ScrollBar" BasedOn="{StaticResource ModernScrollBar}"/>
 
@@ -70,10 +100,10 @@
         <Style x:Key="PrimaryHeaderButtonStyle" TargetType="Button">
             <Setter Property="Foreground" Value="{DynamicResource NotedAccentTextBrush}"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontWeight" Value="Medium"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Height" Value="30"/>
-            <Setter Property="Padding" Value="11,0"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="9,0"/>
             <Setter Property="MinWidth" Value="0"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
@@ -81,7 +111,7 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="bg"
                                 Background="{DynamicResource NotedAccentBrush}"
-                                CornerRadius="6"
+                                CornerRadius="5"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
@@ -100,8 +130,8 @@
         </Style>
 
         <Style x:Key="HeaderChromeButtonStyle" TargetType="Button">
-            <Setter Property="Width" Value="30"/>
-            <Setter Property="Height" Value="30"/>
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Foreground" Value="{DynamicResource NotedSecondaryTextBrush}"/>
             <Setter Property="Background" Value="Transparent"/>
@@ -134,7 +164,7 @@
                TargetType="Button"
                BasedOn="{StaticResource HeaderChromeButtonStyle}">
             <Setter Property="Width" Value="24"/>
-            <Setter Property="Height" Value="30"/>
+            <Setter Property="Height" Value="28"/>
             <Setter Property="Margin" Value="0"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
@@ -316,20 +346,40 @@
 
                     <Button x:Name="NewNoteButton"
                             Click="NewNoteButton_Click"
-                            Margin="0,0,3,0"
+                            Margin="0,0,4,0"
                             ToolTip="Create a new note">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource PrimaryHeaderButtonStyle}">
-                                <Setter Property="Content" Value="+ New"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
-                                        <Setter Property="Content" Value="+"/>
-                                        <Setter Property="Width" Value="30"/>
+                                        <Setter Property="Width" Value="28"/>
                                         <Setter Property="Padding" Value="0"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </Button.Style>
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                            <TextBlock Text="&#xE710;"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="11"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="New"
+                                       Margin="5,0,0,0"
+                                       VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Setter Property="Margin" Value="0"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
                     </Button>
 
                     <Button x:Name="QuickNoteButton"
@@ -343,7 +393,7 @@
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow400}}" Value="True">
                                         <Setter Property="Content" Value="⚡"/>
-                                        <Setter Property="Width" Value="30"/>
+                                        <Setter Property="Width" Value="28"/>
                                         <Setter Property="Padding" Value="0"/>
                                     </DataTrigger>
                                 </Style.Triggers>
@@ -449,7 +499,7 @@
                         <Button x:Name="SettingsButton"
                                 Click="SettingsButton_Click"
                                 Style="{StaticResource HeaderChromeButtonStyle}"
-                                Margin="0,0,3,0"
+                                Margin="8,0,3,0"
                                 ToolTip="Settings"
                                 AutomationProperties.Name="Settings">
                             <TextBlock x:Name="SettingsButtonIcon"
@@ -475,25 +525,8 @@
                     Height="1" Background="{DynamicResource NotedBorderBrush}" Margin="0,2,0,6"/>
 
                 <Grid>
-                    <Border x:Name="NotesContentBackground"
-                            CornerRadius="8">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Background" Value="{DynamicResource NotedSurfaceBrush}"/>
-                                <Setter Property="BorderBrush" Value="{DynamicResource NotedBorderBrush}"/>
-                                <Setter Property="BorderThickness" Value="1"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsSettingsVisible}" Value="True">
-                                        <Setter Property="Background" Value="Transparent"/>
-                                        <Setter Property="BorderThickness" Value="0"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                    </Border>
-
                     <DockPanel x:Name="NotesListView"
-                              Margin="8"
+                              Margin="2,4,2,2"
                               Opacity="0.95">
 
                         <!-- Navigation breadcrumb bar – visible when inside a subfolder -->
@@ -560,107 +593,92 @@
                         </Border>
 
                         <!-- Search / filter bar -->
-                        <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
-                            <Border BorderThickness="1" CornerRadius="6" Padding="8,0">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="Background" Value="{DynamicResource NotedInputBackgroundBrush}"/>
-                                        <Setter Property="BorderBrush" Value="{DynamicResource NotedBorderBrush}"/>
+                        <Grid DockPanel.Dock="Top" Margin="2,0,2,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Search icon -->
+                            <TextBlock Grid.Column="0"
+                                       Text="&#xE721;"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="13"
+                                       Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                       VerticalAlignment="Center"
+                                       Margin="2,0,6,0"
+                                       IsHitTestVisible="False"/>
+
+                            <!-- Placeholder rendered BEHIND the TextBox (same column, earlier in XML order) -->
+                            <TextBlock Grid.Column="1"
+                                       Text="Search notes..."
+                                       FontSize="12"
+                                       FontStyle="Italic"
+                                       Foreground="{DynamicResource NotedMutedTextBrush}"
+                                       VerticalAlignment="Center"
+                                       Padding="0,7"
+                                       IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
                                         <Style.Triggers>
-                                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                                <Setter Property="BorderBrush" Value="{DynamicResource NotedAccentBrush}"/>
-                                            </Trigger>
+                                            <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </Border.Style>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
+                                </TextBlock.Style>
+                            </TextBlock>
 
-                                    <!-- Search icon -->
-                                    <TextBlock Grid.Column="0"
-                                               Text="&#xE721;"
-                                               FontFamily="Segoe MDL2 Assets"
-                                               FontSize="13"
-                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                               VerticalAlignment="Center"
-                                               Margin="2,0,6,0"
-                                               IsHitTestVisible="False"/>
+                            <!-- Search TextBox (rendered on top of placeholder) -->
+                            <TextBox x:Name="SearchBox"
+                                     Grid.Column="1"
+                                     FontSize="12"
+                                     Foreground="{DynamicResource NotedTextBrush}"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Padding="0,7"
+                                     VerticalAlignment="Center"
+                                     KeyDown="SearchBox_KeyDown"/>
 
-                                    <!-- Placeholder rendered BEHIND the TextBox (same column, earlier in XML order) -->
-                                    <TextBlock Grid.Column="1"
-                                               Text="Search notes..."
-                                               FontSize="12"
-                                               FontStyle="Italic"
-                                               Foreground="{DynamicResource NotedMutedTextBrush}"
-                                               VerticalAlignment="Center"
-                                               Padding="0,7"
-                                               IsHitTestVisible="False">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
+                            <!-- Clear button (visible only when FilterText is non-empty) -->
+                            <Button Grid.Column="2"
+                                    x:Name="ClearSearchButton"
+                                    Content="&#xE711;"
+                                    FontFamily="Segoe MDL2 Assets"
+                                    FontSize="11"
+                                    Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                    Cursor="Hand"
+                                    Padding="6,6"
+                                    AutomationProperties.Name="Clear search"
+                                    Click="ClearSearchButton_Click">
+                                <Button.Style>
+                                    <Style TargetType="Button"
+                                           BasedOn="{StaticResource NotedHeaderIconButton}">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
                                                 <Setter Property="Visibility" Value="Collapsed"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
-                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-
-                                    <!-- Search TextBox (rendered on top of placeholder) -->
-                                    <TextBox x:Name="SearchBox"
-                                             Grid.Column="1"
-                                             FontSize="12"
-                                             Foreground="{DynamicResource NotedTextBrush}"
-                                             Background="Transparent"
-                                             BorderThickness="0"
-                                             Padding="0,7"
-                                             VerticalAlignment="Center"
-                                             KeyDown="SearchBox_KeyDown"/>
-
-                                    <!-- Clear button (visible only when FilterText is non-empty) -->
-                                    <Button Grid.Column="2"
-                                            x:Name="ClearSearchButton"
-                                            Content="&#xE711;"
-                                            FontFamily="Segoe MDL2 Assets"
-                                            FontSize="11"
-                                            Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                            Cursor="Hand"
-                                            Padding="6,6"
-                                            AutomationProperties.Name="Clear search"
-                                            Click="ClearSearchButton_Click">
-                                        <Button.Style>
-                                            <Style TargetType="Button"
-                                                   BasedOn="{StaticResource NotedHeaderIconButton}">
-                                                <Setter Property="Visibility" Value="Visible"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border x:Name="bg" Background="Transparent" CornerRadius="4"
-                                                        Padding="{TemplateBinding Padding}">
-                                                    <ContentPresenter HorizontalAlignment="Center"
-                                                                      VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-                                </Grid>
-                            </Border>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="bg" Background="Transparent" CornerRadius="4"
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
                         </Grid>
 
                         <!-- No-results message (shown when filter matches nothing) -->
@@ -781,7 +799,7 @@
                                                         Content="&#xE718;"
                                                         ToolTip="Pin note"
                                                         AutomationProperties.Name="Pin note"
-                                                        Foreground="{DynamicResource NotedDangerBrush}"
+                                                        Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                         Cursor="Hand"
                                                         Background="Transparent"
                                                         BorderBrush="Transparent"
@@ -795,6 +813,7 @@
                                                                 <DataTrigger Binding="{Binding IsPinned}" Value="True">
                                                                     <Setter Property="Visibility" Value="Visible"/>
                                                                     <Setter Property="Opacity" Value="1"/>
+                                                                    <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
                                                                 </DataTrigger>
                                                                 <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
                                                                     <Setter Property="Visibility" Value="Visible"/>
@@ -814,8 +833,7 @@
                                                 </Button>
                                                 <!-- Folder icon – visible only for folder rows; icon changes when expanded -->
                                                 <TextBlock FontFamily="Segoe MDL2 Assets"
-                                                           FontSize="14"
-                                                           Foreground="{DynamicResource NotedAccentBrush}"
+                                                           FontSize="15"
                                                            VerticalAlignment="Center"
                                                            HorizontalAlignment="Left"
                                                            Margin="-6,0,0,0">
@@ -823,12 +841,20 @@
                                                         <Style TargetType="TextBlock">
                                                             <Setter Property="Text" Value="&#xE8B7;"/>
                                                             <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource NotedSecondaryTextBrush}"/>
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsFolder}" Value="True">
                                                                     <Setter Property="Visibility" Value="Visible"/>
                                                                 </DataTrigger>
                                                                 <DataTrigger Binding="{Binding IsExpanded}" Value="True">
                                                                     <Setter Property="Text" Value="&#xE8DA;"/>
+                                                                    <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="True">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
@@ -970,20 +996,32 @@
                                         <Setter Property="Template">
                                             <Setter.Value>
                                                 <ControlTemplate TargetType="ListBoxItem">
-                                                    <Border x:Name="ItemBorder"
-                                                            Background="Transparent"
-                                                            BorderBrush="Transparent"
-                                                            BorderThickness="1"
-                                                            CornerRadius="6"
-                                                            Padding="{TemplateBinding Padding}">
-                                                        <ContentPresenter/>
-                                                    </Border>
+                                                    <Grid>
+                                                        <Border x:Name="ItemBorder"
+                                                                Background="Transparent"
+                                                                BorderBrush="Transparent"
+                                                                BorderThickness="1"
+                                                                CornerRadius="6"
+                                                                Padding="{TemplateBinding Padding}">
+                                                            <ContentPresenter/>
+                                                        </Border>
+                                                        <Border x:Name="SelectionAccent"
+                                                                Width="3"
+                                                                Margin="0,6,0,6"
+                                                                HorizontalAlignment="Left"
+                                                                VerticalAlignment="Stretch"
+                                                                Background="{DynamicResource NotedAccentBrush}"
+                                                                CornerRadius="2"
+                                                                Visibility="Collapsed"
+                                                                IsHitTestVisible="False"/>
+                                                    </Grid>
                                                     <ControlTemplate.Triggers>
                                                         <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
+                                                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource NotedSubtleSurfaceBrush}"/>
                                                         </Trigger>
                                                         <Trigger Property="IsSelected" Value="True">
-                                                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource NotedAccentSoftHoverBrush}"/>
+                                                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
+                                                            <Setter TargetName="SelectionAccent" Property="Visibility" Value="Visible"/>
                                                         </Trigger>
                                                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                                                             <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource NotedAccentBrush}"/>
@@ -1009,12 +1047,12 @@
                                           VerticalScrollBarVisibility="Auto">
                             <StackPanel>
 
-                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                            <Border Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Padding="12"
-                                    Margin="0,0,0,10">
+                                    BorderThickness="0,0,0,1"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,16"
+                                    Margin="0,0,0,16">
                                 <StackPanel>
                                     <StackPanel.Resources>
                                         <Style x:Key="AccentSwatchButton" TargetType="Button">
@@ -1205,12 +1243,12 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                            <Border Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Padding="12"
-                                    Margin="0,0,0,10">
+                                    BorderThickness="0,0,0,1"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,16"
+                                    Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Note Behavior"
                                                FontSize="12"
@@ -1269,12 +1307,12 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                            <Border Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Padding="12"
-                                    Margin="0,0,0,10">
+                                    BorderThickness="0,0,0,1"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,16"
+                                    Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Folder Navigation"
                                                FontSize="12"
@@ -1306,12 +1344,12 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                            <Border Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Padding="12"
-                                    Margin="0,0,0,10">
+                                    BorderThickness="0,0,0,1"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,16"
+                                    Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Startup"
                                                FontSize="12"
@@ -1331,12 +1369,12 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                            <Border Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Padding="12"
-                                    Margin="0,0,0,10">
+                                    BorderThickness="0,0,0,1"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,16"
+                                    Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Window Behavior"
                                                FontSize="12"
@@ -1370,12 +1408,12 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                            <Border Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Padding="12"
-                                    Margin="0,0,0,10">
+                                    BorderThickness="0,0,0,1"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,16"
+                                    Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="App Opacity"
                                                FontSize="12"
@@ -1463,12 +1501,12 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                            <Border Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Padding="12"
-                                    Margin="0,0,0,10">
+                                    BorderThickness="0,0,0,1"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,16"
+                                    Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="New Note Timestamp"
                                                FontSize="12"
@@ -1525,12 +1563,12 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                            <Border Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Padding="12"
-                                    Margin="0,0,0,10">
+                                    BorderThickness="0,0,0,1"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,16"
+                                    Margin="0,0,0,16">
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <TextBlock Text="Notes Folder"
@@ -1589,12 +1627,12 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                            <Border Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Padding="12"
-                                    Margin="0,0,0,10">
+                                    BorderThickness="0,0,0,1"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,16"
+                                    Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Data Protection"
                                                FontSize="12"
@@ -1666,12 +1704,11 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="{DynamicResource NotedSubtleSurfaceBrush}"
-                                    BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Padding="12"
-                                    Margin="0,0,0,10">
+                            <Border Background="Transparent"
+                                    BorderThickness="0"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,4"
+                                    Margin="0">
                                 <StackPanel>
                                     <TextBlock Text="Hotkeys"
                                                FontSize="12"

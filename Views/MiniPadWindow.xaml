@@ -28,7 +28,7 @@
                 BorderBrush="{DynamicResource NotedStrongBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="8">
-            <Grid Margin="10">
+            <Grid Margin="10,7,8,8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -37,7 +37,7 @@
 
                 <Border x:Name="TitleBar"
                         Grid.Row="0"
-                        Padding="2,1,0,8"
+                        Padding="2,0,0,5"
                         Background="Transparent"
                         Cursor="SizeAll">
                     <Grid>
@@ -49,10 +49,11 @@
                                     Orientation="Horizontal"
                                     VerticalAlignment="Center"
                                     IsHitTestVisible="False">
-                            <TextBlock Text="✎"
+                            <TextBlock Text="&#xE8AC;"
+                                       FontFamily="Segoe MDL2 Assets"
                                        Margin="0,0,7,0"
                                        Foreground="{DynamicResource NotedAccentBrush}"
-                                       FontSize="15"
+                                       FontSize="14"
                                        VerticalAlignment="Center"/>
                             <TextBlock Text="MiniPad"
                                        Foreground="{DynamicResource NotedTextBrush}"
@@ -82,10 +83,9 @@
                 </Border>
 
                 <Border Grid.Row="1"
-                        Background="{DynamicResource NotedSurfaceBrush}"
-                        BorderBrush="{DynamicResource NotedBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="8"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        CornerRadius="0"
                         ClipToBounds="True">
                     <DockPanel>
                         <Border x:Name="FindPanel" DockPanel.Dock="Top" Padding="6" Visibility="Collapsed"

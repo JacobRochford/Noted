@@ -155,10 +155,10 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="FindBox" Grid.Column="0"
+                            <TextBox x:Name="FindTextBox" Grid.Column="0"
                                      Style="{StaticResource FindInput}"
                                      Text="{Binding FindText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     KeyDown="FindBox_KeyDown"/>
+                                     KeyDown="FindTextBox_KeyDown"/>
                             <Button Grid.Column="1" Content="↑" Style="{StaticResource ToolbarBtn}"
                                     Click="FindPreviousButton_Click" ToolTip="Previous (Shift+Enter)"
                                     Margin="4,0,0,0"/>
@@ -168,7 +168,7 @@
                                        Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="11"
                                        VerticalAlignment="Center" Margin="6,0"/>
                             <Button Grid.Column="4" Content="×" Style="{StaticResource ToolbarBtn}"
-                                    Click="CloseFindBar_Click" ToolTip="Close (Escape)"/>
+                                    Click="CloseFindButton_Click" ToolTip="Close (Escape)"/>
                         </Grid>
                         <Grid Margin="0,6,0,0">
                             <Grid.ColumnDefinitions>
@@ -263,17 +263,19 @@
                         BorderBrush="{DynamicResource NotedBorderBrush}"
                         BorderThickness="1" CornerRadius="8" ClipToBounds="True">
                     <RichTextBox x:Name="Editor"
-                                 Background="{DynamicResource NotedInputBackgroundBrush}"
-                                 Foreground="{DynamicResource NotedTextBrush}"
-                                 BorderThickness="0" Padding="11,9"
-                                 FontFamily="Segoe UI" FontSize="13"
-                                 CaretBrush="{DynamicResource NotedTextBrush}"
-                                 SelectionBrush="{DynamicResource NotedSelectionBrush}"
+                                Background="{DynamicResource NotedInputBackgroundBrush}"
+                                Foreground="{DynamicResource NotedTextBrush}"
+                                BorderThickness="0" Padding="11,9"
+                                FontFamily="Segoe UI" FontSize="13"
+                                CaretBrush="{DynamicResource NotedTextBrush}"
+                                SelectionBrush="{DynamicResource NotedSelectionBrush}"
+                                IsInactiveSelectionHighlightEnabled="True"
                                  VerticalScrollBarVisibility="Auto"
                                  AcceptsReturn="True" AcceptsTab="True"
                                  SpellCheck.IsEnabled="True"
                                  TextChanged="Editor_TextChanged"
                                  SelectionChanged="Editor_SelectionChanged"
+                                 PreviewMouseDoubleClick="Editor_PreviewMouseDoubleClick"
                                  PreviewKeyDown="Editor_PreviewKeyDown"/>
                 </Border>
 
