@@ -147,14 +147,6 @@ public partial class ScratchpadWindow : OverlayWindow
         _windowStateSaveTimer.Start();
     }
 
-    protected override void OnTitleBarDoubleClick()
-    {
-        if (IsWindowVisible)
-            RequestHide();
-        else
-            ShowWindow();
-    }
-
     private void ViewModel_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         switch (e.PropertyName)
@@ -335,7 +327,7 @@ public partial class ScratchpadWindow : OverlayWindow
             ShowPersistenceWarningOnce(error);
     }
 
-    private void RequestHide()
+    protected override void RequestHide()
     {
         if (!TryFlushPendingContent(out var error))
         {

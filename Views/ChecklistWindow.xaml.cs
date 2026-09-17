@@ -95,8 +95,6 @@ public partial class ChecklistWindow : OverlayWindow
         base.OnClosed(e);
     }
 
-    protected override void OnTitleBarDoubleClick() => ToggleWindow();
-
     protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
     {
         if (Keyboard.FocusedElement is TextBox { Name: "ItemTitleTextBox" } textBox &&
@@ -138,7 +136,7 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void HideButton_Click(object sender, RoutedEventArgs e) => RequestHide();
 
-    private void RequestHide()
+    protected override void RequestHide()
     {
         if (!TryFlushPendingContent(out var error))
         {

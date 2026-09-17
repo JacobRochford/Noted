@@ -68,7 +68,7 @@ public abstract class OverlayWindow : Window
 
         if (e.ClickCount == 2)
         {
-            OnTitleBarDoubleClick();
+            RequestHide();
             return;
         }
 
@@ -79,8 +79,6 @@ public abstract class OverlayWindow : Window
         }
         catch { }
     }
-
-    protected virtual void OnTitleBarDoubleClick() { }
 
     protected void ApplyGhostMode(bool enabled)
     {
@@ -93,6 +91,7 @@ public abstract class OverlayWindow : Window
             : Math.Clamp(opacity, 0, 1);
 
     protected abstract void SaveWindowState();
+    protected abstract void RequestHide();
 
     internal bool IsWindowVisible => Visibility == Visibility.Visible;
     internal bool IsHiddenTogether { get; private set; }

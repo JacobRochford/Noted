@@ -88,7 +88,9 @@ public partial class MiniPadWindow : OverlayWindow
         });
     }
 
-    private void HideButton_Click(object sender, RoutedEventArgs e)
+    private void HideButton_Click(object sender, RoutedEventArgs e) => RequestHide();
+
+    protected override void RequestHide()
     {
         if (!TryFlushPendingContent(out var error))
         {
