@@ -507,6 +507,7 @@
                              Background="{DynamicResource NotedInputBackgroundBrush}"
                              BorderThickness="0"
                              CaretBrush="{DynamicResource NotedTextBrush}"
+                             PreviewMouseDoubleClick="EditorTextBox_PreviewMouseDoubleClick"
                              Foreground="{DynamicResource NotedTextBrush}"
                              FontFamily="Consolas"
                              FontSize="14"
@@ -735,6 +736,7 @@
                         </Border>
                         <TextBox x:Name="SecondaryEditorTextBox" Grid.Column="1" PreviewMouseWheel="Editor_PreviewMouseWheel"
                                      Padding="12"
+                                     PreviewMouseDoubleClick="EditorTextBox_PreviewMouseDoubleClick"
                                      AcceptsReturn="True"
                                      AcceptsTab="True"
                                      Background="{DynamicResource NotedInputBackgroundBrush}"
