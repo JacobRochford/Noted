@@ -12,12 +12,14 @@ namespace Noted.Tests.Services;
 public sealed partial class FullBackupServiceTests
 {
     [TestMethod]
-    public void ImportPreviewRebasesStoredNotePaths()
+    public void ImportPreviewRebasesStoredNotePathsIncludingBothEditorPanes()
     {
         using var sourceDirectory = new TemporaryTestDirectory();
         using var targetDirectory = new TemporaryTestDirectory();
         var source = CreateSourceData(sourceDirectory);
         var sourceNote = Path.Combine(source.Notes, "one.txt");
+        var sourceSecondaryNote = Path.Combine(source.Notes, "split-secondary.txt");
+        File.WriteAllText(sourceSecondaryNote, "secondary pane content");
         WriteJson(
             Path.Combine(source.AppData, "settings.json"),
             new { SchemaVersion = 1, Revision = 1, NotesDirectory = source.Notes });
@@ -25,8 +27,13 @@ public sealed partial class FullBackupServiceTests
             Path.Combine(source.AppData, "session", "editor-workspace.json"),
             new NoteEditorSession
             {
-                Tabs = [new NoteEditorTabState { FilePath = sourceNote }],
-                ActiveFilePath = sourceNote
+                Tabs =
+                [
+                    new NoteEditorTabState { FilePath = sourceNote },
+                    new NoteEditorTabState { FilePath = sourceSecondaryNote }
+                ],
+                ActiveFilePath = sourceNote,
+                SecondaryFilePath = sourceSecondaryNote
             });
         var sourceHash = GetNotePathHash(sourceNote);
         WriteJson(
@@ -82,7 +89,11 @@ public sealed partial class FullBackupServiceTests
         var session = JsonSerializer.Deserialize<NoteEditorSession>(sessionContent.Data!);
         Assert.IsNotNull(session);
         Assert.AreEqual(targetNote, session.ActiveFilePath);
-        Assert.AreEqual(targetNote, session.Tabs.Single().FilePath);
+        var targetSecondaryNote = Path.Combine(target.Notes, "split-secondary.txt");
+        Assert.AreEqual(targetSecondaryNote, session.SecondaryFilePath);
+        Assert.AreEqual(2, session.Tabs.Count);
+        Assert.AreEqual(targetNote, session.Tabs[0].FilePath);
+        Assert.AreEqual(targetSecondaryNote, session.Tabs[1].FilePath);
 
         var recoveryFile = preview.Files.Single(file =>
             file.LogicalPath.Equals(
@@ -113,6 +124,86 @@ public sealed partial class FullBackupServiceTests
         Assert.AreEqual(
             targetNote,
             history.RootElement.GetProperty("NotePath").GetString());
+    }
+
+    [TestMethod]
+    [DataRow("tab", "sibling-prefix")]
+    [DataRow("active", "sibling-prefix")]
+    [DataRow("secondary", "sibling-prefix")]
+    [DataRow("tab", "parent-traversal")]
+    [DataRow("active", "parent-traversal")]
+    [DataRow("secondary", "parent-traversal")]
+    [DataRow("tab", "different-drive")]
+    [DataRow("active", "different-drive")]
+    [DataRow("secondary", "different-drive")]
+    public void ImportRejectsSessionPathsOutsideTheSourceNotesRoot(string field, string pathKind)
+    {
+        using var directory = new TemporaryTestDirectory();
+        var paths = CreateSourceData(directory);
+        var sourceNote = Path.Combine(paths.Notes, "one.txt");
+        var otherDrive = Path.GetPathRoot(paths.Notes)!.Equals(@"Z:\", StringComparison.OrdinalIgnoreCase)
+            ? @"Y:\"
+            : @"Z:\";
+        // These are stored path strings only; no files are created outside the fixture.
+        var outsidePath = pathKind switch
+        {
+            "sibling-prefix" => Path.Combine(paths.Notes + "-other", "outside.txt"),
+            "parent-traversal" => Path.Combine(paths.Notes, "..", "outside.txt"),
+            "different-drive" => Path.Combine(otherDrive, "outside.txt"),
+            _ => throw new ArgumentOutOfRangeException(nameof(pathKind))
+        };
+        WriteJson(
+            Path.Combine(paths.AppData, "session", "editor-workspace.json"),
+            new NoteEditorSession
+            {
+                Tabs = [new NoteEditorTabState { FilePath = field == "tab" ? outsidePath : sourceNote }],
+                ActiveFilePath = field == "active" ? outsidePath : sourceNote,
+                SecondaryFilePath = field == "secondary" ? outsidePath : null
+            });
+        var service = new FullBackupService(paths.AppData, paths.Notes);
+        Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
+        var exportPath = directory.File("external-session-path.notedbackup");
+        Assert.IsTrue(service.ExportUserBackup(exportPath).Success);
+
+        var preview = service.GetBackupImportPreview(exportPath);
+
+        Assert.IsFalse(preview.IsValid);
+        StringAssert.Contains(preview.Error!, "outside the backup's notes folder");
+    }
+
+    [TestMethod]
+    [DataRow(null)]
+    [DataRow("")]
+    [DataRow("   ")]
+    public void ImportNormalizesEmptyOptionalSessionPaths(string? optionalPath)
+    {
+        using var directory = new TemporaryTestDirectory();
+        var paths = CreateSourceData(directory);
+        WriteJson(
+            Path.Combine(paths.AppData, "session", "editor-workspace.json"),
+            new NoteEditorSession
+            {
+                Tabs = [new NoteEditorTabState { FilePath = Path.Combine(paths.Notes, "one.txt") }],
+                ActiveFilePath = optionalPath,
+                SecondaryFilePath = optionalPath
+            });
+        var service = new FullBackupService(paths.AppData, paths.Notes);
+        Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
+        var exportPath = directory.File("empty-session-paths.notedbackup");
+        Assert.IsTrue(service.ExportUserBackup(exportPath).Success);
+        var preview = service.GetBackupImportPreview(exportPath);
+        Assert.IsTrue(preview.IsValid, preview.Error);
+        var sessionFile = preview.Files.Single(file =>
+            file.LogicalPath.Equals("app/session/editor-workspace.json", StringComparison.OrdinalIgnoreCase));
+
+        var content = service.ReadBackupImportFile(
+            exportPath, preview.BackupId, preview.VerificationToken!, sessionFile);
+
+        Assert.IsTrue(content.Success, content.Error);
+        var session = JsonSerializer.Deserialize<NoteEditorSession>(content.Data!);
+        Assert.IsNotNull(session);
+        Assert.IsNull(session.ActiveFilePath);
+        Assert.IsNull(session.SecondaryFilePath);
     }
 
     [TestMethod]

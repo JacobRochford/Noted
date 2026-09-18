@@ -534,7 +534,10 @@ internal sealed partial class FullBackupService
                     .ToList(),
                 ActiveFilePath = string.IsNullOrWhiteSpace(session.ActiveFilePath)
                     ? null
-                    : RebaseNotePath(session.ActiveFilePath, manifest.NotesRoot)
+                    : RebaseNotePath(session.ActiveFilePath, manifest.NotesRoot),
+                SecondaryFilePath = string.IsNullOrWhiteSpace(session.SecondaryFilePath)
+                    ? null
+                    : RebaseNotePath(session.SecondaryFilePath, manifest.NotesRoot)
             };
             transformed = JsonSerializer.SerializeToUtf8Bytes(importedSession, s_backupJsonOptions);
             _ = ValidateEditorSession(transformed);
