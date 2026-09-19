@@ -12,6 +12,7 @@ public interface INoteFileService : IDisposable {
     IReadOnlyList<NoteItem> GetNotes();
     IReadOnlyList<ArchivedNoteItem> GetArchivedNotes();
     IReadOnlyList<string> GetAllNoteKeys();
+    bool TryGetNoteKey(string filePath, out string noteKey);
     string GetNoteKey(string filePath);
     string SuggestNoteName();
     CreatedNote CreateNote(string? requestedName = null);

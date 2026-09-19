@@ -9,6 +9,64 @@ namespace Noted.Tests.Services;
 public sealed class NoteFileServiceTests
 {
     [TestMethod]
+    [DataRow("external")]
+    [DataRow("sibling-prefix")]
+    [DataRow("parent-traversal")]
+    public void ExternalRenamePathsHaveNoNoteKeyAndLeaveFilesUnchanged(string pathKind)
+    {
+        using var directory = new TemporaryTestDirectory();
+        var notes = directory.File("notes");
+        Directory.CreateDirectory(notes);
+        var externalDirectory = directory.File(pathKind == "sibling-prefix" ? "notes-other" : "external");
+        Directory.CreateDirectory(externalDirectory);
+        var externalPath = Path.Combine(externalDirectory, "outside.txt");
+        File.WriteAllText(externalPath, "Keep this content");
+        var requestedPath = pathKind == "parent-traversal"
+            ? Path.Combine(notes, "..", "external", "outside.txt")
+            : externalPath;
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveNotesDirectory(notes);
+        using var service = new NoteFileService(settings);
+
+        Assert.IsFalse(service.TryGetNoteKey(requestedPath, out var noteKey));
+        Assert.AreEqual(string.Empty, noteKey);
+        var (success, renamedFileName, error) = service.RenameNote(
+            Path.GetFileName(requestedPath), "Renamed", Path.GetDirectoryName(requestedPath));
+        Assert.IsFalse(success);
+        Assert.IsNull(renamedFileName);
+        Assert.IsNotNull(error);
+        Assert.AreEqual("Keep this content", File.ReadAllText(externalPath));
+        Assert.IsFalse(File.Exists(Path.Combine(externalDirectory, "Renamed.txt")));
+        Assert.HasCount(0, Directory.GetFiles(notes));
+    }
+
+    [TestMethod]
+    public void NormalizedInternalRenamePathsKeepTheirExistingNoteKeys()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var notes = directory.File("notes");
+        Directory.CreateDirectory(Path.Combine(notes, "child"));
+        var notePath = Path.Combine(notes, "original.txt");
+        File.WriteAllText(notePath, "Keep this content");
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveNotesDirectory(notes);
+        using var service = new NoteFileService(settings);
+        var requestedPath = Path.Combine(notes, "child", "..", "original.txt");
+
+        Assert.IsTrue(service.TryGetNoteKey(requestedPath, out var noteKey));
+        Assert.AreEqual(service.GetNoteKey(notePath), noteKey);
+        var (success, renamedFileName, error) = service.RenameNote("original.txt", "Renamed", notes);
+        Assert.IsTrue(success);
+        Assert.IsNull(error);
+        Assert.IsNotNull(renamedFileName);
+        Assert.IsFalse(File.Exists(notePath));
+        var renamedPath = Path.Combine(notes, renamedFileName);
+        Assert.AreEqual("Keep this content", File.ReadAllText(renamedPath));
+        Assert.IsTrue(service.TryGetNoteKey(renamedPath, out var renamedKey));
+        Assert.AreEqual(service.GetNoteKey(renamedPath), renamedKey);
+    }
+
+    [TestMethod]
     public void AcceptingSuggestedDateNameCountsAsAnExplicitName()
     {
         using var directory = new TemporaryTestDirectory();

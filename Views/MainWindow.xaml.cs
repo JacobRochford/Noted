@@ -1820,7 +1820,17 @@ public partial class MainWindow : Window {
         var attemptedName = Path.GetFileNameWithoutExtension(e.FilePath);
         var oldFileName = Path.GetFileName(e.FilePath);
         var containingDirectory = Path.GetDirectoryName(e.FilePath) ?? _fileService.CurrentDirectory;
-        var oldNoteKey = _fileService.GetNoteKey(e.FilePath);
+        if (!_fileService.TryGetNoteKey(e.FilePath, out var oldNoteKey))
+        {
+            e.IsCanceled = true;
+            AppDialog.Show(
+                this,
+                "This file is outside the notes folder and cannot be renamed here. Use Save As to choose a new name or location.",
+                "Rename Note",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
 
         while (true) {
             var dialog = e.IsFirstSave

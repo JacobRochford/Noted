@@ -85,6 +85,16 @@ public sealed class NoteFileService : INoteFileService {
             .ToList();
     }
 
+    public bool TryGetNoteKey(string filePath, out string noteKey)
+    {
+        noteKey = string.Empty;
+        if (!TryNormalizeContainedPath(NotesDirectory, filePath, out var fullPath, allowRoot: false))
+            return false;
+
+        noteKey = GetNoteKey(fullPath);
+        return true;
+    }
+
     public string GetNoteKey(string filePath) {
         var fullPath = Path.GetFullPath(filePath);
         if (!IsPathWithinNotesDirectory(fullPath))
