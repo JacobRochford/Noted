@@ -28,4 +28,26 @@ public sealed class OpenNoteDocumentTests
 
         Assert.AreEqual("project ideas", document.DisplayName);
     }
+
+    [TestMethod]
+    public void DocumentIdentityIsUniqueAndSurvivesPathChanges()
+    {
+        var document = new OpenNoteDocument(
+            @"C:\Notes\draft.txt",
+            content: string.Empty,
+            savedContent: string.Empty,
+            isDirty: false);
+        var otherDocument = new OpenNoteDocument(
+            @"C:\Notes\other.txt",
+            content: string.Empty,
+            savedContent: string.Empty,
+            isDirty: false);
+        var documentId = document.DocumentId;
+
+        document.UpdateFilePath(@"C:\Notes\renamed.txt");
+
+        Assert.AreNotEqual(Guid.Empty, documentId);
+        Assert.AreNotEqual(documentId, otherDocument.DocumentId);
+        Assert.AreEqual(documentId, document.DocumentId);
+    }
 }

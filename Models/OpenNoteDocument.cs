@@ -33,6 +33,7 @@ public sealed class OpenNoteDocument : ObservableObject
         InitialFileContent = initialFileContent;
     }
 
+    public Guid DocumentId { get; } = Guid.NewGuid();
     public string FilePath => _filePath;
     public string DisplayName => NoteNameFormatter.Format(
         Path.GetFileName(_filePath),

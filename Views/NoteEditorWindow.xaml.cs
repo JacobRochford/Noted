@@ -28,7 +28,7 @@ public partial class NoteEditorWindow : Window
     private readonly INoteContentService _contentService;
     private readonly IAppSettingsService _settingsService;
     private readonly INoteRecoveryService _recoveryService;
-    private readonly INoteEditorSessionService _sessionService;
+    private readonly NoteEditorPersistence _persistence;
     private readonly SaveScheduler<IReadOnlyList<RecoveryDraftSnapshot>> _recoverySaveScheduler;
     private readonly NoteEditorWorkspace _workspace = new();
     private readonly HashSet<OpenNoteDocument> _discardedDocumentsPendingDraftDeletion = [];
@@ -80,7 +80,7 @@ public partial class NoteEditorWindow : Window
         _contentService = contentService;
         _settingsService = settingsService;
         _recoveryService = recoveryService;
-        _sessionService = sessionService;
+        _persistence = new NoteEditorPersistence(contentService, recoveryService, sessionService);
 
         InitializeComponent();
         _primaryFindPresenter = new TextBoxSearchPresenter(EditorTextBox);
@@ -194,50 +194,25 @@ public partial class NoteEditorWindow : Window
 
     internal void ReopenSavedTabs()
     {
-        var sessionLoadResult = _settingsService.LoadReopenEditorTabsOnStartup()
-            ? _sessionService.Load()
-            : new NoteEditorSessionLoadResult(new NoteEditorSession(), []);
-        var recoveryLoadResult = _recoveryService.LoadDrafts();
-        var recoveryIssues = recoveryLoadResult.Issues.ToList();
-        var session = sessionLoadResult.Session;
-        var recoveredDrafts = recoveryLoadResult.Drafts
-            .ToDictionary(draft => draft.FilePath, StringComparer.OrdinalIgnoreCase);
-        var restoredPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var loadResult = _persistence.LoadWorkspace(
+            _settingsService.LoadReopenEditorTabsOnStartup());
 
         _suppressSessionSave = true;
         try
         {
-            foreach (var tabState in session.Tabs)
-            {
-                if (TryRestoreDocument(tabState, recoveredDrafts, recoveryIssues, out var document) &&
-                    restoredPaths.Add(document.FilePath))
-                {
-                    _workspace.Add(document);
-                }
-            }
-
-            foreach (var draft in recoveredDrafts.Values)
-            {
-                if (restoredPaths.Contains(draft.FilePath) ||
-                    !TryRestoreDraftOnlyDocument(draft, recoveryIssues, out var document))
-                {
-                    continue;
-                }
-
+            foreach (var document in loadResult.Documents)
                 _workspace.Add(document);
-                restoredPaths.Add(document.FilePath);
-            }
 
             if (_documents.Count > 0)
             {
-                var activeDocument = _documents.FirstOrDefault(document =>
-                        PathsEqual(document.FilePath, session.ActiveFilePath))
-                    ?? _documents[0];
+                var activeDocument = loadResult.ActiveDocumentId.HasValue
+                    ? _workspace.FindById(loadResult.ActiveDocumentId.Value) ?? _documents[0]
+                    : _documents[0];
                 ActivateDocument(activeDocument);
 
-                var secondaryDocument = _documents.FirstOrDefault(document =>
-                    !ReferenceEquals(document, activeDocument) &&
-                    PathsEqual(document.FilePath, session.SecondaryFilePath));
+                var secondaryDocument = loadResult.SecondaryDocumentId.HasValue
+                    ? _workspace.FindById(loadResult.SecondaryDocumentId.Value)
+                    : null;
                 if (secondaryDocument is not null)
                     ShowSecondaryDocument(secondaryDocument, focusEditor: false, saveSession: false);
             }
@@ -250,15 +225,17 @@ public partial class NoteEditorWindow : Window
         if (_documents.Count > 0)
             SaveEditorSession();
 
+        _recoveryOperationError = loadResult.RecoveryOperationError;
+        UpdatePersistenceErrorState();
         foreach (var document in _documents.Where(document => document.IsDirty))
             _unsavedRecoveredPaths.Add(document.FilePath);
 
-        ShowRecoveryIssues(recoveryIssues, sessionLoadResult.Issues);
+        ShowRecoveryIssues(loadResult.RecoveryIssues, loadResult.SessionIssues);
         if (_documents.Count > 0 &&
             (_reopenOnStartup ||
              _unsavedRecoveredPaths.Count > 0 ||
-             recoveryIssues.Count > 0 ||
-             sessionLoadResult.Issues.Count > 0))
+             loadResult.RecoveryIssues.Count > 0 ||
+             loadResult.SessionIssues.Count > 0))
         {
             ShowWindow();
         }
@@ -523,111 +500,6 @@ public partial class NoteEditorWindow : Window
         {
             ExceptionDiagnostics.Record(ex);
             ShowError("Unable to open note", "The note could not be opened. Check the file location and access permissions.");
-            return false;
-        }
-    }
-
-    private bool TryRestoreDocument(
-        NoteEditorTabState tabState,
-        IReadOnlyDictionary<string, NoteRecoveryDraft> drafts,
-        ICollection<NoteRecoveryIssue> issues,
-        out OpenNoteDocument document)
-    {
-        document = null!;
-        if (string.IsNullOrWhiteSpace(tabState.FilePath))
-            return false;
-
-        try
-        {
-            if (!TryNormalizeRestoredPath(tabState.FilePath, out var normalizedPath))
-                return false;
-            if (!NoteFileExtensions.IsSupported(normalizedPath))
-                return false;
-            if (!File.Exists(normalizedPath))
-            {
-                if (!drafts.TryGetValue(normalizedPath, out var missingDraft))
-                    return false;
-
-                document = new OpenNoteDocument(
-                    normalizedPath,
-                    missingDraft.Content,
-                    savedContent: string.Empty,
-                    isDirty: true,
-                    caretIndex: Math.Clamp(tabState.CaretIndex, 0, missingDraft.Content.Length),
-                    verticalOffset: tabState.VerticalOffset,
-                    markdownPreviewEnabled: tabState.MarkdownPreviewEnabled,
-                    isMissing: true,
-                    usesGeneratedName: tabState.UsesGeneratedName,
-                    initialFileContent: tabState.InitialFileContent);
-                return true;
-            }
-
-            var persistedContent = _contentService.Load(normalizedPath);
-            drafts.TryGetValue(normalizedPath, out var draft);
-            var content = draft is not null &&
-                          !string.Equals(draft.Content, persistedContent, StringComparison.Ordinal)
-                ? draft.Content
-                : persistedContent;
-            if (draft is not null && string.Equals(draft.Content, persistedContent, StringComparison.Ordinal))
-                AddRecoveryCleanupIssue(normalizedPath, issues);
-
-            document = new OpenNoteDocument(
-                normalizedPath,
-                content,
-                persistedContent,
-                isDirty: !string.Equals(content, persistedContent, StringComparison.Ordinal),
-                caretIndex: Math.Clamp(tabState.CaretIndex, 0, content.Length),
-                verticalOffset: tabState.VerticalOffset,
-                markdownPreviewEnabled: tabState.MarkdownPreviewEnabled,
-                usesGeneratedName: tabState.UsesGeneratedName,
-                    initialFileContent: tabState.InitialFileContent);
-            return true;
-        }
-        catch (Exception ex) when (IsExpectedFileException(ex))
-        {
-            ExceptionDiagnostics.Record(ex);
-            return false;
-        }
-    }
-
-    private bool TryRestoreDraftOnlyDocument(
-        NoteRecoveryDraft draft,
-        ICollection<NoteRecoveryIssue> issues,
-        out OpenNoteDocument document)
-    {
-        document = null!;
-        try
-        {
-            if (!File.Exists(draft.FilePath))
-            {
-                document = new OpenNoteDocument(
-                    draft.FilePath,
-                    draft.Content,
-                    savedContent: string.Empty,
-                    isDirty: true,
-                    caretIndex: draft.Content.Length,
-                    isMissing: true);
-                return true;
-            }
-
-            var persistedContent = _contentService.Load(draft.FilePath);
-            if (string.Equals(draft.Content, persistedContent, StringComparison.Ordinal))
-            {
-                AddRecoveryCleanupIssue(draft.FilePath, issues);
-                return false;
-            }
-
-            document = new OpenNoteDocument(
-                draft.FilePath,
-                draft.Content,
-                persistedContent,
-                isDirty: true,
-                caretIndex: draft.Content.Length);
-            return true;
-        }
-        catch (Exception ex) when (IsExpectedFileException(ex))
-        {
-            ExceptionDiagnostics.Record(ex);
             return false;
         }
     }
@@ -1048,33 +920,10 @@ public partial class NoteEditorWindow : Window
             return true;
 
         CaptureActiveDocument();
-        try
-        {
-            var warning = _sessionService.Save(new NoteEditorSession
-            {
-                Tabs = _documents.Select(document => new NoteEditorTabState
-                {
-                    FilePath = document.FilePath,
-                    CaretIndex = document.CaretIndex,
-                    VerticalOffset = document.VerticalOffset,
-                    MarkdownPreviewEnabled = document.MarkdownPreviewEnabled,
-                    UsesGeneratedName = document.UsesGeneratedName,
-                    InitialFileContent = document.InitialFileContent
-                }).ToList(),
-                ActiveFilePath = _activeDocument?.FilePath,
-                SecondaryFilePath = _secondaryDocument?.FilePath
-            });
-            _sessionPersistenceError = warning;
-            UpdatePersistenceErrorState();
-            return true;
-        }
-        catch (Exception ex) when (IsExpectedFileException(ex))
-        {
-            ExceptionDiagnostics.Record(ex);
-            _sessionPersistenceError = "The note editor session could not be saved.";
-            UpdatePersistenceErrorState();
-            return false;
-        }
+        var result = _persistence.SaveSession(_workspace);
+        _sessionPersistenceError = result.Success ? result.Warning : result.Error;
+        UpdatePersistenceErrorState();
+        return result.Success;
     }
 
     private bool TryDeleteDiscardedRecoveryDrafts()
@@ -2424,21 +2273,6 @@ public partial class NoteEditorWindow : Window
         _primaryFindPresenter.Dispose();
         _secondaryFindPresenter.Dispose();
         Closed -= Window_Closed;
-    }
-
-    private static bool TryNormalizeRestoredPath(string path, out string normalizedPath)
-    {
-        try
-        {
-            normalizedPath = NormalizePath(path);
-            return true;
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
-        {
-            ExceptionDiagnostics.Record(ex);
-            normalizedPath = string.Empty;
-            return false;
-        }
     }
 
     private static string NormalizePath(string path)

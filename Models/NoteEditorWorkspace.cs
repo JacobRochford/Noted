@@ -38,6 +38,9 @@ internal sealed class NoteEditorWorkspace
     internal OpenNoteDocument? FindByPath(string normalizedPath) =>
         _documents.FirstOrDefault(document => PathsEqual(document.FilePath, normalizedPath));
 
+    internal OpenNoteDocument? FindById(Guid documentId) =>
+        _documents.FirstOrDefault(document => document.DocumentId == documentId);
+
     internal void Activate(OpenNoteDocument document)
     {
         EnsureOwned(document);
