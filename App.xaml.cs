@@ -163,9 +163,18 @@ public partial class App : Application
             WindowManager.MiniPadProvider = GetOrCreateMiniPadWindow;
             WindowManager.Editor = noteEditor;
 
-            _fileOpenRequestService = new FileOpenRequestService(filePath =>
-                _ = Dispatcher.BeginInvoke(() => noteEditor.OpenNote(filePath)));
-            _fileOpenRequestService.Start();
+            _fileOpenRequestService = new FileOpenRequestService(
+            filePath =>
+            {
+                if (!_isShuttingDown)
+                    noteEditor.OpenNote(filePath);
+            },
+            action =>
+            {
+                if (!_isShuttingDown)
+                    Dispatcher.BeginInvoke(action);
+            });
+        _fileOpenRequestService.Start();
 
             mainWindow.Show();
             foreach (var requestedFile in e.Args.Where(path => !string.IsNullOrWhiteSpace(path)))
