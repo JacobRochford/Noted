@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Noted.Models;
+using static Noted.Services.BackupContentCatalog;
 using static Noted.Services.BackupFormat;
 
 namespace Noted.Services;

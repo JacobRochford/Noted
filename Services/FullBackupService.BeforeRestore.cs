@@ -21,7 +21,7 @@ internal sealed partial class FullBackupService
                     string.Join(", ", interruptedWork.Select(Path.GetFileName)));
             }
 
-            var currentFiles = CollectBackupFiles();
+            var currentFiles = _contentCatalog.Collect();
             if (currentFiles.Count == 0)
             {
                 return new FullBackupResult(
