@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Noted.Models;
+using static Noted.Services.BackupFormat;
 
 namespace Noted.Services;
 
@@ -85,17 +86,10 @@ internal sealed record BackupFileContent(
 
 internal sealed partial class FullBackupService
 {
-    // Backup paths and identifiers are part of the versioned backup format. Keep them
-    // independent from current runtime storage names unless the backup schema is migrated.
-    private const int BackupSchemaVersion = 1;
-    private const int SupportedSettingsSchemaVersion = 1;
-    private const string ManifestFileName = "manifest.json";
-    private const string FilesDirectoryName = "files";
     private const string RestoreRequestFileName = "restore-request.json";
     private const long MaximumPreviewFileSize = 4 * 1024 * 1024;
     private static readonly Guid s_miniPadDraftId =
         new("A6CB4208-79C0-4C08-9D07-9CDF33F31337");
-    private static readonly JsonSerializerOptions s_backupJsonOptions = CreateJsonOptions();
 
     private readonly string _appDataDirectory;
     private string _notesDirectory;
@@ -190,7 +184,7 @@ internal sealed partial class FullBackupService
         var path = GetBackupPath(FullBackupType.User);
         var manifestResult = JsonFileStore.Read<FullBackupManifest>(
             Path.Combine(path, ManifestFileName),
-            s_backupJsonOptions);
+            BackupFormat.JsonOptions);
         var manifest = manifestResult.Value;
         if (!manifestResult.Success ||
             manifest is null ||
@@ -316,7 +310,7 @@ internal sealed partial class FullBackupService
             JsonFileStore.Write(
                 GetRestoreRequestPath(),
                 request,
-                options: s_backupJsonOptions);
+                options: BackupFormat.JsonOptions);
             return new FullBackupResult(
                 FullBackupStatus.RestoreScheduled,
                 FullBackupType.User,
@@ -339,7 +333,7 @@ internal sealed partial class FullBackupService
         var requestPath = GetRestoreRequestPath();
         var requestResult = JsonFileStore.Read<FullBackupRestoreRequest>(
             requestPath,
-            s_backupJsonOptions);
+            BackupFormat.JsonOptions);
         if (requestResult.Status == JsonFileReadStatus.Missing)
         {
             return new FullBackupResult(
@@ -446,7 +440,7 @@ internal sealed partial class FullBackupService
         var requestPath = GetRestoreRequestPath();
         var requestResult = JsonFileStore.Read<FullBackupRestoreRequest>(
             requestPath,
-            s_backupJsonOptions);
+            BackupFormat.JsonOptions);
         FileWriter.DeleteIfExists(requestPath);
         if (requestResult.Success && requestResult.Value?.ImportId is Guid importId)
             TryDeleteImportDirectory(GetPendingImportPath(importId));
@@ -827,7 +821,7 @@ internal sealed partial class FullBackupService
         JsonFileStore.Write(
             Path.Combine(buildPath, ManifestFileName),
             manifest,
-            options: s_backupJsonOptions);
+            options: BackupFormat.JsonOptions);
 
         var verification = ReadBackup(buildPath, backupType);
         if (verification.Status != BackupReadStatus.Valid)
@@ -980,7 +974,7 @@ internal sealed partial class FullBackupService
 
             var manifestResult = JsonFileStore.Read<FullBackupManifest>(
                 Path.Combine(path, ManifestFileName),
-                s_backupJsonOptions);
+                BackupFormat.JsonOptions);
             if (!manifestResult.Success)
             {
                 return new BackupReadResult(
@@ -1434,55 +1428,6 @@ internal sealed partial class FullBackupService
         }
     }
 
-    private static string GetDisplayPath(string logicalPath)
-    {
-        var normalizedPath = NormalizeLogicalPath(logicalPath);
-        var separator = normalizedPath.IndexOf('/');
-        return separator >= 0 && separator < normalizedPath.Length - 1
-            ? normalizedPath[(separator + 1)..]
-            : normalizedPath;
-    }
-
-    private static string GetFileCategory(string logicalPath)
-    {
-        var path = NormalizeLogicalPath(logicalPath);
-        if (path.StartsWith("notes/", StringComparison.OrdinalIgnoreCase))
-            return "Notes";
-        if (path.StartsWith("app/DeletedNotes/", StringComparison.OrdinalIgnoreCase))
-            return "Deleted notes";
-        if (path.StartsWith("app/note-history/", StringComparison.OrdinalIgnoreCase))
-            return "Note history";
-        if (path.StartsWith("app/recovery/micro-scratchpads/", StringComparison.OrdinalIgnoreCase))
-            return "MiniPad";
-        if (path.StartsWith("app/recovery/", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("app/session/editor-workspace.json", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Open notes";
-        }
-        if (path.Equals("app/checklist.json", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("app/checklist-tabs.json", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Checklist";
-        }
-        if (path.Equals("app/dictionary.json", StringComparison.OrdinalIgnoreCase))
-            return "Dictionary";
-        if (path.Equals("app/scratchpad.rtf", StringComparison.OrdinalIgnoreCase))
-            return "Scratchpad";
-        if (path.Equals("app/settings.json", StringComparison.OrdinalIgnoreCase))
-            return "Settings";
-        return "Application data";
-    }
-
-    private static BackupContentFormat GetContentFormat(string logicalPath)
-    {
-        var extension = Path.GetExtension(logicalPath);
-        if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
-            return BackupContentFormat.Json;
-        if (extension.Equals(".rtf", StringComparison.OrdinalIgnoreCase))
-            return BackupContentFormat.RichText;
-        return BackupContentFormat.Text;
-    }
-
     private static void VerifyFileBytes(
         byte[] bytes,
         long expectedLength,
@@ -1506,42 +1451,6 @@ internal sealed partial class FullBackupService
             FullBackupType.BeforeRestore => "before-restore backup",
             _ => throw new ArgumentOutOfRangeException(nameof(backupType))
         };
-
-    private static string GetContainedPath(string rootDirectory, string relativePath)
-    {
-        var root = Path.GetFullPath(rootDirectory);
-        var platformPath = NormalizeLogicalPath(relativePath)
-            .Replace('/', Path.DirectorySeparatorChar);
-        var fullPath = NormalizeBackupDataPath(Path.Combine(root, platformPath));
-        var rootWithSeparator = Path.EndsInDirectorySeparator(root)
-            ? root
-            : root + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
-            throw new IOException($"The backup path '{relativePath}' escapes its backup directory.");
-        return fullPath;
-    }
-
-    private static string ToLogicalPath(string prefix, string relativePath) =>
-        $"{prefix}/{NormalizeLogicalPath(relativePath)}";
-
-    private static string NormalizeLogicalPath(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-            throw new InvalidDataException("The backup contains an empty file path.");
-        return path.Replace('\\', '/').TrimStart('/');
-    }
-
-    private static string NormalizeBackupDataPath(string path)
-    {
-        try
-        {
-            return Path.GetFullPath(path);
-        }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
-        {
-            throw new InvalidDataException("The backup contains an invalid file path.", ex);
-        }
-    }
 
     private static bool IsPathWithin(string path, string directory)
     {
@@ -1579,13 +1488,6 @@ internal sealed partial class FullBackupService
     private static bool IsExpectedBackupException(Exception exception) =>
         FileSystemErrors.IsExpected(exception) || exception is JsonException or InvalidDataException;
 
-    private static JsonSerializerOptions CreateJsonOptions()
-    {
-        var options = new JsonSerializerOptions { WriteIndented = true };
-        options.Converters.Add(new JsonStringEnumConverter());
-        return options;
-    }
-
     private sealed record BackupSourceEntry(
         string LogicalPath,
         string SourcePath,
@@ -1599,32 +1501,6 @@ internal sealed partial class FullBackupService
     }
 
     private sealed record BackupContentDetails(int? ItemCount, long? ContentLength);
-
-    private sealed record FullBackupManifest(
-        int SchemaVersion,
-        [property: JsonPropertyName("SnapshotId")]
-        Guid BackupId,
-        [property: JsonPropertyName("Role")]
-        FullBackupType Type,
-        DateTime CreatedUtc,
-        string AppDataRoot,
-        string NotesRoot,
-        IReadOnlyList<FullBackupEntry> Entries);
-
-    private sealed record FullBackupRestoreRequest(
-        int SchemaVersion,
-        [property: JsonPropertyName("SnapshotId")]
-        Guid BackupId,
-        DateTime RequestedUtc,
-        Guid? ImportId = null);
-
-    private sealed record FullBackupEntry(
-        string LogicalPath,
-        string OriginalPath,
-        long Length,
-        string Sha256,
-        int? ItemCount,
-        long? ContentLength);
 
     private enum BackupReadStatus
     {

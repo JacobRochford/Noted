@@ -1,6 +1,7 @@
 using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using static Noted.Services.BackupFormat;
 
 namespace Noted.Services;
 
