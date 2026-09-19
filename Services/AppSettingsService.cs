@@ -95,9 +95,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         try {
             Directory.CreateDirectory(AppDataDirectory);
         } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
-            throw CreatePersistenceException(
-                $"Noted could not initialize its application data folder at '{AppDataDirectory}'. "
-                + "Check that the location exists and that you have permission to write to it, then restart Noted.",
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.StorageDirectoryUnavailable(AppDataDirectory),
                 ex);
         }
     }
@@ -371,8 +369,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         }
 
         if (settingsFile.Status == JsonFileReadStatus.Unavailable) {
-            throw CreatePersistenceException(
-                $"Noted could not read settings from '{_settingsFilePath}'. No recovery files were changed.",
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.SettingsFileUnreadable(_settingsFilePath),
                 settingsFile.Error ?? new IOException("The settings file is unavailable."));
         }
 
@@ -387,8 +384,7 @@ public sealed class AppSettingsService : IAppSettingsService {
 
             recoveryFilesFound = true;
             if (recoveryFile.Status == JsonFileReadStatus.Unavailable) {
-                throw CreatePersistenceException(
-                    $"Noted could not inspect the settings recovery file '{recoveryFileInfo.Path}'. No recovery files were changed.",
+                throw new SettingsPersistenceException(SettingsPersistenceMessages.RecoveryFileUnreadable(recoveryFileInfo.Path),
                     recoveryFile.Error ?? new IOException("The recovery file is unavailable."));
             }
 
@@ -410,10 +406,9 @@ public sealed class AppSettingsService : IAppSettingsService {
                 return _cachedSettings;
             }
 
-            throw CreatePersistenceException(
-                settingsFile.Status == JsonFileReadStatus.Missing
-                    ? "Noted could not restore missing settings because no valid recovery copy was available. Existing recovery files were not changed."
-                    : "Noted found invalid settings but could not restore a valid recovery copy. Existing files were not changed.",
+            throw new SettingsPersistenceException(settingsFile.Status == JsonFileReadStatus.Missing
+                    ? SettingsPersistenceMessages.MissingSettingsWithoutRecovery
+                    : SettingsPersistenceMessages.InvalidSettingsWithoutRecovery,
                 lastRecoveryError ?? settingsFile.Error ?? new JsonException("No valid settings recovery copy was available."));
         }
 
@@ -434,8 +429,7 @@ public sealed class AppSettingsService : IAppSettingsService {
                 selectedRecoveryFile.SerializedJson!,
                 damagedPath);
         } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
-            throw CreatePersistenceException(
-                $"Noted found a valid settings recovery copy at '{selectedRecoveryFile.Path}', but could not restore it. The recovery copy was not changed.",
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.RecoveryWriteFailed(selectedRecoveryFile.Path),
                 ex);
         }
 
@@ -446,8 +440,7 @@ public sealed class AppSettingsService : IAppSettingsService {
                 selectedRecoveryFile.SerializedJson,
                 StringComparison.Ordinal)) {
             _writesBlocked = true;
-            throw CreatePersistenceException(
-                "Noted restored settings but could not verify the resulting settings file. Further settings writes are blocked until restart. Recovery files were left in place.",
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.VerificationFailed(_settingsFilePath),
                 verification.Error ?? new IOException("The restored settings did not match the selected recovery copy."));
         }
 
@@ -493,8 +486,7 @@ public sealed class AppSettingsService : IAppSettingsService {
                     File.GetLastWriteTimeUtc(path)))
                 .ToList();
         } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
-            throw CreatePersistenceException(
-                "Noted could not completely inspect settings recovery files. No recovery files were changed.",
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.RecoveryScanFailed,
                 ex);
         }
     }
@@ -531,8 +523,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             var description = highestRevision > 0
                 ? $"revision {highestRevision}"
                 : $"write time {newestFiles[0].FileInfo.LastWriteTimeUtc:O}";
-            throw CreatePersistenceException(
-                $"Noted found conflicting settings recovery files with the same {description}. No recovery file was selected or changed.",
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.ConflictingRecoveryFiles(description),
                 new InvalidDataException("The newest settings recovery files do not contain the same state."));
         }
 
@@ -541,8 +532,7 @@ public sealed class AppSettingsService : IAppSettingsService {
 
     private void SaveSettings(AppSettings settings) {
         if (_writesBlocked) {
-            throw CreatePersistenceException(
-                "Settings writes are blocked because a previous settings write could not be verified. Restart Noted before trying again.",
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.WritesBlocked,
                 new IOException("The current settings file has an unverified state."));
         }
 
@@ -557,8 +547,7 @@ public sealed class AppSettingsService : IAppSettingsService {
 
         if (current.Status is JsonFileReadStatus.Corrupt or JsonFileReadStatus.Unavailable) {
             _writesBlocked = true;
-            throw CreatePersistenceException(
-                "Noted did not overwrite settings because the current settings file is invalid or unavailable. Restart Noted to run recovery.",
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.CurrentSettingsUnreadable(_settingsFilePath),
                 current.Error ?? new IOException("The current settings file cannot be safely replaced."));
         }
 
@@ -567,8 +556,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             current.Settings?.Revision ?? 0);
         if (highestKnownRevision == long.MaxValue) {
             _writesBlocked = true;
-            throw CreatePersistenceException(
-                "Settings cannot be saved because the settings revision reached its maximum value. Further settings writes are blocked until restart.",
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.RevisionLimitReached,
                 new OverflowException("The settings revision cannot be incremented."));
         }
 
@@ -584,8 +572,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         try {
             writeResult = FileWriter.WriteAllText(_settingsFilePath, json, _backupFilePath);
         } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
-            throw CreatePersistenceException(
-                $"Noted could not save settings to '{_settingsFilePath}'. Your latest settings change was not saved.",
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.SaveFailed(_settingsFilePath),
                 ex);
         }
 
@@ -594,8 +581,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             persistedJson = File.ReadAllText(_settingsFilePath, Encoding.UTF8);
         } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
             _writesBlocked = true;
-            throw CreatePersistenceException(
-                "Noted wrote settings but could not read the settings file back for verification. Further settings writes are blocked until restart.",
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.VerificationFailed(_settingsFilePath),
                 ex);
         }
 
@@ -604,8 +590,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             !string.Equals(persistedJson, json, StringComparison.Ordinal) ||
             !string.Equals(verification.SerializedJson, json, StringComparison.Ordinal)) {
             _writesBlocked = true;
-            throw CreatePersistenceException(
-                "Noted wrote settings but could not verify the resulting settings file. Further settings writes are blocked until restart.",
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.VerificationFailed(_settingsFilePath),
                 verification.Error ?? new IOException("The persisted settings did not match the requested settings."));
         }
 
@@ -802,9 +787,6 @@ public sealed class AppSettingsService : IAppSettingsService {
             SecurityException or
             ArgumentException or
             NotSupportedException;
-
-    private static SettingsPersistenceException CreatePersistenceException(string message, Exception innerException) =>
-        new(message, innerException);
 
     private string CreateUniqueSettingsPath(string fileName, string directory) {
         var timestamp = _timeProvider.GetUtcNow().UtcDateTime.ToString("yyyyMMdd_HHmmss_fff");

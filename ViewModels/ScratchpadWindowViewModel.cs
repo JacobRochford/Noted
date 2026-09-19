@@ -1,5 +1,3 @@
-using System.IO;
-using System.Security;
 using Noted.Models;
 using Noted.Services;
 
@@ -168,17 +166,7 @@ public sealed class ScratchpadWindowViewModel : ObservableObject
         {
             return _settingsService.LoadScratchpadWindowState();
         }
-        catch (IOException ex)
-        {
-            SetSettingsPersistenceError($"Scratchpad settings could not be loaded: {ex.Message}");
-            return new ScratchpadWindowState();
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            SetSettingsPersistenceError($"Scratchpad settings could not be loaded: {ex.Message}");
-            return new ScratchpadWindowState();
-        }
-        catch (SecurityException ex)
+        catch (SettingsPersistenceException ex)
         {
             SetSettingsPersistenceError($"Scratchpad settings could not be loaded: {ex.Message}");
             return new ScratchpadWindowState();
@@ -204,15 +192,7 @@ public sealed class ScratchpadWindowViewModel : ObservableObject
             SetSettingsPersistenceError(null);
             return true;
         }
-        catch (IOException ex)
-        {
-            SetSettingsPersistenceError($"Scratchpad settings could not be saved: {ex.Message}");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            SetSettingsPersistenceError($"Scratchpad settings could not be saved: {ex.Message}");
-        }
-        catch (SecurityException ex)
+        catch (SettingsPersistenceException ex)
         {
             SetSettingsPersistenceError($"Scratchpad settings could not be saved: {ex.Message}");
         }

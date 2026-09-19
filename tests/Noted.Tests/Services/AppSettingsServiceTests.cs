@@ -12,6 +12,73 @@ namespace Noted.Tests.Services;
 public sealed class AppSettingsServiceTests
 {
     [TestMethod]
+    public void RetryableWriteFailurePreservesItsCauseAndExplainsHowToRetry()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveScratchpadWindowState(new ScratchpadWindowState { Left = 10 });
+        var settingsPath = directory.File("settings.json");
+        var originalBytes = File.ReadAllBytes(settingsPath);
+
+        using (var lockedFile = new FileStream(settingsPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            var error = Assert.ThrowsExactly<SettingsPersistenceException>(() =>
+                settings.SaveScratchpadWindowState(new ScratchpadWindowState { Left = 20 }));
+
+            Assert.IsInstanceOfType<IOException>(error.InnerException);
+            StringAssert.Contains(error.Message, settingsPath);
+            StringAssert.Contains(error.Message, "try again");
+            CollectionAssert.AreEqual(originalBytes, File.ReadAllBytes(settingsPath));
+        }
+
+        settings.SaveScratchpadWindowState(new ScratchpadWindowState { Left = 20 });
+        Assert.AreEqual(20d, new AppSettingsService(directory.Path).LoadScratchpadWindowState().Left);
+    }
+
+    [TestMethod]
+    public void UnreadableSettingsExplainWhyFurtherSavesRequireRestart()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveScratchpadWindowState(new ScratchpadWindowState { Left = 10 });
+        var settingsPath = directory.File("settings.json");
+        var originalBytes = File.ReadAllBytes(settingsPath);
+
+        using (var lockedFile = new FileStream(settingsPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            var error = Assert.ThrowsExactly<SettingsPersistenceException>(() =>
+                settings.SaveScratchpadWindowState(new ScratchpadWindowState { Left = 20 }));
+
+            Assert.IsInstanceOfType<IOException>(error.InnerException);
+            StringAssert.Contains(error.Message, settingsPath);
+            StringAssert.Contains(error.Message, "restart Noted");
+        }
+
+        var blockedError = Assert.ThrowsExactly<SettingsPersistenceException>(() =>
+            settings.SaveScratchpadWindowState(new ScratchpadWindowState { Left = 30 }));
+        StringAssert.Contains(blockedError.Message, "restart Noted");
+        Assert.IsFalse(blockedError.Message.Contains("try again", StringComparison.OrdinalIgnoreCase));
+        CollectionAssert.AreEqual(originalBytes, File.ReadAllBytes(settingsPath));
+        Assert.AreEqual(10d, new AppSettingsService(directory.Path).LoadScratchpadWindowState().Left);
+    }
+
+    [TestMethod]
+    public void LoadFailureIdentifiesTheUnreadableFileAndPreservesItsCause()
+    {
+        using var directory = new TemporaryTestDirectory();
+        new AppSettingsService(directory.Path).SaveScratchpadWindowState(new ScratchpadWindowState { Left = 10 });
+        var settingsPath = directory.File("settings.json");
+        var settings = new AppSettingsService(directory.Path);
+
+        using var lockedFile = new FileStream(settingsPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        var error = Assert.ThrowsExactly<SettingsPersistenceException>(() => settings.LoadScratchpadWindowState());
+
+        Assert.IsInstanceOfType<IOException>(error.InnerException);
+        StringAssert.Contains(error.Message, settingsPath);
+        StringAssert.Contains(error.Message, "try again");
+    }
+
+    [TestMethod]
     public void WindowAppearanceOverridesAndEditorPreferencesSurviveReload()
     {
         using var directory = new TemporaryTestDirectory();
