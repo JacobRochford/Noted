@@ -24,6 +24,7 @@ public partial class MainWindow : Window {
     private readonly IAppSettingsService _settingsService;
     private readonly INoteFileService _fileService;
     private readonly NoteEditorWindow _noteEditor;
+    private readonly NoteOperations _noteOperations;
     private readonly BackupCoordinator _backupCoordinator;
     private readonly MainWindowViewModel _viewModel;
     private readonly SettingsViewModel _settingsViewModel;
@@ -49,6 +50,7 @@ public partial class MainWindow : Window {
             IAppSettingsService settingsService,
             INoteFileService fileService,
             NoteEditorWindow noteEditor,
+            NoteOperations noteOperations,
             IRunOnStartupService runOnStartupService,
             BackupCoordinator backupCoordinator,
             Action<AppThemeMode, string> applyAppTheme
@@ -61,6 +63,7 @@ public partial class MainWindow : Window {
         _hotkeys = new HotkeyConfiguration(settingsService, () => new GlobalHotkeysService(this), GetHotkeyAction);
         _fileService = fileService;
         _noteEditor = noteEditor;
+        _noteOperations = noteOperations ?? throw new ArgumentNullException(nameof(noteOperations));
         _backupCoordinator = backupCoordinator ?? throw new ArgumentNullException(nameof(backupCoordinator));
 
         _viewModel = new MainWindowViewModel(_fileService, _settingsService, action => Dispatcher.Invoke(action));
@@ -854,19 +857,6 @@ public partial class MainWindow : Window {
         object? sender,
         NoteRenameRequestedEventArgs e) {
         var attemptedName = Path.GetFileNameWithoutExtension(e.FilePath);
-        var oldFileName = Path.GetFileName(e.FilePath);
-        var containingDirectory = Path.GetDirectoryName(e.FilePath) ?? _fileService.CurrentDirectory;
-        if (!_fileService.TryGetNoteKey(e.FilePath, out var oldNoteKey))
-        {
-            e.IsCanceled = true;
-            AppDialog.Show(
-                this,
-                "This file is outside the notes folder and cannot be renamed here. Use Save As to choose a new name or location.",
-                "Rename Note",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            return;
-        }
 
         while (true) {
             var dialog = e.IsFirstSave
@@ -879,43 +869,50 @@ public partial class MainWindow : Window {
             }
 
             attemptedName = dialog.NoteName;
-            var (success, newFileName, error) = _fileService.RenameNote(
-                oldFileName,
-                attemptedName,
-                containingDirectory);
-            if (!success) {
+            var result = _noteOperations.RenameNote(e.FilePath, attemptedName);
+            if (!result.Success) {
+                if (result.IsExternalPath)
+                {
+                    e.IsCanceled = true;
+                    AppDialog.Show(
+                        this,
+                        result.Error!,
+                        "Rename Note",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return;
+                }
+
                 AppDialog.Show(
                     _noteEditor,
-                    error ?? "The note could not be renamed.",
+                    result.Error ?? "The note could not be renamed.",
                     e.IsFirstSave ? "Name Note" : "Rename Note",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 continue;
             }
 
-            var renamedFilePath = Path.Combine(
-                containingDirectory,
-                newFileName ?? oldFileName);
-            var renamedNoteKey = _fileService.GetNoteKey(renamedFilePath);
-            _viewModel.ReplacePinnedNoteKey(oldNoteKey, renamedNoteKey);
-            e.NewFilePath = renamedFilePath;
+            _viewModel.ReplacePinnedNoteKey(result.OldNoteKey!, result.NewNoteKey!);
+            e.NewFilePath = result.NewFilePath;
             Dispatcher.BeginInvoke(
                 DispatcherPriority.Background,
-                new Action(() => _viewModel.LoadNotes(renamedNoteKey)));
+                new Action(() => _viewModel.LoadNotes(result.NewNoteKey)));
             return;
         }
     }
 
     private void CreateAndOpenNewNote(Window owner) {
         try {
-            var createdNote = CreateNewNoteFromCurrentSettings(owner);
-            if (createdNote is null)
+            var result = CreateNewNoteFromCurrentSettings(owner);
+            if (result?.Note is null)
                 return;
 
-            var filePath = Path.Combine(_fileService.CurrentDirectory, createdNote.FileName);
-            _viewModel.LoadNotes(_fileService.GetNoteKey(filePath));
+            _viewModel.LoadNotes(result.NoteKey);
             // OnNotesLoaded fires synchronously above, so selection is already set.
-            OpenCreatedNoteInEditor(filePath, createdNote.UsesGeneratedName, createdNote.InitialContent);
+            OpenCreatedNoteInEditor(
+                result.FilePath!,
+                result.Note.UsesGeneratedName,
+                result.Note.InitialContent);
         } catch (Exception ex) when (FileSystemErrors.IsExpected(ex)) {
             ExceptionDiagnostics.Record(ex);
             AppDialog.Show(owner, "The note could not be created. Check folder access and available disk space.",
@@ -925,15 +922,17 @@ public partial class MainWindow : Window {
 
     private void QuickNoteButton_Click(object sender, RoutedEventArgs e) {
         try {
-            var (createdNote, error) = _fileService.CreateNote();
-            if (createdNote is null)
+            var result = _noteOperations.CreateNote();
+            if (result.Note is null)
             {
-                AppDialog.Show(error ?? "The note could not be created.", "New Note", MessageBoxButton.OK, MessageBoxImage.Information);
+                AppDialog.Show(result.Error ?? "The note could not be created.", "New Note", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-            var filePath = Path.Combine(_fileService.CurrentDirectory, createdNote.FileName);
-            _viewModel.LoadNotes(_fileService.GetNoteKey(filePath));
-            OpenCreatedNoteInEditor(filePath, createdNote.UsesGeneratedName, createdNote.InitialContent);
+            _viewModel.LoadNotes(result.NoteKey);
+            OpenCreatedNoteInEditor(
+                result.FilePath!,
+                result.Note.UsesGeneratedName,
+                result.Note.InitialContent);
         } catch (Exception ex) when (FileSystemErrors.IsExpected(ex)) {
             ExceptionDiagnostics.Record(ex);
             AppDialog.Show("The quick note could not be created. Check folder access and available disk space.",
@@ -941,15 +940,15 @@ public partial class MainWindow : Window {
         }
     }
 
-    private CreatedNote? CreateNewNoteFromCurrentSettings(Window owner) {
+    private NoteCreationResult? CreateNewNoteFromCurrentSettings(Window owner) {
         var mode = _settingsService.LoadNewNoteMode();
 
         // In "Quick" mode, skip the dialog
         if (mode == NewNoteMode.Quick)
-            return _fileService.CreateNote().Note;
+            return _noteOperations.CreateNote();
 
         // In "Prompt" or "Both" modes, offer a date name that can be accepted or replaced.
-        var attemptedName = _fileService.SuggestNoteName();
+        var attemptedName = _noteOperations.SuggestNoteName();
         while (true) {
             var dialog = new NewNoteNameDialog(attemptedName) {
                 Owner = owner
@@ -958,12 +957,12 @@ public partial class MainWindow : Window {
             if (dialog.ShowDialog() != true)
                 return null;
 
-            var (note, error) = _fileService.CreateNote(dialog.NoteName);
-            if (note is not null)
-                return note;
+            var result = _noteOperations.CreateNote(dialog.NoteName);
+            if (result.Note is not null)
+                return result;
 
             attemptedName = dialog.NoteName;
-            AppDialog.Show(owner, error ?? "The note name is invalid.",
+            AppDialog.Show(owner, result.Error ?? "The note name is invalid.",
                 "New Note Name", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
@@ -989,7 +988,7 @@ public partial class MainWindow : Window {
             if (!_noteEditor.TryPrepareForDirectoryRemoval(folderPath))
                 return;
 
-            var (success, error) = _fileService.DeleteFolder(note.FileName);
+            var (success, error) = _noteOperations.DeleteFolder(folderPath);
             if (success)
                 _noteEditor.NotifyDirectoryRemoved(folderPath);
             else
@@ -1035,8 +1034,7 @@ public partial class MainWindow : Window {
             return;
 
         try {
-            var containingDirectory = Path.GetDirectoryName(filePath);
-            if (_fileService.DeleteNote(Path.GetFileName(filePath), containingDirectory)) {
+            if (_noteOperations.DeleteNote(filePath)) {
                 _noteEditor.NotifyFileRemoved(filePath);
                 _viewModel.LoadNotes();
                 return;
@@ -1360,15 +1358,10 @@ public partial class MainWindow : Window {
 
     private bool CommitFolderRename(NoteItem folder, string newName) {
         var oldFolderPath = Path.Combine(_fileService.CurrentDirectory, folder.FileName);
-        var (success, newFolderName, error) = _fileService.RenameFolder(folder.FileName, newName);
-        if (!success) {
-            AppDialog.Show(error ?? "Rename failed.", "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+        var result = _noteOperations.RenameFolder(oldFolderPath, newName);
+        if (!result.Success) {
+            AppDialog.Show(result.Error ?? "Rename failed.", "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
             return false;
-        }
-
-        if (newFolderName is not null) {
-            var newFolderPath = Path.Combine(_fileService.CurrentDirectory, newFolderName);
-            _noteEditor.NotifyDirectoryRenamed(oldFolderPath, newFolderPath);
         }
 
         _viewModel.LoadNotes();
@@ -1376,27 +1369,19 @@ public partial class MainWindow : Window {
     }
 
     private bool CommitNoteRename(NoteItem note, string newDisplayName) {
-        var oldFileName = note.FileName;
         var containingDirectory = note.FullPath is null
             ? _fileService.CurrentDirectory
             : Path.GetDirectoryName(note.FullPath) ?? _fileService.CurrentDirectory;
-        var oldFilePath = Path.Combine(containingDirectory, oldFileName);
+        var oldFilePath = Path.Combine(containingDirectory, note.FileName);
 
-        var (success, newFileName, error) = _fileService.RenameNote(
-            note.FileName,
-            newDisplayName,
-            containingDirectory);
-        if (!success) {
-            if (error is not null)
-                AppDialog.Show(error, "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+        var result = _noteOperations.RenameNote(oldFilePath, newDisplayName);
+        if (!result.Success) {
+            if (result.Error is not null)
+                AppDialog.Show(result.Error, "Rename Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
             return false;
         }
-        var renamedFileName = newFileName ?? note.FileName;
-        var renamedFilePath = Path.Combine(containingDirectory, renamedFileName);
-        _noteEditor.NotifyFileRenamed(oldFilePath, renamedFilePath);
-        var renamedNoteKey = _fileService.GetNoteKey(renamedFilePath);
-        _viewModel.ReplacePinnedNoteKey(note.NoteKey, renamedNoteKey);
-        _viewModel.LoadNotes(renamedNoteKey);
+        _viewModel.ReplacePinnedNoteKey(note.NoteKey, result.NewNoteKey!);
+        _viewModel.LoadNotes(result.NewNoteKey);
         return true;
     }
 

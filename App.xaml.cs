@@ -146,10 +146,12 @@ public partial class App : Application
                 "Some automatically recovered notes still need to be saved, or note recovery reported a problem.",
                 includeRecoveryInUserBackup: true);
             startupNoteEditor = noteEditor;
+            var noteOperations = new NoteOperations(fileService, noteEditor.Workspace);
             var mainWindow = new MainWindow(
                 settings,
                 fileService,
                 noteEditor,
+                noteOperations,
                 new RunOnStartupService(),
                 backupCoordinator,
                 themeManager.Apply);

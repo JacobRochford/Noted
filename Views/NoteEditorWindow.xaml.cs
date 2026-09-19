@@ -81,6 +81,7 @@ public partial class NoteEditorWindow : Window
         _settingsService = settingsService;
         _recoveryService = recoveryService;
         _persistence = new NoteEditorPersistence(contentService, recoveryService, sessionService);
+        _workspace.DocumentPathsChanged += Workspace_DocumentPathsChanged;
 
         InitializeComponent();
         _primaryFindPresenter = new TextBoxSearchPresenter(EditorTextBox);
@@ -120,6 +121,7 @@ public partial class NoteEditorWindow : Window
     public event EventHandler? NewNoteRequested;
     public event EventHandler<NoteDeleteRequestedEventArgs>? DeleteNoteRequested;
     public event EventHandler<NoteRenameRequestedEventArgs>? NoteRenameRequested;
+    internal NoteEditorWorkspace Workspace => _workspace;
 
     private OpenNoteDocument? CurrentDocument => _workspace.CurrentDocument;
     private TextBox CurrentEditorTextBox => ReferenceEquals(CurrentDocument, _secondaryDocument)
@@ -287,65 +289,31 @@ public partial class NoteEditorWindow : Window
         UpdateEditorState();
     }
 
-    public void NotifyFileRenamed(string oldFilePath, string newFilePath)
-    {
-        var document = FindDocument(oldFilePath);
-        if (document is null)
-            return;
-
-        CaptureActiveDocument();
-        UpdateDocumentPathAfterRename(document, newFilePath);
-    }
-
     private void UpdateDocumentPathAfterRename(OpenNoteDocument document, string newFilePath)
     {
-        var oldPath = document.FilePath;
         var normalizedNewPath = NormalizePath(newFilePath);
-        var pathChanged = !string.Equals(
-            oldPath,
-            normalizedNewPath,
-            StringComparison.OrdinalIgnoreCase);
         _workspace.UpdatePath(
             document,
             normalizedNewPath,
             clearGeneratedName: true,
             markPresent: true);
-        _documentTimeText.Remove(oldPath);
-        _documentTimeText.Remove(document.FilePath);
-        if (_unsavedRecoveredPaths.Remove(oldPath))
-            _unsavedRecoveredPaths.Add(document.FilePath);
-        if (pathChanged && document.IsDirty)
-            MoveRecoveryDraft(oldPath, document);
-        if (ReferenceEquals(document, _secondaryDocument))
-            SecondaryDocumentTitle.Text = document.TabLabel;
-        SaveEditorSession();
-        UpdateEditorState();
     }
 
-    public void NotifyDirectoryRenamed(string oldDirectoryPath, string newDirectoryPath)
+    private void Workspace_DocumentPathsChanged(
+        object? sender,
+        NoteEditorDocumentPathsChangedEventArgs e)
     {
-        var normalizedOldDirectory = NormalizePath(oldDirectoryPath);
-        var normalizedNewDirectory = NormalizePath(newDirectoryPath);
-        var affectedDocuments = _documents
-            .Where(document => IsPathWithin(document.FilePath, normalizedOldDirectory))
-            .ToList();
-
         CaptureActiveDocument();
-        foreach (var document in affectedDocuments)
+        foreach (var change in e.Changes)
         {
-            var oldPath = document.FilePath;
-            var relativePath = Path.GetRelativePath(normalizedOldDirectory, oldPath);
-            _workspace.UpdatePath(
-                document,
-                Path.Combine(normalizedNewDirectory, relativePath),
-                clearGeneratedName: false,
-                markPresent: false);
-            _documentTimeText.Remove(oldPath);
-            _documentTimeText.Remove(document.FilePath);
-            if (_unsavedRecoveredPaths.Remove(oldPath))
-                _unsavedRecoveredPaths.Add(document.FilePath);
-            if (document.IsDirty)
-                MoveRecoveryDraft(oldPath, document);
+            _documentTimeText.Remove(change.OldFilePath);
+            _documentTimeText.Remove(change.NewFilePath);
+            if (_unsavedRecoveredPaths.Remove(change.OldFilePath))
+                _unsavedRecoveredPaths.Add(change.NewFilePath);
+            if (change.Document.IsDirty)
+                MoveRecoveryDraft(change.OldFilePath, change.Document);
+            if (ReferenceEquals(change.Document, _secondaryDocument))
+                SecondaryDocumentTitle.Text = change.Document.TabLabel;
         }
 
         SaveEditorSession();
@@ -1595,7 +1563,8 @@ public partial class NoteEditorWindow : Window
                 document,
                 newPath,
                 clearGeneratedName: true,
-                markPresent: true);
+                markPresent: true,
+                notifyChange: false);
             _documentTimeText.Remove(oldPath);
             _documentTimeText.Remove(newPath);
             _workspace.MarkSaved(document);
@@ -2269,6 +2238,7 @@ public partial class NoteEditorWindow : Window
     private void Window_Closed(object? sender, EventArgs e)
     {
         _recoverySaveScheduler.StateChanged -= RecoverySaveScheduler_StateChanged;
+        _workspace.DocumentPathsChanged -= Workspace_DocumentPathsChanged;
         _recoverySaveScheduler.Dispose();
         _primaryFindPresenter.Dispose();
         _secondaryFindPresenter.Dispose();

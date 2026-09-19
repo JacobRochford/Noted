@@ -8,6 +8,17 @@ internal sealed record NoteEditorWorkspaceCloseResult(
     bool SecondaryDocumentClosed,
     OpenNoteDocument? ActiveDocument);
 
+internal sealed record NoteEditorDocumentPathChange(
+    OpenNoteDocument Document,
+    string OldFilePath,
+    string NewFilePath);
+
+internal sealed class NoteEditorDocumentPathsChangedEventArgs(
+    IReadOnlyList<NoteEditorDocumentPathChange> changes) : EventArgs
+{
+    internal IReadOnlyList<NoteEditorDocumentPathChange> Changes { get; } = changes;
+}
+
 internal sealed class NoteEditorWorkspace
 {
     private readonly ObservableCollection<OpenNoteDocument> _documents = [];
@@ -23,6 +34,7 @@ internal sealed class NoteEditorWorkspace
     internal OpenNoteDocument? FocusedDocument { get; private set; }
     internal OpenNoteDocument? CurrentDocument => FocusedDocument ?? ActiveDocument;
     internal bool IsDirty => _documents.Any(document => document.IsDirty);
+    internal event EventHandler<NoteEditorDocumentPathsChangedEventArgs>? DocumentPathsChanged;
 
     internal void Add(OpenNoteDocument document)
     {
@@ -114,7 +126,8 @@ internal sealed class NoteEditorWorkspace
         OpenNoteDocument document,
         string filePath,
         bool clearGeneratedName,
-        bool markPresent)
+        bool markPresent,
+        bool notifyChange = true)
     {
         EnsureOwned(document);
         var normalizedPath = Path.GetFullPath(filePath);
@@ -125,11 +138,48 @@ internal sealed class NoteEditorWorkspace
             throw new InvalidOperationException("A document with the same path is already open.");
         }
 
+        var oldFilePath = document.FilePath;
         document.UpdateFilePath(normalizedPath);
         if (clearGeneratedName)
             document.UsesGeneratedName = false;
         if (markPresent)
             document.IsMissing = false;
+        if (notifyChange && !PathsEqual(oldFilePath, document.FilePath))
+        {
+            DocumentPathsChanged?.Invoke(
+                this,
+                new NoteEditorDocumentPathsChangedEventArgs(
+                    [new NoteEditorDocumentPathChange(document, oldFilePath, document.FilePath)]));
+        }
+    }
+
+    internal void UpdateDirectoryPath(string oldDirectoryPath, string newDirectoryPath)
+    {
+        var normalizedOldDirectory = Path.GetFullPath(oldDirectoryPath);
+        var normalizedNewDirectory = Path.GetFullPath(newDirectoryPath);
+        var changes = _documents
+            .Where(document => IsPathWithin(document.FilePath, normalizedOldDirectory))
+            .Select(document => new NoteEditorDocumentPathChange(
+                document,
+                document.FilePath,
+                Path.Combine(
+                    normalizedNewDirectory,
+                    Path.GetRelativePath(normalizedOldDirectory, document.FilePath))))
+            .ToList();
+        if (changes.Count == 0)
+            return;
+
+        var finalPaths = changes.Select(change => change.NewFilePath)
+            .Concat(_documents
+                .Where(document => changes.All(change => !ReferenceEquals(change.Document, document)))
+                .Select(document => document.FilePath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (finalPaths.Count != _documents.Count)
+            throw new InvalidOperationException("Renaming the directory would create duplicate open document paths.");
+
+        foreach (var change in changes)
+            change.Document.UpdateFilePath(change.NewFilePath);
+        DocumentPathsChanged?.Invoke(this, new NoteEditorDocumentPathsChangedEventArgs(changes));
     }
 
     internal void UpdateCreationMetadata(
@@ -210,4 +260,13 @@ internal sealed class NoteEditorWorkspace
 
     private static bool PathsEqual(string left, string right) =>
         string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPathWithin(string filePath, string directoryPath)
+    {
+        var relativePath = Path.GetRelativePath(directoryPath, filePath);
+        return !Path.IsPathRooted(relativePath) &&
+               !relativePath.Equals("..", StringComparison.Ordinal) &&
+               !relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) &&
+               !relativePath.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal);
+    }
 }

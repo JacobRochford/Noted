@@ -45,7 +45,8 @@ public sealed class WindowConstructionTests
                     new FullBackupService(directory.Path, files.NotesDirectory),
                     new ShutdownFlushCoordinator(),
                     () => files.NotesDirectory);
-                var main = new MainWindow(settings, files, editor, new ConstructionStartupService(),
+                var noteOperations = new NoteOperations(files, editor.Workspace);
+                var main = new MainWindow(settings, files, editor, noteOperations, new ConstructionStartupService(),
                     backupCoordinator,
                     (_, _) => Assert.Fail("Construction must not change the theme.")) { Width = 1280, Height = 900 };
                 foreach (var window in new Window[] { editor, miniPad, dictionary, checklist, scratchpad, main })
