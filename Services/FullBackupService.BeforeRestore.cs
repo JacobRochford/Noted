@@ -31,7 +31,7 @@ internal sealed partial class FullBackupService
                     "There is no current Noted data to protect before restoration.");
             }
 
-            var build = BuildVerifiedBackup(FullBackupType.BeforeRestore, currentFiles);
+            var build = _archiveWriter.BuildVerifiedBackup(FullBackupType.BeforeRestore, currentFiles);
             var backupPath = Path.Combine(
                 _backupDirectory,
                 $"before-restore-{_clock.GetUtcNow().UtcDateTime:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}");
