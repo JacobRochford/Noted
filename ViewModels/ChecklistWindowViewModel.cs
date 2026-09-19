@@ -28,6 +28,11 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
     private bool _isRefreshing;
     private bool _isBulkUpdating;
     private string? _persistenceError;
+    private string? _itemSaveError;
+    private string? _tabSaveError;
+    private string? _itemSaveWarning;
+    private string? _tabSaveWarning;
+    private string? _loadNotice;
 
     // Source collection in saved order
     public ObservableCollection<ChecklistItem> Items { get; } = new();
@@ -741,13 +746,18 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         try
         {
             var saveResult = _contentService.SaveTabs(CreateTabsSnapshot());
-            PersistenceError = saveResult.Warning;
+            _tabSaveError = null;
+            _tabSaveWarning = saveResult.Warning;
+            _loadNotice = null;
+            RefreshPersistenceError();
             return true;
         }
         catch (Exception ex) when (IsExpectedPersistenceException(ex))
         {
             System.Diagnostics.Debug.WriteLine(ex);
-            PersistenceError = $"Checklist tabs could not be saved: {ex.Message}";
+            _tabSaveError = $"Checklist tabs could not be saved: {ex.Message}";
+            _tabSaveWarning = null;
+            RefreshPersistenceError();
             return false;
         }
     }
@@ -757,25 +767,39 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         try
         {
             var saveResult = _contentService.SaveItems(items);
-            PersistenceError = saveResult.Warning;
+            _itemSaveError = null;
+            _itemSaveWarning = saveResult.Warning;
+            _loadNotice = null;
+            RefreshPersistenceError();
             return PersistenceSaveResult.Succeeded();
         }
         catch (Exception ex) when (IsExpectedPersistenceException(ex))
         {
             System.Diagnostics.Debug.WriteLine(ex);
-            PersistenceError = $"Checklist content could not be saved: {ex.Message}";
-            return PersistenceSaveResult.Failed(PersistenceError);
+            _itemSaveError = $"Checklist content could not be saved: {ex.Message}";
+            _itemSaveWarning = null;
+            RefreshPersistenceError();
+            return PersistenceSaveResult.Failed(_itemSaveError);
         }
     }
 
     private void SetLoadIssues(IReadOnlyList<ChecklistContentIssue> issues)
     {
-        PersistenceError = issues.Count == 0
+        _loadNotice = issues.Count == 0
             ? null
             : string.Join(
                 " ",
                 issues.Select(issue => $"{Path.GetFileName(issue.FilePath)}: {issue.Message}"));
+        RefreshPersistenceError();
     }
+
+    // Failures precede warnings; item saves take precedence within each category.
+    private void RefreshPersistenceError()
+        => PersistenceError = _itemSaveError
+            ?? _tabSaveError
+            ?? _itemSaveWarning
+            ?? _tabSaveWarning
+            ?? _loadNotice;
 
     private static bool IsExpectedPersistenceException(Exception exception)
     {
