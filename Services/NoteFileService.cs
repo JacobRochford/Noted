@@ -5,14 +5,12 @@ using Noted.Models;
 
 namespace Noted.Services;
 
-// handles all note/folder file ops, nav, and watcher
+// handles note and folder file operations
 public sealed class NoteFileService : INoteFileService {
     private const string DeletedNoteTimestampFormat = "yyyy-MM-dd_HH-mm-ss_fff";
     private readonly IAppSettingsService _settingsService;
-    private FileSystemWatcher? _watcher;
-    private FileSystemWatcher? _directoryWatcher;
-    private readonly Stack<string> _backHistory = new();
-    private readonly Stack<string> _forwardHistory = new();
+    private readonly NoteBrowserNavigation _navigation;
+    private readonly NoteDirectoryWatcher _directoryWatcher = new();
     private static readonly TimeSpan s_deletedNoteRetention = TimeSpan.FromDays(14); // how long to keep deleted notes
     private static readonly HashSet<string> s_reservedFileNames = new(StringComparer.OrdinalIgnoreCase) {
         // windows reserved names
@@ -21,23 +19,12 @@ public sealed class NoteFileService : INoteFileService {
         "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
     };
 
-    public string NotesDirectory { get; private set; }
-    public string CurrentDirectory { get; private set; } = "";
-    public string CurrentFolderName {
-        get {
-            // show pretty folder path, or blank if at root
-            if (string.Equals(CurrentDirectory, NotesDirectory, StringComparison.OrdinalIgnoreCase))
-                return "";
-            var relative = Path.GetRelativePath(
-                Path.GetFullPath(NotesDirectory),
-                Path.GetFullPath(CurrentDirectory));
-            return relative.Replace(Path.DirectorySeparatorChar, '/').Replace("/", " / ");
-        }
-    }
-    public bool CanNavigateUp =>
-        !string.Equals(CurrentDirectory, NotesDirectory, StringComparison.OrdinalIgnoreCase); // at root?
-    public bool CanNavigateBack => _backHistory.Count > 0;
-    public bool CanNavigateForward => _forwardHistory.Count > 0;
+    public string NotesDirectory => _navigation.RootDirectory;
+    public string CurrentDirectory => _navigation.CurrentDirectory;
+    public string CurrentFolderName => _navigation.CurrentFolderName;
+    public bool CanNavigateUp => _navigation.CanNavigateUp;
+    public bool CanNavigateBack => _navigation.CanNavigateBack;
+    public bool CanNavigateForward => _navigation.CanNavigateForward;
     public string DeletedNotesDirectory { get; }
     public string ArchivedNotesDirectory => Path.Combine(NotesDirectory, ".archive");
 
@@ -46,8 +33,8 @@ public sealed class NoteFileService : INoteFileService {
     public NoteFileService(IAppSettingsService settingsService) {
         _settingsService = settingsService;
         DeletedNotesDirectory = Path.Combine(_settingsService.AppDataDirectory, "DeletedNotes");
-        NotesDirectory = ResolveInitialNotesDirectory();
-        CurrentDirectory = NotesDirectory;
+        _navigation = new NoteBrowserNavigation(ResolveInitialNotesDirectory());
+        _directoryWatcher.Changed += OnFilesChanged;
         Directory.CreateDirectory(NotesDirectory);
         Directory.CreateDirectory(DeletedNotesDirectory);
         PurgeExpiredDeletedNotes(); // clean up old deleted notes
@@ -55,7 +42,7 @@ public sealed class NoteFileService : INoteFileService {
 
     public IReadOnlyList<NoteItem> GetNotes() {
         // get all supported notes in current dir
-        if (!Directory.Exists(CurrentDirectory)) CurrentDirectory = NotesDirectory;
+        _navigation.EnsureCurrentDirectoryExists();
         // Notes are always sorted by last modified (descending)
         return EnumerateNoteFiles(CurrentDirectory)
             .Select(path => new FileInfo(path))
@@ -134,29 +121,27 @@ public sealed class NoteFileService : INoteFileService {
         if (string.Equals(NotesDirectory, normalizedPath, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        var wasWatching = _watcher is not null;
-        FileSystemWatcher? newFileWatcher = null;
-        FileSystemWatcher? newDirectoryWatcher = null;
+        var wasWatching = _directoryWatcher.IsWatching;
+        NoteDirectoryWatcher.PreparedWatchers? replacementWatchers = null;
 
         try {
             if (wasWatching)
-                (newFileWatcher, newDirectoryWatcher) = CreateWatchers(normalizedPath);
+                replacementWatchers = _directoryWatcher.PrepareReplacement(normalizedPath);
 
             // Persist before exposing the new root to callers. If this fails,
             // the current root, navigation state, and existing watchers remain intact.
             _settingsService.SaveNotesDirectory(normalizedPath);
         } catch {
-            DisposeFileWatcher(newFileWatcher);
-            DisposeDirectoryWatcher(newDirectoryWatcher);
+            replacementWatchers?.Dispose();
             throw;
         }
 
-        NotesDirectory = normalizedPath;
-        CurrentDirectory = normalizedPath;
-        ResetNavigationHistory();
+        _navigation.ChangeRoot(normalizedPath);
 
-        if (newFileWatcher is not null && newDirectoryWatcher is not null)
-            ReplaceWatchers(newFileWatcher, newDirectoryWatcher);
+        if (replacementWatchers is not null) {
+            using (replacementWatchers)
+                _directoryWatcher.ReplaceWith(replacementWatchers);
+        }
 
         FilesChanged?.Invoke(this, EventArgs.Empty);
         return true;
@@ -437,66 +422,15 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     // start watching for file/folder changes
-    public void StartWatching() {
-        var (fileWatcher, directoryWatcher) = CreateWatchers(NotesDirectory);
-        ReplaceWatchers(fileWatcher, directoryWatcher);
-    }
+    public void StartWatching() => _directoryWatcher.Start(NotesDirectory);
 
-    private static (FileSystemWatcher FileWatcher, FileSystemWatcher DirectoryWatcher) CreateWatchers(
-        string notesDirectory) {
-        FileSystemWatcher? fileWatcher = null;
-        FileSystemWatcher? directoryWatcher = null;
-
-        try {
-            fileWatcher = new FileSystemWatcher(notesDirectory) {
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
-                IncludeSubdirectories = true,
-                EnableRaisingEvents = false
-            };
-            foreach (var extension in NoteFileExtensions.SupportedExtensions)
-                fileWatcher.Filters.Add($"*{extension}");
-            fileWatcher.EnableRaisingEvents = true;
-            directoryWatcher = new FileSystemWatcher(notesDirectory) {
-                NotifyFilter = NotifyFilters.DirectoryName,
-                IncludeSubdirectories = true,
-                EnableRaisingEvents = true
-            };
-
-            return (fileWatcher, directoryWatcher);
-        } catch {
-            fileWatcher?.Dispose();
-            directoryWatcher?.Dispose();
-            throw;
-        }
-    }
-
-    private void ReplaceWatchers(
-        FileSystemWatcher fileWatcher,
-        FileSystemWatcher directoryWatcher) {
-        fileWatcher.Created += OnFileSystemChanged;
-        fileWatcher.Changed += OnFileSystemChanged;
-        fileWatcher.Deleted += OnFileSystemChanged;
-        fileWatcher.Renamed += OnFileSystemChanged;
-        directoryWatcher.Created += OnFileSystemChanged;
-        directoryWatcher.Deleted += OnFileSystemChanged;
-        directoryWatcher.Renamed += OnFileSystemChanged;
-
-        var previousFileWatcher = _watcher;
-        var previousDirectoryWatcher = _directoryWatcher;
-        _watcher = fileWatcher;
-        _directoryWatcher = directoryWatcher;
-
-        DisposeFileWatcher(previousFileWatcher);
-        DisposeDirectoryWatcher(previousDirectoryWatcher);
-    }
-
-    private void OnFileSystemChanged(object sender, FileSystemEventArgs e) {
+    private void OnFilesChanged(object? sender, EventArgs e) {
         FilesChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // get all folders in current dir
     public IReadOnlyList<NoteItem> GetFolders() {
-        if (!Directory.Exists(CurrentDirectory)) CurrentDirectory = NotesDirectory;
+        _navigation.EnsureCurrentDirectoryExists();
         return Directory.GetDirectories(CurrentDirectory)
             .Where(path => !PathsEqual(path, ArchivedNotesDirectory))
             .Select(path => new DirectoryInfo(path))
@@ -550,44 +484,14 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     // go into a folder (blocks path traversal)
-    public void NavigateTo(string folderName) {
-        if (!TryResolveChildPath(
-                NotesDirectory,
-                CurrentDirectory,
-                folderName,
-                out var target))
-            return;
-        if (IsPathWithinArchiveDirectory(target))
-            return;
-        NavigateToDirectory(target, clearForwardHistory: true);
-    }
+    public void NavigateTo(string folderName) => _navigation.NavigateTo(folderName);
 
     // go up one folder (blocks escape)
-    public void NavigateUp() {
-        if (!CanNavigateUp) return;
-        var parent = Path.GetDirectoryName(CurrentDirectory);
-        var target = parent is not null &&
-                     TryNormalizeContainedPath(NotesDirectory, parent, out var normalizedParent)
-            ? normalizedParent
-            : NotesDirectory;
-        NavigateToDirectory(target, clearForwardHistory: true);
-    }
+    public void NavigateUp() => _navigation.NavigateUp();
 
-    public void NavigateBack() {
-        if (!TryPopValidHistoryEntry(_backHistory, out var target))
-            return;
+    public void NavigateBack() => _navigation.NavigateBack();
 
-        _forwardHistory.Push(CurrentDirectory);
-        CurrentDirectory = target;
-    }
-
-    public void NavigateForward() {
-        if (!TryPopValidHistoryEntry(_forwardHistory, out var target))
-            return;
-
-        _backHistory.Push(CurrentDirectory);
-        CurrentDirectory = target;
-    }
+    public void NavigateForward() => _navigation.NavigateForward();
 
     // create a new folder (sanitizes name, blocks traversal)
     public (bool Success, string? Error) CreateFolder(string folderName) {
@@ -791,73 +695,8 @@ public sealed class NoteFileService : INoteFileService {
     private static bool IsExpectedFileOperationException(Exception exception) =>
         FileSystemErrors.IsExpected(exception);
 
-    private void NavigateToDirectory(string target, bool clearForwardHistory) {
-        if (!TryNormalizeContainedPath(NotesDirectory, target, out var normalizedTarget) ||
-            IsPathWithinArchiveDirectory(normalizedTarget) ||
-            !Directory.Exists(normalizedTarget) ||
-            PathsEqual(normalizedTarget, CurrentDirectory))
-            return;
-
-        _backHistory.Push(CurrentDirectory);
-        CurrentDirectory = normalizedTarget;
-
-        if (clearForwardHistory)
-            _forwardHistory.Clear();
-    }
-
-    private bool TryPopValidHistoryEntry(Stack<string> history, out string target) {
-        while (history.Count > 0) {
-            var historyPath = history.Pop();
-            if (!TryNormalizeContainedPath(NotesDirectory, historyPath, out var fullPath) ||
-                IsPathWithinArchiveDirectory(fullPath) ||
-                !Directory.Exists(fullPath))
-                continue;
-
-            target = fullPath;
-            return true;
-        }
-
-        target = string.Empty;
-        return false;
-    }
-
-    private void ResetNavigationHistory() {
-        _backHistory.Clear();
-        _forwardHistory.Clear();
-    }
-
-    private void StopWatching() {
-        var fileWatcher = _watcher;
-        var directoryWatcher = _directoryWatcher;
-        _watcher = null;
-        _directoryWatcher = null;
-
-        DisposeFileWatcher(fileWatcher);
-        DisposeDirectoryWatcher(directoryWatcher);
-    }
-
-    private void DisposeFileWatcher(FileSystemWatcher? watcher) {
-        if (watcher is null)
-            return;
-
-        watcher.Created -= OnFileSystemChanged;
-        watcher.Changed -= OnFileSystemChanged;
-        watcher.Deleted -= OnFileSystemChanged;
-        watcher.Renamed -= OnFileSystemChanged;
-        watcher.Dispose();
-    }
-
-    private void DisposeDirectoryWatcher(FileSystemWatcher? watcher) {
-        if (watcher is null)
-            return;
-
-        watcher.Created -= OnFileSystemChanged;
-        watcher.Deleted -= OnFileSystemChanged;
-        watcher.Renamed -= OnFileSystemChanged;
-        watcher.Dispose();
-    }
-
     public void Dispose() {
-        StopWatching();
+        _directoryWatcher.Changed -= OnFilesChanged;
+        _directoryWatcher.Dispose();
     }
 }
