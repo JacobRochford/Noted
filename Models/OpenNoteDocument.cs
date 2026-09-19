@@ -39,19 +39,19 @@ public sealed class OpenNoteDocument : ObservableObject
         keepExtensionForCustomName: false);
     public string TabLabel =>
         $"{DisplayName}{(_isMissing ? "  (missing)" : string.Empty)}{(_isDirty ? "  •" : string.Empty)}";
-    public string Content { get; set; }
-    public string SavedContent { get; set; }
-    public int CaretIndex { get; set; }
-    public double VerticalOffset { get; set; }
-    public bool MarkdownPreviewEnabled { get; set; }
-    public bool UsesGeneratedName { get; set; }
+    public string Content { get; internal set; }
+    public string SavedContent { get; internal set; }
+    public int CaretIndex { get; internal set; }
+    public double VerticalOffset { get; internal set; }
+    public bool MarkdownPreviewEnabled { get; internal set; }
+    public bool UsesGeneratedName { get; internal set; }
     // Non-null only for a file created by this app that has not been explicitly saved yet.
-    public string? InitialFileContent { get; set; }
+    public string? InitialFileContent { get; internal set; }
 
     public bool IsDirty
     {
         get => _isDirty;
-        set
+        internal set
         {
             if (SetProperty(ref _isDirty, value))
                 OnPropertyChanged(nameof(TabLabel));
@@ -61,14 +61,14 @@ public sealed class OpenNoteDocument : ObservableObject
     public bool IsMissing
     {
         get => _isMissing;
-        set
+        internal set
         {
             if (SetProperty(ref _isMissing, value))
                 OnPropertyChanged(nameof(TabLabel));
         }
     }
 
-    public void UpdateFilePath(string filePath)
+    internal void UpdateFilePath(string filePath)
     {
         var normalizedPath = Path.GetFullPath(filePath);
         if (string.Equals(_filePath, normalizedPath, StringComparison.OrdinalIgnoreCase))
