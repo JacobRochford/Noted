@@ -13,12 +13,12 @@ namespace Noted.Services
 
         private static NotedWindowVisibility? s_hiddenNotedWindows;
 
-        public static MainWindow? Main { get; set; }
-        public static ChecklistWindow? Checklist { get; set; }
-        public static DictionaryWindow? Dictionary { get; set; }
-        public static ScratchpadWindow? Scratchpad { get; set; }
-        public static MiniPadWindow? MiniPad { get; set; }
-        public static NoteEditorWindow? Editor { get; set; }
+        public static MainWindow? Main { get; internal set; }
+        public static ChecklistWindow? Checklist { get; internal set; }
+        public static DictionaryWindow? Dictionary { get; internal set; }
+        public static ScratchpadWindow? Scratchpad { get; internal set; }
+        public static MiniPadWindow? MiniPad { get; internal set; }
+        public static NoteEditorWindow? Editor { get; internal set; }
 
         internal static Func<ChecklistWindow?>? ChecklistProvider { get; set; }
         internal static Func<DictionaryWindow?>? DictionaryProvider { get; set; }
@@ -169,6 +169,49 @@ namespace Noted.Services
                 HideMiniPad();
             else
                 ShowMiniPad();
+        }
+
+        internal static bool TryPrepareForShutdown(out string? error)
+        {
+            try
+            {
+                if (Editor is not null && !Editor.TryPrepareForClose())
+                {
+                    CancelPreparedClose();
+                    error = null;
+                    return false;
+                }
+
+                Checklist?.PrepareForApplicationShutdown();
+                Dictionary?.PrepareForApplicationShutdown();
+                if (Scratchpad is not null &&
+                    !Scratchpad.TryPrepareForApplicationShutdown(out var stateError))
+                {
+                    CancelPreparedClose();
+                    error = stateError ?? "Scratchpad window state could not be saved.";
+                    return false;
+                }
+                MiniPad?.PrepareForApplicationShutdown();
+            }
+            catch (SettingsPersistenceException ex)
+            {
+                ExceptionDiagnostics.Record(ex);
+                CancelPreparedClose();
+                error = ex.Message;
+                return false;
+            }
+
+            error = null;
+            return true;
+        }
+
+        internal static void CancelPreparedClose()
+        {
+            Editor?.CancelPreparedClose();
+            Checklist?.CancelPreparedClose();
+            Dictionary?.CancelPreparedClose();
+            Scratchpad?.CancelPreparedClose();
+            MiniPad?.CancelPreparedClose();
         }
 
         public static void ClearAll()

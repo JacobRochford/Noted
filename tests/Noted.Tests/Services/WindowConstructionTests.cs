@@ -71,7 +71,7 @@ public sealed class WindowConstructionTests
                 VerifySettingsBindings(settingsView, settings, files);
                 main.CleanupResources();
                 main.Close();
-                VerifyShutdownPreparation(app, editor, scratchpad, directory);
+                VerifyShutdownPreparation(editor, scratchpad, directory);
                 miniPad.KeepDraftOnClose();
                 editor.Close();
                 miniPad.Close();
@@ -158,17 +158,16 @@ public sealed class WindowConstructionTests
     }
 
     private static void VerifyShutdownPreparation(
-        App app, NoteEditorWindow editor, ScratchpadWindow scratchpad, TemporaryTestDirectory directory)
+        NoteEditorWindow editor, ScratchpadWindow scratchpad, TemporaryTestDirectory directory)
     {
-        var appEditor = typeof(App).GetField("_noteEditorWindow", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        var appScratchpad = typeof(App).GetField("_scratchpadWindow", BindingFlags.Instance | BindingFlags.NonPublic)!;
         var prepared = typeof(NoteEditorWindow).GetField("_isPreparedForApplicationClose", BindingFlags.Instance | BindingFlags.NonPublic)!;
         // Exercise persistence on the laid-out, undisplayed editor.
         editor.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent));
-        appEditor.SetValue(app, editor);
+        WindowManager.Editor = editor;
         try
         {
-            Assert.IsTrue(app.TryPrepareWindowsForShutdown(out _));
+            Assert.AreSame(editor, WindowManager.Editor);
+            Assert.IsTrue(WindowManager.TryPrepareForShutdown(out _));
             editor.CancelPreparedClose();
             // A hidden Window need not update ActualWidth, so change a persisted
             // preference directly to force a write without showing native UI.
@@ -177,27 +176,27 @@ public sealed class WindowConstructionTests
 
             using (new FileStream(directory.File("settings.json"), FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                Assert.IsFalse(app.TryPrepareWindowsForShutdown(out var error));
+                Assert.IsFalse(WindowManager.TryPrepareForShutdown(out var error));
                 Assert.IsNotNull(error);
                 Assert.IsFalse((bool)prepared.GetValue(editor)!);
             }
-            Assert.IsTrue(app.TryPrepareWindowsForShutdown(out _), "Editor preparation should be retryable.");
+            Assert.IsTrue(WindowManager.TryPrepareForShutdown(out _), "Editor preparation should be retryable.");
             editor.CancelPreparedClose();
 
-            appScratchpad.SetValue(app, scratchpad);
+            WindowManager.Scratchpad = scratchpad;
             scratchpad.Width += 80;
             using (new FileStream(directory.File("settings.json"), FileMode.Open, FileAccess.Read, FileShare.Read))
             {
-                Assert.IsFalse(app.TryPrepareWindowsForShutdown(out var error));
+                Assert.IsFalse(WindowManager.TryPrepareForShutdown(out var error));
                 Assert.IsNotNull(error);
                 Assert.IsFalse((bool)prepared.GetValue(editor)!, "A later failure must undo editor preparation.");
             }
-            Assert.IsTrue(app.TryPrepareWindowsForShutdown(out _), "Scratchpad preparation should be retryable.");
+            Assert.IsTrue(WindowManager.TryPrepareForShutdown(out _), "Scratchpad preparation should be retryable.");
         }
         finally
         {
-            appEditor.SetValue(app, null);
-            appScratchpad.SetValue(app, null);
+            WindowManager.Editor = null;
+            WindowManager.Scratchpad = null;
         }
     }
 

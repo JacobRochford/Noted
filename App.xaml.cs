@@ -25,11 +25,6 @@ public partial class App : Application
     private AppThemeManager? _themeManager;
     private FileOpenRequestService? _fileOpenRequestService;
     private NoteFileService? _fileService;
-    private MainWindow? _mainWindow;
-    private NoteEditorWindow? _noteEditorWindow;
-    private ChecklistWindow? _checklistWindow;
-    private DictionaryWindow? _dictionaryWindow;
-    private ScratchpadWindow? _scratchpadWindow;
     private readonly ShutdownFlushCoordinator _shutdownFlushCoordinator = new();
     private readonly ApplicationShutdownSequence _shutdownSequence;
     private IDisposable? _checklistBackupRegistration;
@@ -37,7 +32,6 @@ public partial class App : Application
     private IDisposable? _scratchpadBackupRegistration;
     private IDisposable? _miniPadBackupRegistration;
     private IDisposable? _noteEditorBackupRegistration;
-    private MiniPadWindow? _miniPadWindow;
     private IMiniPadRecoveryService? _miniPadRecoveryService;
     private BackupCoordinator? _backupCoordinator;
     private bool _isShuttingDown;
@@ -158,8 +152,6 @@ public partial class App : Application
                 backupCoordinator,
                 themeManager.Apply);
             _fileService = fileService;
-            _noteEditorWindow = noteEditor;
-            _mainWindow = mainWindow;
             MainWindow = mainWindow;
             mainWindow.Closing += MainWindow_Closing;
             backupCoordinator.ShutdownRequested += BackupCoordinator_ShutdownRequested;
@@ -225,7 +217,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            if (_mainWindow is null)
+            if (WindowManager.Main is null)
             {
                 CloseExistingWindow(startupNoteEditor, "note editor");
                 try { startupFileService?.Dispose(); } catch (Exception cleanupException) { ExceptionDiagnostics.Record(cleanupException); }
@@ -242,15 +234,15 @@ public partial class App : Application
         try
         {
 
-            var mainWindow = _mainWindow;
+            var mainWindow = WindowManager.Main;
             if (mainWindow is not null)
             {
                 mainWindow.Closing -= MainWindow_Closing;
             }
 
-            if (_scratchpadWindow is not null)
+            if (WindowManager.Scratchpad is { } scratchpadWindow)
             {
-                if (!_scratchpadWindow.TryFlushPendingContent(out var error))
+                if (!scratchpadWindow.TryFlushPendingContent(out var error))
                 {
                     AppDialog.Show(
                         error ?? "Scratchpad content could not be saved before shutdown.",
@@ -260,10 +252,10 @@ public partial class App : Application
                 }
             }
 
-            CloseExistingWindow(_checklistWindow, "Checklist");
-            CloseExistingWindow(_dictionaryWindow, "Dictionary");
-            CloseExistingWindow(_scratchpadWindow, "Scratchpad");
-            CloseExistingWindow(_noteEditorWindow, "note editor");
+            CloseExistingWindow(WindowManager.Checklist, "Checklist");
+            CloseExistingWindow(WindowManager.Dictionary, "Dictionary");
+            CloseExistingWindow(WindowManager.Scratchpad, "Scratchpad");
+            CloseExistingWindow(WindowManager.Editor, "note editor");
             CloseMiniPadWindow();
 
             _checklistBackupRegistration?.Dispose();
@@ -307,12 +299,6 @@ public partial class App : Application
             }
 
             _fileService = null;
-            _mainWindow = null;
-            _noteEditorWindow = null;
-            _checklistWindow = null;
-            _dictionaryWindow = null;
-            _scratchpadWindow = null;
-            _miniPadWindow = null;
             _miniPadRecoveryService = null;
             if (_backupCoordinator is not null)
                 _backupCoordinator.ShutdownRequested -= BackupCoordinator_ShutdownRequested;
@@ -335,10 +321,10 @@ public partial class App : Application
     {
         Dispatcher.VerifyAccess();
         if (_isShuttingDown)
-            return _checklistWindow;
+            return WindowManager.Checklist;
 
-        if (_checklistWindow is not null)
-            return _checklistWindow;
+        if (WindowManager.Checklist is not null)
+            return WindowManager.Checklist;
 
         var settings = _settingsService
             ?? throw new InvalidOperationException("Application settings are not initialized.");
@@ -362,7 +348,6 @@ public partial class App : Application
             () => window.RecoveryBlocksBackup,
             "Checklist recovery reported a problem during this application run.");
         window.Closed += ChecklistWindow_Closed;
-        _checklistWindow = window;
         WindowManager.Checklist = window;
         return window;
     }
@@ -371,10 +356,10 @@ public partial class App : Application
     {
         Dispatcher.VerifyAccess();
         if (_isShuttingDown)
-            return _dictionaryWindow;
+            return WindowManager.Dictionary;
 
-        if (_dictionaryWindow is not null)
-            return _dictionaryWindow;
+        if (WindowManager.Dictionary is not null)
+            return WindowManager.Dictionary;
 
         var settings = _settingsService
             ?? throw new InvalidOperationException("Application settings are not initialized.");
@@ -398,7 +383,6 @@ public partial class App : Application
             () => window.RecoveryBlocksBackup,
             "Dictionary recovery reported a problem during this application run.");
         window.Closed += DictionaryWindow_Closed;
-        _dictionaryWindow = window;
         WindowManager.Dictionary = window;
         return window;
     }
@@ -407,10 +391,10 @@ public partial class App : Application
     {
         Dispatcher.VerifyAccess();
         if (_isShuttingDown)
-            return _scratchpadWindow;
+            return WindowManager.Scratchpad;
 
-        if (_scratchpadWindow is not null)
-            return _scratchpadWindow;
+        if (WindowManager.Scratchpad is not null)
+            return WindowManager.Scratchpad;
 
         var settings = _settingsService
             ?? throw new InvalidOperationException("Application settings are not initialized.");
@@ -431,7 +415,6 @@ public partial class App : Application
             "Scratchpad recovery reported a problem during this application run.",
             preparationOrder: 1);
         window.Closed += ScratchpadWindow_Closed;
-        _scratchpadWindow = window;
         WindowManager.Scratchpad = window;
         return window;
     }
@@ -442,14 +425,12 @@ public partial class App : Application
             return;
 
         window.Closed -= ChecklistWindow_Closed;
-        if (!ReferenceEquals(_checklistWindow, window))
+        if (!ReferenceEquals(WindowManager.Checklist, window))
             return;
 
         _checklistBackupRegistration?.Dispose();
         _checklistBackupRegistration = null;
-        _checklistWindow = null;
-        if (ReferenceEquals(WindowManager.Checklist, window))
-            WindowManager.Checklist = null;
+        WindowManager.Checklist = null;
     }
 
     private void DictionaryWindow_Closed(object? sender, EventArgs e)
@@ -458,14 +439,12 @@ public partial class App : Application
             return;
 
         window.Closed -= DictionaryWindow_Closed;
-        if (!ReferenceEquals(_dictionaryWindow, window))
+        if (!ReferenceEquals(WindowManager.Dictionary, window))
             return;
 
         _dictionaryBackupRegistration?.Dispose();
         _dictionaryBackupRegistration = null;
-        _dictionaryWindow = null;
-        if (ReferenceEquals(WindowManager.Dictionary, window))
-            WindowManager.Dictionary = null;
+        WindowManager.Dictionary = null;
     }
 
     private void ScratchpadWindow_Closed(object? sender, EventArgs e)
@@ -474,24 +453,22 @@ public partial class App : Application
             return;
 
         window.Closed -= ScratchpadWindow_Closed;
-        if (!ReferenceEquals(_scratchpadWindow, window))
+        if (!ReferenceEquals(WindowManager.Scratchpad, window))
             return;
 
         _scratchpadBackupRegistration?.Dispose();
         _scratchpadBackupRegistration = null;
-        _scratchpadWindow = null;
-        if (ReferenceEquals(WindowManager.Scratchpad, window))
-            WindowManager.Scratchpad = null;
+        WindowManager.Scratchpad = null;
     }
 
     private MiniPadWindow? GetOrCreateMiniPadWindow()
     {
         Dispatcher.VerifyAccess();
         if (_isShuttingDown)
-            return _miniPadWindow;
+            return WindowManager.MiniPad;
 
-        if (_miniPadWindow is not null)
-            return _miniPadWindow;
+        if (WindowManager.MiniPad is not null)
+            return WindowManager.MiniPad;
 
         var recoveryService = _miniPadRecoveryService
             ?? throw new InvalidOperationException("MiniPad recovery is not initialized.");
@@ -568,7 +545,6 @@ public partial class App : Application
             () => window.BackupBlockingIssue,
             preparationOrder: 0);
         window.Closed += MiniPadWindow_Closed;
-        _miniPadWindow = window;
         WindowManager.MiniPad = window;
         return window;
     }
@@ -579,19 +555,17 @@ public partial class App : Application
             return;
 
         window.Closed -= MiniPadWindow_Closed;
-        if (!ReferenceEquals(_miniPadWindow, window))
+        if (!ReferenceEquals(WindowManager.MiniPad, window))
             return;
 
         _miniPadBackupRegistration?.Dispose();
         _miniPadBackupRegistration = null;
-        _miniPadWindow = null;
-        if (ReferenceEquals(WindowManager.MiniPad, window))
-            WindowManager.MiniPad = null;
+        WindowManager.MiniPad = null;
     }
 
     private void CloseMiniPadWindow()
     {
-        var window = _miniPadWindow;
+        var window = WindowManager.MiniPad;
         if (window is null)
             return;
 
@@ -609,9 +583,7 @@ public partial class App : Application
 
         window.KeepDraftOnClose();
         CloseExistingWindow(window, "MiniPad");
-        _miniPadWindow = null;
-        if (ReferenceEquals(WindowManager.MiniPad, window))
-            WindowManager.MiniPad = null;
+        WindowManager.MiniPad = null;
     }
 
     private static void CloseExistingWindow(Window? window, string name)
@@ -630,7 +602,7 @@ public partial class App : Application
     }
 
     private void BackupCoordinator_ShutdownRequested(object? sender, EventArgs e) =>
-        _mainWindow?.Close();
+        WindowManager.Main?.Close();
 
     private static PersistenceSaveResult CreatePersistenceSaveResult(
         bool success,
@@ -664,7 +636,7 @@ public partial class App : Application
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
         var directFlushes = new List<ShutdownDirectFlush>();
-        if (_miniPadWindow is { } miniPadWindow)
+        if (WindowManager.MiniPad is { } miniPadWindow)
         {
             directFlushes.Add(new ShutdownDirectFlush(
                 "MiniPad",
@@ -673,7 +645,7 @@ public partial class App : Application
                     error,
                     "MiniPad recovery data could not be saved.")));
         }
-        if (_scratchpadWindow is { } scratchpadWindow)
+        if (WindowManager.Scratchpad is { } scratchpadWindow)
         {
             directFlushes.Add(new ShutdownDirectFlush(
                 "Scratchpad",
@@ -685,7 +657,7 @@ public partial class App : Application
 
         var result = _shutdownSequence.Execute(
             directFlushes,
-            () => TryPrepareWindowsForShutdown(out var error)
+            () => WindowManager.TryPrepareForShutdown(out var error)
                 ? WindowPreparationResult.Succeeded()
                 : WindowPreparationResult.Failed(error),
             () => _backupCoordinator?.HasRequestedRestore == true,
@@ -783,52 +755,9 @@ public partial class App : Application
             MessageBoxImage.Warning);
     }
 
-    internal bool TryPrepareWindowsForShutdown(out string? error)
-    {
-        try
-        {
-            if (_noteEditorWindow is not null && !_noteEditorWindow.TryPrepareForClose())
-            {
-                CancelPreparedWindowClose();
-                error = null;
-                return false;
-            }
-
-            _checklistWindow?.PrepareForApplicationShutdown();
-            _dictionaryWindow?.PrepareForApplicationShutdown();
-            if (_scratchpadWindow is not null &&
-                !_scratchpadWindow.TryPrepareForApplicationShutdown(out var stateError))
-            {
-                CancelPreparedWindowClose();
-                error = stateError ?? "Scratchpad window state could not be saved.";
-                return false;
-            }
-            _miniPadWindow?.PrepareForApplicationShutdown();
-        }
-        catch (SettingsPersistenceException ex)
-        {
-            ExceptionDiagnostics.Record(ex);
-            CancelPreparedWindowClose();
-            error = ex.Message;
-            return false;
-        }
-
-        error = null;
-        return true;
-    }
-
-    private void CancelPreparedWindowClose()
-    {
-        _noteEditorWindow?.CancelPreparedClose();
-        _checklistWindow?.CancelPreparedClose();
-        _dictionaryWindow?.CancelPreparedClose();
-        _scratchpadWindow?.CancelPreparedClose();
-        _miniPadWindow?.CancelPreparedClose();
-    }
-
     private void CancelRequestedBackupRestore()
     {
-        CancelPreparedWindowClose();
+        WindowManager.CancelPreparedClose();
         _backupCoordinator?.CancelRequestedRestore();
     }
 
