@@ -12,143 +12,15 @@ namespace Noted.Services;
 
 internal sealed partial class FullBackupService
 {
-    private const int MaximumImportFileCount = 10_000;
-    private const long MaximumImportFileSize = 256L * 1024 * 1024;
-    private const long MaximumImportJsonFileSize = 16L * 1024 * 1024;
-    private const long MaximumImportTotalSize = 2L * 1024 * 1024 * 1024;
-    private const long MaximumImportManifestSize = 4L * 1024 * 1024;
-
-    internal FullBackupPreview GetBackupImportPreview(string archivePath)
-    {
-        if (string.IsNullOrWhiteSpace(archivePath) || !File.Exists(archivePath))
-        {
-            return new FullBackupPreview(
-                false,
-                false,
-                Guid.Empty,
-                null,
-                [],
-                "The selected backup file could not be found.");
-        }
-
-        try
-        {
-            var archive = ReadBackupArchive(archivePath);
-            var importedFiles = InspectImportedFiles(archive);
-            var previewManifest = CreateImportedManifest(
-                archive.Manifest,
-                archive.Manifest.BackupId,
-                importedFiles);
-            var files = previewManifest.Entries
-                .Zip(importedFiles)
-                .Select(pair => new BackupFileSummary(
-                    pair.First.LogicalPath,
-                    GetDisplayPath(pair.First.LogicalPath),
-                    GetFileCategory(pair.First.LogicalPath),
-                    pair.First.Length,
-                    pair.First.Sha256,
-                    pair.First.ItemCount,
-                    pair.First.ContentLength,
-                    CompareWithCurrentFile(pair.First, previewManifest),
-                    pair.Second.SourceLogicalPath))
-                .OrderBy(file => file.Category, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(file => file.DisplayPath, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            return new FullBackupPreview(
-                true,
-                true,
-                archive.Manifest.BackupId,
-                archive.Manifest.CreatedUtc,
-                files,
-                null,
-                archive.ManifestHash);
-        }
-        catch (Exception ex) when (IsExpectedBackupException(ex))
-        {
-            ExceptionDiagnostics.Record(ex);
-            return new FullBackupPreview(
-                true,
-                false,
-                Guid.Empty,
-                null,
-                [],
-                "The selected backup could not be read or verified.");
-        }
-    }
+    internal FullBackupPreview GetBackupImportPreview(string archivePath) =>
+        _archiveReader.GetImportPreview(archivePath);
 
     internal BackupFileContent ReadBackupImportFile(
         string archivePath,
         Guid backupId,
         string verificationToken,
-        BackupFileSummary file)
-    {
-        if (backupId == Guid.Empty || string.IsNullOrWhiteSpace(file.SourceLogicalPath))
-        {
-            return new BackupFileContent(
-                false,
-                false,
-                BackupContentFormat.Text,
-                null,
-                "Select an imported backup file to preview.");
-        }
-
-        try
-        {
-            var archive = ReadBackupArchive(archivePath);
-            if (archive.Manifest.BackupId != backupId ||
-                !archive.ManifestHash.Equals(verificationToken, StringComparison.OrdinalIgnoreCase))
-            {
-                return ImportFileChanged(
-                    "The imported backup changed after this preview was opened. Close this window and check it again.");
-            }
-
-            var sourceEntry = archive.Manifest.Entries.FirstOrDefault(entry =>
-                string.Equals(
-                    NormalizeLogicalPath(entry.LogicalPath),
-                    NormalizeLogicalPath(file.SourceLogicalPath),
-                    StringComparison.OrdinalIgnoreCase));
-            if (sourceEntry is null)
-                return ImportFileChanged("The selected file is no longer present in the imported backup.");
-
-            var importedFile = ReadImportedFile(archive, sourceEntry);
-            if (!string.Equals(
-                    importedFile.LogicalPath,
-                    file.LogicalPath,
-                    StringComparison.OrdinalIgnoreCase) ||
-                importedFile.Data.LongLength != file.Length ||
-                !string.Equals(
-                    Convert.ToHexString(SHA256.HashData(importedFile.Data)),
-                    file.Sha256,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return ImportFileChanged(
-                    "The selected file changed after this preview was opened. Close this window and check it again.");
-            }
-
-            if (importedFile.Data.LongLength > MaximumPreviewFileSize)
-            {
-                return new BackupFileContent(
-                    false,
-                    false,
-                    BackupContentFormat.Text,
-                    null,
-                    "This file is verified but too large to display in the preview window.");
-            }
-
-            return new BackupFileContent(
-                true,
-                false,
-                GetContentFormat(importedFile.LogicalPath),
-                importedFile.Data,
-                null);
-        }
-        catch (Exception ex) when (IsExpectedBackupException(ex))
-        {
-            ExceptionDiagnostics.Record(ex);
-            return ImportFileChanged("The selected file could not be verified.");
-        }
-    }
+        BackupFileSummary file) =>
+        _archiveReader.ReadImportFile(archivePath, backupId, verificationToken, file);
 
     internal FullBackupResult ScheduleBackupImportRestore(
         string archivePath,
@@ -180,7 +52,7 @@ internal sealed partial class FullBackupService
                     string.Join(", ", interruptedWork.Select(Path.GetFileName)));
             }
 
-            var archive = ReadBackupArchive(archivePath);
+            var archive = _archiveReader.ReadBackupArchive(archivePath);
             if (archive.Manifest.BackupId != expectedBackupId ||
                 !archive.ManifestHash.Equals(expectedVerificationToken, StringComparison.OrdinalIgnoreCase))
             {
@@ -208,12 +80,12 @@ internal sealed partial class FullBackupService
                 Path.Combine(buildPath, ManifestFileName),
                 manifest,
                 options: BackupFormat.JsonOptions);
-            VerifyBackupFolder(buildPath, FullBackupType.User);
+            _archiveReader.VerifyBackupFolder(buildPath, FullBackupType.User);
 
             pendingPath = GetPendingImportPath(importId.Value);
             Directory.Move(buildPath, pendingPath);
             buildPath = null;
-            VerifyBackupFolder(pendingPath, FullBackupType.User);
+            _archiveReader.VerifyBackupFolder(pendingPath, FullBackupType.User);
 
             var request = new FullBackupRestoreRequest(
                 BackupSchemaVersion,
@@ -245,159 +117,6 @@ internal sealed partial class FullBackupService
         }
     }
 
-    private BackupArchive ReadBackupArchive(string archivePath)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
-        var fullPath = Path.GetFullPath(archivePath);
-        if (!File.Exists(fullPath))
-            throw new FileNotFoundException("The selected backup file could not be found.", fullPath);
-
-        using var fileStream = new FileStream(
-            fullPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 64 * 1024,
-            FileOptions.SequentialScan);
-        using var archive = new ZipArchive(fileStream, ZipArchiveMode.Read);
-        if (archive.Entries.Count == 0)
-            throw new InvalidDataException("The selected backup archive is empty.");
-        if (archive.Entries.Count > MaximumImportFileCount + 1)
-            throw new InvalidDataException("The selected backup contains too many files.");
-        if (archive.Entries.Any(entry => string.IsNullOrEmpty(entry.Name)))
-            throw new InvalidDataException("The selected backup contains unexpected directory entries.");
-
-        foreach (var entry in archive.Entries)
-            ValidateArchivePath(entry.FullName);
-
-        var duplicate = archive.Entries
-            .GroupBy(entry => entry.FullName, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault(group => group.Count() > 1);
-        if (duplicate is not null)
-            throw new InvalidDataException($"The selected backup repeats '{duplicate.Key}'.");
-
-        var manifestEntry = archive.Entries.SingleOrDefault(entry =>
-            entry.FullName.Equals(ManifestFileName, StringComparison.OrdinalIgnoreCase));
-        if (manifestEntry is null)
-            throw new InvalidDataException("The selected backup does not contain a manifest.");
-        if (manifestEntry.Length > MaximumImportManifestSize)
-            throw new InvalidDataException("The selected backup manifest is too large.");
-
-        var manifestBytes = ReadArchiveEntry(manifestEntry, MaximumImportManifestSize);
-        var manifestHash = Convert.ToHexString(SHA256.HashData(manifestBytes));
-        var manifest = JsonSerializer.Deserialize<FullBackupManifest>(
-                manifestBytes,
-                BackupFormat.JsonOptions)
-            ?? throw new InvalidDataException("The selected backup manifest contains no value.");
-        ValidateImportedManifest(manifest);
-
-        var expectedPaths = manifest.Entries
-            .Select(entry => $"{FilesDirectoryName}/{NormalizeLogicalPath(entry.LogicalPath)}")
-            .Append(ManifestFileName)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var actualPaths = archive.Entries
-            .Select(entry => entry.FullName)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (!expectedPaths.SetEquals(actualPaths))
-            throw new InvalidDataException("The selected backup file list does not match its manifest.");
-
-        long totalSize = 0;
-        foreach (var file in manifest.Entries)
-        {
-            var maximumFileSize = Path.GetExtension(file.LogicalPath)
-                    .Equals(".json", StringComparison.OrdinalIgnoreCase)
-                ? MaximumImportJsonFileSize
-                : MaximumImportFileSize;
-            if (file.Length < 0 || file.Length > maximumFileSize)
-                throw new InvalidDataException($"The imported file '{file.LogicalPath}' is too large.");
-            if (!IsSha256(file.Sha256))
-                throw new InvalidDataException($"The imported file '{file.LogicalPath}' has an invalid hash.");
-            totalSize = checked(totalSize + file.Length);
-            if (totalSize > MaximumImportTotalSize)
-                throw new InvalidDataException("The selected backup is too large to import safely.");
-
-            var entry = FindArchiveEntry(
-                archive.Entries,
-                $"{FilesDirectoryName}/{NormalizeLogicalPath(file.LogicalPath)}");
-            if (entry.Length != file.Length)
-                throw new InvalidDataException($"The imported file '{file.LogicalPath}' has the wrong size.");
-        }
-
-        return new BackupArchive(fullPath, manifest, manifestHash);
-    }
-
-    private void ValidateImportedManifest(FullBackupManifest manifest)
-    {
-        if (manifest.SchemaVersion != BackupSchemaVersion)
-            throw new InvalidDataException("The selected backup schema is not supported.");
-        if (manifest.Type != FullBackupType.User)
-            throw new InvalidDataException("Only a user-created full backup can be imported.");
-        if (manifest.BackupId == Guid.Empty)
-            throw new InvalidDataException("The selected backup ID is missing.");
-        if (string.IsNullOrWhiteSpace(manifest.AppDataRoot) ||
-            string.IsNullOrWhiteSpace(manifest.NotesRoot))
-        {
-            throw new InvalidDataException("The selected backup does not identify its original storage folders.");
-        }
-        if (!Path.IsPathFullyQualified(manifest.AppDataRoot) ||
-            !Path.IsPathFullyQualified(manifest.NotesRoot))
-        {
-            throw new InvalidDataException("The selected backup contains an invalid original storage folder.");
-        }
-        if (manifest.Entries is null || manifest.Entries.Count == 0)
-            throw new InvalidDataException("The selected backup contains no files.");
-        if (manifest.Entries.Count > MaximumImportFileCount)
-            throw new InvalidDataException("The selected backup contains too many files.");
-        if (manifest.Entries.Any(entry => entry is null))
-            throw new InvalidDataException("The selected backup manifest contains an empty file entry.");
-
-        _ = NormalizeBackupDataPath(manifest.AppDataRoot);
-        _ = NormalizeBackupDataPath(manifest.NotesRoot);
-        var duplicate = manifest.Entries
-            .GroupBy(entry => NormalizeLogicalPath(entry.LogicalPath), StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault(group => group.Count() > 1);
-        if (duplicate is not null)
-            throw new InvalidDataException($"The selected backup manifest repeats '{duplicate.Key}'.");
-
-        foreach (var entry in manifest.Entries)
-        {
-            if (string.IsNullOrWhiteSpace(entry.LogicalPath))
-                throw new InvalidDataException("The selected backup manifest contains an empty file path.");
-            ValidateBackupLogicalPath(entry.LogicalPath, manifest);
-            if (entry.ItemCount < 0 || entry.ContentLength < 0)
-                throw new InvalidDataException($"The imported file '{entry.LogicalPath}' has invalid metadata.");
-        }
-    }
-
-    private void ValidateBackupLogicalPath(
-        string logicalPath,
-        FullBackupManifest manifest)
-    {
-        ValidateArchivePath(logicalPath);
-        _ = GetRestoreDestination(logicalPath, manifest);
-    }
-
-    private IReadOnlyList<ImportedBackupFileInfo> InspectImportedFiles(BackupArchive source)
-    {
-        using var fileStream = new FileStream(
-            source.Path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 64 * 1024,
-            FileOptions.SequentialScan);
-        using var archive = new ZipArchive(fileStream, ZipArchiveMode.Read);
-        var files = source.Manifest.Entries
-            .Select(entry => ReadImportedFile(archive, source.Manifest, entry).ToInfo())
-            .ToList();
-        var duplicate = files
-            .GroupBy(file => file.LogicalPath, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault(group => group.Count() > 1);
-        if (duplicate is not null)
-            throw new InvalidDataException($"Multiple imported files map to '{duplicate.Key}'.");
-        return files;
-    }
-
     private IReadOnlyList<ImportedBackupFileInfo> WriteImportedFiles(
         BackupArchive source,
         string filesDirectory)
@@ -414,7 +133,7 @@ internal sealed partial class FullBackupService
         var files = new List<ImportedBackupFileInfo>(source.Manifest.Entries.Count);
         foreach (var entry in source.Manifest.Entries)
         {
-            var file = ReadImportedFile(archive, source.Manifest, entry);
+            var file = _archiveReader.ReadImportedFile(archive, source.Manifest, entry);
             if (!importedPaths.Add(file.LogicalPath))
                 throw new InvalidDataException($"Multiple imported files map to '{file.LogicalPath}'.");
 
@@ -447,34 +166,6 @@ internal sealed partial class FullBackupService
             throw new FileVerificationException(
                 $"The imported file '{file.LogicalPath}' did not match the data written to local import storage.");
         }
-    }
-
-    private ImportedBackupFile ReadImportedFile(
-        BackupArchive source,
-        FullBackupEntry entry)
-    {
-        using var fileStream = new FileStream(
-            source.Path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 64 * 1024,
-            FileOptions.SequentialScan);
-        using var archive = new ZipArchive(fileStream, ZipArchiveMode.Read);
-        return ReadImportedFile(archive, source.Manifest, entry);
-    }
-
-    private ImportedBackupFile ReadImportedFile(
-        ZipArchive archive,
-        FullBackupManifest manifest,
-        FullBackupEntry entry)
-    {
-        var archiveEntry = FindArchiveEntry(
-            archive.Entries,
-            $"{FilesDirectoryName}/{NormalizeLogicalPath(entry.LogicalPath)}");
-        var bytes = ReadArchiveEntry(archiveEntry, MaximumImportFileSize);
-        VerifyFileBytes(bytes, entry.Length, entry.Sha256, entry.LogicalPath);
-        return TransformImportedFile(entry, bytes, manifest);
     }
 
     private ImportedBackupFile TransformImportedFile(
@@ -671,66 +362,6 @@ internal sealed partial class FullBackupService
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath)));
     }
 
-    private static byte[] ReadArchiveEntry(ZipArchiveEntry entry, long maximumSize)
-    {
-        if (entry.Length < 0 || entry.Length > maximumSize || entry.Length > int.MaxValue)
-            throw new InvalidDataException($"The imported file '{entry.FullName}' is too large.");
-        using var stream = entry.Open();
-        var bytes = new byte[checked((int)entry.Length)];
-        stream.ReadExactly(bytes);
-        if (stream.ReadByte() != -1)
-            throw new InvalidDataException($"The imported file '{entry.FullName}' is larger than declared.");
-        return bytes;
-    }
-
-    private static void ValidateArchivePath(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path) ||
-            path.Contains('\\') ||
-            path.StartsWith('/') ||
-            path.Contains(':'))
-        {
-            throw new InvalidDataException($"The selected backup contains an unsafe path: '{path}'.");
-        }
-
-        var parts = path.Split('/');
-        if (parts.Any(part =>
-                string.IsNullOrWhiteSpace(part) ||
-                part.Equals(".", StringComparison.Ordinal) ||
-                part.Equals("..", StringComparison.Ordinal) ||
-                part.EndsWith(' ') ||
-                part.EndsWith('.') ||
-                part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
-                IsReservedWindowsFileName(part)))
-        {
-            throw new InvalidDataException($"The selected backup contains an unsafe path: '{path}'.");
-        }
-    }
-
-    private static bool IsReservedWindowsFileName(string name)
-    {
-        var baseName = name.Split('.')[0];
-        return baseName.Equals("CON", StringComparison.OrdinalIgnoreCase) ||
-            baseName.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
-            baseName.Equals("AUX", StringComparison.OrdinalIgnoreCase) ||
-            baseName.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
-            (baseName.Length == 4 &&
-             (baseName.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
-              baseName.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
-             baseName[3] is >= '1' and <= '9');
-    }
-
-    private static bool IsSha256(string? value) =>
-        value is { Length: 64 } && value.All(Uri.IsHexDigit);
-
-    private static BackupFileContent ImportFileChanged(string message) =>
-        new(
-            false,
-            true,
-            BackupContentFormat.Text,
-            null,
-            message);
-
     private string GetPendingImportPath(Guid importId) =>
         Path.Combine(_backupDirectory, $"pending-import-{importId:N}");
 
@@ -829,36 +460,6 @@ internal sealed partial class FullBackupService
 
         Directory.Delete(fullPath, recursive: true);
     }
-
-    private sealed record BackupArchive(
-        string Path,
-        FullBackupManifest Manifest,
-        string ManifestHash);
-
-    private sealed record ImportedBackupFile(
-        string SourceLogicalPath,
-        string LogicalPath,
-        byte[] Data,
-        int? ItemCount,
-        long? ContentLength)
-    {
-        internal ImportedBackupFileInfo ToInfo() =>
-            new(
-                SourceLogicalPath,
-                LogicalPath,
-                Data.LongLength,
-                Convert.ToHexString(SHA256.HashData(Data)),
-                ItemCount,
-                ContentLength);
-    }
-
-    private sealed record ImportedBackupFileInfo(
-        string SourceLogicalPath,
-        string LogicalPath,
-        long Length,
-        string Sha256,
-        int? ItemCount,
-        long? ContentLength);
 
     private sealed record ImportedNoteHistoryEntry(
         int SchemaVersion,

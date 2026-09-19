@@ -46,7 +46,7 @@ internal sealed partial class FullBackupService
             }
 
             var backupPath = GetBackupPath(FullBackupType.User);
-            var backup = ReadBackup(backupPath, FullBackupType.User);
+            var backup = _archiveReader.ReadBackup(backupPath, FullBackupType.User);
             if (backup.Status != BackupReadStatus.Valid)
             {
                 return new BackupExportResult(

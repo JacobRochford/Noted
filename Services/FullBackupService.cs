@@ -87,11 +87,11 @@ internal sealed record BackupFileContent(
 internal sealed partial class FullBackupService
 {
     private const string RestoreRequestFileName = "restore-request.json";
-    private const long MaximumPreviewFileSize = 4 * 1024 * 1024;
     private readonly string _appDataDirectory;
     private string _notesDirectory;
     private readonly string _backupDirectory;
     private readonly BackupContentCatalog _contentCatalog;
+    private readonly BackupArchiveReader _archiveReader;
     private readonly TimeProvider _clock;
     private bool _backupCreatedThisRun;
 
@@ -110,6 +110,10 @@ internal sealed partial class FullBackupService
             _appDataDirectory,
             _notesDirectory,
             _backupDirectory);
+        _archiveReader = new BackupArchiveReader(
+            GetRestoreDestination,
+            TransformImportedFile,
+            CreateImportedManifest);
         _clock = clock ?? TimeProvider.System;
         TryCleanupFinishedImportFolders();
     }
@@ -119,142 +123,20 @@ internal sealed partial class FullBackupService
     internal bool UserBackupExists =>
         Directory.Exists(GetBackupPath(FullBackupType.User));
 
-    internal FullBackupInfo GetUserBackupInfo()
-    {
-        var path = GetBackupPath(FullBackupType.User);
-        var backup = ReadBackup(path, FullBackupType.User);
-        return backup.Status switch
-        {
-            BackupReadStatus.Missing => new FullBackupInfo(false, false, null, 0, null),
-            BackupReadStatus.Valid => new FullBackupInfo(
-                true,
-                true,
-                backup.Manifest!.CreatedUtc,
-                backup.Manifest.Entries.Count,
-                null),
-            _ => new FullBackupInfo(true, false, null, 0, backup.Error)
-        };
-    }
+    internal FullBackupInfo GetUserBackupInfo() =>
+        _archiveReader.GetBackupInfo(GetBackupPath(FullBackupType.User), FullBackupType.User);
 
-    internal FullBackupPreview GetUserBackupPreview()
-    {
-        var path = GetBackupPath(FullBackupType.User);
-        var backup = ReadBackup(path, FullBackupType.User);
-        if (backup.Status == BackupReadStatus.Missing)
-            return new FullBackupPreview(false, false, Guid.Empty, null, [], null);
-        if (backup.Status != BackupReadStatus.Valid)
-            return new FullBackupPreview(true, false, Guid.Empty, null, [], backup.Error);
-
-        var manifest = backup.Manifest!;
-        var files = manifest.Entries
-            .Select(entry => new BackupFileSummary(
-                entry.LogicalPath,
-                GetDisplayPath(entry.LogicalPath),
-                GetFileCategory(entry.LogicalPath),
-                entry.Length,
-                entry.Sha256,
-                entry.ItemCount,
-                entry.ContentLength,
-                CompareWithCurrentFile(entry, manifest)))
-            .OrderBy(file => file.Category, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(file => file.DisplayPath, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        return new FullBackupPreview(
-            true,
-            true,
-            manifest.BackupId,
-            manifest.CreatedUtc,
-            files,
-            null);
-    }
+    internal FullBackupPreview GetUserBackupPreview() =>
+        _archiveReader.GetBackupPreview(GetBackupPath(FullBackupType.User), FullBackupType.User);
 
     internal BackupFileContent ReadUserBackupFile(
         Guid backupId,
-        BackupFileSummary file)
-    {
-        if (backupId == Guid.Empty || string.IsNullOrWhiteSpace(file.LogicalPath))
-        {
-            return new BackupFileContent(
-                false,
-                false,
-                BackupContentFormat.Text,
-                null,
-                "Select a backup file to preview.");
-        }
-
-        var path = GetBackupPath(FullBackupType.User);
-        var manifestResult = JsonFileStore.Read<FullBackupManifest>(
-            Path.Combine(path, ManifestFileName),
-            BackupFormat.JsonOptions);
-        var manifest = manifestResult.Value;
-        if (!manifestResult.Success ||
-            manifest is null ||
-            manifest.SchemaVersion != BackupSchemaVersion ||
-            manifest.Type != FullBackupType.User ||
-            manifest.BackupId != backupId ||
-            manifest.Entries is null)
-        {
-            return new BackupFileContent(
-                false,
-                true,
-                BackupContentFormat.Text,
-                null,
-                "The backup changed after this preview was opened. Close this window and check it again.");
-        }
-
-        var entry = manifest.Entries.FirstOrDefault(item =>
-            string.Equals(
-                NormalizeLogicalPath(item.LogicalPath),
-                NormalizeLogicalPath(file.LogicalPath),
-                StringComparison.OrdinalIgnoreCase));
-        if (entry is null ||
-            entry.Length != file.Length ||
-            !string.Equals(entry.Sha256, file.Sha256, StringComparison.OrdinalIgnoreCase))
-        {
-            return new BackupFileContent(
-                false,
-                true,
-                BackupContentFormat.Text,
-                null,
-                "The selected file changed after this preview was opened. Close this window and check it again.");
-        }
-
-        try
-        {
-            if (entry.Length > MaximumPreviewFileSize)
-            {
-                return new BackupFileContent(
-                    false,
-                    false,
-                    BackupContentFormat.Text,
-                    null,
-                    "This file is verified but too large to display in the preview window.");
-            }
-
-            var filesDirectory = Path.Combine(path, FilesDirectoryName);
-            var filePath = GetContainedPath(filesDirectory, entry.LogicalPath);
-            var bytes = ReadFileBytes(filePath);
-            VerifyFileBytes(bytes, entry.Length, entry.Sha256, entry.LogicalPath);
-            return new BackupFileContent(
-                true,
-                false,
-                GetContentFormat(entry.LogicalPath),
-                bytes,
-                null);
-        }
-        catch (Exception ex) when (IsExpectedBackupException(ex))
-        {
-            ExceptionDiagnostics.Record(ex);
-            return new BackupFileContent(
-                false,
-                true,
-                BackupContentFormat.Text,
-                null,
-                "The selected file could not be verified.");
-        }
-    }
-
+        BackupFileSummary file) =>
+        _archiveReader.ReadBackupFile(
+            GetBackupPath(FullBackupType.User),
+            FullBackupType.User,
+            backupId,
+            file);
     internal void UpdateNotesDirectory(string notesDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(notesDirectory);
@@ -292,7 +174,7 @@ internal sealed partial class FullBackupService
             }
 
             var userBackupPath = GetBackupPath(FullBackupType.User);
-            var userBackup = ReadBackup(userBackupPath, FullBackupType.User);
+            var userBackup = _archiveReader.ReadBackup(userBackupPath, FullBackupType.User);
             if (userBackup.Status != BackupReadStatus.Valid)
             {
                 var explanation = userBackup.Status == BackupReadStatus.Missing
@@ -372,7 +254,7 @@ internal sealed partial class FullBackupService
             var restorePath = request.ImportId.HasValue
                 ? GetPendingImportPath(request.ImportId.Value)
                 : GetBackupPath(FullBackupType.User);
-            var restoreBackup = ReadBackup(restorePath, FullBackupType.User);
+            var restoreBackup = _archiveReader.ReadBackup(restorePath, FullBackupType.User);
             if (restoreBackup.Status != BackupReadStatus.Valid)
             {
                 throw new FileVerificationException(
@@ -392,11 +274,11 @@ internal sealed partial class FullBackupService
             {
                 var sourcePath = GetContainedPath(filesDirectory, entry.LogicalPath);
                 var destinationPath = GetRestoreDestination(entry.LogicalPath, manifest);
-                var bytes = ReadFileBytes(sourcePath);
-                VerifyFileBytes(bytes, entry.Length, entry.Sha256, entry.LogicalPath);
+                var bytes = BackupArchiveReader.ReadFileBytes(sourcePath);
+                BackupArchiveReader.VerifyFileBytes(bytes, entry.Length, entry.Sha256, entry.LogicalPath);
                 FileWriter.WriteAllBytes(destinationPath, bytes);
-                var restoredBytes = ReadFileBytes(destinationPath);
-                VerifyFileBytes(restoredBytes, entry.Length, entry.Sha256, entry.LogicalPath);
+                var restoredBytes = BackupArchiveReader.ReadFileBytes(destinationPath);
+                BackupArchiveReader.VerifyFileBytes(restoredBytes, entry.Length, entry.Sha256, entry.LogicalPath);
             }
 
             FileWriter.DeleteIfExists(requestPath);
@@ -477,8 +359,8 @@ internal sealed partial class FullBackupService
 
             var userBackupPath = GetBackupPath(FullBackupType.User);
             var recentBackupPath = GetBackupPath(FullBackupType.Recent);
-            var userBackup = ReadBackup(userBackupPath, FullBackupType.User);
-            var recentBackup = ReadBackup(recentBackupPath, FullBackupType.Recent);
+            var userBackup = _archiveReader.ReadBackup(userBackupPath, FullBackupType.User);
+            var recentBackup = _archiveReader.ReadBackup(recentBackupPath, FullBackupType.Recent);
             var invalidBackup = new[] { userBackup, recentBackup }
                 .FirstOrDefault(backup => backup.Status == BackupReadStatus.Invalid);
             if (invalidBackup is not null)
@@ -624,7 +506,7 @@ internal sealed partial class FullBackupService
             manifest,
             options: BackupFormat.JsonOptions);
 
-        var verification = ReadBackup(buildPath, backupType);
+        var verification = _archiveReader.ReadBackup(buildPath, backupType);
         if (verification.Status != BackupReadStatus.Valid)
         {
             throw new FileVerificationException(
@@ -640,7 +522,7 @@ internal sealed partial class FullBackupService
         if (!Directory.Exists(backupPath))
         {
             Directory.Move(buildPath, backupPath);
-            VerifyBackupFolder(backupPath, backupType);
+            _archiveReader.VerifyBackupFolder(backupPath, backupType);
             return new BackupReplaceResult(backupPath, null);
         }
 
@@ -651,7 +533,7 @@ internal sealed partial class FullBackupService
         try
         {
             Directory.Move(buildPath, backupPath);
-            VerifyBackupFolder(backupPath, backupType);
+            _archiveReader.VerifyBackupFolder(backupPath, backupType);
         }
         catch
         {
@@ -701,7 +583,7 @@ internal sealed partial class FullBackupService
             }
 
             Directory.Move(retiredUserBackupPath, previousPath);
-            VerifyBackupFolder(previousPath, FullBackupType.User);
+            _archiveReader.VerifyBackupFolder(previousPath, FullBackupType.User);
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
@@ -735,132 +617,6 @@ internal sealed partial class FullBackupService
                 $"The current and previous backups are verified, but an older backup folder could not be removed from '{olderPreviousPath}'.");
         }
     }
-
-    private void VerifyBackupFolder(string path, FullBackupType backupType)
-    {
-        var verification = ReadBackup(path, backupType);
-        if (verification.Status != BackupReadStatus.Valid)
-        {
-            throw new FileVerificationException(
-                $"The saved {GetBackupName(backupType)} could not be verified: {verification.Error}");
-        }
-    }
-
-    private BackupReadResult ReadBackup(string path, FullBackupType backupType)
-    {
-        if (!Directory.Exists(path))
-            return new BackupReadResult(BackupReadStatus.Missing, backupType, path, null, null);
-
-        try
-        {
-            if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-                return InvalidBackup(backupType, path, "The backup directory is a filesystem link.");
-
-            var rootFiles = Directory.EnumerateFiles(path)
-                .Select(Path.GetFileName)
-                .ToList();
-            var rootDirectories = Directory.EnumerateDirectories(path)
-                .Select(Path.GetFileName)
-                .ToList();
-            if (rootFiles.Count != 1 ||
-                !rootFiles[0]!.Equals(ManifestFileName, StringComparison.OrdinalIgnoreCase) ||
-                rootDirectories.Count != 1 ||
-                !rootDirectories[0]!.Equals(FilesDirectoryName, StringComparison.OrdinalIgnoreCase))
-            {
-                return InvalidBackup(
-                    backupType,
-                    path,
-                    "The backup contains unexpected top-level files or directories.");
-            }
-
-            var manifestResult = JsonFileStore.Read<FullBackupManifest>(
-                Path.Combine(path, ManifestFileName),
-                BackupFormat.JsonOptions);
-            if (!manifestResult.Success)
-            {
-                return new BackupReadResult(
-                    BackupReadStatus.Invalid,
-                    backupType,
-                    path,
-                    null,
-                    "The backup manifest is missing, unreadable, or invalid.");
-            }
-
-            var manifest = manifestResult.Value!;
-            if (manifest.SchemaVersion != BackupSchemaVersion)
-                return InvalidBackup(backupType, path, "The backup schema is not supported.");
-            if (manifest.Type != backupType)
-                return InvalidBackup(backupType, path, "The backup type does not match its directory.");
-            if (manifest.BackupId == Guid.Empty)
-                return InvalidBackup(backupType, path, "The backup ID is missing.");
-            if (manifest.Entries is null || manifest.Entries.Count == 0)
-                return InvalidBackup(backupType, path, "The backup contains no files.");
-
-            if (manifest.Entries.Any(entry => entry is null || string.IsNullOrWhiteSpace(entry.LogicalPath)))
-                return InvalidBackup(backupType, path, "The backup contains an empty file entry or path.");
-
-            var duplicate = manifest.Entries
-                .GroupBy(entry => entry.LogicalPath, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault(group => group.Count() > 1);
-            if (duplicate is not null)
-                return InvalidBackup(backupType, path, $"The manifest repeats '{duplicate.Key}'.");
-
-            var filesDirectory = Path.Combine(path, FilesDirectoryName);
-            if ((File.GetAttributes(filesDirectory) & FileAttributes.ReparsePoint) != 0)
-                return InvalidBackup(backupType, path, "The backup files directory is a filesystem link.");
-
-            var expectedPaths = new HashSet<string>(
-                manifest.Entries.Select(entry => NormalizeLogicalPath(entry.LogicalPath)),
-                StringComparer.OrdinalIgnoreCase);
-            foreach (var entry in manifest.Entries)
-            {
-                if (entry.Length < 0 || string.IsNullOrWhiteSpace(entry.Sha256))
-                    return InvalidBackup(backupType, path, $"The manifest entry '{entry.LogicalPath}' is incomplete.");
-
-                _ = GetRestoreDestination(entry.LogicalPath, manifest);
-
-                var filePath = GetContainedPath(filesDirectory, entry.LogicalPath);
-                if (!File.Exists(filePath))
-                    return InvalidBackup(backupType, path, $"The backup file '{entry.LogicalPath}' is missing.");
-
-                var bytes = ReadFileBytes(filePath);
-                if (bytes.LongLength != entry.Length ||
-                    !string.Equals(
-                        Convert.ToHexString(SHA256.HashData(bytes)),
-                        entry.Sha256,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    return InvalidBackup(backupType, path, $"The backup file '{entry.LogicalPath}' failed hash verification.");
-                }
-            }
-
-            var actualPaths = Directory.Exists(filesDirectory)
-                ? EnumerateFilesWithoutLinks(filesDirectory)
-                    .Select(file => NormalizeLogicalPath(Path.GetRelativePath(filesDirectory, file)))
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
-                : [];
-            if (!expectedPaths.SetEquals(actualPaths))
-                return InvalidBackup(backupType, path, "The backup file list does not match its manifest.");
-
-            return new BackupReadResult(
-                BackupReadStatus.Valid,
-                backupType,
-                path,
-                manifest,
-                null);
-        }
-        catch (Exception ex) when (IsExpectedBackupException(ex))
-        {
-            ExceptionDiagnostics.Record(ex);
-            return InvalidBackup(backupType, path, "The selected backup could not be read or verified.");
-        }
-    }
-
-    private static BackupReadResult InvalidBackup(
-        FullBackupType backupType,
-        string path,
-        string error) =>
-        new(BackupReadStatus.Invalid, backupType, path, null, error);
 
     private IReadOnlyList<string> FindInterruptedWork()
     {
@@ -985,7 +741,7 @@ internal sealed partial class FullBackupService
             destinationStream.Flush(flushToDisk: true);
         }
 
-        var copiedBytes = ReadFileBytes(destinationPath);
+        var copiedBytes = BackupArchiveReader.ReadFileBytes(destinationPath);
         var copiedHash = Convert.ToHexString(SHA256.HashData(copiedBytes));
         if (copiedBytes.LongLength != source.Length ||
             !string.Equals(copiedHash, source.Sha256, StringComparison.OrdinalIgnoreCase))
@@ -993,23 +749,6 @@ internal sealed partial class FullBackupService
             throw new FileVerificationException(
                 $"'{source.SourcePath}' changed or could not be copied exactly while the full backup was being created.");
         }
-    }
-
-    private static byte[] ReadFileBytes(string path)
-    {
-        using var stream = new FileStream(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: 64 * 1024,
-            FileOptions.SequentialScan);
-        if (stream.Length > int.MaxValue)
-            throw new IOException($"'{path}' is too large for the current backup implementation.");
-
-        var bytes = new byte[stream.Length];
-        stream.ReadExactly(bytes);
-        return bytes;
     }
 
     private string GetBackupPath(FullBackupType backupType) =>
@@ -1054,50 +793,6 @@ internal sealed partial class FullBackupService
             $"The backup path '{logicalPath}' does not identify application or note data.");
     }
 
-    private BackupFileComparison CompareWithCurrentFile(
-        FullBackupEntry entry,
-        FullBackupManifest manifest)
-    {
-        try
-        {
-            var currentPath = GetRestoreDestination(entry.LogicalPath, manifest);
-            var bytes = ReadFileBytes(currentPath);
-            var hash = Convert.ToHexString(SHA256.HashData(bytes));
-            return bytes.LongLength == entry.Length &&
-                   string.Equals(hash, entry.Sha256, StringComparison.OrdinalIgnoreCase)
-                ? BackupFileComparison.Unchanged
-                : BackupFileComparison.Changed;
-        }
-        catch (FileNotFoundException)
-        {
-            return BackupFileComparison.Missing;
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return BackupFileComparison.Missing;
-        }
-        catch (Exception ex) when (IsExpectedBackupException(ex))
-        {
-            ExceptionDiagnostics.Record(ex);
-            return BackupFileComparison.Unavailable;
-        }
-    }
-
-    private static void VerifyFileBytes(
-        byte[] bytes,
-        long expectedLength,
-        string expectedHash,
-        string logicalPath)
-    {
-        var actualHash = Convert.ToHexString(SHA256.HashData(bytes));
-        if (bytes.LongLength != expectedLength ||
-            !string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new FileVerificationException(
-                $"The restored file '{logicalPath}' did not match the verified backup.");
-        }
-    }
-
     private static string GetBackupName(FullBackupType backupType) =>
         backupType switch
         {
@@ -1106,6 +801,22 @@ internal sealed partial class FullBackupService
             FullBackupType.BeforeRestore => "before-restore backup",
             _ => throw new ArgumentOutOfRangeException(nameof(backupType))
         };
+
+    private static bool IsPathWithin(string path, string directory)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var fullDirectory = Path.GetFullPath(directory);
+        var directoryWithSeparator = Path.EndsInDirectorySeparator(fullDirectory)
+            ? fullDirectory
+            : fullDirectory + Path.DirectorySeparatorChar;
+        return fullPath.StartsWith(directoryWithSeparator, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool PathsEqual(string left, string right) =>
+        string.Equals(
+            Path.GetFullPath(left),
+            Path.GetFullPath(right),
+            StringComparison.OrdinalIgnoreCase);
 
     private void DeleteBackupDirectory(string path)
     {
@@ -1126,20 +837,6 @@ internal sealed partial class FullBackupService
 
     private static bool IsExpectedBackupException(Exception exception) =>
         FileSystemErrors.IsExpected(exception) || exception is JsonException or InvalidDataException;
-
-    private enum BackupReadStatus
-    {
-        Missing,
-        Valid,
-        Invalid
-    }
-
-    private sealed record BackupReadResult(
-        BackupReadStatus Status,
-        FullBackupType Type,
-        string Path,
-        FullBackupManifest? Manifest,
-        string? Error);
 
     private sealed record BackupBuildResult(string Path);
 

@@ -36,7 +36,7 @@ internal sealed partial class FullBackupService
                 _backupDirectory,
                 $"before-restore-{_clock.GetUtcNow().UtcDateTime:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}");
             Directory.Move(build.Path, backupPath);
-            VerifyBackupFolder(backupPath, FullBackupType.BeforeRestore);
+            _archiveReader.VerifyBackupFolder(backupPath, FullBackupType.BeforeRestore);
 
             string? warning = null;
             try
