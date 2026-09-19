@@ -28,9 +28,11 @@ internal sealed class NoteDirectoryWatcher : IDisposable
         fileWatcher.Changed += OnFileSystemChanged;
         fileWatcher.Deleted += OnFileSystemChanged;
         fileWatcher.Renamed += OnFileSystemChanged;
+        fileWatcher.Error += OnWatcherError;
         directoryWatcher.Created += OnFileSystemChanged;
         directoryWatcher.Deleted += OnFileSystemChanged;
         directoryWatcher.Renamed += OnFileSystemChanged;
+        directoryWatcher.Error += OnWatcherError;
 
         var previousFileWatcher = _fileWatcher;
         var previousDirectoryWatcher = _directoryWatcher;
@@ -43,6 +45,16 @@ internal sealed class NoteDirectoryWatcher : IDisposable
 
     private void OnFileSystemChanged(object sender, FileSystemEventArgs e) =>
         Changed?.Invoke(this, EventArgs.Empty);
+
+    private void OnWatcherError(object sender, ErrorEventArgs e) =>
+        RequestRescanAfterError(e.GetException());
+
+    internal void RequestRescanAfterError(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        ExceptionDiagnostics.Record(exception);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
 
     private void Stop()
     {
@@ -64,6 +76,7 @@ internal sealed class NoteDirectoryWatcher : IDisposable
         watcher.Changed -= OnFileSystemChanged;
         watcher.Deleted -= OnFileSystemChanged;
         watcher.Renamed -= OnFileSystemChanged;
+        watcher.Error -= OnWatcherError;
         watcher.Dispose();
     }
 
@@ -75,6 +88,7 @@ internal sealed class NoteDirectoryWatcher : IDisposable
         watcher.Created -= OnFileSystemChanged;
         watcher.Deleted -= OnFileSystemChanged;
         watcher.Renamed -= OnFileSystemChanged;
+        watcher.Error -= OnWatcherError;
         watcher.Dispose();
     }
 

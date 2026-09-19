@@ -38,4 +38,16 @@ public sealed class NoteDirectoryWatcherTests
 
         Assert.IsTrue(changed.Wait(TimeSpan.FromSeconds(5)), "The watcher did not report the directory change.");
     }
+
+    [TestMethod]
+    public void WatcherErrorRequestsDirectoryRescan()
+    {
+        using var watcher = new NoteDirectoryWatcher();
+        var rescanRequests = 0;
+        watcher.Changed += (_, _) => rescanRequests++;
+
+        watcher.RequestRescanAfterError(new InternalBufferOverflowException("Events were lost."));
+
+        Assert.AreEqual(1, rescanRequests);
+    }
 }
