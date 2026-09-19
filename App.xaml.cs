@@ -31,6 +31,7 @@ public partial class App : Application
     private DictionaryWindow? _dictionaryWindow;
     private ScratchpadWindow? _scratchpadWindow;
     private readonly ShutdownFlushCoordinator _shutdownFlushCoordinator = new();
+    private readonly ApplicationShutdownSequence _shutdownSequence;
     private IDisposable? _checklistBackupRegistration;
     private IDisposable? _dictionaryBackupRegistration;
     private IDisposable? _scratchpadBackupRegistration;
@@ -45,6 +46,7 @@ public partial class App : Application
 
     public App()
     {
+        _shutdownSequence = new ApplicationShutdownSequence(_shutdownFlushCoordinator);
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
@@ -661,49 +663,83 @@ public partial class App : Application
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
-        if (_miniPadWindow is not null &&
-            !_miniPadWindow.TryFlushPendingContent(out var recoveryError))
+        var directFlushes = new List<ShutdownDirectFlush>();
+        if (_miniPadWindow is { } miniPadWindow)
         {
-            e.Cancel = true;
-            CancelRequestedBackupRestore();
-            var message = recoveryError ?? "MiniPad recovery data could not be saved.";
+            directFlushes.Add(new ShutdownDirectFlush(
+                "MiniPad",
+                () => CreatePersistenceSaveResult(
+                    miniPadWindow.TryFlushPendingContent(out var error),
+                    error,
+                    "MiniPad recovery data could not be saved.")));
+        }
+        if (_scratchpadWindow is { } scratchpadWindow)
+        {
+            directFlushes.Add(new ShutdownDirectFlush(
+                "Scratchpad",
+                () => CreatePersistenceSaveResult(
+                    scratchpadWindow.TryFlushPendingContent(out var error),
+                    error,
+                    "Scratchpad content could not be saved before shutdown.")));
+        }
+
+        var result = _shutdownSequence.Execute(
+            directFlushes,
+            () => TryPrepareWindowsForShutdown(out var error)
+                ? WindowPreparationResult.Succeeded()
+                : WindowPreparationResult.Failed(error),
+            () => _backupCoordinator?.HasRequestedRestore == true,
+            () => _backupCoordinator?.PrepareRequestedRestore()
+                ?? throw new InvalidOperationException("Backup coordination is not initialized."),
+            CancelRequestedBackupRestore,
+            TryUpdateRecentBackup);
+
+        if (!string.IsNullOrWhiteSpace(result.Warning))
+        {
+            AppDialog.Show(
+                result.Warning,
+                "Noted - Backup Warning",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+
+        if (result.CanShutdown)
+        {
+            _lastShutdownWarning = null;
+            return;
+        }
+
+        e.Cancel = true;
+        ShowShutdownBlocked(result);
+    }
+
+    private void ShowShutdownBlocked(ApplicationShutdownResult result)
+    {
+        if (result.BlockReason == ShutdownBlockReason.DirectFlush)
+        {
+            var isMiniPad = string.Equals(result.ParticipantName, "MiniPad", StringComparison.Ordinal);
+            var message = result.Error ?? (isMiniPad
+                ? "MiniPad recovery data could not be saved."
+                : "Scratchpad content could not be saved before shutdown.");
             if (message == _lastShutdownWarning)
                 return;
 
             _lastShutdownWarning = message;
             AppDialog.Show(
-                $"Noted could not close because MiniPad recovery data was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
-                "MiniPad Save Failed",
+                isMiniPad
+                    ? $"Noted could not close because MiniPad recovery data was not saved.\n\n{message}\n\nThe application will remain open so you can retry."
+                    : $"Noted could not close because pending Scratchpad content was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
+                isMiniPad ? "MiniPad Save Failed" : "Scratchpad Save Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
         }
 
-        if (_scratchpadWindow is not null && !_scratchpadWindow.TryFlushPendingContent(out var error))
+        if (result.BlockReason == ShutdownBlockReason.SharedFlush)
         {
-            e.Cancel = true;
-            CancelRequestedBackupRestore();
-            var message = error ?? "Scratchpad content could not be saved before shutdown.";
-            if (message == _lastShutdownWarning)
-                return;
-
-            _lastShutdownWarning = message;
-            AppDialog.Show(
-                $"Noted could not close because pending Scratchpad content was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
-                "Scratchpad Save Failed",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        var toolSaveFailures = _shutdownFlushCoordinator.FlushAll();
-        if (toolSaveFailures.Count > 0)
-        {
-            e.Cancel = true;
-            CancelRequestedBackupRestore();
             var message = string.Join(
                 "\n",
-                toolSaveFailures.Select(failure =>
+                result.SharedFlushFailures!.Select(failure =>
                     $"{failure.ParticipantName}: {failure.Error}"));
             if (message == _lastShutdownWarning)
                 return;
@@ -718,53 +754,33 @@ public partial class App : Application
         }
 
         _lastShutdownWarning = null;
-        if (!TryPrepareWindowsForShutdown(out var stateError))
+        if (result.BlockReason == ShutdownBlockReason.WindowPreparation)
         {
-            CancelCloseForWindowStateFailure(e, stateError);
+            if (result.Error is null)
+                return;
+            AppDialog.Show(
+                $"Noted could not close because window state was not saved.\n\n{result.Error}\n\nThe application will remain open so you can retry.",
+                "Window State Save Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
             return;
         }
 
-        if (_backupCoordinator?.HasRequestedRestore == true)
+        if (result.BlockReason == ShutdownBlockReason.RestoreProtection)
         {
-            var preparation = _backupCoordinator.PrepareRequestedRestore();
-            var protectionResult = preparation.ProtectionResult;
-            if (protectionResult.Status is not (FullBackupStatus.Created or FullBackupStatus.Skipped))
-            {
-                e.Cancel = true;
-                CancelRequestedBackupRestore();
-                AppDialog.Show(
-                    $"Noted did not start the restore because the current data could not be protected first.\n\n{protectionResult.Message}",
-                    "Noted - Restore Not Started",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-                return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(protectionResult.Warning))
-            {
-                AppDialog.Show(
-                    protectionResult.Warning,
-                    "Noted - Backup Warning",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-            }
-
-            var restoreResult = preparation.ScheduleResult!;
-            if (restoreResult.Status != FullBackupStatus.RestoreScheduled)
-            {
-                e.Cancel = true;
-                CancelRequestedBackupRestore();
-                AppDialog.Show(
-                    restoreResult.Message,
-                    "Noted - Restore Not Started",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
-                return;
-            }
+            AppDialog.Show(
+                $"Noted did not start the restore because the current data could not be protected first.\n\n{result.Error}",
+                "Noted - Restore Not Started",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
         }
 
-        if (_backupCoordinator?.HasRequestedRestore != true)
-            TryUpdateRecentBackup();
+        AppDialog.Show(
+            result.Error ?? "The requested restore could not be scheduled.",
+            "Noted - Restore Not Started",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     internal bool TryPrepareWindowsForShutdown(out string? error)
@@ -808,19 +824,6 @@ public partial class App : Application
         _dictionaryWindow?.CancelPreparedClose();
         _scratchpadWindow?.CancelPreparedClose();
         _miniPadWindow?.CancelPreparedClose();
-    }
-
-    private void CancelCloseForWindowStateFailure(CancelEventArgs e, string? message)
-    {
-        e.Cancel = true;
-        CancelRequestedBackupRestore();
-        if (message is null)
-            return;
-        AppDialog.Show(
-            $"Noted could not close because window state was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
-            "Window State Save Failed",
-            MessageBoxButton.OK,
-            MessageBoxImage.Warning);
     }
 
     private void CancelRequestedBackupRestore()
