@@ -168,6 +168,7 @@ public sealed class ScratchpadWindowViewModel : ObservableObject
         }
         catch (SettingsPersistenceException ex)
         {
+            ExceptionDiagnostics.Record(ex);
             SetSettingsPersistenceError($"Scratchpad settings could not be loaded: {ex.Message}");
             return new ScratchpadWindowState();
         }
@@ -194,6 +195,7 @@ public sealed class ScratchpadWindowViewModel : ObservableObject
         }
         catch (SettingsPersistenceException ex)
         {
+            ExceptionDiagnostics.Record(ex);
             SetSettingsPersistenceError($"Scratchpad settings could not be saved: {ex.Message}");
         }
 

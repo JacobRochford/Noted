@@ -205,8 +205,8 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex) when (IsExpectedPersistenceException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
-            PersistenceError = $"Dictionary content could not be saved: {ex.Message}";
+            ExceptionDiagnostics.Record(ex);
+            PersistenceError = "Dictionary content could not be saved.";
             return PersistenceSaveResult.Failed(PersistenceError);
         }
     }
@@ -220,13 +220,7 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
                 issues.Select(issue => $"{Path.GetFileName(issue.FilePath)}: {issue.Message}"));
     }
 
-    private static bool IsExpectedPersistenceException(Exception exception)
-    {
-        return exception is IOException or
-            UnauthorizedAccessException or
-            SecurityException or
-            ArgumentException or
-            NotSupportedException;
-    }
+    private static bool IsExpectedPersistenceException(Exception exception) =>
+        FileSystemErrors.IsExpected(exception);
 
 }

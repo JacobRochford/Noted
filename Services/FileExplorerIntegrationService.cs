@@ -50,11 +50,10 @@ internal static class FileExplorerIntegrationService
         }
         catch (Exception ex) when (ex is
                    IOException or
-                   InvalidOperationException or
                    SecurityException or
                    UnauthorizedAccessException)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return false;
         }
     }

@@ -28,7 +28,8 @@ public sealed class RunOnStartupService : IRunOnStartupService {
             else
                 key.DeleteValue(AppName, throwOnMissingValue: false);
         } catch (Exception ex) when (IsExpectedRegistryException(ex)) {
-            return BuildFailureResult($"Windows could not update the startup registration: {ex.Message}");
+            ExceptionDiagnostics.Record(ex);
+            return BuildFailureResult("Windows could not update the startup registration.");
         }
 
         try {
@@ -41,10 +42,11 @@ public sealed class RunOnStartupService : IRunOnStartupService {
                 actualEnabled,
                 "Windows reported a different startup registration state than the requested setting.");
         } catch (Exception ex) when (IsExpectedRegistryException(ex)) {
+            ExceptionDiagnostics.Record(ex);
             return (
                 false,
                 null,
-                $"The startup registration was updated, but its current state could not be verified: {ex.Message}");
+                "The startup registration was updated, but its current state could not be verified.");
         }
     }
 
@@ -52,10 +54,11 @@ public sealed class RunOnStartupService : IRunOnStartupService {
         try {
             return (false, IsRunOnStartupEnabled, error);
         } catch (Exception ex) when (IsExpectedRegistryException(ex)) {
+            ExceptionDiagnostics.Record(ex);
             return (
                 false,
                 null,
-                $"{error} The current startup registration state could not be verified: {ex.Message}");
+                $"{error} The current startup registration state could not be verified.");
         }
     }
 

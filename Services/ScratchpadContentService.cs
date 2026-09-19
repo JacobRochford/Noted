@@ -82,17 +82,11 @@ public sealed class ScratchpadContentService : IScratchpadContentService
             _preserveBackupOnNextSave = false;
             return new ScratchpadContentSaveResult(true, null, writeResult.Warning);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (FileSystemErrors.IsExpected(ex))
         {
-            return new ScratchpadContentSaveResult(false, ex.Message, null);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return new ScratchpadContentSaveResult(false, ex.Message, null);
-        }
-        catch (SecurityException ex)
-        {
-            return new ScratchpadContentSaveResult(false, ex.Message, null);
+            ExceptionDiagnostics.Record(ex);
+            return new ScratchpadContentSaveResult(false,
+                "Scratchpad content could not be saved. Check storage access and available disk space.", null);
         }
     }
 
@@ -115,7 +109,8 @@ public sealed class ScratchpadContentService : IScratchpadContentService
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
         {
-            return new TextReadResult(JsonFileReadStatus.Unavailable, null, ex.Message);
+            ExceptionDiagnostics.Record(ex);
+            return new TextReadResult(JsonFileReadStatus.Unavailable, null, "Scratchpad content could not be read. Check storage access and whether the file is in use.");
         }
     }
 

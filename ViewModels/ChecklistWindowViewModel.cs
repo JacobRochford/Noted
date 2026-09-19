@@ -754,8 +754,8 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex) when (IsExpectedPersistenceException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
-            _tabSaveError = $"Checklist tabs could not be saved: {ex.Message}";
+            ExceptionDiagnostics.Record(ex);
+            _tabSaveError = "Checklist tabs could not be saved.";
             _tabSaveWarning = null;
             RefreshPersistenceError();
             return false;
@@ -775,8 +775,8 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex) when (IsExpectedPersistenceException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
-            _itemSaveError = $"Checklist content could not be saved: {ex.Message}";
+            ExceptionDiagnostics.Record(ex);
+            _itemSaveError = "Checklist content could not be saved.";
             _itemSaveWarning = null;
             RefreshPersistenceError();
             return PersistenceSaveResult.Failed(_itemSaveError);
@@ -801,13 +801,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             ?? _tabSaveWarning
             ?? _loadNotice;
 
-    private static bool IsExpectedPersistenceException(Exception exception)
-    {
-        return exception is IOException or
-            UnauthorizedAccessException or
-            SecurityException or
-            ArgumentException or
-            NotSupportedException;
-    }
+    private static bool IsExpectedPersistenceException(Exception exception) =>
+        FileSystemErrors.IsExpected(exception);
 
 }

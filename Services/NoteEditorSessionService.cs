@@ -130,7 +130,7 @@ public sealed class NoteEditorSessionService : INoteEditorSessionService
     {
         var result = JsonFileStore.Read<NoteEditorSession>(path);
         if (!result.Success)
-            return new SessionReadResult(path, result.Status, null, result.Error?.Message);
+            return new SessionReadResult(path, result.Status, null, "The note editor session file could not be read or is invalid.");
 
         var session = result.Value!;
         if (session.Tabs is null)
@@ -161,7 +161,7 @@ public sealed class NoteEditorSessionService : INoteEditorSessionService
         {
             issues.Add(new NoteEditorSessionIssue(
                 path,
-                $"The corrupt note editor session could not be preserved under a new name: {result.Error.Message}"));
+                "The corrupt note editor session could not be preserved under a new name."));
         }
 
         return result.PreservedPath;

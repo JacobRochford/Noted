@@ -63,11 +63,13 @@ public partial class MiniPadWindow : OverlayWindow
         _keepDraftOnClose = true;
     }
 
+    internal void CancelPreparedClose() => _preserveOpenStateOnClose = false;
+
     internal void PrepareForApplicationShutdown()
     {
         _reopenOnStartup = IsWindowVisible || IsHiddenTogether;
-        _preserveOpenStateOnClose = true;
         SaveWindowState();
+        _preserveOpenStateOnClose = true;
     }
 
     public bool TryFlushPendingContent(out string? error)
@@ -161,9 +163,9 @@ public partial class MiniPadWindow : OverlayWindow
         }
         catch (Exception ex) when (IsExpectedRecoveryException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return PersistenceSaveResult.Failed(
-                $"MiniPad recovery data could not be saved: {ex.Message}");
+                "MiniPad recovery data could not be saved.");
         }
     }
 
@@ -192,13 +194,13 @@ public partial class MiniPadWindow : OverlayWindow
             return;
         }
 
+        e.Cancel = true;
         if (!_preserveOpenStateOnClose)
         {
             _reopenOnStartup = false;
             SaveWindowState();
         }
 
-        e.Cancel = true;
         HideWindow();
     }
 
@@ -343,13 +345,7 @@ public partial class MiniPadWindow : OverlayWindow
                 : $"{_findSession.CurrentMatchIndex + 1} of {_findSession.Matches.Count}";
     }
 
-    private static bool IsExpectedRecoveryException(Exception exception)
-    {
-        return exception is IOException or
-            UnauthorizedAccessException or
-            System.Security.SecurityException or
-            ArgumentException or
-            NotSupportedException;
-    }
+    private static bool IsExpectedRecoveryException(Exception exception) =>
+        FileSystemErrors.IsExpected(exception);
 
 }

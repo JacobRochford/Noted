@@ -1,6 +1,8 @@
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Reflection;
+using System.ComponentModel;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Windows;
 using Noted;
@@ -22,31 +24,46 @@ public static class UpdateService
         s_httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Noted-UpdateChecker/1.0");
     }
 
-    public static async Task CheckForUpdatesAsync()
+    public static Task CheckForUpdatesAsync() => CheckForUpdatesAsync(s_httpClient);
+
+    internal static async Task CheckForUpdatesAsync(HttpClient httpClient)
     {
+        GitHubRelease? release;
         try
         {
-            var release = await s_httpClient
+            release = await httpClient
                 .GetFromJsonAsync<GitHubRelease>(LatestReleaseApiUrl)
                 .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException)
+        {
+            ExceptionDiagnostics.Record(ex);
+            return;
+        }
 
-            if (release?.TagName is null)
-                return;
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.HasShutdownStarted)
+            return;
 
-            if (!Version.TryParse(release.TagName.TrimStart('v'), out var latestVersion))
-                return;
+        if (release?.TagName is null)
+            return;
 
-            var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
-            if (assemblyVersion is null)
-                return;
+        if (!Version.TryParse(release.TagName.TrimStart('v'), out var latestVersion))
+            return;
 
-            // Normalize to 3-part version to match tag format (e.g. 1.0.0)
-            var currentVersion = new Version(assemblyVersion.Major, assemblyVersion.Minor, assemblyVersion.Build);
+        var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
+        if (assemblyVersion is null)
+            return;
 
-            if (latestVersion <= currentVersion)
-                return;
+        // Normalize to 3-part version to match tag format (e.g. 1.0.0)
+        var currentVersion = new Version(assemblyVersion.Major, assemblyVersion.Minor, assemblyVersion.Build);
 
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+        if (latestVersion <= currentVersion)
+            return;
+
+        try
+        {
+            await dispatcher.InvokeAsync(() =>
             {
                 var result = AppDialog.Show(
                     $"Noted. {release.TagName} is available.\n\nYou are running v{currentVersion}. Would you like to download the update?",
@@ -55,16 +72,27 @@ public static class UpdateService
                     MessageBoxImage.Information);
 
                 if (result == MessageBoxResult.Yes)
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    try
                     {
-                        FileName = ReleasesPageUrl,
-                        UseShellExecute = true
-                    });
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = ReleasesPageUrl,
+                            UseShellExecute = true
+                        });
+                    }
+                    catch (Exception ex) when (ex is Win32Exception || FileSystemErrors.IsExpected(ex))
+                    {
+                        ExceptionDiagnostics.Record(ex);
+                        AppDialog.Show("The download page could not be opened. Try again from the Noted releases page.",
+                            "Update Download", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                }
             });
         }
-        catch
+        catch (OperationCanceledException) when (dispatcher.HasShutdownStarted)
         {
-            // Never crash the app over a failed update check.
+            // app shut down before the update prompt could run
         }
     }
 

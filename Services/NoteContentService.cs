@@ -58,9 +58,9 @@ public sealed class NoteContentService : INoteContentService
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             warnings.Add(
-                $"'{Path.GetFileName(validatedPath)}' was saved, but its previous version could not be added to note history: {ex.Message}");
+                $"'{Path.GetFileName(validatedPath)}' was saved, but its previous version could not be added to note history.");
         }
 
         FileWriter.WriteAllText(validatedPath, content);
@@ -134,7 +134,7 @@ public sealed class NoteContentService : INoteContentService
             {
                 var error = Marshal.GetLastWin32Error();
                 if (error is 2 or 3) return warning;
-                throw new IOException(new Win32Exception(error).Message);
+                throw new IOException("The original note could not be opened for cleanup.", new Win32Exception(error));
             }
             using var stream = new FileStream(handle, FileAccess.Read);
             using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
@@ -143,12 +143,13 @@ public sealed class NoteContentService : INoteContentService
 
             var disposition = new FileDispositionInfo { DeleteFile = 1 };
             if (!SetFileInformationByHandle(handle, FileDispositionInfoClass, ref disposition, 1))
-                throw new IOException(new Win32Exception(Marshal.GetLastWin32Error()).Message);
+                throw new IOException("The original note could not be removed.", new Win32Exception(Marshal.GetLastWin32Error()));
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
+            ExceptionDiagnostics.Record(ex);
             var cleanupWarning = $"The note was saved as '{Path.GetFileName(destination)}', but the original file " +
-                $"'{source}' was kept: {ex.Message}";
+                $"'{source}' was kept.";
             return string.IsNullOrWhiteSpace(warning) ? cleanupWarning : $"{warning} {cleanupWarning}";
         }
         return warning;
@@ -227,14 +228,8 @@ public sealed class NoteContentService : INoteContentService
         return fullPath;
     }
 
-    private static bool IsExpectedFileException(Exception exception)
-    {
-        return exception is IOException or
-            UnauthorizedAccessException or
-            System.Security.SecurityException or
-            ArgumentException or
-            NotSupportedException;
-    }
+    private static bool IsExpectedFileException(Exception exception) =>
+        FileSystemErrors.IsExpected(exception);
 
     private sealed record NoteHistoryEntry(
         int SchemaVersion,

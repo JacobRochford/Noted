@@ -65,10 +65,12 @@ internal static class JsonFileStore
         }
         catch (JsonException ex)
         {
+            ExceptionDiagnostics.Record(ex);
             return new JsonFileReadResult<T>(JsonFileReadStatus.Corrupt, default, ex);
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
+            ExceptionDiagnostics.Record(ex);
             return new JsonFileReadResult<T>(JsonFileReadStatus.Unavailable, default, ex);
         }
     }
@@ -131,17 +133,11 @@ internal static class JsonFileStore
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return new CorruptFilePreservationResult(null, ex);
         }
     }
 
-    private static bool IsExpectedFileException(Exception exception)
-    {
-        return exception is IOException or
-            UnauthorizedAccessException or
-            SecurityException or
-            ArgumentException or
-            NotSupportedException;
-    }
+    private static bool IsExpectedFileException(Exception exception) =>
+        FileSystemErrors.IsExpected(exception);
 }

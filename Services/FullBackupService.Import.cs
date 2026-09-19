@@ -64,14 +64,14 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return new FullBackupPreview(
                 true,
                 false,
                 Guid.Empty,
                 null,
                 [],
-                ex.Message);
+                "The selected backup could not be read or verified.");
         }
     }
 
@@ -143,8 +143,8 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
-            return ImportFileChanged($"The selected file could not be verified: {ex.Message}");
+            ExceptionDiagnostics.Record(ex);
+            return ImportFileChanged("The selected file could not be verified.");
         }
     }
 
@@ -231,7 +231,7 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             TryDeleteImportRestoreRequest(importId);
             TryDeleteImportDirectory(buildPath);
             TryDeleteImportDirectory(pendingPath);
@@ -239,7 +239,7 @@ internal sealed partial class FullBackupService
                 FullBackupStatus.Failed,
                 FullBackupType.User,
                 null,
-                $"The backup import could not be prepared: {ex.Message}");
+                "The backup import could not be prepared.");
         }
     }
 
@@ -349,8 +349,8 @@ internal sealed partial class FullBackupService
         if (manifest.Entries.Any(entry => entry is null))
             throw new InvalidDataException("The selected backup manifest contains an empty file entry.");
 
-        _ = Path.GetFullPath(manifest.AppDataRoot);
-        _ = Path.GetFullPath(manifest.NotesRoot);
+        _ = NormalizeBackupDataPath(manifest.AppDataRoot);
+        _ = NormalizeBackupDataPath(manifest.NotesRoot);
         var duplicate = manifest.Entries
             .GroupBy(entry => NormalizeLogicalPath(entry.LogicalPath), StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault(group => group.Count() > 1);
@@ -639,7 +639,8 @@ internal sealed partial class FullBackupService
 
     private string RebaseNotePath(string notePath, string oldNotesDirectory)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(notePath);
+        if (string.IsNullOrWhiteSpace(notePath))
+            throw new InvalidDataException("The imported note path is empty.");
         if (!Path.IsPathFullyQualified(notePath) ||
             !NoteFileExtensions.IsSupported(notePath))
         {
@@ -648,7 +649,7 @@ internal sealed partial class FullBackupService
         }
 
         var oldRoot = Path.GetFullPath(oldNotesDirectory);
-        var sourcePath = Path.GetFullPath(notePath);
+        var sourcePath = NormalizeBackupDataPath(notePath);
         var relativePath = Path.GetRelativePath(oldRoot, sourcePath);
         if (Path.IsPathRooted(relativePath) ||
             relativePath.Equals("..", StringComparison.Ordinal) ||
@@ -664,7 +665,7 @@ internal sealed partial class FullBackupService
 
     private static string GetPathHash(string path)
     {
-        var normalizedPath = Path.GetFullPath(path).ToUpperInvariant();
+        var normalizedPath = NormalizeBackupDataPath(path).ToUpperInvariant();
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath)));
     }
 
@@ -742,7 +743,7 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
         }
     }
 
@@ -781,7 +782,7 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
         }
     }
 
@@ -805,7 +806,7 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
         }
     }
 

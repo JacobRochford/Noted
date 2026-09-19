@@ -245,7 +245,7 @@ public partial class MainWindow : Window {
             return;
 
         e.Handled = true;
-        Dispatcher.InvokeAsync(BeginHeaderEdit, DispatcherPriority.Input);
+        Dispatcher.BeginInvoke(BeginHeaderEdit, DispatcherPriority.Input);
     }
 
     private void BeginHeaderEdit()
@@ -377,8 +377,9 @@ public partial class MainWindow : Window {
             _hotkeysInitialized = true;
             SyncHotkeyControls(restoreEditorToActive: true);
         }
-        catch (Exception exception)
+        catch (SettingsPersistenceException exception)
         {
+            ExceptionDiagnostics.Record(exception);
             warnings.Add(
                 $"Hotkey initialization stopped before all features were processed: {exception.Message}\n" +
                 "Registrations already owned by Noted were retained; initialization may be retried without replacing the service.");
@@ -473,8 +474,9 @@ public partial class MainWindow : Window {
             {
                 saveHotkey(registration.Modifiers, registration.Key);
             }
-            catch (Exception exception)
+            catch (SettingsPersistenceException exception)
             {
+                ExceptionDiagnostics.Record(exception);
                 persistenceWarning =
                     $" The fallback is active for this session, but saving it failed: {exception.Message}";
             }
@@ -747,7 +749,7 @@ public partial class MainWindow : Window {
         SetHotkeyEditor(modifiers, key);
         HotkeyEditorPopup.PlacementTarget = button;
         HotkeyEditorPopup.IsOpen = true;
-        Dispatcher.InvokeAsync(() => HotkeyKeyCombo.Focus(), DispatcherPriority.Input);
+        Dispatcher.BeginInvoke(() => HotkeyKeyCombo.Focus(), DispatcherPriority.Input);
     }
 
     private void SetHotkeyEditor(string modifiers, string key)
@@ -948,8 +950,9 @@ public partial class MainWindow : Window {
                 replacement.ActiveRegistration.Modifiers,
                 replacement.ActiveRegistration.Key);
         }
-        catch (Exception exception)
+        catch (SettingsPersistenceException exception)
         {
+            ExceptionDiagnostics.Record(exception);
             AppDialog.Show(
                 $"The hotkey is active as {replacement.ActiveRegistration.Combination}, " +
                 $"but the setting could not be saved: {exception.Message}",
@@ -1303,7 +1306,7 @@ public partial class MainWindow : Window {
             }
 
             // focus list after layout
-            Dispatcher.InvokeAsync(() => {
+            Dispatcher.BeginInvoke(() => {
                 try {
                     FileList.Focus();
                 } finally {
@@ -1800,9 +1803,10 @@ public partial class MainWindow : Window {
         {
             Clipboard.SetText(note.DisplayName);
         }
-        catch (Exception ex)
+        catch (System.Runtime.InteropServices.COMException ex)
         {
-            AppDialog.Show($"Failed to copy note name:\n{ex.Message}",
+            ExceptionDiagnostics.Record(ex);
+            AppDialog.Show("The note name could not be copied. The clipboard may be in use; try again.",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -1880,20 +1884,27 @@ public partial class MainWindow : Window {
             _viewModel.LoadNotes(_fileService.GetNoteKey(filePath));
             // OnNotesLoaded fires synchronously above, so selection is already set.
             OpenCreatedNoteInEditor(filePath, createdNote.UsesGeneratedName, createdNote.InitialContent);
-        } catch (Exception ex) {
-            AppDialog.Show(owner, $"Failed to create note:\n{ex.Message}",
+        } catch (Exception ex) when (FileSystemErrors.IsExpected(ex)) {
+            ExceptionDiagnostics.Record(ex);
+            AppDialog.Show(owner, "The note could not be created. Check folder access and available disk space.",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
     private void QuickNoteButton_Click(object sender, RoutedEventArgs e) {
         try {
-            var createdNote = _fileService.CreateNote();
+            var (createdNote, error) = _fileService.CreateNote();
+            if (createdNote is null)
+            {
+                AppDialog.Show(error ?? "The note could not be created.", "New Note", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
             var filePath = Path.Combine(_fileService.CurrentDirectory, createdNote.FileName);
             _viewModel.LoadNotes(_fileService.GetNoteKey(filePath));
             OpenCreatedNoteInEditor(filePath, createdNote.UsesGeneratedName, createdNote.InitialContent);
-        } catch (Exception ex) {
-            AppDialog.Show($"Failed to create quick note:\n{ex.Message}",
+        } catch (Exception ex) when (FileSystemErrors.IsExpected(ex)) {
+            ExceptionDiagnostics.Record(ex);
+            AppDialog.Show("The quick note could not be created. Check folder access and available disk space.",
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -1903,7 +1914,7 @@ public partial class MainWindow : Window {
 
         // In "Quick" mode, skip the dialog
         if (mode == NewNoteMode.Quick)
-            return _fileService.CreateNote();
+            return _fileService.CreateNote().Note;
 
         // In "Prompt" or "Both" modes, offer a date name that can be accepted or replaced.
         var attemptedName = _fileService.SuggestNoteName();
@@ -1915,13 +1926,13 @@ public partial class MainWindow : Window {
             if (dialog.ShowDialog() != true)
                 return null;
 
-            try {
-                return _fileService.CreateNote(dialog.NoteName);
-            } catch (InvalidOperationException ex) {
-                attemptedName = dialog.NoteName;
-                AppDialog.Show(owner, ex.Message,
-                    "New Note Name", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
+            var (note, error) = _fileService.CreateNote(dialog.NoteName);
+            if (note is not null)
+                return note;
+
+            attemptedName = dialog.NoteName;
+            AppDialog.Show(owner, error ?? "The note name is invalid.",
+                "New Note Name", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 
@@ -2057,10 +2068,11 @@ public partial class MainWindow : Window {
                 "Delete Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
-        } catch (Exception ex) {
+        } catch (Exception ex) when (FileSystemErrors.IsExpected(ex)) {
+            ExceptionDiagnostics.Record(ex);
             AppDialog.Show(
                 owner,
-                $"Failed to delete note:\n{ex.Message}",
+                "The note could not be deleted. Check folder access and whether the file is in use.",
                 "Delete Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -2170,8 +2182,11 @@ public partial class MainWindow : Window {
 
             UpdateNotesDirectoryDisplay();
             UpdateSettingsView();
-        } catch (Exception ex) {
-            AppDialog.Show($"Failed to change notes folder:\n{ex.Message}",
+        } catch (Exception ex) when (ex is SettingsPersistenceException || FileSystemErrors.IsExpected(ex)) {
+            ExceptionDiagnostics.Record(ex);
+            AppDialog.Show(ex is SettingsPersistenceException
+                    ? ex.Message
+                    : "The notes folder could not be changed. Check folder access and try again.",
                 "Folder Change Failed", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -2252,7 +2267,7 @@ public partial class MainWindow : Window {
             note.EditableName = Path.GetFileNameWithoutExtension(note.FileName);
             note.IsEditing = true;
 
-            Dispatcher.InvokeAsync(() => {
+            Dispatcher.BeginInvoke(() => {
                 try {
                     var listBoxItem = FileList.ItemContainerGenerator.ContainerFromItem(note) as ListBoxItem;
                     var textBox = listBoxItem is null
@@ -2342,7 +2357,7 @@ public partial class MainWindow : Window {
             _isCommittingRename = false;
         }
 
-        _ = Dispatcher.InvokeAsync(() => {
+        _ = Dispatcher.BeginInvoke(() => {
             try {
                 var listBoxItem = FileList.ItemContainerGenerator.ContainerFromItem(note) as ListBoxItem;
                 var renameTextBox = listBoxItem is null
@@ -2501,7 +2516,7 @@ public partial class MainWindow : Window {
                 else
                     _viewModel.NavigateTo(firstDisplayedItem.FileName);
 
-                Dispatcher.InvokeAsync(() => FileList.Focus(), DispatcherPriority.Input);
+                Dispatcher.BeginInvoke(() => FileList.Focus(), DispatcherPriority.Input);
             } else {
                 OpenSelectedNote();
             }

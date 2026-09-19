@@ -125,11 +125,13 @@ public partial class ChecklistWindow : OverlayWindow
         });
     }
 
+    internal void CancelPreparedClose() => _preserveOpenStateOnClose = false;
+
     internal void PrepareForApplicationShutdown()
     {
         _reopenOnStartup = IsWindowVisible || IsHiddenTogether;
-        _preserveOpenStateOnClose = true;
         SaveWindowState();
+        _preserveOpenStateOnClose = true;
     }
 
     // Title bar

@@ -130,7 +130,11 @@ public partial class ScratchpadWindow : OverlayWindow
         }
 
         if (!TryFlushPendingWindowState(out var stateError))
+        {
+            e.Cancel = true;
             ShowPersistenceWarningOnce(stateError);
+            return;
+        }
 
         _isClosing = true;
         base.OnClosing(e);
@@ -205,10 +209,11 @@ public partial class ScratchpadWindow : OverlayWindow
         }
         catch (ArgumentException ex)
         {
+            ExceptionDiagnostics.Record(ex);
             Editor.Document.Blocks.Clear();
             Editor.AppendText(saved);
             _viewModel.ReportPersistenceError(
-                $"Scratchpad formatting could not be restored; the saved content was opened as plain text: {ex.Message}");
+                "Scratchpad formatting could not be restored; the saved content was opened as plain text.");
         }
         finally
         {
@@ -260,18 +265,7 @@ public partial class ScratchpadWindow : OverlayWindow
 
     private PersistenceSaveResult SaveContentRevision(long revision)
     {
-        string content;
-        try
-        {
-            content = SerializeEditorContent();
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-            var serializationError = $"Scratchpad content could not be prepared for saving: {ex.Message}";
-            _viewModel.ReportPersistenceError(serializationError);
-            return PersistenceSaveResult.Failed(serializationError);
-        }
+        var content = SerializeEditorContent();
 
         if (!_viewModel.TrySaveContent(content))
         {
@@ -329,14 +323,18 @@ public partial class ScratchpadWindow : OverlayWindow
             ShowPersistenceWarningOnce(stateError);
     }
 
-    internal void PrepareForApplicationShutdown()
+    internal bool TryPrepareForApplicationShutdown(out string? error)
     {
         _reopenOnStartup = IsWindowVisible || IsHiddenTogether;
-        _preserveOpenStateOnClose = true;
         _isWindowStateDirty = true;
-        if (!TryFlushPendingWindowState(out var error))
-            ShowPersistenceWarningOnce(error);
+        if (!TryFlushPendingWindowState(out error))
+            return false;
+
+        _preserveOpenStateOnClose = true;
+        return true;
     }
+
+    internal void CancelPreparedClose() => _preserveOpenStateOnClose = false;
 
     protected override void RequestHide()
     {

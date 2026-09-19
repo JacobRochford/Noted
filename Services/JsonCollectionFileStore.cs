@@ -101,7 +101,7 @@ internal sealed class JsonCollectionFileStore<TItem>
         {
             _writesBlocked = true;
             throw new FileVerificationException(
-                $"{_contentName} was written but could not be verified: {verification.Error ?? "the new file could not be read."}");
+                $"{_contentName} was written but could not be verified: {verification.Error ?? "the new file could not be read."}", verification.Exception);
         }
 
         _preserveBackupOnNextSave = false;
@@ -112,7 +112,7 @@ internal sealed class JsonCollectionFileStore<TItem>
     {
         var result = JsonFileStore.Read<List<TItem>>(path);
         if (!result.Success)
-            return new ItemReadResult(path, result.Status, null, result.Error?.Message);
+            return new ItemReadResult(path, result.Status, null, "The content file could not be read or is invalid.", result.Error);
         if (result.Value!.Any(item => item is null))
         {
             return new ItemReadResult(
@@ -141,7 +141,7 @@ internal sealed class JsonCollectionFileStore<TItem>
         {
             issues.Add(new PersistenceFileIssue(
                 path,
-                $"The corrupt content file could not be preserved under a new name: {result.Error.Message}"));
+                "The corrupt content file could not be preserved under a new name."));
         }
 
         return result.PreservedPath;
@@ -151,5 +151,6 @@ internal sealed class JsonCollectionFileStore<TItem>
         string Path,
         JsonFileReadStatus Status,
         IReadOnlyList<TItem>? Items,
-        string? Error);
+        string? Error,
+        Exception? Exception = null);
 }

@@ -308,25 +308,14 @@ public sealed class GlobalHotkeysService : IDisposable
                 "The global hotkey service has already been disposed.");
         }
 
-        try
+        if (!UnregisterHotKey(_hwnd, id))
         {
-            if (!UnregisterHotKey(_hwnd, id))
-            {
-                var nativeError = Marshal.GetLastWin32Error();
-                var description = DescribeNativeFailure(
-                    $"Windows could not unregister {ownedRegistration.Registration.FeatureName} hotkey {ownedRegistration.Registration.Combination}",
-                    nativeError);
-                Debug.WriteLine(description);
-
-                return new HotkeyUnregistrationResult(
-                    false,
-                    description);
-            }
-        }
-        catch (Exception exception)
-        {
-            var description = $"Unregistering {ownedRegistration.Registration.FeatureName} hotkey {ownedRegistration.Registration.Combination} threw {exception.GetType().Name}: {exception.Message}";
+            var nativeError = Marshal.GetLastWin32Error();
+            var description = DescribeNativeFailure(
+                $"Windows could not unregister {ownedRegistration.Registration.FeatureName} hotkey {ownedRegistration.Registration.Combination}",
+                nativeError);
             Debug.WriteLine(description);
+
             return new HotkeyUnregistrationResult(
                 false,
                 description);
@@ -375,7 +364,7 @@ public sealed class GlobalHotkeysService : IDisposable
             }
             catch (Exception exception)
             {
-                Debug.WriteLine($"Removing the global hotkey window hook failed: {exception}");
+                ExceptionDiagnostics.Record(exception, "Remove global hotkey hook");
             }
 
             _hookAttached = false;
@@ -428,7 +417,8 @@ public sealed class GlobalHotkeysService : IDisposable
 
     private static string DescribeNativeFailure(string context, int nativeError)
     {
-        return $"{context}. Win32 error {nativeError}: {new Win32Exception(nativeError).Message}";
+        ExceptionDiagnostics.Record(new Win32Exception(nativeError), context);
+        return $"{context}. Windows error code: {nativeError}.";
     }
 
     private static bool TryNormalize(

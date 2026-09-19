@@ -18,8 +18,8 @@ public sealed class FileOpenRequestServiceTests
         var queued = new TaskCompletionSource<Action>(TaskCreationOptions.RunContinuationsAsynchronously);
         var opened = new List<string>();
         await using var service = new FileOpenRequestService(opened.Add, action => queued.SetResult(action), pipeName);
-        service.Start();
-        service.Start();
+        _ = service.Start();
+        _ = service.Start();
 
         const string path = @"C:\external notes\example.md";
         await SendAsync(pipeName, path);
@@ -38,7 +38,7 @@ public sealed class FileOpenRequestServiceTests
         var queued = new TaskCompletionSource<Action>(TaskCreationOptions.RunContinuationsAsynchronously);
         var opened = new List<string>();
         await using var service = new FileOpenRequestService(opened.Add, action => queued.SetResult(action), pipeName);
-        service.Start();
+        _ = service.Start();
         await SendAsync(pipeName, "pending.txt");
         var deliver = await queued.Task.WaitAsync(TestTimeout);
 
@@ -58,7 +58,7 @@ public sealed class FileOpenRequestServiceTests
     {
         var pipeName = NewPipeName();
         await using var service = new FileOpenRequestService(_ => Assert.Fail("Unexpected delivery."), _ => { }, pipeName);
-        service.Start();
+        _ = service.Start();
         using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.Out, PipeOptions.Asynchronous);
         if (connectWithoutSending)
             await client.ConnectAsync(5000);
@@ -72,7 +72,7 @@ public sealed class FileOpenRequestServiceTests
         using var replacement = new NamedPipeServerStream(
             pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte,
             PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-        Assert.ThrowsExactly<ObjectDisposedException>(service.Start);
+        Assert.ThrowsExactly<ObjectDisposedException>(() => { service.Start(); });
     }
 
     [TestMethod]
@@ -82,7 +82,7 @@ public sealed class FileOpenRequestServiceTests
         await service.DisposeAsync();
         service.Dispose();
         await service.DisposeAsync();
-        Assert.ThrowsExactly<ObjectDisposedException>(service.Start);
+        Assert.ThrowsExactly<ObjectDisposedException>(() => { service.Start(); });
     }
 
     [TestMethod]
@@ -97,7 +97,7 @@ public sealed class FileOpenRequestServiceTests
             {
                 var pipeName = NewPipeName();
                 using var service = new FileOpenRequestService(_ => { }, _ => { }, pipeName);
-                service.Start();
+                _ = service.Start();
                 using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.Out);
                 client.Connect(5000);
                 service.Dispose();
@@ -115,7 +115,7 @@ public sealed class FileOpenRequestServiceTests
     }
 
     [TestMethod]
-    public async Task ListenerFailuresAreObservedDuringTeardown()
+    public async Task ListenerFailureIsObservableImmediatelyAndDuringTeardown()
     {
         var pipeName = NewPipeName();
         var dispatchAttempted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -128,9 +128,12 @@ public sealed class FileOpenRequestServiceTests
 
         try
         {
-            service.Start();
+            var listener = service.Start();
             await SendAsync(pipeName, "pending.txt");
             await dispatchAttempted.Task.WaitAsync(TestTimeout);
+            var immediate = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
+                () => listener.WaitAsync(TestTimeout));
+            Assert.AreSame(failure, immediate);
             var observed = await Assert.ThrowsExactlyAsync<InvalidOperationException>(
                 () => service.DisposeAsync().AsTask().WaitAsync(TestTimeout));
             Assert.AreSame(failure, observed);

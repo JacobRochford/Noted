@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using Noted.Helpers;
+using Noted.Services;
 
 namespace Noted;
 
@@ -75,9 +76,14 @@ public abstract class OverlayWindow : Window
         try
         {
             DragMove();
-            SaveWindowState();
         }
-        catch { }
+        catch (InvalidOperationException ex) when (Mouse.LeftButton != MouseButtonState.Pressed)
+        {
+            ExceptionDiagnostics.Record(ex);
+            return;
+        }
+
+        SaveWindowState();
     }
 
     protected void ApplyGhostMode(bool enabled)

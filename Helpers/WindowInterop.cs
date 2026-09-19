@@ -169,38 +169,31 @@ internal static class WindowInterop {
     private static bool TryGetMonitorWorkArea(Rect bounds, out Rect workArea)
     {
         workArea = default;
-        try
+        var scale = GetDpiForSystem() / 96d;
+        if (!IsFinite(scale) || scale <= 0)
+            scale = 1;
+
+        var nativeBounds = new NativeRect
         {
-            var scale = GetDpiForSystem() / 96d;
-            if (!IsFinite(scale) || scale <= 0)
-                scale = 1;
-
-            var nativeBounds = new NativeRect
-            {
-                Left = (int)Math.Floor(bounds.Left * scale),
-                Top = (int)Math.Floor(bounds.Top * scale),
-                Right = (int)Math.Ceiling(bounds.Right * scale),
-                Bottom = (int)Math.Ceiling(bounds.Bottom * scale)
-            };
-            var monitor = MonitorFromRect(ref nativeBounds, MONITOR_DEFAULTTONULL);
-            if (monitor == IntPtr.Zero)
-                return false;
-
-            var monitorInfo = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
-            if (!GetMonitorInfo(monitor, ref monitorInfo))
-                return false;
-
-            workArea = new Rect(
-                monitorInfo.Work.Left / scale,
-                monitorInfo.Work.Top / scale,
-                (monitorInfo.Work.Right - monitorInfo.Work.Left) / scale,
-                (monitorInfo.Work.Bottom - monitorInfo.Work.Top) / scale);
-            return workArea.Width > 0 && workArea.Height > 0;
-        }
-        catch
-        {
+            Left = (int)Math.Floor(bounds.Left * scale),
+            Top = (int)Math.Floor(bounds.Top * scale),
+            Right = (int)Math.Ceiling(bounds.Right * scale),
+            Bottom = (int)Math.Ceiling(bounds.Bottom * scale)
+        };
+        var monitor = MonitorFromRect(ref nativeBounds, MONITOR_DEFAULTTONULL);
+        if (monitor == IntPtr.Zero)
             return false;
-        }
+
+        var monitorInfo = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(monitor, ref monitorInfo))
+            return false;
+
+        workArea = new Rect(
+            monitorInfo.Work.Left / scale,
+            monitorInfo.Work.Top / scale,
+            (monitorInfo.Work.Right - monitorInfo.Work.Left) / scale,
+            (monitorInfo.Work.Bottom - monitorInfo.Work.Top) / scale);
+        return workArea.Width > 0 && workArea.Height > 0;
     }
 
     private static bool IsFinite(double value) =>

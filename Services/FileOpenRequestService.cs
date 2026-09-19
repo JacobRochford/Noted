@@ -28,13 +28,13 @@ internal sealed class FileOpenRequestService : IDisposable, IAsyncDisposable
         _pipeName = pipeName ?? PipeName;
     }
 
-    internal void Start()
+    internal Task Start()
     {
         lock (_lifecycleLock)
         {
             ObjectDisposedException.ThrowIf(_stopping, this);
             // The listener must never depend on the UI thread that waits for teardown.
-            _listener ??= Task.Run(ListenAsync);
+            return _listener ??= Task.Run(ListenAsync);
         }
     }
 
@@ -57,7 +57,7 @@ internal sealed class FileOpenRequestService : IDisposable, IAsyncDisposable
         }
         catch (Exception ex) when (ex is IOException or TimeoutException or UnauthorizedAccessException)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return false;
         }
     }
@@ -66,6 +66,7 @@ internal sealed class FileOpenRequestService : IDisposable, IAsyncDisposable
     {
         while (!_cancellation.IsCancellationRequested)
         {
+            string? filePath;
             try
             {
                 await using var server = new NamedPipeServerStream(
@@ -76,16 +77,7 @@ internal sealed class FileOpenRequestService : IDisposable, IAsyncDisposable
                     PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await server.WaitForConnectionAsync(_cancellation.Token).ConfigureAwait(false);
                 using var reader = new StreamReader(server, Encoding.UTF8);
-                var filePath = await reader.ReadLineAsync(_cancellation.Token).ConfigureAwait(false);
-                if (!_stopping && !string.IsNullOrWhiteSpace(filePath))
-                {
-                    _dispatch(() =>
-                    {
-                        // A request can already be queued when teardown begins.
-                        if (!_stopping)
-                            _openFile(filePath);
-                    });
-                }
+                filePath = await reader.ReadLineAsync(_cancellation.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
             {
@@ -93,7 +85,20 @@ internal sealed class FileOpenRequestService : IDisposable, IAsyncDisposable
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                System.Diagnostics.Debug.WriteLine(ex);
+                ExceptionDiagnostics.Record(ex);
+                // wait briefly before retrying the pipe
+                await Task.Delay(250).ConfigureAwait(false);
+                continue;
+            }
+
+            if (!_stopping && !string.IsNullOrWhiteSpace(filePath))
+            {
+                _dispatch(() =>
+                {
+                    // shutdown may start before this runs on the UI thread
+                    if (!_stopping)
+                        _openFile(filePath);
+                });
             }
         }
     }

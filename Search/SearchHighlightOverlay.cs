@@ -244,8 +244,9 @@ internal sealed class SearchHighlightOverlay : Adorner
                     .TransformToAncestor(_editor)
                     .TransformBounds(new Rect(contentHost.RenderSize));
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException ex)
             {
+                Noted.Services.ExceptionDiagnostics.Record(ex);
                 // Fall back to the editor bounds while a template is being replaced.
             }
         }

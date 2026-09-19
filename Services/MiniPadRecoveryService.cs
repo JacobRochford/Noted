@@ -120,7 +120,7 @@ public sealed class MiniPadRecoveryService : IMiniPadRecoveryService
     {
         var result = JsonFileStore.Read<MiniPadRecoveryDraft>(path);
         if (!result.Success)
-            return new DraftReadResult(path, result.Status, null, result.Error?.Message);
+            return new DraftReadResult(path, result.Status, null, "The MiniPad recovery file could not be read or is invalid.");
 
         var draft = result.Value!;
         if (draft.Id == Guid.Empty || draft.Id != s_miniPadDraftId)
@@ -151,7 +151,7 @@ public sealed class MiniPadRecoveryService : IMiniPadRecoveryService
         {
             issues.Add(new MiniPadRecoveryIssue(
                 path,
-                $"The corrupt recovery file could not be preserved under a new name: {result.Error.Message}"));
+                "The corrupt recovery file could not be preserved under a new name."));
         }
 
         return result.PreservedPath;

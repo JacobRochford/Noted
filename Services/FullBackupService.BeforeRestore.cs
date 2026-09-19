@@ -45,8 +45,8 @@ internal sealed partial class FullBackupService
             }
             catch (Exception ex) when (IsExpectedBackupException(ex))
             {
-                System.Diagnostics.Debug.WriteLine(ex);
-                warning = $"The current data is protected, but an older before-restore backup could not be removed: {ex.Message}";
+                ExceptionDiagnostics.Record(ex);
+                warning = "The current data is protected, but an older before-restore backup could not be removed.";
             }
 
             return new FullBackupResult(
@@ -58,12 +58,12 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return new FullBackupResult(
                 FullBackupStatus.Failed,
                 FullBackupType.BeforeRestore,
                 null,
-                $"Current data could not be protected before restoration: {ex.Message}");
+                "Current data could not be protected before restoration.");
         }
     }
 

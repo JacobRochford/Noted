@@ -54,9 +54,7 @@ public partial class App : Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        // Check for an existing instance before WPF creates the main window.
-        // base.OnStartup processes StartupUri, so returning before it prevents
-        // the window from appearing in the duplicate-instance case.
+        // Check for another instance before base.OnStartup creates the main window
         try
         {
             _singleInstanceMutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out bool isNewInstance);
@@ -174,7 +172,7 @@ public partial class App : Application
                 if (!_isShuttingDown)
                     Dispatcher.BeginInvoke(action);
             });
-        _fileOpenRequestService.Start();
+            ObserveBackgroundTask(_fileOpenRequestService.Start());
 
             mainWindow.Show();
             foreach (var requestedFile in e.Args.Where(path => !string.IsNullOrWhiteSpace(path)))
@@ -213,14 +211,14 @@ public partial class App : Application
             if (noteEditor.RecoveryBlocksBackup)
                 BlockBackupsForThisRun("Note editor recovery was used or reported a problem during this application run.");
             RestoreMiniPadWindow();
-            _ = UpdateService.CheckForUpdatesAsync();
+            ObserveBackgroundTask(UpdateService.CheckForUpdatesAsync());
         }
         catch (Exception ex)
         {
             if (_mainWindow is null)
             {
                 CloseExistingWindow(startupNoteEditor, "note editor");
-                try { startupFileService?.Dispose(); } catch (Exception cleanupException) { Debug.WriteLine(cleanupException); }
+                try { startupFileService?.Dispose(); } catch (Exception cleanupException) { ExceptionDiagnostics.Record(cleanupException); }
             }
 
             HandleFatalStartupFailure(ex);
@@ -268,7 +266,7 @@ public partial class App : Application
             _themeManager = null;
             _fileOpenRequestService?.Dispose();
             _fileOpenRequestService = null;
-            try { _fileService?.Dispose(); } catch (Exception ex) { Debug.WriteLine(ex); }
+            try { _fileService?.Dispose(); } catch (Exception ex) { ExceptionDiagnostics.Record(ex); }
             WindowManager.ClearAll();
 
             if (_restoreUserBackupOnShutdown && _fullBackupService is not null)
@@ -565,7 +563,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to close the {name} window: {ex}");
+            ExceptionDiagnostics.Record(ex, $"Close {name} window");
         }
     }
 
@@ -832,33 +830,9 @@ public partial class App : Application
         }
 
         _lastShutdownWarning = null;
-        if (_noteEditorWindow is not null && !_noteEditorWindow.TryPrepareForClose())
+        if (!TryPrepareWindowsForShutdown(out var stateError))
         {
-            e.Cancel = true;
-            CancelRequestedUserBackupRestore();
-            return;
-        }
-
-        try
-        {
-            _checklistWindow?.PrepareForApplicationShutdown();
-            _dictionaryWindow?.PrepareForApplicationShutdown();
-            _scratchpadWindow?.PrepareForApplicationShutdown();
-            _miniPadWindow?.PrepareForApplicationShutdown();
-        }
-        catch (Exception ex) when (ex is
-                   SettingsPersistenceException or
-                   IOException or
-                   UnauthorizedAccessException)
-        {
-            e.Cancel = true;
-            _noteEditorWindow?.CancelPreparedClose();
-            CancelRequestedUserBackupRestore();
-            AppDialog.Show(
-                $"Noted could not close because window state was not saved.\n\n{ex.Message}\n\nThe application will remain open so you can retry.",
-                "Window State Save Failed",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            CancelCloseForWindowStateFailure(e, stateError);
             return;
         }
 
@@ -875,7 +849,6 @@ public partial class App : Application
             if (protectionResult.Status is not (FullBackupStatus.Created or FullBackupStatus.Skipped))
             {
                 e.Cancel = true;
-                _noteEditorWindow?.CancelPreparedClose();
                 CancelRequestedUserBackupRestore();
                 AppDialog.Show(
                     $"Noted did not start the restore because the current data could not be protected first.\n\n{protectionResult.Message}",
@@ -911,7 +884,6 @@ public partial class App : Application
             if (restoreResult.Status != FullBackupStatus.RestoreScheduled)
             {
                 e.Cancel = true;
-                _noteEditorWindow?.CancelPreparedClose();
                 CancelRequestedUserBackupRestore();
                 AppDialog.Show(
                     restoreResult.Message,
@@ -926,8 +898,65 @@ public partial class App : Application
             TryUpdateRecentBackup();
     }
 
+    internal bool TryPrepareWindowsForShutdown(out string? error)
+    {
+        try
+        {
+            if (_noteEditorWindow is not null && !_noteEditorWindow.TryPrepareForClose())
+            {
+                CancelPreparedWindowClose();
+                error = null;
+                return false;
+            }
+
+            _checklistWindow?.PrepareForApplicationShutdown();
+            _dictionaryWindow?.PrepareForApplicationShutdown();
+            if (_scratchpadWindow is not null &&
+                !_scratchpadWindow.TryPrepareForApplicationShutdown(out var stateError))
+            {
+                CancelPreparedWindowClose();
+                error = stateError ?? "Scratchpad window state could not be saved.";
+                return false;
+            }
+            _miniPadWindow?.PrepareForApplicationShutdown();
+        }
+        catch (SettingsPersistenceException ex)
+        {
+            ExceptionDiagnostics.Record(ex);
+            CancelPreparedWindowClose();
+            error = ex.Message;
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    private void CancelPreparedWindowClose()
+    {
+        _noteEditorWindow?.CancelPreparedClose();
+        _checklistWindow?.CancelPreparedClose();
+        _dictionaryWindow?.CancelPreparedClose();
+        _scratchpadWindow?.CancelPreparedClose();
+        _miniPadWindow?.CancelPreparedClose();
+    }
+
+    private void CancelCloseForWindowStateFailure(CancelEventArgs e, string? message)
+    {
+        e.Cancel = true;
+        CancelRequestedUserBackupRestore();
+        if (message is null)
+            return;
+        AppDialog.Show(
+            $"Noted could not close because window state was not saved.\n\n{message}\n\nThe application will remain open so you can retry.",
+            "Window State Save Failed",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+    }
+
     private void CancelRequestedUserBackupRestore()
     {
+        CancelPreparedWindowClose();
         _restoreUserBackupOnShutdown = false;
         _importBackupPathOnShutdown = null;
         _importBackupIdOnShutdown = null;
@@ -938,7 +967,7 @@ public partial class App : Application
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
         }
     }
 
@@ -948,6 +977,7 @@ public partial class App : Application
     {
         if (e.Exception is SettingsPersistenceException)
         {
+            ExceptionDiagnostics.Record(e.Exception);
             e.Handled = true;
             AppDialog.Show(
                 e.Exception.Message,
@@ -961,22 +991,33 @@ public partial class App : Application
         ReleaseSingleInstanceMutex();
     }
 
-    // Catches unhandled exceptions on non-UI threads (e.g. background workers).
-    // The runtime may still terminate the process after this fires, but the user
-    // sees a clear message rather than a silent crash.
+    // last chance to log an unhandled exception that may have occurred off the UI thread
     private void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
         var exception = e.ExceptionObject as Exception
             ?? new InvalidOperationException(e.ExceptionObject?.ToString() ?? "Unknown error");
-        ShowFatalError("A fatal background error occurred.", exception);
+        ExceptionDiagnostics.Record(exception, "Fatal background error");
     }
 
-    // Catches exceptions from fire-and-forget Tasks that were never awaited.
-    // Marking them observed prevents any future runtime behavior from treating
-    // them as unhandled and surfacing them to the user.
+    // log task exceptions that were never observed elsewhere
     private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {
+        ExceptionDiagnostics.Record(e.Exception);
         e.SetObserved();
+    }
+
+    // observe background tasks and let unexpected failures reach WPF's dispatcher handler
+    internal static async void ObserveBackgroundTask(Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch (Exception ex)
+        {
+            ExceptionDiagnostics.Record(ex);
+            throw;
+        }
     }
 
     private void HandleFatalStartupFailure(Exception exception)
@@ -997,12 +1038,13 @@ public partial class App : Application
 
     private void ShowFatalError(string context, Exception exception)
     {
+        ExceptionDiagnostics.Record(exception, context);
         if (Interlocked.Exchange(ref _fatalErrorShown, 1) != 0)
             return;
 
         var message = exception is SettingsPersistenceException
             ? exception.Message
-            : $"{context}\n\n{exception.Message}";
+            : $"{context}\n\nDiagnostic details were sent to the application log.";
 
         AppDialog.Show(
             $"{message}\n\nNoted must close.",
@@ -1024,7 +1066,7 @@ public partial class App : Application
         }
         catch (ApplicationException ex)
         {
-            Debug.WriteLine($"The single-instance mutex was not owned by this thread: {ex}");
+            ExceptionDiagnostics.Record(ex, "Release single-instance mutex");
         }
         finally
         {
@@ -1054,9 +1096,10 @@ public partial class App : Application
             shortcut.WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory;
             shortcut.Save();
         }
-        catch
+        catch (Exception ex) when (FileSystemErrors.IsExpected(ex) ||
+                                   ex is System.Runtime.InteropServices.COMException)
         {
-            // Best-effort; never crash the app over a missing shortcut.
+            ExceptionDiagnostics.Record(ex);
         }
     }
 }

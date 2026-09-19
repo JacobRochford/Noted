@@ -91,8 +91,8 @@ internal sealed partial class FullBackupService
                 }
                 catch (Exception ex) when (IsExpectedBackupException(ex))
                 {
-                    System.Diagnostics.Debug.WriteLine(ex);
-                    warning = $"The export is verified, but its temporary rollback file could not be removed: {ex.Message}";
+                    ExceptionDiagnostics.Record(ex);
+                    warning = "The export is verified, but its temporary rollback file could not be removed.";
                 }
             }
 
@@ -104,12 +104,12 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             TryDeleteTemporaryExport(tempPath);
             return new BackupExportResult(
                 false,
                 null,
-                $"The backup could not be exported: {ex.Message}");
+                "The backup could not be exported.");
         }
     }
 
@@ -287,7 +287,7 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
         }
     }
 }

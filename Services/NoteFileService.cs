@@ -108,13 +108,15 @@ public sealed class NoteFileService : INoteFileService {
 
     public string SuggestNoteName() => Path.GetFileNameWithoutExtension(BuildUniqueFileName(DateTime.Now));
 
-    public CreatedNote CreateNote(string? requestedName = null) {
+    public (CreatedNote? Note, string? Error) CreateNote(string? requestedName = null) {
         // create new note, optionally with user-supplied name
         var now = DateTime.Now;
         var usesGeneratedName = string.IsNullOrWhiteSpace(requestedName);
-        var filename = usesGeneratedName
-            ? BuildUniqueFileName(now)
+        var (filename, error) = usesGeneratedName
+            ? (BuildUniqueFileName(now), (string?)null)
             : BuildRequestedFileName(requestedName!);
+        if (filename is null)
+            return (null, error);
         var fullPath = Path.Combine(CurrentDirectory, filename);
         var content = BuildNewNoteContent(
             now,
@@ -123,7 +125,7 @@ public sealed class NoteFileService : INoteFileService {
         FileWriter.WriteAllText(fullPath, content);
         if (!string.Equals(File.ReadAllText(fullPath), content, StringComparison.Ordinal))
             throw new IOException("The new note was created but could not be verified.");
-        return new CreatedNote(filename, usesGeneratedName, content);
+        return (new CreatedNote(filename, usesGeneratedName, content), null);
     }
 
     public bool ChangeNotesDirectory(string newDirectory) {
@@ -229,11 +231,13 @@ public sealed class NoteFileService : INoteFileService {
         try {
             Directory.CreateDirectory(Path.GetDirectoryName(archivePath)!);
             File.Move(sourcePath, archivePath);
-            FilesChanged?.Invoke(this, EventArgs.Empty);
-            return (true, null);
         } catch (Exception ex) when (IsExpectedFileOperationException(ex)) {
-            return (false, ex.Message);
+            ExceptionDiagnostics.Record(ex);
+            return (false, "The note could not be archived. Check folder access and whether the file is in use.");
         }
+
+        FilesChanged?.Invoke(this, EventArgs.Empty);
+        return (true, null);
     }
 
     public (bool Success, string? Error) RestoreArchivedNote(string relativePath) {
@@ -262,11 +266,13 @@ public sealed class NoteFileService : INoteFileService {
             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
             File.Move(sourcePath, destinationPath);
             DeleteEmptyArchiveDirectories(Path.GetDirectoryName(sourcePath));
-            FilesChanged?.Invoke(this, EventArgs.Empty);
-            return (true, null);
         } catch (Exception ex) when (IsExpectedFileOperationException(ex)) {
-            return (false, ex.Message);
+            ExceptionDiagnostics.Record(ex);
+            return (false, "The archived note could not be restored. Check folder access and whether the file is in use.");
         }
+
+        FilesChanged?.Invoke(this, EventArgs.Empty);
+        return (true, null);
     }
 
     public (bool Success, string? NewFileName, string? Error) RenameNote(
@@ -302,8 +308,9 @@ public sealed class NoteFileService : INoteFileService {
 
             File.Move(oldPath, newPath);
             return (true, newFileName, null);
-        } catch (Exception ex) {
-            return (false, null, ex.Message);
+        } catch (Exception ex) when (IsExpectedFileOperationException(ex)) {
+            ExceptionDiagnostics.Record(ex);
+            return (false, null, "The note could not be renamed. Check folder access and whether the file is in use.");
         }
     }
 
@@ -363,8 +370,8 @@ public sealed class NoteFileService : INoteFileService {
             try {
                 if (TryGetDeletionTime(path, out var deletedAt) && deletedAt < cutoff)
                     File.Delete(path);
-            } catch {
-                // ignore locked/in-use files
+            } catch (Exception ex) when (FileSystemErrors.IsExpected(ex)) {
+                ExceptionDiagnostics.Record(ex);
             }
         }
     }
@@ -402,17 +409,16 @@ public sealed class NoteFileService : INoteFileService {
         return $"{baseName}_{Guid.NewGuid():N}.txt";
     }
 
-    // build note file name from user input (throws if invalid or taken)
-    private string BuildRequestedFileName(string requestedName) {
+    private (string? FileName, string? Error) BuildRequestedFileName(string requestedName) {
         var validatedFileName = ValidateAndSanitizeFileName(requestedName);
         if (string.IsNullOrWhiteSpace(validatedFileName))
-            throw new InvalidOperationException("Invalid or reserved file name.");
+            return (null, "Invalid or reserved file name.");
 
         var fileName = validatedFileName + ".txt";
         if (File.Exists(Path.Combine(CurrentDirectory, fileName)))
-            throw new InvalidOperationException("A file with that name already exists.");
+            return (null, "A file with that name already exists.");
 
-        return fileName;
+        return (fileName, null);
     }
 
     // remove invalid chars, reserved names, and supported note extensions
@@ -601,8 +607,9 @@ public sealed class NoteFileService : INoteFileService {
         try {
             Directory.CreateDirectory(target);
             return (true, null);
-        } catch (Exception ex) {
-            return (false, ex.Message);
+        } catch (Exception ex) when (IsExpectedFileOperationException(ex)) {
+            ExceptionDiagnostics.Record(ex);
+            return (false, "The folder could not be created. Check folder access and whether the name is already in use.");
         }
     }
 
@@ -625,8 +632,9 @@ public sealed class NoteFileService : INoteFileService {
         try {
             Directory.Move(oldPath, newPath);
             return (true, sanitized, null);
-        } catch (Exception ex) {
-            return (false, null, ex.Message);
+        } catch (Exception ex) when (IsExpectedFileOperationException(ex)) {
+            ExceptionDiagnostics.Record(ex);
+            return (false, null, "The folder could not be renamed. Check folder access and whether it is in use.");
         }
     }
 
@@ -644,8 +652,9 @@ public sealed class NoteFileService : INoteFileService {
         try {
             Directory.Delete(target, recursive: true);
             return (true, null);
-        } catch (Exception ex) {
-            return (false, ex.Message);
+        } catch (Exception ex) when (IsExpectedFileOperationException(ex)) {
+            ExceptionDiagnostics.Record(ex);
+            return (false, "The folder could not be deleted. Check folder access and whether its files are in use.");
         }
     }
 
@@ -779,13 +788,8 @@ public sealed class NoteFileService : INoteFileService {
         }
     }
 
-    private static bool IsExpectedFileOperationException(Exception exception) {
-        return exception is IOException or
-            UnauthorizedAccessException or
-            System.Security.SecurityException or
-            ArgumentException or
-            NotSupportedException;
-    }
+    private static bool IsExpectedFileOperationException(Exception exception) =>
+        FileSystemErrors.IsExpected(exception);
 
     private void NavigateToDirectory(string target, bool clearForwardHistory) {
         if (!TryNormalizeContainedPath(NotesDirectory, target, out var normalizedTarget) ||

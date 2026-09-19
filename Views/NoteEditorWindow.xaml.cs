@@ -163,9 +163,9 @@ public partial class NoteEditorWindow : Window
         if (!TryDeleteDiscardedRecoveryDrafts())
             return false;
 
-        _isPreparedForApplicationClose = true;
         _reopenOnStartup = reopenOnStartup;
         SaveWindowSize();
+        _isPreparedForApplicationClose = true;
         return true;
     }
 
@@ -454,9 +454,16 @@ public partial class NoteEditorWindow : Window
         {
             normalizedPath = NormalizePath(filePath);
         }
-        catch (Exception ex) when (IsExpectedFileException(ex))
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException || IsExpectedFileException(ex))
         {
-            ShowError("Unable to open note", ex.Message);
+            ExceptionDiagnostics.Record(ex);
+            ShowError("Unable to open note", "The note could not be opened. Check the file location and access permissions.");
+            return false;
+        }
+
+        if (!NoteFileExtensions.IsSupported(normalizedPath))
+        {
+            ShowError("Unable to open note", "Only supported text-based files can be opened.");
             return false;
         }
 
@@ -504,7 +511,8 @@ public partial class NoteEditorWindow : Window
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
-            ShowError("Unable to open note", ex.Message);
+            ExceptionDiagnostics.Record(ex);
+            ShowError("Unable to open note", "The note could not be opened. Check the file location and access permissions.");
             return false;
         }
     }
@@ -521,7 +529,10 @@ public partial class NoteEditorWindow : Window
 
         try
         {
-            var normalizedPath = NormalizePath(tabState.FilePath);
+            if (!TryNormalizeRestoredPath(tabState.FilePath, out var normalizedPath))
+                return false;
+            if (!NoteFileExtensions.IsSupported(normalizedPath))
+                return false;
             if (!File.Exists(normalizedPath))
             {
                 if (!drafts.TryGetValue(normalizedPath, out var missingDraft))
@@ -564,7 +575,7 @@ public partial class NoteEditorWindow : Window
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return false;
         }
     }
@@ -606,7 +617,7 @@ public partial class NoteEditorWindow : Window
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return false;
         }
     }
@@ -765,7 +776,8 @@ public partial class NoteEditorWindow : Window
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
-            ShowError("Unable to save note", ex.Message);
+            ExceptionDiagnostics.Record(ex);
+            ShowError("Unable to save note", "The note could not be saved. Check file access and available disk space.");
             return false;
         }
     }
@@ -864,8 +876,9 @@ public partial class NoteEditorWindow : Window
             var normalizedPath = NormalizePath(filePath);
             return _documents.FirstOrDefault(document => PathsEqual(document.FilePath, normalizedPath));
         }
-        catch (Exception ex) when (IsExpectedFileException(ex))
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException || IsExpectedFileException(ex))
         {
+            ExceptionDiagnostics.Record(ex);
             return null;
         }
     }
@@ -972,8 +985,8 @@ public partial class NoteEditorWindow : Window
             }
             catch (Exception ex) when (IsExpectedFileException(ex))
             {
-                System.Diagnostics.Debug.WriteLine(ex);
-                failures.Add($"'{Path.GetFileName(snapshot.FilePath)}': {ex.Message}");
+                ExceptionDiagnostics.Record(ex);
+                failures.Add($"'{Path.GetFileName(snapshot.FilePath)}': recovery data could not be saved.");
             }
         }
 
@@ -997,9 +1010,9 @@ public partial class NoteEditorWindow : Window
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             _recoveryOperationError =
-                $"Recovery data for '{document.DisplayName}' could not be saved after the note was renamed: {ex.Message}";
+                $"Recovery data for '{document.DisplayName}' could not be saved after the note was renamed.";
             UpdatePersistenceErrorState();
             return;
         }
@@ -1039,8 +1052,8 @@ public partial class NoteEditorWindow : Window
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
-            _sessionPersistenceError = $"The note editor session could not be saved: {ex.Message}";
+            ExceptionDiagnostics.Record(ex);
+            _sessionPersistenceError = "The note editor session could not be saved.";
             UpdatePersistenceErrorState();
             return false;
         }
@@ -1076,8 +1089,8 @@ public partial class NoteEditorWindow : Window
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
-            error = $"Recovery data for '{Path.GetFileName(filePath)}' could not be removed: {ex.Message}";
+            ExceptionDiagnostics.Record(ex);
+            error = $"Recovery data for '{Path.GetFileName(filePath)}' could not be removed.";
             _recoveryOperationError = error;
             UpdatePersistenceErrorState();
             return false;
@@ -1168,24 +1181,17 @@ public partial class NoteEditorWindow : Window
             ? new Rect(Left, Top, ActualWidth, ActualHeight)
             : RestoreBounds;
         CaptureTabsPanelWidth();
-        try
+        _settingsService.SaveNoteEditorWindowState(new NoteEditorWindowState
         {
-            _settingsService.SaveNoteEditorWindowState(new NoteEditorWindowState
-            {
-                Width = NormalizeWindowDimension(bounds.Width, MinWidth, 900),
-                Height = NormalizeWindowDimension(bounds.Height, MinHeight, 650),
-                TabsPanelWidth = _tabsPanelWidth,
-                IsTabsPanelCollapsed = _isTabsPanelCollapsed,
-                WordWrapEnabled = EditorTextBox.TextWrapping == TextWrapping.Wrap,
-                ShowLineNumbers = LineNumbersMenuItem.IsChecked,
-                ScrollSpeed = _scrollSpeed,
-                ReopenOnStartup = _reopenOnStartup
-            });
-        }
-        catch (SettingsPersistenceException ex)
-        {
-            System.Diagnostics.Debug.WriteLine(ex);
-        }
+            Width = NormalizeWindowDimension(bounds.Width, MinWidth, 900),
+            Height = NormalizeWindowDimension(bounds.Height, MinHeight, 650),
+            TabsPanelWidth = _tabsPanelWidth,
+            IsTabsPanelCollapsed = _isTabsPanelCollapsed,
+            WordWrapEnabled = EditorTextBox.TextWrapping == TextWrapping.Wrap,
+            ShowLineNumbers = LineNumbersMenuItem.IsChecked,
+            ScrollSpeed = _scrollSpeed,
+            ReopenOnStartup = _reopenOnStartup
+        });
     }
 
     private void EditorTextBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -1316,7 +1322,7 @@ public partial class NoteEditorWindow : Window
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             text = string.Empty;
         }
 
@@ -1473,7 +1479,7 @@ public partial class NoteEditorWindow : Window
             return;
 
         var refreshVersion = ++_findRefreshVersion;
-        _ = Dispatcher.InvokeAsync(
+        _ = Dispatcher.BeginInvoke(
             () =>
             {
                 if (refreshVersion == _findRefreshVersion
@@ -1699,9 +1705,10 @@ public partial class NoteEditorWindow : Window
         {
             newPath = NormalizePath(dialog.FileName);
         }
-        catch (Exception ex) when (IsExpectedFileException(ex))
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException || IsExpectedFileException(ex))
         {
-            ShowError("Unable to save note", ex.Message);
+            ExceptionDiagnostics.Record(ex);
+            ShowError("Unable to save note", "The note could not be saved. Check file access and available disk space.");
             return false;
         }
 
@@ -1743,7 +1750,8 @@ public partial class NoteEditorWindow : Window
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
-            ShowError("Unable to save note", ex.Message);
+            ExceptionDiagnostics.Record(ex);
+            ShowError("Unable to save note", "The note could not be saved. Check file access and available disk space.");
             return false;
         }
     }
@@ -1769,9 +1777,10 @@ public partial class NoteEditorWindow : Window
                 UseShellExecute = true
             });
         }
-        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or IOException)
+        catch (Exception ex) when (ex is Win32Exception || FileSystemErrors.IsExpected(ex))
         {
-            ShowError("Unable to open File Explorer", ex.Message);
+            ExceptionDiagnostics.Record(ex);
+            ShowError("Unable to open File Explorer", "File Explorer could not be opened for this note.");
         }
     }
 
@@ -1785,7 +1794,8 @@ public partial class NoteEditorWindow : Window
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or SecurityException)
         {
             FileExplorerIntegrationMenuItem.IsChecked = !enabled;
-            ShowError("Unable to update File Explorer", ex.Message);
+            ExceptionDiagnostics.Record(ex);
+            ShowError("Unable to update File Explorer", "The File Explorer integration could not be updated. Check registry access.");
         }
     }
 
@@ -2113,6 +2123,7 @@ public partial class NoteEditorWindow : Window
         }
         catch (SettingsPersistenceException ex)
         {
+            ExceptionDiagnostics.Record(ex);
             ReopenTabsOnStartupMenuItem.IsChecked = !enabled;
             ShowError("Unable to save setting", ex.Message);
         }
@@ -2377,18 +2388,15 @@ public partial class NoteEditorWindow : Window
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
         if (_isPreparedForApplicationClose)
-        {
-            SaveWindowSize();
             return;
-        }
 
+        e.Cancel = true;
         CaptureActiveDocument();
         TryFlushRecoveryDraft(out _);
         SaveEditorSession();
         _reopenOnStartup = false;
         SaveWindowSize();
 
-        e.Cancel = true;
         Hide();
     }
 
@@ -2399,6 +2407,21 @@ public partial class NoteEditorWindow : Window
         _primaryFindPresenter.Dispose();
         _secondaryFindPresenter.Dispose();
         Closed -= Window_Closed;
+    }
+
+    private static bool TryNormalizeRestoredPath(string path, out string normalizedPath)
+    {
+        try
+        {
+            normalizedPath = NormalizePath(path);
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+        {
+            ExceptionDiagnostics.Record(ex);
+            normalizedPath = string.Empty;
+            return false;
+        }
     }
 
     private static string NormalizePath(string path)
@@ -2423,14 +2446,8 @@ public partial class NoteEditorWindow : Window
                !relativePath.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal);
     }
 
-    private static bool IsExpectedFileException(Exception exception)
-    {
-        return exception is IOException or
-            UnauthorizedAccessException or
-            SecurityException or
-            ArgumentException or
-            NotSupportedException;
-    }
+    private static bool IsExpectedFileException(Exception exception) =>
+        FileSystemErrors.IsExpected(exception);
 
     private static double NormalizeWindowDimension(double value, double minimum, double fallback)
     {

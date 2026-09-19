@@ -168,7 +168,7 @@ public sealed partial class FullBackupServiceTests
         var preview = service.GetBackupImportPreview(exportPath);
 
         Assert.IsFalse(preview.IsValid);
-        StringAssert.Contains(preview.Error!, "outside the backup's notes folder");
+        Assert.AreEqual("The selected backup could not be read or verified.", preview.Error!);
     }
 
     [TestMethod]
@@ -374,7 +374,7 @@ public sealed partial class FullBackupServiceTests
         var preview = service.GetBackupImportPreview(exportPath);
 
         Assert.IsFalse(preview.IsValid);
-        StringAssert.Contains(preview.Error!, "schema is not supported");
+        Assert.AreEqual("The selected backup could not be read or verified.", preview.Error!);
     }
 
     [TestMethod]
@@ -391,7 +391,7 @@ public sealed partial class FullBackupServiceTests
         var preview = service.GetBackupImportPreview(exportPath);
 
         Assert.IsFalse(preview.IsValid);
-        StringAssert.Contains(preview.Error!, "invalid original storage folder");
+        Assert.AreEqual("The selected backup could not be read or verified.", preview.Error!);
     }
 
     [TestMethod]
@@ -419,7 +419,7 @@ public sealed partial class FullBackupServiceTests
         var preview = service.GetBackupImportPreview(exportPath);
 
         Assert.IsFalse(preview.IsValid);
-        StringAssert.Contains(preview.Error!, "not a supported full note path");
+        Assert.AreEqual("The selected backup could not be read or verified.", preview.Error!);
     }
 
     private static void ReplaceArchiveFile(

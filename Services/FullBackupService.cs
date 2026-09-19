@@ -249,12 +249,13 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
+            ExceptionDiagnostics.Record(ex);
             return new BackupFileContent(
                 false,
                 true,
                 BackupContentFormat.Text,
                 null,
-                $"The selected file could not be verified: {ex.Message}");
+                "The selected file could not be verified.");
         }
     }
 
@@ -324,12 +325,12 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return new FullBackupResult(
                 FullBackupStatus.Failed,
                 FullBackupType.User,
                 null,
-                $"The backup restore could not be prepared: {ex.Message}");
+                "The backup restore could not be prepared.");
         }
     }
 
@@ -415,8 +416,8 @@ internal sealed partial class FullBackupService
                 }
                 catch (Exception ex) when (IsExpectedBackupException(ex))
                 {
-                    System.Diagnostics.Debug.WriteLine(ex);
-                    warning = $"The imported backup was restored, but its temporary local copy could not be removed: {ex.Message}";
+                    ExceptionDiagnostics.Record(ex);
+                    warning = "The imported backup was restored, but its temporary local copy could not be removed.";
                 }
             }
 
@@ -431,12 +432,12 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return new FullBackupResult(
                 FullBackupStatus.Failed,
                 FullBackupType.User,
                 null,
-                $"The backup restore did not finish: {ex.Message} The backup and restore request were left unchanged so Noted can retry.");
+                "The backup restore did not finish. The backup and restore request were left unchanged so Noted can retry.");
         }
     }
 
@@ -585,12 +586,12 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return new FullBackupResult(
                 FullBackupStatus.Failed,
                 null,
                 null,
-                $"The full backup could not be created: {ex.Message}");
+                "The full backup could not be created.");
         }
     }
 
@@ -881,10 +882,10 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return new BackupReplaceResult(
                 backupPath,
-                $"The new recent backup is verified, but the retired recent backup could not be removed from '{retiredPath}': {ex.Message}");
+                $"The new recent backup is verified, but the retired recent backup could not be removed from '{retiredPath}'.");
         }
     }
 
@@ -909,6 +910,7 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
+            ExceptionDiagnostics.Record(ex);
             if (!Directory.Exists(previousPath) &&
                 olderPreviousPath is not null &&
                 Directory.Exists(olderPreviousPath))
@@ -919,7 +921,7 @@ internal sealed partial class FullBackupService
 
             return new BackupReplaceResult(
                 userBackupPath,
-                $"The updated backup is verified, but the previous backup could not be filed normally. Its data was left unchanged for review: {ex.Message}");
+                "The updated backup is verified, but the previous backup could not be filed normally. Its data was left unchanged for review.");
         }
 
         if (olderPreviousPath is null)
@@ -932,10 +934,10 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return new BackupReplaceResult(
                 userBackupPath,
-                $"The current and previous backups are verified, but an older backup folder could not be removed from '{olderPreviousPath}': {ex.Message}");
+                $"The current and previous backups are verified, but an older backup folder could not be removed from '{olderPreviousPath}'.");
         }
     }
 
@@ -986,7 +988,7 @@ internal sealed partial class FullBackupService
                     backupType,
                     path,
                     null,
-                    manifestResult.Error?.Message ?? "The backup manifest is missing or invalid.");
+                    "The backup manifest is missing, unreadable, or invalid.");
             }
 
             var manifest = manifestResult.Value!;
@@ -998,6 +1000,9 @@ internal sealed partial class FullBackupService
                 return InvalidBackup(backupType, path, "The backup ID is missing.");
             if (manifest.Entries is null || manifest.Entries.Count == 0)
                 return InvalidBackup(backupType, path, "The backup contains no files.");
+
+            if (manifest.Entries.Any(entry => entry is null || string.IsNullOrWhiteSpace(entry.LogicalPath)))
+                return InvalidBackup(backupType, path, "The backup contains an empty file entry or path.");
 
             var duplicate = manifest.Entries
                 .GroupBy(entry => entry.LogicalPath, StringComparer.OrdinalIgnoreCase)
@@ -1051,7 +1056,8 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            return InvalidBackup(backupType, path, ex.Message);
+            ExceptionDiagnostics.Record(ex);
+            return InvalidBackup(backupType, path, "The selected backup could not be read or verified.");
         }
     }
 
@@ -1171,7 +1177,8 @@ internal sealed partial class FullBackupService
 
         if (document.RootElement.TryGetProperty("SchemaVersion", out var schemaElement))
         {
-            if (!schemaElement.TryGetInt32(out var schemaVersion) ||
+            if (schemaElement.ValueKind != JsonValueKind.Number ||
+                !schemaElement.TryGetInt32(out var schemaVersion) ||
                 schemaVersion < 0 ||
                 schemaVersion > SupportedSettingsSchemaVersion)
             {
@@ -1180,7 +1187,8 @@ internal sealed partial class FullBackupService
         }
 
         if (document.RootElement.TryGetProperty("Revision", out var revisionElement) &&
-            (!revisionElement.TryGetInt64(out var revision) || revision < 0))
+            (revisionElement.ValueKind != JsonValueKind.Number ||
+             !revisionElement.TryGetInt64(out var revision) || revision < 0))
         {
             throw new JsonException("The Settings revision is invalid.");
         }
@@ -1239,7 +1247,7 @@ internal sealed partial class FullBackupService
 
         if (!Path.GetFileName(path).Equals("editor-draft.json", StringComparison.OrdinalIgnoreCase))
         {
-            var normalizedPath = Path.GetFullPath(draft.FilePath).ToUpperInvariant();
+            var normalizedPath = NormalizeBackupDataPath(draft.FilePath).ToUpperInvariant();
             var expectedName = Convert.ToHexString(
                 SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(normalizedPath))) + ".json";
             if (!Path.GetFileName(path).Equals(expectedName, StringComparison.OrdinalIgnoreCase))
@@ -1255,6 +1263,7 @@ internal sealed partial class FullBackupService
         var root = document.RootElement;
         if (root.ValueKind != JsonValueKind.Object ||
             !root.TryGetProperty("SchemaVersion", out var schema) ||
+            schema.ValueKind != JsonValueKind.Number ||
             !schema.TryGetInt32(out var schemaVersion) ||
             schemaVersion != 1 ||
             !root.TryGetProperty("NotePath", out var notePath) ||
@@ -1420,7 +1429,7 @@ internal sealed partial class FullBackupService
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return BackupFileComparison.Unavailable;
         }
     }
@@ -1503,7 +1512,7 @@ internal sealed partial class FullBackupService
         var root = Path.GetFullPath(rootDirectory);
         var platformPath = NormalizeLogicalPath(relativePath)
             .Replace('/', Path.DirectorySeparatorChar);
-        var fullPath = Path.GetFullPath(Path.Combine(root, platformPath));
+        var fullPath = NormalizeBackupDataPath(Path.Combine(root, platformPath));
         var rootWithSeparator = Path.EndsInDirectorySeparator(root)
             ? root
             : root + Path.DirectorySeparatorChar;
@@ -1515,9 +1524,24 @@ internal sealed partial class FullBackupService
     private static string ToLogicalPath(string prefix, string relativePath) =>
         $"{prefix}/{NormalizeLogicalPath(relativePath)}";
 
-    private static string NormalizeLogicalPath(string path) =>
-        path.Replace('\\', '/')
-            .TrimStart('/');
+    private static string NormalizeLogicalPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new InvalidDataException("The backup contains an empty file path.");
+        return path.Replace('\\', '/').TrimStart('/');
+    }
+
+    private static string NormalizeBackupDataPath(string path)
+    {
+        try
+        {
+            return Path.GetFullPath(path);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+        {
+            throw new InvalidDataException("The backup contains an invalid file path.", ex);
+        }
+    }
 
     private static bool IsPathWithin(string path, string directory)
     {
@@ -1552,16 +1576,8 @@ internal sealed partial class FullBackupService
         Directory.Delete(fullPath, recursive: true);
     }
 
-    private static bool IsExpectedBackupException(Exception exception)
-    {
-        return exception is IOException or
-            InvalidDataException or
-            UnauthorizedAccessException or
-            System.Security.SecurityException or
-            JsonException or
-            ArgumentException or
-            NotSupportedException;
-    }
+    private static bool IsExpectedBackupException(Exception exception) =>
+        FileSystemErrors.IsExpected(exception) || exception is JsonException or InvalidDataException;
 
     private static JsonSerializerOptions CreateJsonOptions()
     {

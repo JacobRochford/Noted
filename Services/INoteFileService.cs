@@ -15,7 +15,7 @@ public interface INoteFileService : IDisposable {
     bool TryGetNoteKey(string filePath, out string noteKey);
     string GetNoteKey(string filePath);
     string SuggestNoteName();
-    CreatedNote CreateNote(string? requestedName = null);
+    (CreatedNote? Note, string? Error) CreateNote(string? requestedName = null);
     bool ChangeNotesDirectory(string newDirectory);
     bool DeleteNote(string fileName, string? containingDirectory = null);
     (bool Success, string? Error) ArchiveNote(string fileName, string? containingDirectory = null);

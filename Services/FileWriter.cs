@@ -138,9 +138,9 @@ internal static class FileWriter
                 ? $" The previous file remains available at '{preservedPath}'."
                 : " The previous file could not be confirmed at the rollback path.";
             var warning =
-                $"The destination file was saved, but its rolling backup could not be updated: {ex.Message}" +
+                "The destination file was saved, but its rolling backup could not be updated." +
                 preservationMessage;
-            System.Diagnostics.Debug.WriteLine(warning);
+            ExceptionDiagnostics.Record(ex);
             return new FileWriteResult(false, preservedPath, warning);
         }
     }
@@ -184,17 +184,12 @@ internal static class FileWriter
             if (File.Exists(path))
                 File.Delete(path);
         }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
-        catch (SecurityException) { }
+        catch (Exception ex) when (FileSystemErrors.IsExpected(ex))
+        {
+            ExceptionDiagnostics.Record(ex);
+        }
     }
 
-    private static bool IsExpectedFileException(Exception exception)
-    {
-        return exception is IOException or
-            UnauthorizedAccessException or
-            SecurityException or
-            ArgumentException or
-            NotSupportedException;
-    }
+    private static bool IsExpectedFileException(Exception exception) =>
+        FileSystemErrors.IsExpected(exception);
 }

@@ -166,7 +166,7 @@ internal sealed class AppThemeManager : IDisposable
                    ExternalException or
                    SecurityException)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
         }
     }
 
@@ -205,7 +205,7 @@ internal sealed class AppThemeManager : IDisposable
                    UnauthorizedAccessException or
                    IOException)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             return false;
         }
     }

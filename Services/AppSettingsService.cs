@@ -370,7 +370,7 @@ public sealed class AppSettingsService : IAppSettingsService {
 
         if (settingsFile.Status == JsonFileReadStatus.Unavailable) {
             throw new SettingsPersistenceException(SettingsPersistenceMessages.SettingsFileUnreadable(_settingsFilePath),
-                settingsFile.Error ?? new IOException("The settings file is unavailable."));
+                settingsFile.RequiredError);
         }
 
         var recoveryFiles = FindRecoveryFiles();
@@ -385,7 +385,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             recoveryFilesFound = true;
             if (recoveryFile.Status == JsonFileReadStatus.Unavailable) {
                 throw new SettingsPersistenceException(SettingsPersistenceMessages.RecoveryFileUnreadable(recoveryFileInfo.Path),
-                    recoveryFile.Error ?? new IOException("The recovery file is unavailable."));
+                    recoveryFile.RequiredError);
             }
 
             if (recoveryFile.Status == JsonFileReadStatus.Success) {
@@ -409,7 +409,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             throw new SettingsPersistenceException(settingsFile.Status == JsonFileReadStatus.Missing
                     ? SettingsPersistenceMessages.MissingSettingsWithoutRecovery
                     : SettingsPersistenceMessages.InvalidSettingsWithoutRecovery,
-                lastRecoveryError ?? settingsFile.Error ?? new JsonException("No valid settings recovery copy was available."));
+                lastRecoveryError ?? settingsFile.RequiredError);
         }
 
         return RecoverSettings(settingsFile, selectedRecoveryFile.SettingsFile);
@@ -440,8 +440,7 @@ public sealed class AppSettingsService : IAppSettingsService {
                 selectedRecoveryFile.SerializedJson,
                 StringComparison.Ordinal)) {
             _writesBlocked = true;
-            throw new SettingsPersistenceException(SettingsPersistenceMessages.VerificationFailed(_settingsFilePath),
-                verification.Error ?? new IOException("The restored settings did not match the selected recovery copy."));
+            throw CreateVerificationFailure(verification);
         }
 
         var preservedDamagedPath = writeResult.BackupUpdated
@@ -523,8 +522,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             var description = highestRevision > 0
                 ? $"revision {highestRevision}"
                 : $"write time {newestFiles[0].FileInfo.LastWriteTimeUtc:O}";
-            throw new SettingsPersistenceException(SettingsPersistenceMessages.ConflictingRecoveryFiles(description),
-                new InvalidDataException("The newest settings recovery files do not contain the same state."));
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.ConflictingRecoveryFiles(description));
         }
 
         return newestFiles[0];
@@ -532,8 +530,7 @@ public sealed class AppSettingsService : IAppSettingsService {
 
     private void SaveSettings(AppSettings settings) {
         if (_writesBlocked) {
-            throw new SettingsPersistenceException(SettingsPersistenceMessages.WritesBlocked,
-                new IOException("The current settings file has an unverified state."));
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.WritesBlocked);
         }
 
         var normalizedSettings = NormalizeSettings(settings);
@@ -548,7 +545,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         if (current.Status is JsonFileReadStatus.Corrupt or JsonFileReadStatus.Unavailable) {
             _writesBlocked = true;
             throw new SettingsPersistenceException(SettingsPersistenceMessages.CurrentSettingsUnreadable(_settingsFilePath),
-                current.Error ?? new IOException("The current settings file cannot be safely replaced."));
+                current.RequiredError);
         }
 
         var highestKnownRevision = Math.Max(
@@ -556,8 +553,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             current.Settings?.Revision ?? 0);
         if (highestKnownRevision == long.MaxValue) {
             _writesBlocked = true;
-            throw new SettingsPersistenceException(SettingsPersistenceMessages.RevisionLimitReached,
-                new OverflowException("The settings revision cannot be incremented."));
+            throw new SettingsPersistenceException(SettingsPersistenceMessages.RevisionLimitReached);
         }
 
         var settingsToSave = normalizedSettings with {
@@ -590,8 +586,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             !string.Equals(persistedJson, json, StringComparison.Ordinal) ||
             !string.Equals(verification.SerializedJson, json, StringComparison.Ordinal)) {
             _writesBlocked = true;
-            throw new SettingsPersistenceException(SettingsPersistenceMessages.VerificationFailed(_settingsFilePath),
-                verification.Error ?? new IOException("The persisted settings did not match the requested settings."));
+            throw CreateVerificationFailure(verification);
         }
 
         _cachedSettings = verification.Settings!;
@@ -628,13 +623,14 @@ public sealed class AppSettingsService : IAppSettingsService {
             var verification = ReadSettingsFile(historyPath);
             if (verification.Status != JsonFileReadStatus.Success ||
                 !string.Equals(verification.SerializedJson, settingsJson, StringComparison.Ordinal)) {
-                throw new IOException("The new settings history file could not be verified.");
+                throw new FileVerificationException("The new settings history file could not be verified.", verification.Error);
             }
 
             File.SetLastWriteTimeUtc(historyPath, now);
             PruneSettingsHistory();
         } catch (Exception ex) when (ex is JsonException || IsExpectedSettingsIoException(ex)) {
-            warnings.Add($"Settings were saved, but settings history could not be updated: {ex.Message}");
+            ExceptionDiagnostics.Record(ex);
+            warnings.Add("Settings were saved, but settings history could not be updated. Check storage access and available disk space.");
         }
     }
 
@@ -678,8 +674,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             try {
                 subscriber(LastPersistenceWarning);
             } catch (Exception ex) {
-                System.Diagnostics.Debug.WriteLine(
-                    $"A settings persistence warning subscriber failed: {ex}");
+                ExceptionDiagnostics.Record(ex, "Settings persistence warning subscriber");
             }
         }
     }
@@ -766,8 +761,10 @@ public sealed class AppSettingsService : IAppSettingsService {
         } catch (DirectoryNotFoundException) {
             return new SettingsReadResult(path, JsonFileReadStatus.Missing, null, null, null);
         } catch (JsonException ex) {
+            ExceptionDiagnostics.Record(ex);
             return new SettingsReadResult(path, JsonFileReadStatus.Corrupt, null, null, ex);
         } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
+            ExceptionDiagnostics.Record(ex);
             return new SettingsReadResult(path, JsonFileReadStatus.Unavailable, null, null, ex);
         }
     }
@@ -782,11 +779,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             StringComparison.Ordinal);
 
     private static bool IsExpectedSettingsIoException(Exception exception) =>
-        exception is IOException or
-            UnauthorizedAccessException or
-            SecurityException or
-            ArgumentException or
-            NotSupportedException;
+        FileSystemErrors.IsExpected(exception);
 
     private string CreateUniqueSettingsPath(string fileName, string directory) {
         var timestamp = _timeProvider.GetUtcNow().UtcDateTime.ToString("yyyyMMdd_HHmmss_fff");
@@ -801,12 +794,24 @@ public sealed class AppSettingsService : IAppSettingsService {
         return path;
     }
 
+    private SettingsPersistenceException CreateVerificationFailure(SettingsReadResult verification)
+    {
+        var message = SettingsPersistenceMessages.VerificationFailed(_settingsFilePath);
+        return verification.Error is { } error
+            ? new SettingsPersistenceException(message, error)
+            : new SettingsPersistenceException(message);
+    }
+
     private sealed record SettingsReadResult(
         string Path,
         JsonFileReadStatus Status,
         AppSettings? Settings,
         string? SerializedJson,
-        Exception? Error);
+        Exception? Error)
+    {
+        internal Exception RequiredError => Error
+            ?? throw new InvalidOperationException($"Settings read status {Status} requires an underlying exception.");
+    }
 
     private sealed record RecoveryFileInfo(
         string Path,

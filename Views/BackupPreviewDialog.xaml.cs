@@ -177,7 +177,8 @@ public partial class BackupPreviewDialog : Window
                    ArgumentException or
                    IOException)
         {
-            ShowMessage($"This file is verified, but its contents cannot be displayed safely: {ex.Message}");
+            ExceptionDiagnostics.Record(ex);
+            ShowMessage("This file is verified, but its contents cannot be displayed safely.");
         }
     }
 

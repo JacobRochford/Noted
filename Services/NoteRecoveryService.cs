@@ -70,10 +70,10 @@ public sealed class NoteRecoveryService : INoteRecoveryService
         }
         catch (Exception ex) when (IsExpectedRecoveryException(ex))
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ExceptionDiagnostics.Record(ex);
             issues.Add(new NoteRecoveryIssue(
                 _recoveryDirectory,
-                $"The note recovery folder could not be read: {ex.Message}"));
+                "The note recovery folder could not be read."));
         }
 
         return new NoteRecoveryLoadResult(
@@ -206,7 +206,7 @@ public sealed class NoteRecoveryService : INoteRecoveryService
     {
         var result = JsonFileStore.Read<NoteRecoveryDraft>(path);
         if (!result.Success)
-            return new DraftReadResult(path, result.Status, null, result.Error?.Message);
+            return new DraftReadResult(path, result.Status, null, "The note recovery file could not be read or is invalid.");
 
         try
         {
@@ -241,9 +241,10 @@ public sealed class NoteRecoveryService : INoteRecoveryService
                 normalizedDraft,
                 null);
         }
-        catch (Exception ex) when (IsExpectedRecoveryException(ex))
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException || IsExpectedRecoveryException(ex))
         {
-            return new DraftReadResult(path, JsonFileReadStatus.Corrupt, null, ex.Message);
+            ExceptionDiagnostics.Record(ex);
+            return new DraftReadResult(path, JsonFileReadStatus.Corrupt, null, "The recovery draft contains an invalid note path.");
         }
     }
 
@@ -293,7 +294,7 @@ public sealed class NoteRecoveryService : INoteRecoveryService
         {
             issues.Add(new NoteRecoveryIssue(
                 path,
-                $"The corrupt note recovery file could not be preserved under a new name: {result.Error.Message}"));
+                "The corrupt note recovery file could not be preserved under a new name."));
         }
 
         return result.PreservedPath;
@@ -347,15 +348,8 @@ public sealed class NoteRecoveryService : INoteRecoveryService
             StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsExpectedRecoveryException(Exception exception)
-    {
-        return exception is IOException or
-            UnauthorizedAccessException or
-            System.Security.SecurityException or
-            JsonException or
-            ArgumentException or
-            NotSupportedException;
-    }
+    private static bool IsExpectedRecoveryException(Exception exception) =>
+        FileSystemErrors.IsExpected(exception) || exception is JsonException;
 
     private sealed record DraftReadResult(
         string Path,

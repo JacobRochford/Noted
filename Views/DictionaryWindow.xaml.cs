@@ -289,11 +289,13 @@ public partial class DictionaryWindow : OverlayWindow
         _settingsService.SaveDictionaryWindowState(newState);
     }
 
+    internal void CancelPreparedClose() => _preserveOpenStateOnClose = false;
+
     internal void PrepareForApplicationShutdown()
     {
         _reopenOnStartup = IsWindowVisible || IsHiddenTogether;
-        _preserveOpenStateOnClose = true;
         SaveWindowState();
+        _preserveOpenStateOnClose = true;
     }
 
 }
