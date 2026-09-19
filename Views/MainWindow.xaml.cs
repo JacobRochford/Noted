@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -25,7 +24,6 @@ public partial class MainWindow : Window {
     private readonly IAppSettingsService _settingsService;
     private readonly INoteFileService _fileService;
     private readonly NoteEditorWindow _noteEditor;
-    private readonly IRunOnStartupService _runOnStartupService;
     private readonly Func<FullBackupResult> _createOrUpdateUserBackup;
     private readonly Func<FullBackupInfo> _getUserBackupInfo;
     private readonly Func<FullBackupPreview> _getUserBackupPreview;
@@ -35,32 +33,17 @@ public partial class MainWindow : Window {
     private readonly Func<string, BackupExportResult> _exportUserBackup;
     private readonly Action _requestUserBackupRestore;
     private readonly Action<string, Guid, string> _requestBackupImportRestore;
-    private readonly Action<AppThemeMode, string> _applyAppTheme;
     private readonly MainWindowViewModel _viewModel;
+    private readonly SettingsViewModel _settingsViewModel;
     private readonly CanvasEdgeResizer _notesPanelResizer;
     private readonly HotkeyConfiguration _hotkeys;
     private TrayIcon? _trayIcon;
 
     // UI state
-    private bool _isUpdatingSettingsView;
-    private bool _runOnStartupDisplayedState;
-    private bool _mainHideButtonHidesAll;
-    private string? _preferredDisplayDeviceName;
     private bool _cleanupCompleted;
-    private HotkeyFeature? _editingHotkeyFeature;
     private bool _isNoActivateTemporarilyStripped;
     private bool _isCommittingRename;
-    private bool _lastBackupAttemptFailed;
-    private AppThemeMode _activeThemeMode;
-    private string _activeAccentColor = AppTheme.DefaultAccentColor;
 
-    // ghost mode
-    private const double DefaultPanelOpacity = 0.88;
-    private const double DefaultGhostModeOpacity = 0.25;
-    private const double MinimumPanelOpacity = 0.05;
-    private bool _ghostModeEnabled;
-    private double _ghostModeOpacity;
-    private double _defaultOpacity;
 
     // drag
     private Point? _dragStart;
@@ -69,18 +52,6 @@ public partial class MainWindow : Window {
     private double _dragInitialLeft;
     private double _dragInitialTop;
     private const double DragThreshold = 5.0;
-
-    private sealed record DisplayOption(string? DeviceName, string Label);
-
-    private sealed record AppearanceOption(AppThemeMode Mode, string Label);
-
-    private static readonly AppearanceOption[] s_appearanceOptions =
-    [
-        new(AppThemeMode.System, "Use Windows setting"),
-        new(AppThemeMode.Light, "Light"),
-        new(AppThemeMode.Dark, "Dark"),
-        new(AppThemeMode.Midnight, "Midnight blue")
-    ];
 
     internal MainWindow(
             IAppSettingsService settingsService,
@@ -106,7 +77,6 @@ public partial class MainWindow : Window {
         _hotkeys = new HotkeyConfiguration(settingsService, () => new GlobalHotkeysService(this), GetHotkeyAction);
         _fileService = fileService;
         _noteEditor = noteEditor;
-        _runOnStartupService = runOnStartupService;
         _createOrUpdateUserBackup = createOrUpdateUserBackup;
         _getUserBackupInfo = getUserBackupInfo;
         _getUserBackupPreview = getUserBackupPreview;
@@ -116,37 +86,20 @@ public partial class MainWindow : Window {
         _exportUserBackup = exportUserBackup;
         _requestUserBackupRestore = requestUserBackupRestore;
         _requestBackupImportRestore = requestBackupImportRestore;
-        _applyAppTheme = applyAppTheme;
 
         _viewModel = new MainWindowViewModel(_fileService, _settingsService, action => Dispatcher.Invoke(action));
-        DataContext = _viewModel;
 
-        InitializeSettings();
+        _settingsViewModel = new SettingsViewModel(settingsService, fileService, runOnStartupService,
+            _hotkeys, applyAppTheme, HandleSettingsAction);
+        SettingsView.DataContext = _settingsViewModel;
+        DataContext = _viewModel;
+        _settingsViewModel.PreferenceChanged += OnSettingsPreferenceChanged;
+        _settingsViewModel.NoticeRaised += ShowSettingsNotice;
 
         InitializeEventHandlers();
         InitializeNotesView();
-        InitializeHotkeyEditor();
         RefreshUserBackupControls();
     }
-
-    private void InitializeSettings()
-    {
-        AppearanceModeCombo.ItemsSource = s_appearanceOptions;
-        _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
-        _ghostModeOpacity = NormalizeOpacity(
-            _settingsService.LoadGhostModeOpacity(),
-            0.0,
-            DefaultGhostModeOpacity);
-        _defaultOpacity = NormalizeOpacity(
-            _settingsService.LoadDefaultOpacity(),
-            MinimumPanelOpacity,
-            DefaultPanelOpacity);
-        _mainHideButtonHidesAll = _settingsService.LoadMainHideButtonHidesAll();
-        _preferredDisplayDeviceName = _settingsService.LoadPreferredDisplayDeviceName();
-        _activeThemeMode = _settingsService.LoadAppThemeMode();
-        _activeAccentColor = _settingsService.LoadAccentColor();
-    }
-
 
     private void InitializeEventHandlers()
     {
@@ -161,8 +114,6 @@ public partial class MainWindow : Window {
         MainCanvas.MouseLeftButtonDown += MainCanvas_MouseLeftButtonDown;
         PreviewMouseDown += MainWindow_PreviewMouseDown;
         KeyDown += MainWindow_KeyDown;
-        GhostModeOpacitySlider.ValueChanged += GhostModeOpacitySlider_ValueChanged;
-        DefaultOpacitySlider.ValueChanged += DefaultOpacitySlider_ValueChanged;
         SourceInitialized += MainWindow_SourceInitialized;
         SearchBox.TextChanged += SearchBox_TextChanged;
         SearchBox.GotFocus += SearchBox_GotFocus;
@@ -181,20 +132,6 @@ public partial class MainWindow : Window {
         UpdateNotesDirectoryDisplay();
         UpdateSettingsView();
         SetSettingsViewVisible(false);
-    }
-
-    private void InitializeHotkeyEditor()
-    {
-        HotkeyKeyCombo.ItemsSource = HotkeyConstants.ValidKeys;
-        HotkeyModifierCtrl.Checked += (s, e) => UpdateHotkeyPreview();
-        HotkeyModifierCtrl.Unchecked += (s, e) => UpdateHotkeyPreview();
-        HotkeyModifierAlt.Checked += (s, e) => UpdateHotkeyPreview();
-        HotkeyModifierAlt.Unchecked += (s, e) => UpdateHotkeyPreview();
-        HotkeyModifierShift.Checked += (s, e) => UpdateHotkeyPreview();
-        HotkeyModifierShift.Unchecked += (s, e) => UpdateHotkeyPreview();
-        HotkeyModifierWin.Checked += (s, e) => UpdateHotkeyPreview();
-        HotkeyModifierWin.Unchecked += (s, e) => UpdateHotkeyPreview();
-        HotkeyKeyCombo.SelectionChanged += (s, e) => UpdateHotkeyPreview();
     }
 
     private void HeaderEditBox_LostFocus(object sender, RoutedEventArgs e)
@@ -292,7 +229,7 @@ public partial class MainWindow : Window {
     private void InitializeGlobalHotkeys()
     {
         var warnings = _hotkeys.Initialize();
-        SyncHotkeyControls(restoreEditorToActive: true);
+        _settingsViewModel.SyncHotkeys(restoreEditorToActive: true);
         if (warnings.Count > 0)
             AppDialog.Show(string.Join("\n\n", warnings), "Hotkey Registration Notice",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -320,25 +257,12 @@ public partial class MainWindow : Window {
 
 
     private void UpdateNotesDirectoryDisplay() {
-        NotesFolderPathText.Text = _fileService.NotesDirectory;
+        _settingsViewModel.RefreshNotesDirectory();
         SettingsButton.ToolTip = SettingsView.Visibility == Visibility.Visible
             ? "Return to notes"
             : "Open settings";
-        UpdateToggleNotesFolderPathButton();
     }
 
-
-    private void UpdateToggleNotesFolderPathButton()
-    {
-        if (ToggleNotesFolderPathButton != null)
-            ToggleNotesFolderPathButton.Content = _viewModel.ShowNotesDirectory ? "Hide path" : "Show path";
-    }
-
-    private void ToggleNotesFolderPathButton_Click(object sender, RoutedEventArgs e)
-    {
-        _viewModel.ShowNotesDirectory = !_viewModel.ShowNotesDirectory;
-        UpdateToggleNotesFolderPathButton();
-    }
 
     private void PinNoteButton_Click(object sender, RoutedEventArgs e) {
         if (sender is FrameworkElement element && element.DataContext is NoteItem note) {
@@ -365,110 +289,65 @@ public partial class MainWindow : Window {
             WindowAppearance.Refresh(this);
     }
 
-    private void UpdateSettingsView() {
-        _isUpdatingSettingsView = true;
-        try {
-            var newNoteMode = _settingsService.LoadNewNoteMode();
-            NewNotePromptOption.IsChecked = newNoteMode == NewNoteMode.Prompt;
-            NewNoteQuickOption.IsChecked = newNoteMode == NewNoteMode.Quick;
-            NewNoteBothOption.IsChecked = newNoteMode == NewNoteMode.Both;
+    private void UpdateSettingsView()
+    {
+        _settingsViewModel.Reload();
+        _viewModel.ShowModifiedSubtitle = _settingsViewModel.ShowModifiedSubtitle;
+        _viewModel.FolderNavigationMode = _settingsViewModel.FolderNavigationMode;
+        QuickNoteButton.Visibility = _settingsViewModel.NewNoteMode == NewNoteMode.Both
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
 
-            // Update Quick button visibility
-            QuickNoteButton.Visibility = newNoteMode == NewNoteMode.Both ? Visibility.Visible : Visibility.Collapsed;
-
-            var timestampPlacement = _settingsService.LoadTimestampPlacement();
-            TimestampNoneOption.IsChecked = timestampPlacement == NoteTimestampPlacement.None;
-            TimestampTopOption.IsChecked = timestampPlacement == NoteTimestampPlacement.Top;
-            TimestampBottomOption.IsChecked = timestampPlacement == NoteTimestampPlacement.Bottom;
-            TimestampLineOption.IsChecked = timestampPlacement == NoteTimestampPlacement.Line;
-            TimestampLineTextBox.Text = _settingsService.LoadTimestampLine().ToString(CultureInfo.InvariantCulture);
-            NotesFolderPathText.Text = _fileService.NotesDirectory;
-            var showModified = _settingsService.LoadShowModifiedSubtitle();
-            ShowModifiedSubtitleOption.IsChecked = showModified;
-            _viewModel.ShowModifiedSubtitle = showModified;
-            ConfirmNoteDeletionOption.IsChecked = _settingsService.LoadConfirmNoteDeletion();
-
-            _activeThemeMode = _settingsService.LoadAppThemeMode();
-            _activeAccentColor = _settingsService.LoadAccentColor();
-            AppearanceModeCombo.SelectedValue = _activeThemeMode;
-            AccentHexTextBox.Text = _activeAccentColor;
-            ShowAccentMessage($"Using {_activeAccentColor}", isError: false);
-
-            SyncHotkeyControls(restoreEditorToActive: true);
-            _ghostModeEnabled = _settingsService.LoadGhostModeEnabled();
-            _ghostModeOpacity = NormalizeOpacity(
-                _settingsService.LoadGhostModeOpacity(),
-                0.0,
-                DefaultGhostModeOpacity);
-            _defaultOpacity = NormalizeOpacity(
-                _settingsService.LoadDefaultOpacity(),
-                MinimumPanelOpacity,
-                DefaultPanelOpacity);
-            GhostModeOption.IsChecked = _ghostModeEnabled;
-            GhostModeOpacitySlider.Value = _ghostModeOpacity * 100;
-            UpdateGhostModeOpacityLabel();
-            DefaultOpacitySlider.Value = _defaultOpacity * 100;
-            UpdateDefaultOpacityLabel();
-            _runOnStartupDisplayedState = _runOnStartupService.IsRunOnStartupEnabled;
-            RunOnStartupOption.IsChecked = _runOnStartupDisplayedState;
-            _mainHideButtonHidesAll = _settingsService.LoadMainHideButtonHidesAll();
-            MainHideButtonHidesAllOption.IsChecked = _mainHideButtonHidesAll;
-            _preferredDisplayDeviceName = _settingsService.LoadPreferredDisplayDeviceName();
-            UpdatePreferredDisplayOptions();
-            var folderNavigationMode = _settingsService.LoadFolderNavigationMode()
-                == FolderNavigationMode.Expand
-                ? FolderNavigationMode.Expand
-                : FolderNavigationMode.DrillDown;
-            FolderNavDrillDownOption.IsChecked = folderNavigationMode == FolderNavigationMode.DrillDown;
-            FolderNavExpandOption.IsChecked = folderNavigationMode == FolderNavigationMode.Expand;
-            _viewModel.FolderNavigationMode = folderNavigationMode;
-        } finally {
-            _isUpdatingSettingsView = false;
+    private void OnSettingsPreferenceChanged(string property)
+    {
+        switch (property)
+        {
+            case nameof(SettingsViewModel.ShowModifiedSubtitle):
+                _viewModel.ShowModifiedSubtitle = _settingsViewModel.ShowModifiedSubtitle;
+                break;
+            case nameof(SettingsViewModel.FolderNavigationMode):
+                _viewModel.FolderNavigationMode = _settingsViewModel.FolderNavigationMode;
+                break;
+            case nameof(SettingsViewModel.ShowNotesDirectory):
+                _viewModel.ShowNotesDirectory = _settingsViewModel.ShowNotesDirectory;
+                break;
+            case nameof(SettingsViewModel.NewNoteMode):
+                if (SettingsView.Visibility != Visibility.Visible)
+                    QuickNoteButton.Visibility = _settingsViewModel.NewNoteMode == NewNoteMode.Both ? Visibility.Visible : Visibility.Collapsed;
+                break;
+            case nameof(SettingsViewModel.PreferredDisplay):
+                Dispatcher.BeginInvoke(PositionNotedOnPreferredDisplay, DispatcherPriority.Loaded);
+                break;
+            case nameof(SettingsViewModel.GhostModeEnabled):
+                if (!_settingsViewModel.GhostModeEnabled || IsNotesPanelVisible && !NotesPanel.IsMouseOver)
+                    WindowAppearance.Refresh(this);
+                break;
+            case nameof(SettingsViewModel.GhostOpacityPercent):
+                if (IsNotesPanelVisible) WindowAppearance.Refresh(this);
+                break;
+            case nameof(SettingsViewModel.DefaultOpacityPercent):
+                if (IsNotesPanelVisible && (!_settingsViewModel.GhostModeEnabled || NotesPanel.IsMouseOver))
+                    WindowAppearance.Refresh(this);
+                break;
         }
     }
 
-    private void UpdatePreferredDisplayOptions()
+    private static void ShowSettingsNotice(SettingsNotice notice) =>
+        AppDialog.Show(notice.Message, notice.Title, MessageBoxButton.OK,
+            notice.IsWarning ? MessageBoxImage.Warning : MessageBoxImage.Information);
+
+    private void HandleSettingsAction(SettingsAction action)
     {
-        var screens = DisplayService.GetDisplays();
-        var primary = screens.FirstOrDefault(screen => screen.IsPrimary)
-            ?? screens.FirstOrDefault();
-        var options = new List<DisplayOption>
+        var args = new RoutedEventArgs();
+        switch (action)
         {
-            new(
-                DeviceName: null,
-                Label: primary is null
-                    ? "Windows primary display"
-                    : $"Windows primary display ({FormatDisplayName(primary.DeviceName)})")
-        };
-
-        options.AddRange(screens
-            .OrderBy(screen => screen.DeviceName, StringComparer.OrdinalIgnoreCase)
-            .Select(screen => new DisplayOption(
-                screen.DeviceName,
-                $"{FormatDisplayName(screen.DeviceName)}  " +
-                $"{screen.WorkWidth} × {screen.WorkHeight}" +
-                (screen.IsPrimary ? "  (primary)" : string.Empty))));
-
-        PreferredDisplayCombo.ItemsSource = options;
-        PreferredDisplayCombo.SelectedItem = options.FirstOrDefault(option =>
-                string.Equals(
-                    option.DeviceName,
-                    _preferredDisplayDeviceName,
-                    StringComparison.OrdinalIgnoreCase))
-            ?? options[0];
-    }
-
-    private void PreferredDisplayCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_isUpdatingSettingsView ||
-            PreferredDisplayCombo.SelectedItem is not DisplayOption option)
-        {
-            return;
+            case SettingsAction.ChangeFolder: ChangeFolderButton_Click(this, args); break;
+            case SettingsAction.CreateBackup: CreateOrUpdateBackupButton_Click(this, args); break;
+            case SettingsAction.ViewBackup: ViewBackupButton_Click(this, args); break;
+            case SettingsAction.ExportBackup: ExportBackupButton_Click(this, args); break;
+            case SettingsAction.ImportBackup: ImportBackupButton_Click(this, args); break;
+            case SettingsAction.RestoreBackup: RestoreBackupButton_Click(this, args); break;
         }
-
-        _settingsService.SavePreferredDisplayDeviceName(option.DeviceName);
-        _preferredDisplayDeviceName = option.DeviceName;
-        Dispatcher.BeginInvoke(PositionNotedOnPreferredDisplay, DispatcherPriority.Loaded);
     }
 
     private void PositionNotedOnPreferredDisplay()
@@ -507,12 +386,12 @@ public partial class MainWindow : Window {
     private DisplayInfo? ResolvePreferredDisplay()
     {
         var screens = DisplayService.GetDisplays();
-        if (!string.IsNullOrWhiteSpace(_preferredDisplayDeviceName))
+        if (!string.IsNullOrWhiteSpace(_settingsViewModel.PreferredDisplayDeviceName))
         {
             var preferred = screens.FirstOrDefault(screen =>
                 string.Equals(
                     screen.DeviceName,
-                    _preferredDisplayDeviceName,
+                    _settingsViewModel.PreferredDisplayDeviceName,
                     StringComparison.OrdinalIgnoreCase));
             if (preferred is not null)
                 return preferred;
@@ -522,161 +401,6 @@ public partial class MainWindow : Window {
             ?? screens.FirstOrDefault();
     }
 
-    private static string FormatDisplayName(string deviceName)
-    {
-        var name = deviceName.Replace(@"\\.\", string.Empty, StringComparison.OrdinalIgnoreCase);
-        return name.StartsWith("DISPLAY", StringComparison.OrdinalIgnoreCase)
-            ? $"Display {name["DISPLAY".Length..]}"
-            : name;
-    }
-
-
-    private void EditHotkeyButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button button
-            || button.Tag is not string featureText
-            || !Enum.TryParse(featureText, out HotkeyFeature feature))
-            return;
-
-        _editingHotkeyFeature = feature;
-        HotkeyEditorTitle.Text = $"{HotkeyConfiguration.GetHotkeyFeatureName(feature)} hotkey";
-
-        var registration = _hotkeys.GetHotkeyRegistration(feature);
-        var additionalRegistration = _hotkeys.GetAdditionalHotkeyRegistration(feature);
-        var (modifiers, key) = registration is not null && additionalRegistration is null
-            ? (registration.Modifiers, registration.Key)
-            : _hotkeys.LoadHotkey(feature);
-
-        SetHotkeyEditor(modifiers, key);
-        HotkeyEditorPopup.PlacementTarget = button;
-        HotkeyEditorPopup.IsOpen = true;
-        Dispatcher.BeginInvoke(() => HotkeyKeyCombo.Focus(), DispatcherPriority.Input);
-    }
-
-    private void SetHotkeyEditor(string modifiers, string key)
-    {
-        HotkeyKeyCombo.SelectedItem = key;
-
-        var modifierList = modifiers
-            .Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        HotkeyModifierCtrl.IsChecked = modifierList.Contains("Ctrl");
-        HotkeyModifierAlt.IsChecked = modifierList.Contains("Alt");
-        HotkeyModifierShift.IsChecked = modifierList.Contains("Shift");
-        HotkeyModifierWin.IsChecked = modifierList.Contains("Win");
-
-        UpdateHotkeyPreview();
-    }
-
-    private void SyncHotkeyControls(bool restoreEditorToActive)
-    {
-        if (restoreEditorToActive && _editingHotkeyFeature is { } feature)
-        {
-            var registration = _hotkeys.GetHotkeyRegistration(feature);
-            if (registration is not null && _hotkeys.GetAdditionalHotkeyRegistration(feature) is null)
-                SetHotkeyEditor(registration.Modifiers, registration.Key);
-        }
-
-        UpdateCurrentHotkeyDisplay(
-            CurrentNotesHotkeyDisplay,
-            _hotkeys.GetHotkeyRegistration(HotkeyFeature.Notes),
-            _hotkeys.GetAdditionalHotkeyRegistration(HotkeyFeature.Notes));
-        UpdateCurrentHotkeyDisplay(
-            CurrentChecklistHotkeyDisplay,
-            _hotkeys.GetHotkeyRegistration(HotkeyFeature.Checklist),
-            _hotkeys.GetAdditionalHotkeyRegistration(HotkeyFeature.Checklist));
-        UpdateCurrentHotkeyDisplay(
-            CurrentDictionaryHotkeyDisplay,
-            _hotkeys.GetHotkeyRegistration(HotkeyFeature.Dictionary),
-            _hotkeys.GetAdditionalHotkeyRegistration(HotkeyFeature.Dictionary));
-    }
-
-    private static void UpdateCurrentHotkeyDisplay(
-        TextBlock display,
-        HotkeyRegistration? registration,
-        HotkeyRegistration? additionalRegistration)
-    {
-        if (registration is null)
-        {
-            display.Text = "Not registered";
-            display.ToolTip = null;
-            return;
-        }
-
-        if (additionalRegistration is not null)
-        {
-            display.Text = "Multiple active";
-            display.ToolTip = $"{registration.Combination} and {additionalRegistration.Combination}";
-            return;
-        }
-
-        display.Text = registration.Combination;
-        display.ToolTip = null;
-    }
-
-    private void UpdateHotkeyPreview()
-    {
-        var selectedModifiers = GetSelectedHotkeyModifiers();
-        var selectedKey = HotkeyKeyCombo.SelectedItem as string;
-        HotkeyPreview.Text = HotkeyConstants.BuildHotkey(selectedModifiers, selectedKey)
-            ?? "Select modifiers and a key";
-    }
-
-    private List<string> GetSelectedHotkeyModifiers()
-    {
-        var selectedModifiers = new List<string>();
-        if (HotkeyModifierCtrl.IsChecked == true) selectedModifiers.Add("Ctrl");
-        if (HotkeyModifierAlt.IsChecked == true) selectedModifiers.Add("Alt");
-        if (HotkeyModifierShift.IsChecked == true) selectedModifiers.Add("Shift");
-        if (HotkeyModifierWin.IsChecked == true) selectedModifiers.Add("Win");
-        return selectedModifiers;
-    }
-
-    private void ResetHotkeyButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_editingHotkeyFeature is not { } feature)
-            return;
-
-        var (modifiers, key) = HotkeyConfiguration.GetDefaultHotkey(feature);
-        SetHotkeyEditor(modifiers, key);
-    }
-
-    private void CancelHotkeyButton_Click(object sender, RoutedEventArgs e)
-    {
-        HotkeyEditorPopup.IsOpen = false;
-    }
-
-    private void HotkeyEditorPopup_Closed(object sender, EventArgs e)
-    {
-        _editingHotkeyFeature = null;
-    }
-
-    private void ApplyHotkeyButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_editingHotkeyFeature is not { } feature) return;
-        var result = _hotkeys.Change(feature, GetSelectedHotkeyModifiers(), HotkeyKeyCombo.SelectedItem as string);
-        var restoreEditor = result.Status is HotkeyChangeStatus.Invalid or HotkeyChangeStatus.Unchanged
-            or HotkeyChangeStatus.Saved or HotkeyChangeStatus.SaveFailed
-            || result.Status == HotkeyChangeStatus.Failed
-                && _hotkeys.GetAdditionalHotkeyRegistration(feature) is null
-                && _hotkeys.GetHotkeyRegistration(feature) is not null;
-        SyncHotkeyControls(restoreEditor);
-        if (result.Status is HotkeyChangeStatus.Saved or HotkeyChangeStatus.Unchanged)
-            HotkeyEditorPopup.IsOpen = false;
-        if (result.Status == HotkeyChangeStatus.Unchanged) return;
-        var title = result.Status switch
-        {
-            HotkeyChangeStatus.InvalidSelection or HotkeyChangeStatus.Invalid => "Invalid Hotkey Selection",
-            HotkeyChangeStatus.Ambiguous => "Hotkey State Is Ambiguous",
-            HotkeyChangeStatus.SaveFailed => "Hotkey Active but Not Saved",
-            HotkeyChangeStatus.Saved => "Hotkey Updated",
-            HotkeyChangeStatus.Failed when _hotkeys.GetAdditionalHotkeyRegistration(feature) is not null => "Multiple Hotkeys May Be Active",
-            _ => "Hotkey Update Failed"
-        };
-        AppDialog.Show(result.Description, title, MessageBoxButton.OK,
-            result.Status == HotkeyChangeStatus.Saved ? MessageBoxImage.Information : MessageBoxImage.Warning);
-    }
-
     private Action GetHotkeyAction(HotkeyFeature feature) => feature switch
     {
         HotkeyFeature.Notes => OnNotesHotkeyPressed,
@@ -684,242 +408,6 @@ public partial class MainWindow : Window {
         HotkeyFeature.Dictionary => OnDictionaryHotkeyPressed,
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
     };
-
-    private void AppearanceModeCombo_SelectionChanged(
-        object sender,
-        SelectionChangedEventArgs e)
-    {
-        if (_isUpdatingSettingsView ||
-            AppearanceModeCombo.SelectedValue is not AppThemeMode mode)
-        {
-            return;
-        }
-
-        ApplyAndSaveAppearance(mode, _activeAccentColor);
-    }
-
-    private void AccentPresetButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: string color })
-            AccentHexTextBox.Text = color;
-    }
-
-    private void ChooseAccentColorButton_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new AccentColorDialog(_activeAccentColor)
-        {
-            Owner = this
-        };
-
-        if (dialog.ShowDialog() == true)
-            AccentHexTextBox.Text = dialog.SelectedColor;
-    }
-
-    private void AccentHexTextBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (_isUpdatingSettingsView)
-            return;
-
-        if (!AppTheme.TryNormalizeAccentColor(AccentHexTextBox.Text, out var accentColor))
-        {
-            ShowAccentMessage("Use a six-digit HEX color, such as #5BA8C8.", isError: true);
-            return;
-        }
-
-        ApplyAndSaveAppearance(_activeThemeMode, accentColor);
-    }
-
-    private void AccentHexTextBox_LostKeyboardFocus(
-        object sender,
-        KeyboardFocusChangedEventArgs e)
-    {
-        var displayColor = AppTheme.TryNormalizeAccentColor(
-            AccentHexTextBox.Text,
-            out var normalized)
-            ? normalized
-            : _activeAccentColor;
-        if (string.Equals(AccentHexTextBox.Text, displayColor, StringComparison.Ordinal))
-            return;
-
-        _isUpdatingSettingsView = true;
-        try
-        {
-            AccentHexTextBox.Text = displayColor;
-        }
-        finally
-        {
-            _isUpdatingSettingsView = false;
-        }
-
-        ShowAccentMessage($"Using {displayColor}", isError: false);
-    }
-
-    private void ResetAppearanceButton_Click(object sender, RoutedEventArgs e)
-    {
-        _isUpdatingSettingsView = true;
-        try
-        {
-            AppearanceModeCombo.SelectedValue = AppThemeMode.System;
-            AccentHexTextBox.Text = AppTheme.DefaultAccentColor;
-        }
-        finally
-        {
-            _isUpdatingSettingsView = false;
-        }
-
-        ApplyAndSaveAppearance(AppThemeMode.System, AppTheme.DefaultAccentColor);
-    }
-
-    private void ApplyAndSaveAppearance(AppThemeMode mode, string accentColor)
-    {
-        _settingsService.SaveAppTheme(mode, accentColor);
-        _applyAppTheme(mode, accentColor);
-        _activeThemeMode = mode;
-        _activeAccentColor = AppTheme.NormalizeAccentColor(accentColor);
-        ShowAccentMessage($"Using {_activeAccentColor}", isError: false);
-    }
-
-    private void ShowAccentMessage(string message, bool isError)
-    {
-        AccentValidationText.Text = message;
-        AccentValidationText.SetResourceReference(
-            TextBlock.ForegroundProperty,
-            isError ? "NotedDangerBrush" : "NotedMutedTextBrush");
-        AccentHexTextBox.SetResourceReference(
-            Control.BorderBrushProperty,
-            isError ? "NotedDangerBrush" : "NotedBorderBrush");
-    }
-
-    private void ShowModifiedSubtitleOption_Changed(object sender, RoutedEventArgs e)
-    {
-        if (_isUpdatingSettingsView) return;
-        var isChecked = ShowModifiedSubtitleOption.IsChecked ?? true;
-        _settingsService.SaveShowModifiedSubtitle(isChecked);
-        _viewModel.ShowModifiedSubtitle = isChecked;
-    }
-
-
-    private void FolderNavOption_Checked(object sender, RoutedEventArgs e) {
-        if (_isUpdatingSettingsView) return;
-
-        var folderNavigationMode = sender switch {
-            RadioButton { Name: nameof(FolderNavDrillDownOption) } => FolderNavigationMode.DrillDown,
-            RadioButton { Name: nameof(FolderNavExpandOption) } => FolderNavigationMode.Expand,
-            _ => (FolderNavigationMode?)null
-        };
-
-        if (!folderNavigationMode.HasValue)
-            return;
-
-        _settingsService.SaveFolderNavigationMode(folderNavigationMode.Value);
-        _viewModel.FolderNavigationMode = folderNavigationMode.Value;
-    }
-
-
-    private void RunOnStartupOption_Changed(object sender, RoutedEventArgs e) {
-        if (_isUpdatingSettingsView) return;
-
-        var requestedState = RunOnStartupOption.IsChecked == true;
-        var previousDisplayedState = _runOnStartupDisplayedState;
-        var result = _runOnStartupService.SetRunOnStartup(requestedState);
-        var displayedState = result.ActualEnabled ?? previousDisplayedState;
-
-        _isUpdatingSettingsView = true;
-        try {
-            RunOnStartupOption.IsChecked = displayedState;
-            _runOnStartupDisplayedState = displayedState;
-        } finally {
-            _isUpdatingSettingsView = false;
-        }
-
-        if (!result.Success || result.ActualEnabled is null || result.ActualEnabled != requestedState) {
-            AppDialog.Show(
-                result.Error ?? "Windows did not apply the requested startup setting.",
-                "Startup Setting Failed",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-        }
-    }
-
-
-    private void MainHideButtonHidesAllOption_Changed(object sender, RoutedEventArgs e) {
-        if (_isUpdatingSettingsView) return;
-        _mainHideButtonHidesAll = MainHideButtonHidesAllOption.IsChecked == true;
-        _settingsService.SaveMainHideButtonHidesAll(_mainHideButtonHidesAll);
-    }
-
-
-    private void GhostModeOption_Changed(object sender, RoutedEventArgs e) {
-        if (_isUpdatingSettingsView) return;
-        _ghostModeEnabled = GhostModeOption.IsChecked ?? false;
-        _settingsService.SaveGhostModeEnabled(_ghostModeEnabled);
-        // fade panel if toggled
-        if (!_ghostModeEnabled)
-            WindowAppearance.Refresh(this);
-        else if (NotesPanel.Visibility == Visibility.Visible && !NotesPanel.IsMouseOver)
-            WindowAppearance.Refresh(this);
-    }
-
-
-    private void GhostModeOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) {
-        if (_isUpdatingSettingsView) return;
-        _ghostModeOpacity = NormalizeOpacity(
-            e.NewValue / 100.0,
-            0.0,
-            DefaultGhostModeOpacity);
-        CorrectOpacitySliderValue(GhostModeOpacitySlider, _ghostModeOpacity);
-        _settingsService.SaveGhostModeOpacity(_ghostModeOpacity);
-        UpdateGhostModeOpacityLabel();
-        if (NotesPanel.Visibility == Visibility.Visible) {
-            WindowAppearance.Refresh(this);
-        }
-    }
-
-
-    private void UpdateGhostModeOpacityLabel() {
-        GhostModeOpacityLabel.Text = $"{(int)GhostModeOpacitySlider.Value}%";
-    }
-
-
-    private void DefaultOpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) {
-        if (_isUpdatingSettingsView) return;
-        _defaultOpacity = NormalizeOpacity(
-            e.NewValue / 100.0,
-            MinimumPanelOpacity,
-            DefaultPanelOpacity);
-        CorrectOpacitySliderValue(DefaultOpacitySlider, _defaultOpacity);
-        _settingsService.SaveDefaultOpacity(_defaultOpacity);
-        UpdateDefaultOpacityLabel();
-        // only fade if panel is visible and not in ghost mode
-        if (NotesPanel.Visibility == Visibility.Visible && (!_ghostModeEnabled || NotesPanel.IsMouseOver))
-            WindowAppearance.Refresh(this);
-    }
-
-
-    private void UpdateDefaultOpacityLabel() {
-        DefaultOpacityLabel.Text = $"{(int)DefaultOpacitySlider.Value}%";
-    }
-
-    private void CorrectOpacitySliderValue(Slider slider, double normalizedOpacity) {
-        var displayValue = normalizedOpacity * 100.0;
-        if (Math.Abs(slider.Value - displayValue) < 0.0001)
-            return;
-
-        _isUpdatingSettingsView = true;
-        try {
-            slider.Value = displayValue;
-        } finally {
-            _isUpdatingSettingsView = false;
-        }
-    }
-
-    private static double NormalizeOpacity(double value, double minimum, double fallback) {
-        if (!double.IsFinite(value))
-            return fallback;
-
-        return Math.Clamp(value, minimum, 1.0);
-    }
-
 
     internal bool IsNotesPanelVisible => NotesPanel.Visibility == Visibility.Visible;
 
@@ -958,13 +446,6 @@ public partial class MainWindow : Window {
         }
     }
 
-    private void ConfirmNoteDeletionOption_Changed(object sender, RoutedEventArgs e) {
-        if (_isUpdatingSettingsView)
-            return;
-
-        _settingsService.SaveConfirmNoteDeletion(ConfirmNoteDeletionOption.IsChecked == true);
-    }
-
     private void HideNotesPanelAndEditor() {
         try {
             HideNotesPanel();
@@ -980,7 +461,7 @@ public partial class MainWindow : Window {
 
 
     private void HideNotesButton_Click(object sender, RoutedEventArgs e) {
-        if (_mainHideButtonHidesAll)
+        if (_settingsViewModel.MainHideButtonHidesAll)
             WindowManager.HideAll();
         else
             HideNotesPanelAndEditor();
@@ -1007,9 +488,9 @@ public partial class MainWindow : Window {
 
     private void CreateOrUpdateBackupButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_lastBackupAttemptFailed)
+        if (_settingsViewModel.LastBackupAttemptFailed)
         {
-            _lastBackupAttemptFailed = false;
+            _settingsViewModel.LastBackupAttemptFailed = false;
             RefreshUserBackupControls();
         }
 
@@ -1049,20 +530,20 @@ public partial class MainWindow : Window {
     private async void ViewBackupButton_Click(object sender, RoutedEventArgs e)
     {
         var previousCursor = Mouse.OverrideCursor;
-        var previousStatus = BackupStatusText.Text;
-        var previousStatusBrush = BackupStatusText.Foreground;
-        var createWasEnabled = CreateOrUpdateBackupButton.IsEnabled;
-        var viewWasEnabled = ViewBackupButton.IsEnabled;
-        var exportWasEnabled = ExportBackupButton.IsEnabled;
-        var importWasEnabled = ImportBackupButton.IsEnabled;
-        var restoreWasEnabled = RestoreBackupButton.IsEnabled;
-        CreateOrUpdateBackupButton.IsEnabled = false;
-        ViewBackupButton.IsEnabled = false;
-        ExportBackupButton.IsEnabled = false;
-        ImportBackupButton.IsEnabled = false;
-        RestoreBackupButton.IsEnabled = false;
-        BackupStatusText.Text = "Checking backup contents...";
-        BackupStatusText.Foreground = (Brush)FindResource("NotedSecondaryTextBrush");
+        var previousStatus = _settingsViewModel.BackupStatus;
+        var previousStatusBrush = _settingsViewModel.BackupStatusResource;
+        var createWasEnabled = _settingsViewModel.CanCreateBackup;
+        var viewWasEnabled = _settingsViewModel.CanViewBackup;
+        var exportWasEnabled = _settingsViewModel.CanExportBackup;
+        var importWasEnabled = _settingsViewModel.CanImportBackup;
+        var restoreWasEnabled = _settingsViewModel.CanRestoreBackup;
+        _settingsViewModel.CanCreateBackup = false;
+        _settingsViewModel.CanViewBackup = false;
+        _settingsViewModel.CanExportBackup = false;
+        _settingsViewModel.CanImportBackup = false;
+        _settingsViewModel.CanRestoreBackup = false;
+        _settingsViewModel.BackupStatus = "Checking backup contents...";
+        _settingsViewModel.BackupStatusResource = "NotedSecondaryTextBrush";
         Mouse.OverrideCursor = Cursors.Wait;
 
         FullBackupPreview preview;
@@ -1073,13 +554,13 @@ public partial class MainWindow : Window {
         finally
         {
             Mouse.OverrideCursor = previousCursor;
-            CreateOrUpdateBackupButton.IsEnabled = createWasEnabled;
-            ViewBackupButton.IsEnabled = viewWasEnabled;
-            ExportBackupButton.IsEnabled = exportWasEnabled;
-            ImportBackupButton.IsEnabled = importWasEnabled;
-            RestoreBackupButton.IsEnabled = restoreWasEnabled;
-            BackupStatusText.Text = previousStatus;
-            BackupStatusText.Foreground = previousStatusBrush;
+            _settingsViewModel.CanCreateBackup = createWasEnabled;
+            _settingsViewModel.CanViewBackup = viewWasEnabled;
+            _settingsViewModel.CanExportBackup = exportWasEnabled;
+            _settingsViewModel.CanImportBackup = importWasEnabled;
+            _settingsViewModel.CanRestoreBackup = restoreWasEnabled;
+            _settingsViewModel.BackupStatus = previousStatus;
+            _settingsViewModel.BackupStatusResource = previousStatusBrush;
         }
 
         if (!preview.IsValid)
@@ -1121,13 +602,13 @@ public partial class MainWindow : Window {
         if (dialog.ShowDialog(this) != true)
             return;
 
-        CreateOrUpdateBackupButton.IsEnabled = false;
-        ViewBackupButton.IsEnabled = false;
-        ExportBackupButton.IsEnabled = false;
-        ImportBackupButton.IsEnabled = false;
-        RestoreBackupButton.IsEnabled = false;
-        BackupStatusText.Text = "Exporting verified backup...";
-        BackupStatusText.Foreground = (Brush)FindResource("NotedSecondaryTextBrush");
+        _settingsViewModel.CanCreateBackup = false;
+        _settingsViewModel.CanViewBackup = false;
+        _settingsViewModel.CanExportBackup = false;
+        _settingsViewModel.CanImportBackup = false;
+        _settingsViewModel.CanRestoreBackup = false;
+        _settingsViewModel.BackupStatus = "Exporting verified backup...";
+        _settingsViewModel.BackupStatusResource = "NotedSecondaryTextBrush";
         var previousCursor = Mouse.OverrideCursor;
         Mouse.OverrideCursor = Cursors.Wait;
 
@@ -1143,11 +624,11 @@ public partial class MainWindow : Window {
             Mouse.OverrideCursor = previousCursor;
             if (refreshedBackupInfo is not null)
             {
-                UpdateUserBackupControls(refreshedBackupInfo);
+                _settingsViewModel.UpdateBackupInfo(refreshedBackupInfo);
             }
             else
             {
-                CreateOrUpdateBackupButton.IsEnabled = true;
+                _settingsViewModel.CanCreateBackup = true;
             }
         }
 
@@ -1178,20 +659,20 @@ public partial class MainWindow : Window {
             return;
 
         var previousCursor = Mouse.OverrideCursor;
-        var previousStatus = BackupStatusText.Text;
-        var previousStatusBrush = BackupStatusText.Foreground;
-        var createWasEnabled = CreateOrUpdateBackupButton.IsEnabled;
-        var viewWasEnabled = ViewBackupButton.IsEnabled;
-        var exportWasEnabled = ExportBackupButton.IsEnabled;
-        var importWasEnabled = ImportBackupButton.IsEnabled;
-        var restoreWasEnabled = RestoreBackupButton.IsEnabled;
-        CreateOrUpdateBackupButton.IsEnabled = false;
-        ViewBackupButton.IsEnabled = false;
-        ExportBackupButton.IsEnabled = false;
-        ImportBackupButton.IsEnabled = false;
-        RestoreBackupButton.IsEnabled = false;
-        BackupStatusText.Text = "Checking imported backup...";
-        BackupStatusText.Foreground = (Brush)FindResource("NotedSecondaryTextBrush");
+        var previousStatus = _settingsViewModel.BackupStatus;
+        var previousStatusBrush = _settingsViewModel.BackupStatusResource;
+        var createWasEnabled = _settingsViewModel.CanCreateBackup;
+        var viewWasEnabled = _settingsViewModel.CanViewBackup;
+        var exportWasEnabled = _settingsViewModel.CanExportBackup;
+        var importWasEnabled = _settingsViewModel.CanImportBackup;
+        var restoreWasEnabled = _settingsViewModel.CanRestoreBackup;
+        _settingsViewModel.CanCreateBackup = false;
+        _settingsViewModel.CanViewBackup = false;
+        _settingsViewModel.CanExportBackup = false;
+        _settingsViewModel.CanImportBackup = false;
+        _settingsViewModel.CanRestoreBackup = false;
+        _settingsViewModel.BackupStatus = "Checking imported backup...";
+        _settingsViewModel.BackupStatusResource = "NotedSecondaryTextBrush";
         Mouse.OverrideCursor = Cursors.Wait;
 
         FullBackupPreview preview;
@@ -1202,13 +683,13 @@ public partial class MainWindow : Window {
         finally
         {
             Mouse.OverrideCursor = previousCursor;
-            CreateOrUpdateBackupButton.IsEnabled = createWasEnabled;
-            ViewBackupButton.IsEnabled = viewWasEnabled;
-            ExportBackupButton.IsEnabled = exportWasEnabled;
-            ImportBackupButton.IsEnabled = importWasEnabled;
-            RestoreBackupButton.IsEnabled = restoreWasEnabled;
-            BackupStatusText.Text = previousStatus;
-            BackupStatusText.Foreground = previousStatusBrush;
+            _settingsViewModel.CanCreateBackup = createWasEnabled;
+            _settingsViewModel.CanViewBackup = viewWasEnabled;
+            _settingsViewModel.CanExportBackup = exportWasEnabled;
+            _settingsViewModel.CanImportBackup = importWasEnabled;
+            _settingsViewModel.CanRestoreBackup = restoreWasEnabled;
+            _settingsViewModel.BackupStatus = previousStatus;
+            _settingsViewModel.BackupStatusResource = previousStatusBrush;
         }
 
         if (!preview.IsValid)
@@ -1310,13 +791,13 @@ public partial class MainWindow : Window {
 
     private void RunBackupCommand(Func<FullBackupResult> command)
     {
-        CreateOrUpdateBackupButton.IsEnabled = false;
-        ViewBackupButton.IsEnabled = false;
-        ExportBackupButton.IsEnabled = false;
-        ImportBackupButton.IsEnabled = false;
-        RestoreBackupButton.IsEnabled = false;
-        BackupStatusText.Text = "Checking and copying current data...";
-        BackupStatusText.Foreground = (Brush)FindResource("NotedSecondaryTextBrush");
+        _settingsViewModel.CanCreateBackup = false;
+        _settingsViewModel.CanViewBackup = false;
+        _settingsViewModel.CanExportBackup = false;
+        _settingsViewModel.CanImportBackup = false;
+        _settingsViewModel.CanRestoreBackup = false;
+        _settingsViewModel.BackupStatus = "Checking and copying current data...";
+        _settingsViewModel.BackupStatusResource = "NotedSecondaryTextBrush";
         var previousCursor = Mouse.OverrideCursor;
         Mouse.OverrideCursor = Cursors.Wait;
 
@@ -1328,71 +809,17 @@ public partial class MainWindow : Window {
         finally
         {
             Mouse.OverrideCursor = previousCursor;
-            CreateOrUpdateBackupButton.IsEnabled = true;
+            _settingsViewModel.CanCreateBackup = true;
         }
 
         var backupInfo = _getUserBackupInfo();
-        var resultMessage = result.Status == FullBackupStatus.Created && backupInfo.IsValid
-            ? BuildBackupStatusText(backupInfo)
-            : result.Message;
-        BackupStatusText.Text = string.IsNullOrWhiteSpace(result.Warning)
-            ? resultMessage
-            : $"{resultMessage} {result.Warning}";
-        BackupStatusText.Foreground = result.Status switch
-        {
-            FullBackupStatus.Created => (Brush)FindResource("NotedAccentBrush"),
-            FullBackupStatus.Skipped => (Brush)FindResource("NotedSecondaryTextBrush"),
-            _ => (Brush)FindResource("NotedDangerBrush")
-        };
-        _lastBackupAttemptFailed = result.Status is
-            FullBackupStatus.Blocked or FullBackupStatus.Failed;
+        _settingsViewModel.ShowBackupResult(result, backupInfo);
         RefreshUserBackupControls(updateStatusText: false);
     }
 
     private void RefreshUserBackupControls(bool updateStatusText = true)
     {
-        UpdateUserBackupControls(_getUserBackupInfo(), updateStatusText);
-    }
-
-    private void UpdateUserBackupControls(
-        FullBackupInfo backupInfo,
-        bool updateStatusText = true)
-    {
-        CreateOrUpdateBackupButton.Content = backupInfo.Exists
-            ? "Update Backup"
-            : "Create Backup";
-        RestoreBackupButton.IsEnabled = backupInfo.IsValid;
-        ViewBackupButton.IsEnabled = backupInfo.IsValid;
-        ExportBackupButton.IsEnabled = backupInfo.IsValid;
-        ImportBackupButton.IsEnabled = true;
-
-        if (!updateStatusText)
-            return;
-
-        if (!backupInfo.Exists)
-        {
-            BackupStatusText.Text = "No full backup has been created yet.";
-            BackupStatusText.Foreground = (Brush)FindResource("NotedSecondaryTextBrush");
-            return;
-        }
-
-        if (!backupInfo.IsValid)
-        {
-            BackupStatusText.Text = $"The existing backup needs attention: {backupInfo.Error}";
-            BackupStatusText.Foreground = (Brush)FindResource("NotedDangerBrush");
-            return;
-        }
-
-        BackupStatusText.Text = BuildBackupStatusText(backupInfo);
-        BackupStatusText.Foreground = (Brush)FindResource("NotedSecondaryTextBrush");
-    }
-
-    private static string BuildBackupStatusText(FullBackupInfo backupInfo)
-    {
-        var backupDate = backupInfo.LastUpdatedUtc?.ToLocalTime().ToString("MMM d, yyyy 'at' h:mm tt")
-            ?? "unknown date";
-        var fileLabel = backupInfo.FileCount == 1 ? "file" : "files";
-        return $"Last backup: {backupDate} • {backupInfo.FileCount} {fileLabel}";
+        _settingsViewModel.UpdateBackupInfo(_getUserBackupInfo(), updateStatusText);
     }
 
     private void ChecklistButton_Click(object sender, RoutedEventArgs e)
@@ -1565,57 +992,6 @@ public partial class MainWindow : Window {
         }
     }
 
-    private void NewNoteMode_Changed(object sender, RoutedEventArgs e) {
-        if (_isUpdatingSettingsView)
-            return;
-
-        NewNoteMode? newNoteMode = sender switch {
-            RadioButton { Name: nameof(NewNotePromptOption) } => NewNoteMode.Prompt,
-            RadioButton { Name: nameof(NewNoteQuickOption) } => NewNoteMode.Quick,
-            RadioButton { Name: nameof(NewNoteBothOption) } => NewNoteMode.Both,
-            _ => null
-        };
-
-        if (!newNoteMode.HasValue)
-            return;
-
-        _settingsService.SaveNewNoteMode(newNoteMode.Value);
-
-        if (SettingsView.Visibility != Visibility.Visible)
-            QuickNoteButton.Visibility = newNoteMode == NewNoteMode.Both ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void TimestampPlacementOption_Checked(object sender, RoutedEventArgs e) {
-        if (_isUpdatingSettingsView)
-            return;
-
-        var timestampPlacement = sender switch {
-            RadioButton { Name: nameof(TimestampTopOption) } => NoteTimestampPlacement.Top,
-            RadioButton { Name: nameof(TimestampBottomOption) } => NoteTimestampPlacement.Bottom,
-            RadioButton { Name: nameof(TimestampLineOption) } => NoteTimestampPlacement.Line,
-            _ => NoteTimestampPlacement.None
-        };
-
-        _settingsService.SaveTimestampPlacement(timestampPlacement);
-    }
-
-    private void TimestampLineTextBox_LostFocus(object sender, RoutedEventArgs e) {
-        if (_isUpdatingSettingsView)
-            return;
-
-        if (!int.TryParse(
-                TimestampLineTextBox.Text,
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var lineNumber)) {
-            lineNumber = _settingsService.LoadTimestampLine();
-        }
-
-        lineNumber = Math.Clamp(lineNumber, 1, 10000);
-        TimestampLineTextBox.Text = lineNumber.ToString(CultureInfo.InvariantCulture);
-        _settingsService.SaveTimestampLine(lineNumber);
-    }
-
     private void DeleteNoteButton_Click(object sender, RoutedEventArgs e) {
         NoteItem? note = null;
 
@@ -1675,8 +1051,7 @@ public partial class MainWindow : Window {
             if (confirmation.Result != MessageBoxResult.Yes)
                 return;
             if (confirmation.DoNotShowAgain) {
-                _settingsService.SaveConfirmNoteDeletion(false);
-                ConfirmNoteDeletionOption.IsChecked = false;
+                _settingsViewModel.ConfirmNoteDeletion = false;
             }
         }
 
@@ -2349,8 +1724,9 @@ public partial class MainWindow : Window {
 
         _cleanupCompleted = true;
 
+        _settingsViewModel.PreferenceChanged -= OnSettingsPreferenceChanged;
+        _settingsViewModel.NoticeRaised -= ShowSettingsNotice;
         _hotkeys.Dispose();
-        _editingHotkeyFeature = null;
         _notesPanelResizer.Dispose();
 
         // cleanup tray icon
@@ -2366,8 +1742,6 @@ public partial class MainWindow : Window {
         NotesPanel.PreviewMouseMove -= NotesPanel_PreviewMouseMove;
         NotesPanel.PreviewMouseLeftButtonUp -= NotesPanel_PreviewMouseLeftButtonUp;
 
-        GhostModeOpacitySlider.ValueChanged -= GhostModeOpacitySlider_ValueChanged;
-        DefaultOpacitySlider.ValueChanged -= DefaultOpacitySlider_ValueChanged;
 
         MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;
         PreviewMouseDown -= MainWindow_PreviewMouseDown;
