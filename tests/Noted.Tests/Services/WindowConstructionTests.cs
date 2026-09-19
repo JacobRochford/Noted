@@ -41,16 +41,12 @@ public sealed class WindowConstructionTests
                 var scratchpad = new ScratchpadWindow(new ScratchpadWindowViewModel(settings, new ScratchpadContentService(directory.Path)));
                 settings.SaveNotesDirectory(directory.File("notes"));
                 using var files = new NoteFileService(settings);
+                var backupCoordinator = new BackupCoordinator(
+                    new FullBackupService(directory.Path, files.NotesDirectory),
+                    new ShutdownFlushCoordinator(),
+                    () => files.NotesDirectory);
                 var main = new MainWindow(settings, files, editor, new ConstructionStartupService(),
-                    () => throw new AssertFailedException("Construction must not create a backup."),
-                    () => new FullBackupInfo(false, false, null, 0, null),
-                    () => throw new AssertFailedException("Construction must not preview a backup."),
-                    (_, _) => throw new AssertFailedException("Construction must not read a backup."),
-                    _ => throw new AssertFailedException("Construction must not preview an import."),
-                    (_, _, _, _) => throw new AssertFailedException("Construction must not read an import."),
-                    _ => throw new AssertFailedException("Construction must not export a backup."),
-                    () => Assert.Fail("Construction must not restore a backup."),
-                    (_, _, _) => Assert.Fail("Construction must not import a backup."),
+                    backupCoordinator,
                     (_, _) => Assert.Fail("Construction must not change the theme.")) { Width = 1280, Height = 900 };
                 foreach (var window in new Window[] { editor, miniPad, dictionary, checklist, scratchpad, main })
                 {

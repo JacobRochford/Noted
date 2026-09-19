@@ -24,15 +24,7 @@ public partial class MainWindow : Window {
     private readonly IAppSettingsService _settingsService;
     private readonly INoteFileService _fileService;
     private readonly NoteEditorWindow _noteEditor;
-    private readonly Func<FullBackupResult> _createOrUpdateUserBackup;
-    private readonly Func<FullBackupInfo> _getUserBackupInfo;
-    private readonly Func<FullBackupPreview> _getUserBackupPreview;
-    private readonly Func<Guid, BackupFileSummary, BackupFileContent> _readUserBackupFile;
-    private readonly Func<string, FullBackupPreview> _getBackupImportPreview;
-    private readonly Func<string, Guid, string, BackupFileSummary, BackupFileContent> _readBackupImportFile;
-    private readonly Func<string, BackupExportResult> _exportUserBackup;
-    private readonly Action _requestUserBackupRestore;
-    private readonly Action<string, Guid, string> _requestBackupImportRestore;
+    private readonly BackupCoordinator _backupCoordinator;
     private readonly MainWindowViewModel _viewModel;
     private readonly SettingsViewModel _settingsViewModel;
     private readonly CanvasEdgeResizer _notesPanelResizer;
@@ -58,15 +50,7 @@ public partial class MainWindow : Window {
             INoteFileService fileService,
             NoteEditorWindow noteEditor,
             IRunOnStartupService runOnStartupService,
-            Func<FullBackupResult> createOrUpdateUserBackup,
-            Func<FullBackupInfo> getUserBackupInfo,
-            Func<FullBackupPreview> getUserBackupPreview,
-            Func<Guid, BackupFileSummary, BackupFileContent> readUserBackupFile,
-            Func<string, FullBackupPreview> getBackupImportPreview,
-            Func<string, Guid, string, BackupFileSummary, BackupFileContent> readBackupImportFile,
-            Func<string, BackupExportResult> exportUserBackup,
-            Action requestUserBackupRestore,
-            Action<string, Guid, string> requestBackupImportRestore,
+            BackupCoordinator backupCoordinator,
             Action<AppThemeMode, string> applyAppTheme
         )
     {
@@ -77,15 +61,7 @@ public partial class MainWindow : Window {
         _hotkeys = new HotkeyConfiguration(settingsService, () => new GlobalHotkeysService(this), GetHotkeyAction);
         _fileService = fileService;
         _noteEditor = noteEditor;
-        _createOrUpdateUserBackup = createOrUpdateUserBackup;
-        _getUserBackupInfo = getUserBackupInfo;
-        _getUserBackupPreview = getUserBackupPreview;
-        _readUserBackupFile = readUserBackupFile;
-        _getBackupImportPreview = getBackupImportPreview;
-        _readBackupImportFile = readBackupImportFile;
-        _exportUserBackup = exportUserBackup;
-        _requestUserBackupRestore = requestUserBackupRestore;
-        _requestBackupImportRestore = requestBackupImportRestore;
+        _backupCoordinator = backupCoordinator ?? throw new ArgumentNullException(nameof(backupCoordinator));
 
         _viewModel = new MainWindowViewModel(_fileService, _settingsService, action => Dispatcher.Invoke(action));
 
@@ -494,7 +470,7 @@ public partial class MainWindow : Window {
             RefreshUserBackupControls();
         }
 
-        var backupInfo = _getUserBackupInfo();
+        var backupInfo = _backupCoordinator.GetUserBackupInfo();
         var action = backupInfo.Exists ? "Update" : "Create";
         var confirmation = AppDialog.Show(
             this,
@@ -507,7 +483,7 @@ public partial class MainWindow : Window {
         if (confirmation != MessageBoxResult.Yes)
             return;
 
-        RunBackupCommand(_createOrUpdateUserBackup);
+        RunBackupCommand(_backupCoordinator.CreateOrUpdateUserBackup);
     }
 
     private void UtilityMenuButton_Click(object sender, RoutedEventArgs e)
@@ -549,7 +525,7 @@ public partial class MainWindow : Window {
         FullBackupPreview preview;
         try
         {
-            preview = await Task.Run(_getUserBackupPreview);
+            preview = await Task.Run(_backupCoordinator.GetUserBackupPreview);
         }
         finally
         {
@@ -577,7 +553,7 @@ public partial class MainWindow : Window {
             return;
         }
 
-        var dialog = new BackupPreviewDialog(preview, _readUserBackupFile)
+        var dialog = new BackupPreviewDialog(preview, _backupCoordinator.ReadUserBackupFile)
         {
             Owner = this,
             WindowStartupLocation = WindowStartupLocation.Manual
@@ -616,8 +592,8 @@ public partial class MainWindow : Window {
         FullBackupInfo? refreshedBackupInfo = null;
         try
         {
-            result = await Task.Run(() => _exportUserBackup(dialog.FileName));
-            refreshedBackupInfo = await Task.Run(_getUserBackupInfo);
+            result = await Task.Run(() => _backupCoordinator.ExportUserBackup(dialog.FileName));
+            refreshedBackupInfo = await Task.Run(_backupCoordinator.GetUserBackupInfo);
         }
         finally
         {
@@ -678,7 +654,7 @@ public partial class MainWindow : Window {
         FullBackupPreview preview;
         try
         {
-            preview = await Task.Run(() => _getBackupImportPreview(fileDialog.FileName));
+            preview = await Task.Run(() => _backupCoordinator.GetBackupImportPreview(fileDialog.FileName));
         }
         finally
         {
@@ -717,7 +693,7 @@ public partial class MainWindow : Window {
 
         var previewDialog = new BackupPreviewDialog(
             preview,
-            (backupId, file) => _readBackupImportFile(
+            (backupId, file) => _backupCoordinator.ReadBackupImportFile(
                 fileDialog.FileName,
                 backupId,
                 verificationToken,
@@ -742,7 +718,7 @@ public partial class MainWindow : Window {
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
         if (confirmation == MessageBoxResult.Yes)
-            _requestBackupImportRestore(
+            _backupCoordinator.RequestBackupImportRestore(
                 fileDialog.FileName,
                 preview.BackupId,
                 verificationToken);
@@ -768,7 +744,7 @@ public partial class MainWindow : Window {
 
     private void ConfirmAndRequestBackupRestore()
     {
-        var backupInfo = _getUserBackupInfo();
+        var backupInfo = _backupCoordinator.GetUserBackupInfo();
         if (!backupInfo.IsValid)
         {
             RefreshUserBackupControls();
@@ -786,7 +762,7 @@ public partial class MainWindow : Window {
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
         if (confirmation == MessageBoxResult.Yes)
-            _requestUserBackupRestore();
+            _backupCoordinator.RequestUserBackupRestore();
     }
 
     private void RunBackupCommand(Func<FullBackupResult> command)
@@ -812,14 +788,14 @@ public partial class MainWindow : Window {
             _settingsViewModel.CanCreateBackup = true;
         }
 
-        var backupInfo = _getUserBackupInfo();
+        var backupInfo = _backupCoordinator.GetUserBackupInfo();
         _settingsViewModel.ShowBackupResult(result, backupInfo);
         RefreshUserBackupControls(updateStatusText: false);
     }
 
     private void RefreshUserBackupControls(bool updateStatusText = true)
     {
-        _settingsViewModel.UpdateBackupInfo(_getUserBackupInfo(), updateStatusText);
+        _settingsViewModel.UpdateBackupInfo(_backupCoordinator.GetUserBackupInfo(), updateStatusText);
     }
 
     private void ChecklistButton_Click(object sender, RoutedEventArgs e)

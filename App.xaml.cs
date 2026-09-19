@@ -31,16 +31,14 @@ public partial class App : Application
     private DictionaryWindow? _dictionaryWindow;
     private ScratchpadWindow? _scratchpadWindow;
     private readonly ShutdownFlushCoordinator _shutdownFlushCoordinator = new();
-    private IDisposable? _checklistShutdownRegistration;
-    private IDisposable? _dictionaryShutdownRegistration;
+    private IDisposable? _checklistBackupRegistration;
+    private IDisposable? _dictionaryBackupRegistration;
+    private IDisposable? _scratchpadBackupRegistration;
+    private IDisposable? _miniPadBackupRegistration;
+    private IDisposable? _noteEditorBackupRegistration;
     private MiniPadWindow? _miniPadWindow;
     private IMiniPadRecoveryService? _miniPadRecoveryService;
-    private FullBackupService? _fullBackupService;
-    private readonly HashSet<string> _backupBlockReasons = new(StringComparer.Ordinal);
-    private bool _restoreUserBackupOnShutdown;
-    private string? _importBackupPathOnShutdown;
-    private Guid? _importBackupIdOnShutdown;
-    private string? _importBackupVerificationTokenOnShutdown;
+    private BackupCoordinator? _backupCoordinator;
     private bool _isShuttingDown;
     private string? _lastShutdownWarning;
     private int _fatalErrorShown;
@@ -106,7 +104,12 @@ public partial class App : Application
             var fullBackupService = new FullBackupService(
                 appDataDirectory,
                 appDataDirectory);
-            var pendingRestoreResult = fullBackupService.ApplyPendingUserBackupRestore();
+            var backupCoordinator = new BackupCoordinator(
+                fullBackupService,
+                _shutdownFlushCoordinator,
+                () => _fileService?.NotesDirectory);
+            _backupCoordinator = backupCoordinator;
+            var pendingRestoreResult = backupCoordinator.ApplyPendingRestore();
             if (pendingRestoreResult.Status == FullBackupStatus.Failed)
                 throw new IOException(pendingRestoreResult.Message);
 
@@ -126,33 +129,36 @@ public partial class App : Application
             var fileService = new NoteFileService(settings);
             startupFileService = fileService;
             fullBackupService.UpdateNotesDirectory(fileService.NotesDirectory);
-            _fullBackupService = fullBackupService;
             var noteEditor = new NoteEditorWindow(
                 new NoteContentService(settings.AppDataDirectory),
                 settings,
                 new NoteRecoveryService(settings.AppDataDirectory),
                 new NoteEditorSessionService(settings.AppDataDirectory));
+            _noteEditorBackupRegistration = backupCoordinator.RegisterPreparationParticipant(
+                "Note editor",
+                BackupPreparationPhase.AfterSharedFlush,
+                () => CreatePersistenceSaveResult(
+                    noteEditor.TryFlushForBackup(out var error),
+                    error,
+                    "Note editor recovery data could not be saved."),
+                () => noteEditor.BackupBlockingIssue,
+                () => noteEditor.RecoveryBlocksBackup,
+                "Some automatically recovered notes still need to be saved, or note recovery reported a problem.",
+                includeRecoveryInUserBackup: true);
             startupNoteEditor = noteEditor;
             var mainWindow = new MainWindow(
                 settings,
                 fileService,
                 noteEditor,
                 new RunOnStartupService(),
-                CreateOrUpdateUserBackup,
-                GetUserBackupInfo,
-                GetUserBackupPreview,
-                ReadUserBackupFile,
-                GetBackupImportPreview,
-                ReadBackupImportFile,
-                ExportUserBackup,
-                RequestUserBackupRestore,
-                RequestBackupImportRestore,
+                backupCoordinator,
                 themeManager.Apply);
             _fileService = fileService;
             _noteEditorWindow = noteEditor;
             _mainWindow = mainWindow;
             MainWindow = mainWindow;
             mainWindow.Closing += MainWindow_Closing;
+            backupCoordinator.ShutdownRequested += BackupCoordinator_ShutdownRequested;
 
             WindowManager.Main = mainWindow;
             WindowManager.ChecklistProvider = GetOrCreateChecklistWindow;
@@ -192,7 +198,7 @@ public partial class App : Application
             }
             if (settings.RecoveryNotice is not null)
             {
-                BlockBackupsForThisRun("Settings recovery was used during this application run.");
+                backupCoordinator.RecordRunRecoveryIssue("Settings recovery was used during this application run.");
                 AppDialog.Show(
                     settings.RecoveryNotice,
                     "Noted - Settings Recovered",
@@ -209,7 +215,7 @@ public partial class App : Application
 
             noteEditor.ReopenSavedTabs();
             if (noteEditor.RecoveryBlocksBackup)
-                BlockBackupsForThisRun("Note editor recovery was used or reported a problem during this application run.");
+                backupCoordinator.RecordRunRecoveryIssue("Note editor recovery was used or reported a problem during this application run.");
             RestoreMiniPadWindow();
             ObserveBackgroundTask(UpdateService.CheckForUpdatesAsync());
         }
@@ -256,10 +262,16 @@ public partial class App : Application
             CloseExistingWindow(_noteEditorWindow, "note editor");
             CloseMiniPadWindow();
 
-            _checklistShutdownRegistration?.Dispose();
-            _checklistShutdownRegistration = null;
-            _dictionaryShutdownRegistration?.Dispose();
-            _dictionaryShutdownRegistration = null;
+            _checklistBackupRegistration?.Dispose();
+            _checklistBackupRegistration = null;
+            _dictionaryBackupRegistration?.Dispose();
+            _dictionaryBackupRegistration = null;
+            _scratchpadBackupRegistration?.Dispose();
+            _scratchpadBackupRegistration = null;
+            _miniPadBackupRegistration?.Dispose();
+            _miniPadBackupRegistration = null;
+            _noteEditorBackupRegistration?.Dispose();
+            _noteEditorBackupRegistration = null;
 
             mainWindow?.CleanupResources();
             _themeManager?.Dispose();
@@ -269,9 +281,9 @@ public partial class App : Application
             try { _fileService?.Dispose(); } catch (Exception ex) { ExceptionDiagnostics.Record(ex); }
             WindowManager.ClearAll();
 
-            if (_restoreUserBackupOnShutdown && _fullBackupService is not null)
+            if (_backupCoordinator?.HasRequestedRestore == true)
             {
-                var restoreResult = _fullBackupService.ApplyPendingUserBackupRestore();
+                var restoreResult = _backupCoordinator.ApplyPendingRestore();
                 var restoreDetails = string.IsNullOrWhiteSpace(restoreResult.Warning)
                     ? restoreResult.Message
                     : $"{restoreResult.Message}\n\n{restoreResult.Warning}";
@@ -298,7 +310,9 @@ public partial class App : Application
             _scratchpadWindow = null;
             _miniPadWindow = null;
             _miniPadRecoveryService = null;
-            _fullBackupService = null;
+            if (_backupCoordinator is not null)
+                _backupCoordinator.ShutdownRequested -= BackupCoordinator_ShutdownRequested;
+            _backupCoordinator = null;
         }
         finally
         {
@@ -327,8 +341,11 @@ public partial class App : Application
         var window = new ChecklistWindow(
             settings,
             new ChecklistContentService(settings.AppDataDirectory));
-        _checklistShutdownRegistration = _shutdownFlushCoordinator.Register(
+        var backupCoordinator = _backupCoordinator
+            ?? throw new InvalidOperationException("Backup coordination is not initialized.");
+        _checklistBackupRegistration = backupCoordinator.RegisterPreparationParticipant(
             "Checklist",
+            BackupPreparationPhase.SharedFlush,
             () =>
             {
                 var success = window.TryFlushPendingContent(out var error);
@@ -336,7 +353,10 @@ public partial class App : Application
                     ? PersistenceSaveResult.Succeeded()
                     : PersistenceSaveResult.Failed(
                         error ?? "Checklist content could not be saved before shutdown.");
-            });
+            },
+            () => window.BackupBlockingIssue,
+            () => window.RecoveryBlocksBackup,
+            "Checklist recovery reported a problem during this application run.");
         window.Closed += ChecklistWindow_Closed;
         _checklistWindow = window;
         WindowManager.Checklist = window;
@@ -357,8 +377,11 @@ public partial class App : Application
         var window = new DictionaryWindow(
             settings,
             new DictionaryContentService(settings.AppDataDirectory));
-        _dictionaryShutdownRegistration = _shutdownFlushCoordinator.Register(
+        var backupCoordinator = _backupCoordinator
+            ?? throw new InvalidOperationException("Backup coordination is not initialized.");
+        _dictionaryBackupRegistration = backupCoordinator.RegisterPreparationParticipant(
             "Dictionary",
+            BackupPreparationPhase.SharedFlush,
             () =>
             {
                 var success = window.TryFlushPendingContent(out var error);
@@ -366,7 +389,10 @@ public partial class App : Application
                     ? PersistenceSaveResult.Succeeded()
                     : PersistenceSaveResult.Failed(
                         error ?? "Dictionary content could not be saved before shutdown.");
-            });
+            },
+            () => window.BackupBlockingIssue,
+            () => window.RecoveryBlocksBackup,
+            "Dictionary recovery reported a problem during this application run.");
         window.Closed += DictionaryWindow_Closed;
         _dictionaryWindow = window;
         WindowManager.Dictionary = window;
@@ -387,6 +413,19 @@ public partial class App : Application
         var contentService = new ScratchpadContentService(settings.AppDataDirectory);
         var viewModel = new ScratchpadWindowViewModel(settings, contentService);
         var window = new ScratchpadWindow(viewModel);
+        var backupCoordinator = _backupCoordinator
+            ?? throw new InvalidOperationException("Backup coordination is not initialized.");
+        _scratchpadBackupRegistration = backupCoordinator.RegisterPreparationParticipant(
+            "Scratchpad",
+            BackupPreparationPhase.BeforeSharedFlush,
+            () => CreatePersistenceSaveResult(
+                window.TryFlushPendingContent(out var error),
+                error,
+                "Scratchpad content could not be saved."),
+            () => window.BackupBlockingIssue,
+            () => window.RecoveryBlocksBackup,
+            "Scratchpad recovery reported a problem during this application run.",
+            preparationOrder: 1);
         window.Closed += ScratchpadWindow_Closed;
         _scratchpadWindow = window;
         WindowManager.Scratchpad = window;
@@ -402,8 +441,8 @@ public partial class App : Application
         if (!ReferenceEquals(_checklistWindow, window))
             return;
 
-        _checklistShutdownRegistration?.Dispose();
-        _checklistShutdownRegistration = null;
+        _checklistBackupRegistration?.Dispose();
+        _checklistBackupRegistration = null;
         _checklistWindow = null;
         if (ReferenceEquals(WindowManager.Checklist, window))
             WindowManager.Checklist = null;
@@ -418,8 +457,8 @@ public partial class App : Application
         if (!ReferenceEquals(_dictionaryWindow, window))
             return;
 
-        _dictionaryShutdownRegistration?.Dispose();
-        _dictionaryShutdownRegistration = null;
+        _dictionaryBackupRegistration?.Dispose();
+        _dictionaryBackupRegistration = null;
         _dictionaryWindow = null;
         if (ReferenceEquals(WindowManager.Dictionary, window))
             WindowManager.Dictionary = null;
@@ -434,6 +473,8 @@ public partial class App : Application
         if (!ReferenceEquals(_scratchpadWindow, window))
             return;
 
+        _scratchpadBackupRegistration?.Dispose();
+        _scratchpadBackupRegistration = null;
         _scratchpadWindow = null;
         if (ReferenceEquals(WindowManager.Scratchpad, window))
             WindowManager.Scratchpad = null;
@@ -455,7 +496,8 @@ public partial class App : Application
 
     private void Settings_PersistenceWarning(string warning)
     {
-        BlockBackupsForThisRun("Settings recovery protection reported a warning during this application run.");
+        _backupCoordinator?.RecordRunRecoveryIssue(
+            "Settings recovery protection reported a warning during this application run.");
         if (_isShuttingDown)
             return;
 
@@ -483,7 +525,8 @@ public partial class App : Application
         if (loadResult.Issues.Count == 0)
             return;
 
-        BlockBackupsForThisRun("MiniPad recovery reported a problem during this application run.");
+        _backupCoordinator?.RecordRunRecoveryIssue(
+            "MiniPad recovery reported a problem during this application run.");
 
         const int maximumDisplayedIssues = 5;
         var issueText = string.Join(
@@ -509,6 +552,17 @@ public partial class App : Application
         var settings = _settingsService
             ?? throw new InvalidOperationException("Application settings are not initialized.");
         var window = new MiniPadWindow(recoveryService, settings, draft);
+        var backupCoordinator = _backupCoordinator
+            ?? throw new InvalidOperationException("Backup coordination is not initialized.");
+        _miniPadBackupRegistration = backupCoordinator.RegisterPreparationParticipant(
+            "MiniPad",
+            BackupPreparationPhase.BeforeSharedFlush,
+            () => CreatePersistenceSaveResult(
+                window.TryFlushPendingContent(out var error),
+                error,
+                "MiniPad content could not be saved."),
+            () => window.BackupBlockingIssue,
+            preparationOrder: 0);
         window.Closed += MiniPadWindow_Closed;
         _miniPadWindow = window;
         WindowManager.MiniPad = window;
@@ -524,6 +578,8 @@ public partial class App : Application
         if (!ReferenceEquals(_miniPadWindow, window))
             return;
 
+        _miniPadBackupRegistration?.Dispose();
+        _miniPadBackupRegistration = null;
         _miniPadWindow = null;
         if (ReferenceEquals(WindowManager.MiniPad, window))
             WindowManager.MiniPad = null;
@@ -536,6 +592,8 @@ public partial class App : Application
             return;
 
         window.Closed -= MiniPadWindow_Closed;
+        _miniPadBackupRegistration?.Dispose();
+        _miniPadBackupRegistration = null;
         if (!window.TryFlushPendingContent(out var error))
         {
             AppDialog.Show(
@@ -567,194 +625,22 @@ public partial class App : Application
         }
     }
 
-    private FullBackupInfo GetUserBackupInfo() =>
-        _fullBackupService?.GetUserBackupInfo()
-        ?? new FullBackupInfo(false, false, null, 0, "Backups are not available.");
-
-    private FullBackupPreview GetUserBackupPreview() =>
-        _fullBackupService?.GetUserBackupPreview()
-        ?? new FullBackupPreview(
-            false,
-            false,
-            Guid.Empty,
-            null,
-            [],
-            "Backups are not available.");
-
-    private BackupFileContent ReadUserBackupFile(
-        Guid backupId,
-        BackupFileSummary file) =>
-        _fullBackupService?.ReadUserBackupFile(backupId, file)
-        ?? new BackupFileContent(
-            false,
-            false,
-            BackupContentFormat.Text,
-            null,
-            "Backups are not available.");
-
-    private BackupExportResult ExportUserBackup(string destinationPath) =>
-        _fullBackupService?.ExportUserBackup(destinationPath)
-        ?? new BackupExportResult(
-            false,
-            null,
-            "Backups are not available.");
-
-    private FullBackupPreview GetBackupImportPreview(string archivePath) =>
-        _fullBackupService?.GetBackupImportPreview(archivePath)
-        ?? new FullBackupPreview(
-            false,
-            false,
-            Guid.Empty,
-            null,
-            [],
-            "Backups are not available.");
-
-    private BackupFileContent ReadBackupImportFile(
-        string archivePath,
-        Guid backupId,
-        string verificationToken,
-        BackupFileSummary file) =>
-        _fullBackupService?.ReadBackupImportFile(
-            archivePath,
-            backupId,
-            verificationToken,
-            file)
-        ?? new BackupFileContent(
-            false,
-            false,
-            BackupContentFormat.Text,
-            null,
-            "Backups are not available.");
-
-    private FullBackupResult CreateOrUpdateUserBackup()
-    {
-        var service = _fullBackupService;
-        if (service is null)
-        {
-            return new FullBackupResult(
-                FullBackupStatus.Failed,
-                FullBackupType.User,
-                null,
-                "Backups are not available.");
-        }
-
-        var preparationIssues = PrepareDataForBackup(includeRunRecoveryHistory: false);
-        if (preparationIssues.Count > 0)
-            return CreateBlockedBackupResult(FullBackupType.User, preparationIssues);
-
-        if (_fileService is not null)
-            service.UpdateNotesDirectory(_fileService.NotesDirectory);
-        return service.CreateOrUpdateUserBackup();
-    }
-
-    private void RequestUserBackupRestore()
-    {
-        _restoreUserBackupOnShutdown = true;
-        _importBackupPathOnShutdown = null;
-        _importBackupIdOnShutdown = null;
-        _importBackupVerificationTokenOnShutdown = null;
+    private void BackupCoordinator_ShutdownRequested(object? sender, EventArgs e) =>
         _mainWindow?.Close();
-    }
 
-    private void RequestBackupImportRestore(
-        string archivePath,
-        Guid backupId,
-        string verificationToken)
-    {
-        _restoreUserBackupOnShutdown = true;
-        _importBackupPathOnShutdown = archivePath;
-        _importBackupIdOnShutdown = backupId;
-        _importBackupVerificationTokenOnShutdown = verificationToken;
-        _mainWindow?.Close();
-    }
-
-    private IReadOnlyList<string> PrepareDataForBackup(bool includeRunRecoveryHistory)
-    {
-        var issues = includeRunRecoveryHistory
-            ? new List<string>(_backupBlockReasons)
-            : [];
-
-        if (_miniPadWindow is not null)
-        {
-            if (!_miniPadWindow.TryFlushPendingContent(out var error))
-                issues.Add(error ?? "MiniPad content could not be saved.");
-            if (!string.IsNullOrWhiteSpace(_miniPadWindow.BackupBlockingIssue))
-                issues.Add(_miniPadWindow.BackupBlockingIssue!);
-        }
-
-        if (_scratchpadWindow is not null)
-        {
-            if (!_scratchpadWindow.TryFlushPendingContent(out var error))
-                issues.Add(error ?? "Scratchpad content could not be saved.");
-            if (!string.IsNullOrWhiteSpace(_scratchpadWindow.BackupBlockingIssue))
-                issues.Add(_scratchpadWindow.BackupBlockingIssue!);
-            if (includeRunRecoveryHistory && _scratchpadWindow.RecoveryBlocksBackup)
-                issues.Add("Scratchpad recovery reported a problem during this application run.");
-        }
-
-        foreach (var failure in _shutdownFlushCoordinator.FlushAll())
-            issues.Add($"{failure.ParticipantName}: {failure.Error}");
-
-        if (!string.IsNullOrWhiteSpace(_checklistWindow?.BackupBlockingIssue))
-            issues.Add(_checklistWindow.BackupBlockingIssue!);
-        if (includeRunRecoveryHistory && _checklistWindow?.RecoveryBlocksBackup == true)
-            issues.Add("Checklist recovery reported a problem during this application run.");
-        if (!string.IsNullOrWhiteSpace(_dictionaryWindow?.BackupBlockingIssue))
-            issues.Add(_dictionaryWindow.BackupBlockingIssue!);
-        if (includeRunRecoveryHistory && _dictionaryWindow?.RecoveryBlocksBackup == true)
-            issues.Add("Dictionary recovery reported a problem during this application run.");
-
-        if (_noteEditorWindow is not null)
-        {
-            if (!_noteEditorWindow.TryFlushForBackup(out var error))
-                issues.Add(error ?? "Note editor recovery data could not be saved.");
-            if (_noteEditorWindow.RecoveryBlocksBackup)
-                issues.Add("Some automatically recovered notes still need to be saved, or note recovery reported a problem.");
-        }
-
-        return issues
-            .Where(issue => !string.IsNullOrWhiteSpace(issue))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-    }
-
-    private static FullBackupResult CreateBlockedBackupResult(
-        FullBackupType backupType,
-        IReadOnlyList<string> issues)
-    {
-        const int maximumShownIssues = 5;
-        var message = string.Join(" ", issues.Take(maximumShownIssues));
-        if (issues.Count > maximumShownIssues)
-            message += $" {issues.Count - maximumShownIssues} additional issue(s) were not shown.";
-
-        return new FullBackupResult(
-            FullBackupStatus.Blocked,
-            backupType,
-            null,
-            backupType == FullBackupType.User
-                ? $"The backup was not created because current data could not be prepared safely. {message}"
-                : $"The recent automatic backup was not created because current data could not be prepared safely. {message}");
-    }
-
-    private void BlockBackupsForThisRun(string reason)
-    {
-        if (!string.IsNullOrWhiteSpace(reason))
-            _backupBlockReasons.Add(reason);
-    }
+    private static PersistenceSaveResult CreatePersistenceSaveResult(
+        bool success,
+        string? error,
+        string fallbackError) =>
+        success
+            ? PersistenceSaveResult.Succeeded()
+            : PersistenceSaveResult.Failed(error ?? fallbackError);
 
     private void TryUpdateRecentBackup()
     {
-        var service = _fullBackupService;
-        if (service is null || !service.UserBackupExists)
+        var result = _backupCoordinator?.TryUpdateRecentBackup(RecentBackupInterval);
+        if (result is null)
             return;
-
-        var preparationIssues = PrepareDataForBackup(includeRunRecoveryHistory: true);
-        if (preparationIssues.Count > 0)
-            return;
-
-        if (_fileService is not null)
-            service.UpdateNotesDirectory(_fileService.NotesDirectory);
-        var result = service.CreateRecentBackupIfDue(RecentBackupInterval);
         if ((result.Status is FullBackupStatus.Created or FullBackupStatus.Skipped) &&
             string.IsNullOrWhiteSpace(result.Warning))
         {
@@ -777,7 +663,7 @@ public partial class App : Application
             !_miniPadWindow.TryFlushPendingContent(out var recoveryError))
         {
             e.Cancel = true;
-            CancelRequestedUserBackupRestore();
+            CancelRequestedBackupRestore();
             var message = recoveryError ?? "MiniPad recovery data could not be saved.";
             if (message == _lastShutdownWarning)
                 return;
@@ -794,7 +680,7 @@ public partial class App : Application
         if (_scratchpadWindow is not null && !_scratchpadWindow.TryFlushPendingContent(out var error))
         {
             e.Cancel = true;
-            CancelRequestedUserBackupRestore();
+            CancelRequestedBackupRestore();
             var message = error ?? "Scratchpad content could not be saved before shutdown.";
             if (message == _lastShutdownWarning)
                 return;
@@ -812,7 +698,7 @@ public partial class App : Application
         if (toolSaveFailures.Count > 0)
         {
             e.Cancel = true;
-            CancelRequestedUserBackupRestore();
+            CancelRequestedBackupRestore();
             var message = string.Join(
                 "\n",
                 toolSaveFailures.Select(failure =>
@@ -836,20 +722,14 @@ public partial class App : Application
             return;
         }
 
-        if (_restoreUserBackupOnShutdown)
+        if (_backupCoordinator?.HasRequestedRestore == true)
         {
-            if (_fileService is not null)
-                _fullBackupService?.UpdateNotesDirectory(_fileService.NotesDirectory);
-            var protectionResult = _fullBackupService?.CreateBeforeRestoreBackup()
-                ?? new FullBackupResult(
-                    FullBackupStatus.Failed,
-                    FullBackupType.BeforeRestore,
-                    null,
-                    "Backups are not available.");
+            var preparation = _backupCoordinator.PrepareRequestedRestore();
+            var protectionResult = preparation.ProtectionResult;
             if (protectionResult.Status is not (FullBackupStatus.Created or FullBackupStatus.Skipped))
             {
                 e.Cancel = true;
-                CancelRequestedUserBackupRestore();
+                CancelRequestedBackupRestore();
                 AppDialog.Show(
                     $"Noted did not start the restore because the current data could not be protected first.\n\n{protectionResult.Message}",
                     "Noted - Restore Not Started",
@@ -867,24 +747,11 @@ public partial class App : Application
                     MessageBoxImage.Warning);
             }
 
-            var restoreResult = _fullBackupService is null
-                ? new FullBackupResult(
-                    FullBackupStatus.Failed,
-                    FullBackupType.User,
-                    null,
-                    "Backups are not available.")
-                : _importBackupPathOnShutdown is not null &&
-                  _importBackupIdOnShutdown.HasValue &&
-                  _importBackupVerificationTokenOnShutdown is not null
-                    ? _fullBackupService.ScheduleBackupImportRestore(
-                        _importBackupPathOnShutdown,
-                        _importBackupIdOnShutdown.Value,
-                        _importBackupVerificationTokenOnShutdown)
-                    : _fullBackupService.ScheduleUserBackupRestore();
+            var restoreResult = preparation.ScheduleResult!;
             if (restoreResult.Status != FullBackupStatus.RestoreScheduled)
             {
                 e.Cancel = true;
-                CancelRequestedUserBackupRestore();
+                CancelRequestedBackupRestore();
                 AppDialog.Show(
                     restoreResult.Message,
                     "Noted - Restore Not Started",
@@ -894,7 +761,7 @@ public partial class App : Application
             }
         }
 
-        if (!_restoreUserBackupOnShutdown)
+        if (_backupCoordinator?.HasRequestedRestore != true)
             TryUpdateRecentBackup();
     }
 
@@ -944,7 +811,7 @@ public partial class App : Application
     private void CancelCloseForWindowStateFailure(CancelEventArgs e, string? message)
     {
         e.Cancel = true;
-        CancelRequestedUserBackupRestore();
+        CancelRequestedBackupRestore();
         if (message is null)
             return;
         AppDialog.Show(
@@ -954,21 +821,10 @@ public partial class App : Application
             MessageBoxImage.Warning);
     }
 
-    private void CancelRequestedUserBackupRestore()
+    private void CancelRequestedBackupRestore()
     {
         CancelPreparedWindowClose();
-        _restoreUserBackupOnShutdown = false;
-        _importBackupPathOnShutdown = null;
-        _importBackupIdOnShutdown = null;
-        _importBackupVerificationTokenOnShutdown = null;
-        try
-        {
-            _fullBackupService?.CancelPendingUserBackupRestore();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            ExceptionDiagnostics.Record(ex);
-        }
+        _backupCoordinator?.CancelRequestedRestore();
     }
 
     // Expected settings failures are recoverable after actionable feedback.
@@ -1103,4 +959,3 @@ public partial class App : Application
         }
     }
 }
-
