@@ -91,6 +91,7 @@ internal sealed partial class FullBackupService
     private readonly BackupContentCatalog _contentCatalog;
     private readonly BackupArchiveReader _archiveReader;
     private readonly BackupArchiveWriter _archiveWriter;
+    private readonly BackupRestore _backupRestore;
     private readonly TimeProvider _clock;
     private bool _backupCreatedThisRun;
 
@@ -120,6 +121,11 @@ internal sealed partial class FullBackupService
             _backupDirectory,
             _clock,
             _archiveReader);
+        _backupRestore = new BackupRestore(
+            _backupDirectory,
+            _archiveReader,
+            GetRestoreDestination,
+            DeleteImportDirectory);
         TryCleanupFinishedImportFolders();
     }
 
@@ -219,112 +225,8 @@ internal sealed partial class FullBackupService
         }
     }
 
-    internal FullBackupResult ApplyPendingUserBackupRestore()
-    {
-        var requestPath = GetRestoreRequestPath();
-        var requestResult = JsonFileStore.Read<FullBackupRestoreRequest>(
-            requestPath,
-            BackupFormat.JsonOptions);
-        if (requestResult.Status == JsonFileReadStatus.Missing)
-        {
-            return new FullBackupResult(
-                FullBackupStatus.Skipped,
-                null,
-                null,
-                "No backup restore is pending.");
-        }
-
-        try
-        {
-            if (!requestResult.Success || requestResult.Value is null)
-            {
-                throw new FileVerificationException(
-                    "The pending backup restore request is invalid.",
-                    requestResult.Error);
-            }
-
-            var request = requestResult.Value;
-            if (request.SchemaVersion != BackupSchemaVersion ||
-                request.BackupId == Guid.Empty)
-            {
-                throw new FileVerificationException(
-                    "The pending backup restore request is not supported.");
-            }
-
-            if (request.ImportId == Guid.Empty)
-            {
-                throw new FileVerificationException(
-                    "The pending backup import ID is invalid.");
-            }
-
-            var restorePath = request.ImportId.HasValue
-                ? GetPendingImportPath(request.ImportId.Value)
-                : GetBackupPath(FullBackupType.User);
-            var restoreBackup = _archiveReader.ReadBackup(restorePath, FullBackupType.User);
-            if (restoreBackup.Status != BackupReadStatus.Valid)
-            {
-                throw new FileVerificationException(
-                    $"The backup cannot be restored: {restoreBackup.Error ?? "the backup is missing"}.");
-            }
-
-            var manifest = restoreBackup.Manifest!;
-            if (manifest.BackupId != request.BackupId)
-            {
-                throw new FileVerificationException(
-                    "The backup changed after the restore was requested. Nothing was restored.");
-            }
-
-            var filesDirectory = Path.Combine(restorePath, FilesDirectoryName);
-            foreach (var entry in manifest.Entries
-                         .OrderBy(entry => entry.LogicalPath, StringComparer.OrdinalIgnoreCase))
-            {
-                var sourcePath = GetContainedPath(filesDirectory, entry.LogicalPath);
-                var destinationPath = GetRestoreDestination(entry.LogicalPath, manifest);
-                var bytes = BackupArchiveReader.ReadFileBytes(sourcePath);
-                BackupArchiveReader.VerifyFileBytes(bytes, entry.Length, entry.Sha256, entry.LogicalPath);
-                FileWriter.WriteAllBytes(destinationPath, bytes);
-                var restoredBytes = BackupArchiveReader.ReadFileBytes(destinationPath);
-                BackupArchiveReader.VerifyFileBytes(restoredBytes, entry.Length, entry.Sha256, entry.LogicalPath);
-            }
-
-            FileWriter.DeleteIfExists(requestPath);
-            string? warning = null;
-            if (request.ImportId.HasValue)
-            {
-                try
-                {
-                    var restoredImportPath = Path.Combine(
-                        _backupDirectory,
-                        $".restored-import-{request.ImportId.Value:N}");
-                    Directory.Move(restorePath, restoredImportPath);
-                    DeleteImportDirectory(restoredImportPath);
-                }
-                catch (Exception ex) when (IsExpectedBackupException(ex))
-                {
-                    ExceptionDiagnostics.Record(ex);
-                    warning = "The imported backup was restored, but its temporary local copy could not be removed.";
-                }
-            }
-
-            return new FullBackupResult(
-                FullBackupStatus.Restored,
-                FullBackupType.User,
-                restorePath,
-                request.ImportId.HasValue
-                    ? $"Restored {manifest.Entries.Count} files from the imported backup. Your user backup was not changed."
-                    : $"Restored {manifest.Entries.Count} files from your verified backup. The backup was not changed.",
-                warning);
-        }
-        catch (Exception ex) when (IsExpectedBackupException(ex))
-        {
-            ExceptionDiagnostics.Record(ex);
-            return new FullBackupResult(
-                FullBackupStatus.Failed,
-                FullBackupType.User,
-                null,
-                "The backup restore did not finish. The backup and restore request were left unchanged so Noted can retry.");
-        }
-    }
+    internal FullBackupResult ApplyPendingUserBackupRestore() =>
+        _backupRestore.ApplyPendingUserBackupRestore();
 
     internal void CancelPendingUserBackupRestore()
     {
