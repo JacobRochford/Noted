@@ -3,46 +3,13 @@ using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Noted.Models;
 
 namespace Noted.Services;
 
-internal sealed class NewNoteModeJsonConverter : JsonConverter<NewNoteMode?> {
-    public override bool HandleNull => true;
-
-    public override NewNoteMode? Read(
-            ref Utf8JsonReader reader,
-            Type typeToConvert,
-            JsonSerializerOptions options) {
-        if (reader.TokenType == JsonTokenType.Number
-                && reader.TryGetInt32(out var value)
-                && Enum.IsDefined(typeof(NewNoteMode), value)) {
-            return (NewNoteMode)value;
-        }
-
-        if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray) {
-            using var ignoredValue = JsonDocument.ParseValue(ref reader);
-        }
-
-        return NewNoteMode.Prompt;
-    }
-
-    public override void Write(
-            Utf8JsonWriter writer,
-            NewNoteMode? value,
-            JsonSerializerOptions options) {
-        if (value.HasValue) {
-            writer.WriteNumberValue((int)value.Value);
-        } else {
-            writer.WriteNullValue();
-        }
-    }
-}
-
 /// Manages application settings stored in JSON format in the local app data folder.
 public sealed class AppSettingsService : IAppSettingsService {
-    private const int CurrentSettingsSchemaVersion = 1;
+    private const int CurrentSettingsSchemaVersion = AppSettingsDocument.CurrentSchemaVersion;
     private const int DefaultMaxSettingsHistoryFiles = 10;
     private static readonly TimeSpan s_defaultSettingsHistoryInterval = TimeSpan.FromHours(6);
     private static readonly JsonSerializerOptions s_settingsJsonOptions = new() { WriteIndented = true };
@@ -52,7 +19,7 @@ public sealed class AppSettingsService : IAppSettingsService {
     private readonly TimeProvider _timeProvider;
     private readonly TimeSpan _settingsHistoryInterval;
     private readonly int _maxSettingsHistoryFiles;
-    private AppSettings? _cachedSettings;
+    private AppSettingsDocument? _cachedSettings;
     private bool _writesBlocked;
     private string? _lastRaisedWarning;
 
@@ -349,16 +316,16 @@ public sealed class AppSettingsService : IAppSettingsService {
         });
     }
 
-    private T LoadSetting<T>(Func<AppSettings, T> selector) {
+    private T LoadSetting<T>(Func<AppSettingsDocument, T> selector) {
         return selector(LoadSettings());
     }
 
-    private void SaveSetting(Func<AppSettings, AppSettings> updater) {
+    private void SaveSetting(Func<AppSettingsDocument, AppSettingsDocument> updater) {
         var settings = updater(LoadSettings());
         SaveSettings(settings);
     }
 
-    private AppSettings LoadSettings() {
+    private AppSettingsDocument LoadSettings() {
         if (_cachedSettings is not null)
             return _cachedSettings;
 
@@ -401,7 +368,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         var selectedRecoveryFile = SelectRecoveryFile(validRecoveryFiles);
         if (selectedRecoveryFile is null) {
             if (settingsFile.Status == JsonFileReadStatus.Missing && !recoveryFilesFound) {
-                _cachedSettings = NormalizeSettings(new AppSettings());
+                _cachedSettings = NormalizeSettings(new AppSettingsDocument());
                 ValidateSettings(_cachedSettings);
                 return _cachedSettings;
             }
@@ -415,7 +382,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         return RecoverSettings(settingsFile, selectedRecoveryFile.SettingsFile);
     }
 
-    private AppSettings RecoverSettings(
+    private AppSettingsDocument RecoverSettings(
             SettingsReadResult settingsFile,
             SettingsReadResult selectedRecoveryFile) {
         var damagedPath = settingsFile.Status == JsonFileReadStatus.Corrupt
@@ -528,7 +495,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         return newestFiles[0];
     }
 
-    private void SaveSettings(AppSettings settings) {
+    private void SaveSettings(AppSettingsDocument settings) {
         if (_writesBlocked) {
             throw new SettingsPersistenceException(SettingsPersistenceMessages.WritesBlocked);
         }
@@ -679,7 +646,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         }
     }
 
-    private static AppSettings NormalizeSettings(AppSettings settings) {
+    private static AppSettingsDocument NormalizeSettings(AppSettingsDocument settings) {
         var mode = settings.NewNoteMode ?? NewNoteMode.Prompt;
 
         return settings with {
@@ -718,7 +685,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         };
     }
 
-    private static void ValidateSettings(AppSettings settings) {
+    private static void ValidateSettings(AppSettingsDocument settings) {
         if (settings.SchemaVersion != CurrentSettingsSchemaVersion)
             throw new JsonException("The settings schema version is not supported.");
         if (settings.Revision < 0)
@@ -737,7 +704,7 @@ public sealed class AppSettingsService : IAppSettingsService {
     private static SettingsReadResult ReadSettingsFile(string path) {
         try {
             var json = File.ReadAllText(path, Encoding.UTF8);
-            var settings = JsonSerializer.Deserialize<AppSettings>(json, s_settingsJsonOptions)
+            var settings = JsonSerializer.Deserialize<AppSettingsDocument>(json, s_settingsJsonOptions)
                 ?? throw new JsonException("The settings document did not contain a JSON object.");
             if (settings.SchemaVersion > CurrentSettingsSchemaVersion) {
                 return new SettingsReadResult(
@@ -769,10 +736,10 @@ public sealed class AppSettingsService : IAppSettingsService {
         }
     }
 
-    private static string SerializeSettings(AppSettings settings) =>
+    private static string SerializeSettings(AppSettingsDocument settings) =>
         JsonSerializer.Serialize(settings, s_settingsJsonOptions);
 
-    private static bool SettingsContentEquals(AppSettings left, AppSettings right) =>
+    private static bool SettingsContentEquals(AppSettingsDocument left, AppSettingsDocument right) =>
         string.Equals(
             SerializeSettings(left with { Revision = 0, SavedUtc = null }),
             SerializeSettings(right with { Revision = 0, SavedUtc = null }),
@@ -805,7 +772,7 @@ public sealed class AppSettingsService : IAppSettingsService {
     private sealed record SettingsReadResult(
         string Path,
         JsonFileReadStatus Status,
-        AppSettings? Settings,
+        AppSettingsDocument? Settings,
         string? SerializedJson,
         Exception? Error)
     {
@@ -821,44 +788,4 @@ public sealed class AppSettingsService : IAppSettingsService {
         RecoveryFileInfo FileInfo,
         SettingsReadResult SettingsFile);
 
-    /// Represents the application settings stored in JSON.
-    private sealed record AppSettings {
-        public int SchemaVersion { get; init; } = CurrentSettingsSchemaVersion;
-        public long Revision { get; init; }
-        public DateTimeOffset? SavedUtc { get; init; }
-        public string? NotesDirectory { get; init; }
-        public NoteTimestampPlacement TimestampPlacement { get; init; } = NoteTimestampPlacement.None;
-        public int TimestampLine { get; init; } = 1;
-        [JsonConverter(typeof(NewNoteModeJsonConverter))]
-        public NewNoteMode? NewNoteMode { get; init; }
-        public bool ShowModifiedSubtitle { get; init; } = true;
-        public string? CustomHeader { get; init; }
-        public List<string>? PinnedNotes { get; init; }
-        [JsonPropertyName("HotkeyModifiers")]
-        public string NotesHotkeyModifiers { get; init; } = "Ctrl+Shift";
-        [JsonPropertyName("HotkeyKey")]
-        public string NotesHotkeyKey { get; init; } = "Space";
-        public string ChecklistHotkeyModifiers { get; init; } = "Alt";
-        public string ChecklistHotkeyKey { get; init; } = "C";
-        public string DictionaryHotkeyModifiers { get; init; } = "Alt";
-        public string DictionaryHotkeyKey { get; init; } = "D";
-        public string[]? AlwaysVisibleWindows { get; init; }
-        public bool GhostModeEnabled { get; init; } = false;
-        public double GhostModeOpacity { get; init; } = 0.25;
-        public double DefaultOpacity { get; init; } = 0.88;
-        public AppThemeMode AppThemeMode { get; init; } = AppThemeMode.System;
-        public string AccentColor { get; init; } = AppTheme.DefaultAccentColor;
-        public FolderNavigationMode FolderNavigationMode { get; init; } = FolderNavigationMode.DrillDown;
-        public ChecklistWindowState? ChecklistWindowState { get; init; }
-        public DictionaryWindowState? DictionaryWindowState { get; init; }
-        [JsonPropertyName("HideButtonClosesAll")]
-        public bool MainHideButtonHidesAll { get; init; } = true;
-        public bool ConfirmNoteDeletion { get; init; } = true;
-        public ScratchpadWindowState? ScratchpadWindowState { get; init; }
-        public NoteEditorWindowState? NoteEditorWindowState { get; init; }
-        public MiniPadWindowState? MiniPadWindowState { get; init; }
-        [JsonPropertyName("RestoreEditorSession")]
-        public bool ReopenEditorTabsOnStartup { get; init; } = true;
-        public string? PreferredDisplayDeviceName { get; init; }
-    }
 }
