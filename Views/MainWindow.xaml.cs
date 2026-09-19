@@ -38,13 +38,7 @@ public partial class MainWindow : Window {
     private readonly Action<AppThemeMode, string> _applyAppTheme;
     private readonly MainWindowViewModel _viewModel;
     private readonly CanvasEdgeResizer _notesPanelResizer;
-    private GlobalHotkeysService? _globalHotkeysService;
-    private HotkeyRegistration? _notesHotkeyRegistration;
-    private HotkeyRegistration? _additionalNotesHotkeyRegistration;
-    private HotkeyRegistration? _checklistHotkeyRegistration;
-    private HotkeyRegistration? _additionalChecklistHotkeyRegistration;
-    private HotkeyRegistration? _dictionaryHotkeyRegistration;
-    private HotkeyRegistration? _additionalDictionaryHotkeyRegistration;
+    private readonly HotkeyConfiguration _hotkeys;
     private TrayIcon? _trayIcon;
 
     // UI state
@@ -53,8 +47,6 @@ public partial class MainWindow : Window {
     private bool _mainHideButtonHidesAll;
     private string? _preferredDisplayDeviceName;
     private bool _cleanupCompleted;
-    private bool _hotkeyInitializationInProgress;
-    private bool _hotkeysInitialized;
     private HotkeyFeature? _editingHotkeyFeature;
     private bool _isNoActivateTemporarilyStripped;
     private bool _isCommittingRename;
@@ -78,14 +70,6 @@ public partial class MainWindow : Window {
     private double _dragInitialTop;
     private const double DragThreshold = 5.0;
 
-    private static readonly string[] s_fallbackHotkeyModifiers =
-        { "Alt+Shift", "Ctrl+Alt", "Win+Alt", "Ctrl+Shift" };
-
-    private sealed record InitialHotkeyResult(
-        HotkeyRegistration? Registration,
-        bool UsedFallback,
-        string? Warning);
-
     private sealed record DisplayOption(string? DeviceName, string Label);
 
     private sealed record AppearanceOption(AppThemeMode Mode, string Label);
@@ -97,14 +81,6 @@ public partial class MainWindow : Window {
         new(AppThemeMode.Dark, "Dark"),
         new(AppThemeMode.Midnight, "Midnight blue")
     ];
-
-    private enum HotkeyFeature
-    {
-        Notes,
-        Checklist,
-        Dictionary
-    }
-
 
     internal MainWindow(
             IAppSettingsService settingsService,
@@ -127,6 +103,7 @@ public partial class MainWindow : Window {
         _notesPanelResizer = new CanvasEdgeResizer(NotesPanel, MainCanvas, margin: 8);
 
         _settingsService = settingsService;
+        _hotkeys = new HotkeyConfiguration(settingsService, () => new GlobalHotkeysService(this), GetHotkeyAction);
         _fileService = fileService;
         _noteEditor = noteEditor;
         _runOnStartupService = runOnStartupService;
@@ -314,189 +291,13 @@ public partial class MainWindow : Window {
 
     private void InitializeGlobalHotkeys()
     {
-        if (_cleanupCompleted
-            || _hotkeysInitialized
-            || _hotkeyInitializationInProgress)
-            return;
-
-        _hotkeyInitializationInProgress = true;
-        var warnings = new List<string>();
-
-        try
-        {
-            _globalHotkeysService ??= new GlobalHotkeysService(this);
-
-            if (_notesHotkeyRegistration is null)
-            {
-                var (modifiers, key) = _settingsService.LoadNotesHotkey();
-                var result = RegisterWithFallback(
-                    "Notes",
-                    modifiers,
-                    key,
-                    "Ctrl+Shift",
-                    "Space",
-                    OnNotesHotkeyPressed,
-                    _settingsService.SaveNotesHotkey);
-                _notesHotkeyRegistration = result.Registration;
-                if (result.Warning is not null)
-                    warnings.Add(result.Warning);
-            }
-
-            if (_checklistHotkeyRegistration is null)
-            {
-                var (modifiers, key) = _settingsService.LoadChecklistHotkey();
-                var result = RegisterWithFallback(
-                    "Checklist",
-                    modifiers,
-                    key,
-                    "Alt",
-                    "C",
-                    OnChecklistHotkeyPressed,
-                    _settingsService.SaveChecklistHotkey);
-                _checklistHotkeyRegistration = result.Registration;
-                if (result.Warning is not null)
-                    warnings.Add(result.Warning);
-            }
-
-            if (_dictionaryHotkeyRegistration is null)
-            {
-                var (modifiers, key) = _settingsService.LoadDictionaryHotkey();
-                var result = RegisterWithFallback(
-                    "Dictionary",
-                    modifiers,
-                    key,
-                    "Alt",
-                    "D",
-                    OnDictionaryHotkeyPressed,
-                    _settingsService.SaveDictionaryHotkey);
-                _dictionaryHotkeyRegistration = result.Registration;
-                if (result.Warning is not null)
-                    warnings.Add(result.Warning);
-            }
-
-            _hotkeysInitialized = true;
-            SyncHotkeyControls(restoreEditorToActive: true);
-        }
-        catch (SettingsPersistenceException exception)
-        {
-            ExceptionDiagnostics.Record(exception);
-            warnings.Add(
-                $"Hotkey initialization stopped before all features were processed: {exception.Message}\n" +
-                "Registrations already owned by Noted were retained; initialization may be retried without replacing the service.");
-        }
-        finally
-        {
-            _hotkeyInitializationInProgress = false;
-        }
-
+        var warnings = _hotkeys.Initialize();
+        SyncHotkeyControls(restoreEditorToActive: true);
         if (warnings.Count > 0)
-        {
-            AppDialog.Show(
-                string.Join("\n\n", warnings),
-                "Hotkey Registration Notice",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-        }
+            AppDialog.Show(string.Join("\n\n", warnings), "Hotkey Registration Notice",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
-    private InitialHotkeyResult RegisterWithFallback(
-        string featureName,
-        string requestedModifiers,
-        string requestedKey,
-        string defaultFallbackModifiers,
-        string defaultFallbackKey,
-        Action callback,
-        Action<string, string> saveHotkey)
-    {
-        if (_globalHotkeysService is null)
-        {
-            return new InitialHotkeyResult(
-                null,
-                false,
-                $"{featureName} hotkey could not be registered because the hotkey service is unavailable.");
-        }
-
-        var hotkeyOptions = new List<(string Modifiers, string Key)>
-        {
-            (requestedModifiers, requestedKey),
-            (defaultFallbackModifiers, defaultFallbackKey),
-            (s_fallbackHotkeyModifiers[0], requestedKey),
-            (s_fallbackHotkeyModifiers[1], requestedKey),
-            (s_fallbackHotkeyModifiers[2], requestedKey),
-            (s_fallbackHotkeyModifiers[3], requestedKey),
-            (s_fallbackHotkeyModifiers[0], defaultFallbackKey),
-            (s_fallbackHotkeyModifiers[1], defaultFallbackKey),
-            (s_fallbackHotkeyModifiers[2], defaultFallbackKey),
-            (s_fallbackHotkeyModifiers[3], defaultFallbackKey)
-        };
-
-        var attemptedCombinations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var failures = new List<string>();
-        var requestedValidation = _globalHotkeysService.Validate(
-            requestedModifiers,
-            requestedKey);
-        var requestedDisplay = requestedValidation.Combination
-            ?? $"{requestedModifiers}+{requestedKey}";
-
-        for (var index = 0; index < hotkeyOptions.Count; index++)
-        {
-            var option = hotkeyOptions[index];
-            var validation = _globalHotkeysService.Validate(option.Modifiers, option.Key);
-            if (!validation.Success
-                || validation.Modifiers is null
-                || validation.Key is null
-                || validation.Combination is null)
-            {
-                failures.Add(validation.Description);
-                continue;
-            }
-
-            if (!attemptedCombinations.Add(validation.Combination))
-                continue;
-
-            var registrationResult = _globalHotkeysService.Register(
-                featureName,
-                validation.Modifiers,
-                validation.Key,
-                callback);
-            if (!registrationResult.Success || registrationResult.Registration is null)
-            {
-                failures.Add(registrationResult.Description);
-                continue;
-            }
-
-            var registration = registrationResult.Registration;
-            if (index == 0)
-                return new InitialHotkeyResult(registration, false, null);
-
-            string? persistenceWarning = null;
-            try
-            {
-                saveHotkey(registration.Modifiers, registration.Key);
-            }
-            catch (SettingsPersistenceException exception)
-            {
-                ExceptionDiagnostics.Record(exception);
-                persistenceWarning =
-                    $" The fallback is active for this session, but saving it failed: {exception.Message}";
-            }
-
-            return new InitialHotkeyResult(
-                registration,
-                true,
-                $"{featureName} hotkey {requestedDisplay} was unavailable. " +
-                $"Active fallback: {registration.Combination}.{persistenceWarning}");
-        }
-
-        var failureSummary = string.Join(
-            " ",
-            failures.Where(failure => !string.IsNullOrWhiteSpace(failure)).Distinct());
-        return new InitialHotkeyResult(
-            null,
-            false,
-            $"{featureName} hotkey {requestedModifiers}+{requestedKey} could not be registered. " +
-            $"No fallback is active. {failureSummary}".TrimEnd());
-    }
     private void OnNotesHotkeyPressed()
     {
         WindowManager.ToggleNotedWindows();
@@ -738,13 +539,13 @@ public partial class MainWindow : Window {
             return;
 
         _editingHotkeyFeature = feature;
-        HotkeyEditorTitle.Text = $"{GetHotkeyFeatureName(feature)} hotkey";
+        HotkeyEditorTitle.Text = $"{HotkeyConfiguration.GetHotkeyFeatureName(feature)} hotkey";
 
-        var registration = GetHotkeyRegistration(feature);
-        var additionalRegistration = GetAdditionalHotkeyRegistration(feature);
+        var registration = _hotkeys.GetHotkeyRegistration(feature);
+        var additionalRegistration = _hotkeys.GetAdditionalHotkeyRegistration(feature);
         var (modifiers, key) = registration is not null && additionalRegistration is null
             ? (registration.Modifiers, registration.Key)
-            : LoadHotkey(feature);
+            : _hotkeys.LoadHotkey(feature);
 
         SetHotkeyEditor(modifiers, key);
         HotkeyEditorPopup.PlacementTarget = button;
@@ -771,23 +572,23 @@ public partial class MainWindow : Window {
     {
         if (restoreEditorToActive && _editingHotkeyFeature is { } feature)
         {
-            var registration = GetHotkeyRegistration(feature);
-            if (registration is not null && GetAdditionalHotkeyRegistration(feature) is null)
+            var registration = _hotkeys.GetHotkeyRegistration(feature);
+            if (registration is not null && _hotkeys.GetAdditionalHotkeyRegistration(feature) is null)
                 SetHotkeyEditor(registration.Modifiers, registration.Key);
         }
 
         UpdateCurrentHotkeyDisplay(
             CurrentNotesHotkeyDisplay,
-            _notesHotkeyRegistration,
-            _additionalNotesHotkeyRegistration);
+            _hotkeys.GetHotkeyRegistration(HotkeyFeature.Notes),
+            _hotkeys.GetAdditionalHotkeyRegistration(HotkeyFeature.Notes));
         UpdateCurrentHotkeyDisplay(
             CurrentChecklistHotkeyDisplay,
-            _checklistHotkeyRegistration,
-            _additionalChecklistHotkeyRegistration);
+            _hotkeys.GetHotkeyRegistration(HotkeyFeature.Checklist),
+            _hotkeys.GetAdditionalHotkeyRegistration(HotkeyFeature.Checklist));
         UpdateCurrentHotkeyDisplay(
             CurrentDictionaryHotkeyDisplay,
-            _dictionaryHotkeyRegistration,
-            _additionalDictionaryHotkeyRegistration);
+            _hotkeys.GetHotkeyRegistration(HotkeyFeature.Dictionary),
+            _hotkeys.GetAdditionalHotkeyRegistration(HotkeyFeature.Dictionary));
     }
 
     private static void UpdateCurrentHotkeyDisplay(
@@ -836,7 +637,7 @@ public partial class MainWindow : Window {
         if (_editingHotkeyFeature is not { } feature)
             return;
 
-        var (modifiers, key) = GetDefaultHotkey(feature);
+        var (modifiers, key) = HotkeyConfiguration.GetDefaultHotkey(feature);
         SetHotkeyEditor(modifiers, key);
     }
 
@@ -852,207 +653,35 @@ public partial class MainWindow : Window {
 
     private void ApplyHotkeyButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_editingHotkeyFeature is not { } feature)
-            return;
-
-        var selectedModifiers = GetSelectedHotkeyModifiers();
-        var selectedKey = HotkeyKeyCombo.SelectedItem as string;
-        var builtHotkey = HotkeyConstants.BuildHotkey(selectedModifiers, selectedKey);
-
-        if (selectedModifiers.Count == 0
-            || string.IsNullOrWhiteSpace(selectedKey)
-            || string.IsNullOrEmpty(builtHotkey))
-        {
-            AppDialog.Show(
-                "Please select at least one modifier and a key.",
-                "Invalid Hotkey Selection",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        var featureName = GetHotkeyFeatureName(feature);
-        if (_globalHotkeysService is null)
-        {
-            AppDialog.Show(
-                "The global hotkey service is unavailable. Restart Noted and try again.",
-                "Hotkey Update Failed",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            SyncHotkeyControls(restoreEditorToActive: false);
-            return;
-        }
-
-        var validation = _globalHotkeysService.Validate(
-            string.Join("+", selectedModifiers),
-            selectedKey);
-        if (!validation.Success || validation.Modifiers is null || validation.Key is null)
-        {
-            SyncHotkeyControls(restoreEditorToActive: true);
-            AppDialog.Show(
-                validation.Description,
-                "Invalid Hotkey Selection",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        if (GetAdditionalHotkeyRegistration(feature) is not null)
-        {
-            SyncHotkeyControls(restoreEditorToActive: false);
-            AppDialog.Show(
-                $"Multiple {featureName} hotkeys may still be active after an earlier rollback failure. " +
-                "Restart Noted before attempting another replacement.",
-                "Hotkey State Is Ambiguous",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        var replacement = _globalHotkeysService.Replace(
-            featureName,
-            GetHotkeyRegistration(feature),
-            validation.Modifiers,
-            validation.Key,
-            GetHotkeyAction(feature));
-
-        SetHotkeyRegistrations(
-            feature,
-            replacement.ActiveRegistration,
-            replacement.AdditionalActiveRegistration);
-
-        if (!replacement.Success)
-        {
-            SyncHotkeyControls(
-                restoreEditorToActive: !replacement.HasDualActiveRegistrations
-                    && replacement.ActiveRegistration is not null);
-            AppDialog.Show(
-                replacement.Description,
-                replacement.HasDualActiveRegistrations
-                    ? "Multiple Hotkeys May Be Active"
-                    : "Hotkey Update Failed",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        SyncHotkeyControls(restoreEditorToActive: true);
-        if (replacement.NoChange || replacement.ActiveRegistration is null)
-        {
+        if (_editingHotkeyFeature is not { } feature) return;
+        var result = _hotkeys.Change(feature, GetSelectedHotkeyModifiers(), HotkeyKeyCombo.SelectedItem as string);
+        var restoreEditor = result.Status is HotkeyChangeStatus.Invalid or HotkeyChangeStatus.Unchanged
+            or HotkeyChangeStatus.Saved or HotkeyChangeStatus.SaveFailed
+            || result.Status == HotkeyChangeStatus.Failed
+                && _hotkeys.GetAdditionalHotkeyRegistration(feature) is null
+                && _hotkeys.GetHotkeyRegistration(feature) is not null;
+        SyncHotkeyControls(restoreEditor);
+        if (result.Status is HotkeyChangeStatus.Saved or HotkeyChangeStatus.Unchanged)
             HotkeyEditorPopup.IsOpen = false;
-            return;
-        }
-
-        try
+        if (result.Status == HotkeyChangeStatus.Unchanged) return;
+        var title = result.Status switch
         {
-            SaveHotkey(
-                feature,
-                replacement.ActiveRegistration.Modifiers,
-                replacement.ActiveRegistration.Key);
-        }
-        catch (SettingsPersistenceException exception)
-        {
-            ExceptionDiagnostics.Record(exception);
-            AppDialog.Show(
-                $"The hotkey is active as {replacement.ActiveRegistration.Combination}, " +
-                $"but the setting could not be saved: {exception.Message}",
-                "Hotkey Active but Not Saved",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return;
-        }
-
-        HotkeyEditorPopup.IsOpen = false;
-        AppDialog.Show(
-            $"{featureName} hotkey updated to: {replacement.ActiveRegistration.Combination}",
-            "Hotkey Updated",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+            HotkeyChangeStatus.InvalidSelection or HotkeyChangeStatus.Invalid => "Invalid Hotkey Selection",
+            HotkeyChangeStatus.Ambiguous => "Hotkey State Is Ambiguous",
+            HotkeyChangeStatus.SaveFailed => "Hotkey Active but Not Saved",
+            HotkeyChangeStatus.Saved => "Hotkey Updated",
+            HotkeyChangeStatus.Failed when _hotkeys.GetAdditionalHotkeyRegistration(feature) is not null => "Multiple Hotkeys May Be Active",
+            _ => "Hotkey Update Failed"
+        };
+        AppDialog.Show(result.Description, title, MessageBoxButton.OK,
+            result.Status == HotkeyChangeStatus.Saved ? MessageBoxImage.Information : MessageBoxImage.Warning);
     }
-
-    private HotkeyRegistration? GetHotkeyRegistration(HotkeyFeature feature) => feature switch
-    {
-        HotkeyFeature.Notes => _notesHotkeyRegistration,
-        HotkeyFeature.Checklist => _checklistHotkeyRegistration,
-        HotkeyFeature.Dictionary => _dictionaryHotkeyRegistration,
-        _ => null
-    };
-
-    private HotkeyRegistration? GetAdditionalHotkeyRegistration(HotkeyFeature feature) => feature switch
-    {
-        HotkeyFeature.Notes => _additionalNotesHotkeyRegistration,
-        HotkeyFeature.Checklist => _additionalChecklistHotkeyRegistration,
-        HotkeyFeature.Dictionary => _additionalDictionaryHotkeyRegistration,
-        _ => null
-    };
-
-    private void SetHotkeyRegistrations(
-        HotkeyFeature feature,
-        HotkeyRegistration? registration,
-        HotkeyRegistration? additionalRegistration)
-    {
-        switch (feature)
-        {
-            case HotkeyFeature.Notes:
-                _notesHotkeyRegistration = registration;
-                _additionalNotesHotkeyRegistration = additionalRegistration;
-                break;
-            case HotkeyFeature.Checklist:
-                _checklistHotkeyRegistration = registration;
-                _additionalChecklistHotkeyRegistration = additionalRegistration;
-                break;
-            case HotkeyFeature.Dictionary:
-                _dictionaryHotkeyRegistration = registration;
-                _additionalDictionaryHotkeyRegistration = additionalRegistration;
-                break;
-        }
-    }
-
-    private (string Modifiers, string Key) LoadHotkey(HotkeyFeature feature) => feature switch
-    {
-        HotkeyFeature.Notes => _settingsService.LoadNotesHotkey(),
-        HotkeyFeature.Checklist => _settingsService.LoadChecklistHotkey(),
-        HotkeyFeature.Dictionary => _settingsService.LoadDictionaryHotkey(),
-        _ => GetDefaultHotkey(feature)
-    };
-
-    private void SaveHotkey(HotkeyFeature feature, string modifiers, string key)
-    {
-        switch (feature)
-        {
-            case HotkeyFeature.Notes:
-                _settingsService.SaveNotesHotkey(modifiers, key);
-                break;
-            case HotkeyFeature.Checklist:
-                _settingsService.SaveChecklistHotkey(modifiers, key);
-                break;
-            case HotkeyFeature.Dictionary:
-                _settingsService.SaveDictionaryHotkey(modifiers, key);
-                break;
-        }
-    }
-
-    private static (string Modifiers, string Key) GetDefaultHotkey(HotkeyFeature feature) => feature switch
-    {
-        HotkeyFeature.Notes => ("Ctrl+Shift", "Space"),
-        HotkeyFeature.Checklist => ("Alt", "C"),
-        HotkeyFeature.Dictionary => ("Alt", "D"),
-        _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
-    };
 
     private Action GetHotkeyAction(HotkeyFeature feature) => feature switch
     {
         HotkeyFeature.Notes => OnNotesHotkeyPressed,
         HotkeyFeature.Checklist => OnChecklistHotkeyPressed,
         HotkeyFeature.Dictionary => OnDictionaryHotkeyPressed,
-        _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
-    };
-
-    private static string GetHotkeyFeatureName(HotkeyFeature feature) => feature switch
-    {
-        HotkeyFeature.Notes => "Notes",
-        HotkeyFeature.Checklist => "Checklist",
-        HotkeyFeature.Dictionary => "Dictionary",
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
     };
 
@@ -2720,17 +2349,8 @@ public partial class MainWindow : Window {
 
         _cleanupCompleted = true;
 
-        // cleanup global hotkey
-        _globalHotkeysService?.Dispose();
-        _globalHotkeysService = null;
-        _notesHotkeyRegistration = null;
-        _additionalNotesHotkeyRegistration = null;
-        _checklistHotkeyRegistration = null;
-        _additionalChecklistHotkeyRegistration = null;
-        _dictionaryHotkeyRegistration = null;
-        _additionalDictionaryHotkeyRegistration = null;
+        _hotkeys.Dispose();
         _editingHotkeyFeature = null;
-        _hotkeysInitialized = false;
         _notesPanelResizer.Dispose();
 
         // cleanup tray icon

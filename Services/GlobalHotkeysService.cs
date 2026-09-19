@@ -44,7 +44,7 @@ internal sealed record HotkeyReplacementResult(
         ActiveRegistration is not null && AdditionalActiveRegistration is not null;
 }
 
-public sealed class GlobalHotkeysService : IDisposable
+public sealed class GlobalHotkeysService : IDisposable, IHotkeyRegistrationService
 {
     private const int WM_HOTKEY = 0x0312;
     private const uint MOD_ALT = 0x0001;
@@ -96,6 +96,10 @@ public sealed class GlobalHotkeysService : IDisposable
         _hwndSource.AddHook(HwndHook);
         _hookAttached = true;
     }
+
+    HotkeyValidationResult IHotkeyRegistrationService.Validate(string? modifiers, string? key) => Validate(modifiers, key);
+    HotkeyRegistrationResult IHotkeyRegistrationService.Register(string featureName, string modifiers, string key, Action callback) => Register(featureName, modifiers, key, callback);
+    HotkeyReplacementResult IHotkeyRegistrationService.Replace(string featureName, HotkeyRegistration? currentRegistration, string modifiers, string key, Action callback) => Replace(featureName, currentRegistration, modifiers, key, callback);
 
     internal HotkeyValidationResult Validate(string? modifiers, string? key)
     {
