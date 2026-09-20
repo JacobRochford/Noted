@@ -140,11 +140,19 @@ internal sealed class AppThemeManager : IDisposable
 
     private static void ApplyTitleBars(Color background, Color text, bool dark)
     {
-        var windows = Application.Current?.Windows;
-        if (windows is null)
+        var application = Application.Current;
+        if (application is null)
             return;
 
-        foreach (Window window in windows)
+        var dispatcher = application.Dispatcher;
+        if (!dispatcher.CheckAccess())
+        {
+            if (!dispatcher.HasShutdownStarted && !dispatcher.HasShutdownFinished)
+                _ = dispatcher.BeginInvoke(() => ApplyTitleBars(background, text, dark));
+            return;
+        }
+
+        foreach (Window window in application.Windows)
         {
             WindowInterop.SetTitleBarColors(
                 new WindowInteropHelper(window).Handle,
