@@ -16,8 +16,8 @@
     <Window.Resources>
         <local:WidthToActionButtonVisibilityConverter x:Key="WidthToActionButtonVisibilityConverter"/>
         <local:WidthToHeaderVisibilityConverter x:Key="WidthToHeaderVisibilityConverter"/>
-        <local:WidthBelowThresholdConverter x:Key="WidthBelow240" Threshold="240"/>
-        <local:WidthBelowThresholdConverter x:Key="WidthBelow320" Threshold="320"/>
+        <local:WidthBelowThresholdConverter x:Key="WidthBelow200" Threshold="200"/>
+        <local:WidthBelowThresholdConverter x:Key="WidthBelow250" Threshold="250"/>
         <local:WidthBelowThresholdConverter x:Key="WidthBelow340" Threshold="340"/>
         <local:WidthBelowThresholdConverter x:Key="WidthBelow400" Threshold="400"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
@@ -352,7 +352,7 @@
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource PrimaryHeaderButtonStyle}">
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
+                                    <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow250}}" Value="True">
                                         <Setter Property="Width" Value="28"/>
                                         <Setter Property="Padding" Value="0"/>
                                     </DataTrigger>
@@ -372,7 +372,7 @@
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
+                                            <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow250}}" Value="True">
                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                                 <Setter Property="Margin" Value="0"/>
                                             </DataTrigger>
@@ -410,7 +410,7 @@
                                     <Style.Triggers>
                                         <MultiDataTrigger>
                                             <MultiDataTrigger.Conditions>
-                                                <Condition Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow240}}" Value="True"/>
+                                                <Condition Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow200}}" Value="True"/>
                                                 <Condition Binding="{Binding ElementName=QuickNoteButton, Path=Visibility}" Value="Visible"/>
                                             </MultiDataTrigger.Conditions>
                                             <Setter Property="Visibility" Value="Collapsed"/>
@@ -462,7 +462,7 @@
                                     <Style.Triggers>
                                         <MultiDataTrigger>
                                             <MultiDataTrigger.Conditions>
-                                                <Condition Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow240}}" Value="True"/>
+                                                <Condition Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow200}}" Value="True"/>
                                                 <Condition Binding="{Binding ElementName=QuickNoteButton, Path=Visibility}" Value="Visible"/>
                                             </MultiDataTrigger.Conditions>
                                             <Setter Property="Visibility" Value="Visible"/>
