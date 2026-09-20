@@ -325,18 +325,6 @@
                         CornerRadius="7,0,0,7"
                         Padding="7">
                     <DockPanel>
-                        <Grid DockPanel.Dock="Top" Margin="5,0,0,7">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock VerticalAlignment="Center"
-                                       Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                       FontSize="10"
-                                       FontWeight="SemiBold"
-                                       Text="OPEN NOTES"/>
-                        </Grid>
-
                         <Button DockPanel.Dock="Bottom"
                                 Margin="0,5,0,0"
                                 Padding="8,6"
@@ -384,6 +372,7 @@
                                  Drop="OpenTabsList_Drop"
                                  HorizontalContentAlignment="Stretch"
                                  PreviewMouseDown="OpenTabsList_PreviewMouseDown"
+                                 PreviewMouseUp="OpenTabsList_PreviewMouseUp"
                                  PreviewMouseLeftButtonDown="OpenTabsList_PreviewMouseLeftButtonDown"
                                  PreviewMouseMove="OpenTabsList_PreviewMouseMove"
                                  PreviewKeyDown="OpenTabsList_PreviewKeyDown"

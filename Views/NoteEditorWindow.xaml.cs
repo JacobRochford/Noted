@@ -37,6 +37,7 @@ public partial class NoteEditorWindow : Window
     private readonly Dictionary<string, string> _documentTimeText =
         new(StringComparer.OrdinalIgnoreCase);
     private OpenNoteDocument? _draggedDocument;
+    private OpenNoteDocument? _middlePressedDocument;
     private Point _tabDragStart;
     private bool _isLoading;
     private bool _isLoadingSecondary;
@@ -1698,12 +1699,27 @@ public partial class NoteEditorWindow : Window
         if (e.ChangedButton != MouseButton.Middle)
             return;
 
-        var document = FindDocumentFromElement(e.OriginalSource as DependencyObject);
-        if (document is null)
+        _middlePressedDocument = FindDocumentFromElement(e.OriginalSource as DependencyObject);
+        if (_middlePressedDocument is null)
             return;
 
         e.Handled = true;
-        TryCloseDocument(document);
+    }
+
+    private void OpenTabsList_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Middle)
+            return;
+
+        var pressedDocument = _middlePressedDocument;
+        _middlePressedDocument = null;
+        if (pressedDocument is null)
+            return;
+
+        e.Handled = true;
+        var releasedDocument = FindDocumentFromElement(e.OriginalSource as DependencyObject);
+        if (ReferenceEquals(pressedDocument, releasedDocument))
+            TryCloseDocument(pressedDocument);
     }
 
     private void OpenTabsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
