@@ -31,6 +31,7 @@ public partial class ScratchpadWindow : OverlayWindow
     private int _findUserSelectionLength;
     private bool _hasPendingFindManualAnchor;
     private bool _applyingFindSelection;
+    private bool _findSelectionVisualInitialized;
     private bool _isApplyingFindReplacement;
     private bool _suppressFontSizeChange;
     private bool _isInitializing = true;
@@ -694,6 +695,13 @@ public partial class ScratchpadWindow : OverlayWindow
 
     private void OpenFind()
     {
+        var selectedText = Editor.Selection.Text;
+        if (!string.IsNullOrEmpty(selectedText) &&
+            selectedText.IndexOfAny(['\r', '\n']) < 0)
+        {
+            _viewModel.FindText = selectedText;
+        }
+
         _viewModel.IsFindBarVisible = true;
         _findSession.Reset();
         _findSnapshot = BuildSearchTextSnapshot();
@@ -701,7 +709,11 @@ public partial class ScratchpadWindow : OverlayWindow
         RefreshFindResults(revealCurrent: true);
         Dispatcher.BeginInvoke(
             DispatcherPriority.Render,
-            new Action(() => FindTextBox.Focus()));
+            new Action(() =>
+            {
+                FindTextBox.Focus();
+                FindTextBox.SelectAll();
+            }));
     }
 
     private void CloseFindButton_Click(object sender, RoutedEventArgs e) => CloseFind();
@@ -778,6 +790,12 @@ public partial class ScratchpadWindow : OverlayWindow
             return;
 
         var range = _findSnapshot.CreateRange(match);
+        var initializeSelectionVisual =
+            !_findSelectionVisualInitialized &&
+            !Editor.IsKeyboardFocusWithin;
+        if (initializeSelectionVisual)
+            Editor.Focus();
+
         _applyingFindSelection = true;
         try
         {
@@ -786,6 +804,12 @@ public partial class ScratchpadWindow : OverlayWindow
         finally
         {
             _applyingFindSelection = false;
+        }
+
+        if (initializeSelectionVisual)
+        {
+            _findSelectionVisualInitialized = true;
+            FindTextBox.Focus();
         }
 
         if (revealCurrent)
