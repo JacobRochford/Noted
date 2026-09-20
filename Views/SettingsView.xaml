@@ -359,6 +359,15 @@
                                                TextWrapping="Wrap"
                                                VerticalAlignment="Center"/>
                                     </CheckBox>
+                                    <CheckBox x:Name="ShowNotesHeaderOption" IsChecked="{Binding ShowNotesHeader}"
+                                              Foreground="{DynamicResource NotedTextBrush}"
+                                              FontWeight="SemiBold"
+                                              Margin="0,8,0,0"
+                                              HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Show notes header"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </CheckBox>
                                 </StackPanel>
                             </Border>
 

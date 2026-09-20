@@ -18,6 +18,7 @@ internal sealed record AppSettingsDocument
     public NewNoteMode? NewNoteMode { get; init; }
 
     public bool ShowModifiedSubtitle { get; init; } = true;
+    public bool ShowNotesHeader { get; init; } = false;
     public string? CustomHeader { get; init; }
     public List<string>? PinnedNotes { get; init; }
 

@@ -118,6 +118,7 @@ internal sealed class SettingsViewModel : ObservableObject
             TimestampPlacement = _settings.LoadTimestampPlacement();
             TimestampLineText = _settings.LoadTimestampLine().ToString(CultureInfo.InvariantCulture);
             ShowModifiedSubtitle = _settings.LoadShowModifiedSubtitle();
+            ShowNotesHeader = _settings.LoadShowNotesHeader();
             ConfirmNoteDeletion = _settings.LoadConfirmNoteDeletion();
             ThemeMode = _settings.LoadAppThemeMode();
             _activeAccent = _settings.LoadAccentColor();
@@ -138,7 +139,7 @@ internal sealed class SettingsViewModel : ObservableObject
             };
             options.AddRange(screens.OrderBy(screen => screen.DeviceName, StringComparer.OrdinalIgnoreCase)
                 .Select(screen => new DisplayOption(screen.DeviceName,
-                    $"{FormatDisplayName(screen.DeviceName)}  {screen.WorkWidth} × {screen.WorkHeight}" +
+                    $"{FormatDisplayName(screen.DeviceName)}  {screen.WorkWidth} ï¿½ {screen.WorkHeight}" +
                     (screen.IsPrimary ? "  (primary)" : string.Empty))));
             DisplayOptions = options;
             _preferredDisplay = options.FirstOrDefault(option => string.Equals(option.DeviceName,
@@ -183,6 +184,18 @@ internal sealed class SettingsViewModel : ObservableObject
         {
             if (!SetProperty(ref _showModifiedSubtitle, value)) return;
             Save(() => _settings.SaveShowModifiedSubtitle(value), nameof(ShowModifiedSubtitle));
+            NotifyAll();
+        }
+    }
+
+    private bool _showNotesHeader = false;
+    public bool ShowNotesHeader
+    {
+        get => _showNotesHeader;
+        set
+        {
+            if (!SetProperty(ref _showNotesHeader, value)) return;
+            Save(() => _settings.SaveShowNotesHeader(value), nameof(ShowNotesHeader));
             NotifyAll();
         }
     }

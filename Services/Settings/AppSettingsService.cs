@@ -131,6 +131,14 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { CustomHeader = customHeader });
     }
 
+    public bool LoadShowNotesHeader() {
+        return LoadSetting(s => s.ShowNotesHeader);
+    }
+
+    public void SaveShowNotesHeader(bool showNotesHeader) {
+        SaveSetting(s => s with { ShowNotesHeader = showNotesHeader });
+    }
+
     public (string modifiers, string key) LoadNotesHotkey()
     {
         var setting = LoadSettings();

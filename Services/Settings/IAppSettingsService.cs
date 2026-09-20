@@ -10,6 +10,8 @@ public interface IAppSettingsService {
     void SavePinnedNotes(IReadOnlyList<string> pinnedNotes);
     bool LoadShowModifiedSubtitle();
     void SaveShowModifiedSubtitle(bool showModifiedSubtitle);
+    bool LoadShowNotesHeader();
+    void SaveShowNotesHeader(bool showNotesHeader);
     NoteTimestampPlacement LoadTimestampPlacement();
     void SaveTimestampPlacement(NoteTimestampPlacement timestampPlacement);
     int LoadTimestampLine();

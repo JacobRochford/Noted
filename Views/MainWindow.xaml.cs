@@ -272,6 +272,7 @@ public partial class MainWindow : Window {
     {
         _settingsViewModel.Reload();
         _viewModel.ShowModifiedSubtitle = _settingsViewModel.ShowModifiedSubtitle;
+        _viewModel.ShowNotesHeader = _settingsViewModel.ShowNotesHeader;
         _viewModel.FolderNavigationMode = _settingsViewModel.FolderNavigationMode;
         QuickNoteButton.Visibility = _settingsViewModel.NewNoteMode == NewNoteMode.Both
             ? Visibility.Visible : Visibility.Collapsed;
@@ -283,6 +284,9 @@ public partial class MainWindow : Window {
         {
             case nameof(SettingsViewModel.ShowModifiedSubtitle):
                 _viewModel.ShowModifiedSubtitle = _settingsViewModel.ShowModifiedSubtitle;
+                break;
+            case nameof(SettingsViewModel.ShowNotesHeader):
+                _viewModel.ShowNotesHeader = _settingsViewModel.ShowNotesHeader;
                 break;
             case nameof(SettingsViewModel.FolderNavigationMode):
                 _viewModel.FolderNavigationMode = _settingsViewModel.FolderNavigationMode;

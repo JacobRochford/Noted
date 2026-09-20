@@ -283,6 +283,20 @@
                                 Focusable="True"
                                 Cursor="SizeAll"
                                 Padding="0,3,6,3">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding ShowNotesHeader}" Value="False"/>
+                                                <Condition Binding="{Binding IsSettingsVisible}" Value="False"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
                             <Grid>
                             <TextBlock x:Name="HeaderText"
                                        Text="{Binding HeaderText, Mode=OneWay}"
@@ -303,6 +317,9 @@
                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsHeaderEditing}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding ShowNotesHeader}" Value="False">
                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -337,6 +354,11 @@
                                     <Setter Property="HorizontalAlignment" Value="Right"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow340}}" Value="True">
+                                            <Setter Property="Grid.Column" Value="0"/>
+                                            <Setter Property="Grid.ColumnSpan" Value="2"/>
+                                            <Setter Property="HorizontalAlignment" Value="Left"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ShowNotesHeader}" Value="False">
                                             <Setter Property="Grid.Column" Value="0"/>
                                             <Setter Property="Grid.ColumnSpan" Value="2"/>
                                             <Setter Property="HorizontalAlignment" Value="Left"/>
@@ -1044,10 +1066,10 @@
         </Border>
 
         <Button x:Name="FloatingNotesButton"
-                Content="Notes"
-            Width="96" Height="48"
+                Content="Noted"
+            Width="88" Height="44"
                 Canvas.Right="20" Canvas.Bottom="20"
-                FontSize="16" FontWeight="SemiBold"
+                FontSize="16" FontWeight="Regular"
             Foreground="{DynamicResource NotedAccentTextBrush}"
             Background="{DynamicResource NotedAccentSoftBrush}"
             BorderBrush="{DynamicResource NotedStrongBorderBrush}">

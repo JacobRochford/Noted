@@ -124,6 +124,10 @@ public sealed class WindowConstructionTests
             quick.SetCurrentValue(RadioButton.IsCheckedProperty, true);
             Assert.AreEqual(NewNoteMode.Quick, model.NewNoteMode);
 
+            var showHeader = (CheckBox)view.FindName("ShowNotesHeaderOption");
+            showHeader.SetCurrentValue(CheckBox.IsCheckedProperty, false);
+            Assert.IsFalse(settings.LoadShowNotesHeader());
+
             var accent = (TextBox)view.FindName("AccentHexTextBox");
             accent.SetCurrentValue(TextBox.TextProperty, "#zzzzzz");
             Assert.IsTrue(model.AccentHasError);

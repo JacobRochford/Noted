@@ -18,6 +18,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable {
     private bool _isHeaderEditing;
     private bool _showNotesDirectory;
     private bool _showModifiedSubtitle;
+    private bool _showNotesHeader = true;
     private string _filterText = "";
     private string _headerText = DefaultHeaderText;
     private string _customHeaderText = DefaultHeaderText;
@@ -89,6 +90,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable {
         }
     }
 
+    public bool ShowNotesHeader {
+        get => _showNotesHeader;
+        set {
+            if (_showNotesHeader != value) {
+                _showNotesHeader = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     public string FilterText {
         get => _filterText;
         set {
@@ -144,6 +155,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable {
         _uiThreadInvoke = uiThreadInvoke;
         _customHeaderText = NormalizeHeaderText(settingsService.LoadCustomHeader());
         HeaderText = _customHeaderText;
+        _showNotesHeader = settingsService.LoadShowNotesHeader();
         _folderNavigationMode = settingsService.LoadFolderNavigationMode();
         _fileService.FilesChanged += OnFilesChanged;
         _fileService.StartWatching();
