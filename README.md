@@ -1,10 +1,10 @@
 # Noted.
 
-Noted is a Windows-only .NET 9 WPF utility app. It has a floating Notes button, organizes `.txt`, `.md`, and `.markdown` files in folders, and includes a tabbed editor with recovery and Markdown preview. It also includes Checklist, Dictionary, Scratchpad, and MiniPad.
+Noted is a Windows-only .NET 9 WPF utility app. It has a floating Notes button, organizes [supported text-based files](#supported-file-types) in folders, and includes a tabbed editor with recovery and Markdown preview. It also includes Checklist, Dictionary, Scratchpad, and MiniPad.
 
 ## Notes and folders
 
-- Noted supports existing `.txt`, `.md`, and `.markdown` note files. New notes are saved as `.txt`.
+- Noted supports existing text-based note files with [supported extensions](#supported-file-types). New notes are saved as `.txt`.
 - Notes can be organized in subfolders.
 - Folders can expand in place or open in a drill-down view.
 - The drill-down view keeps back and forward folder history.
@@ -22,7 +22,8 @@ Choose how new notes are created:
 
 - Notes open in the built-in tabbed editor.
 - Noted saves recovery copies of unsaved changes. Restoring the previous editor session can be turned off in Settings.
-- Turn Word Wrap on or off from the View menu.
+- Use `Ctrl+F` to find text and `Ctrl+H` to find and replace. Search highlights all matches and supports case-sensitive matching.
+- The View menu controls line numbers, scroll speed, Word Wrap, Markdown preview, tab visibility, and whether tabs reopen on startup.
 - Press `Ctrl+Shift+V` to toggle Markdown preview.
 - Press `Ctrl+S` to save the active note.
 
@@ -31,7 +32,7 @@ Choose how new notes are created:
 - **Checklist** saves checklist items locally.
 - **Dictionary** saves terms and definitions locally.
 - **Scratchpad** is a lightweight rich-text editor that saves its contents locally before it is hidden or closed.
-- **MiniPad** opens one compact plain-text window. It saves its content locally and restores its previous visibility on startup.
+- **MiniPad** opens one compact plain-text window with find and Word Wrap controls. It saves its content locally and restores its previous visibility on startup.
 
 ## Hotkeys and visibility
 
@@ -47,6 +48,7 @@ The Notes hotkey hides Notes, Checklist, Dictionary, Scratchpad, MiniPad, and th
 
 By default, the Notes List's Hide button also hides the editor, Checklist, Dictionary, Scratchpad, and MiniPad. This can be changed in Settings.
 Clicking outside Notes or pressing `Esc` hides Notes and the editor. 
+The notification-area icon provides Show/Hide Notes, Settings, and Exit commands.
 
 
 ## Download and run
@@ -90,15 +92,27 @@ dotnet run
 
 You can also open `Noted.sln` in Visual Studio 2022 17.12 or later.
 
+## Project organization
+
+Noted uses one WPF application project and one MSTest project. `App.xaml.cs` composes the application and coordinates startup. Runtime responsibilities are separated into focused areas:
+
+- `Views` contains WPF windows, dialogs, and interaction code; `ViewModels` contains presentation state for the Notes list, Settings, Checklist, Dictionary, and Scratchpad.
+- `Models` groups persisted state and domain models for notes, settings, windows, Checklist, and Dictionary.
+- `Services` is organized by responsibility: application lifecycle, backup and restore, built-in tool content, notes and editor persistence, shared persistence primitives, settings, and window integration.
+- `Search` contains the shared text-search session, presenter, viewport rules, and highlight overlay used by searchable editors.
+- `Helpers` contains focused WPF and formatting helpers. `tests/Noted.Tests` mirrors these areas for automated tests.
+
+The main windows retain WPF-specific interaction behavior. File operations, navigation and directory watching, editor workspace and persistence, settings, backup archives and restore, hotkeys, shutdown sequencing, and window ownership are handled by their corresponding models and services.
+
 ## Testing
 
-Run the focused service tests with:
+Run the automated tests with:
 
 ```powershell
 dotnet test tests/Noted.Tests/Noted.Tests.csproj
 ```
 
-The project currently has 123 automated test cases. UI and window behavior still require manual testing on Windows.
+The project currently has 356 automated test cases. UI and window behavior still require manual testing on Windows.
 
 ## Basic use
 
@@ -112,9 +126,22 @@ The project currently has 123 automated test cases. UI and window behavior still
 ## Limitations
 
 - Noted only runs on Windows because it uses WPF and Win32 APIs.
-- Only `.txt`, `.md`, and `.markdown` files can be used as notes.
+- Only text-based files with [supported extensions](#supported-file-types) can be used as notes.
 - Settings, recovery data, and backups are local to the same computer. Noted has no cloud sync or off-device backup.
 
 ## License
 
 MIT. See `LICENSE`.
+
+## Supported file types
+
+Noted recognizes these file extensions, case-insensitively:
+
+`.txt`, `.md`, `.markdown`, `.log`, `.csv`, `.tsv`, `.json`,
+`.xml`, `.yaml`, `.yml`, `.toml`, `.ini`, `.cfg`, `.conf`,
+`.sql`, `.cs`, `.xaml`, `.html`, `.htm`, `.css`, `.js`,
+`.ts`, `.py`, `.ps1`, `.bat`, `.cmd`.
+
+The authoritative list is [NoteFileExtensions.SupportedExtensions](Services/Notes/NoteFileExtensions.cs).
+
+These extensions provide text editing support. Noted does not execute code or provide format-specific tooling for them.
