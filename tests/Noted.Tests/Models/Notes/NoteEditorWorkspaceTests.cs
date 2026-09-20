@@ -60,6 +60,39 @@ public sealed class NoteEditorWorkspaceTests
     }
 
     [TestMethod]
+    public void NonVisibleDocumentsTargetTheMostRecentlyFocusedSplitPane()
+    {
+        var workspace = new NoteEditorWorkspace();
+        var primary = CreateDocument("primary.txt");
+        var secondary = CreateDocument("secondary.txt");
+        var other = CreateDocument("other.txt");
+        var next = CreateDocument("next.txt");
+        workspace.Add(primary);
+        workspace.Add(secondary);
+        workspace.Add(other);
+        workspace.Add(next);
+        workspace.Activate(primary);
+        workspace.ShowSecondary(secondary, focus: false);
+
+        Assert.IsFalse(workspace.ShouldOpenDocumentInSecondaryPane(other));
+
+        workspace.Focus(secondary);
+
+        Assert.IsTrue(workspace.ShouldOpenDocumentInSecondaryPane(other));
+        Assert.IsFalse(workspace.ShouldOpenDocumentInSecondaryPane(primary));
+        Assert.IsFalse(workspace.ShouldOpenDocumentInSecondaryPane(secondary));
+
+        workspace.ShowSecondary(other, focus: true);
+
+        Assert.AreSame(other, workspace.FocusedDocument);
+        Assert.IsTrue(workspace.ShouldOpenDocumentInSecondaryPane(next));
+
+        workspace.Focus(primary);
+
+        Assert.IsFalse(workspace.ShouldOpenDocumentInSecondaryPane(other));
+    }
+
+    [TestMethod]
     public void ClosingActiveDocumentSelectsTheNextDocumentAndRepairsPaneState()
     {
         var workspace = new NoteEditorWorkspace();

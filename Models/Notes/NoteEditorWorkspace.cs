@@ -53,6 +53,15 @@ internal sealed class NoteEditorWorkspace
     internal OpenNoteDocument? FindById(Guid documentId) =>
         _documents.FirstOrDefault(document => document.DocumentId == documentId);
 
+    internal bool ShouldOpenDocumentInSecondaryPane(OpenNoteDocument document)
+    {
+        EnsureOwned(document);
+        return SecondaryDocument is not null &&
+               ReferenceEquals(FocusedDocument, SecondaryDocument) &&
+               !ReferenceEquals(document, ActiveDocument) &&
+               !ReferenceEquals(document, SecondaryDocument);
+    }
+
     internal void Activate(OpenNoteDocument document)
     {
         EnsureOwned(document);

@@ -217,7 +217,11 @@ public partial class NoteEditorWindow : Window
                     ? _workspace.FindById(loadResult.SecondaryDocumentId.Value)
                     : null;
                 if (secondaryDocument is not null)
-                    ShowSecondaryDocument(secondaryDocument, focusEditor: false, saveSession: false);
+                    ShowSecondaryDocument(
+                        secondaryDocument,
+                        focusPane: false,
+                        focusEditor: false,
+                        saveSession: false);
             }
         }
         finally
@@ -459,8 +463,7 @@ public partial class NoteEditorWindow : Window
                 usesGeneratedName: usesGeneratedName,
                 initialFileContent: initialFileContent);
             _workspace.Add(document);
-            ActivateDocument(document);
-            SaveEditorSession();
+            OpenDocumentInFocusedPane(document, focusEditor: true, saveSession: true);
             ShowWindow();
             ShowRecoveryIssues(issues, []);
             return true;
@@ -777,6 +780,11 @@ public partial class NoteEditorWindow : Window
     {
         var hasDocument = _activeDocument is not null;
         var currentDocument = CurrentDocument;
+        PrimaryDocumentHeader.Visibility = _secondaryDocument is not null
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        PrimaryDocumentTitle.Text = _activeDocument?.TabLabel ?? string.Empty;
+        SecondaryDocumentTitle.Text = _secondaryDocument?.TabLabel ?? string.Empty;
         DirtyStatusText.Visibility = currentDocument?.IsDirty == true
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -1679,7 +1687,27 @@ public partial class NoteEditorWindow : Window
     private void OpenTabsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_isLoading && OpenTabsList.SelectedItem is OpenNoteDocument document)
-            ActivateDocument(document, focusEditor: false);
+            OpenDocumentInFocusedPane(document, focusEditor: false, saveSession: true);
+    }
+
+    private void OpenDocumentInFocusedPane(
+        OpenNoteDocument document,
+        bool focusEditor,
+        bool saveSession)
+    {
+        if (_workspace.ShouldOpenDocumentInSecondaryPane(document))
+        {
+            ShowSecondaryDocument(
+                document,
+                focusPane: true,
+                focusEditor: focusEditor,
+                saveSession: saveSession);
+            return;
+        }
+
+        ActivateDocument(document, focusEditor);
+        if (saveSession)
+            SaveEditorSession();
     }
 
     private void OpenTabsList_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -1765,7 +1793,11 @@ public partial class NoteEditorWindow : Window
         if (e.Data.GetDataPresent(typeof(OpenNoteDocument)) &&
             e.Data.GetData(typeof(OpenNoteDocument)) is OpenNoteDocument document)
         {
-            ShowSecondaryDocument(document, focusEditor: true, saveSession: true);
+            ShowSecondaryDocument(
+                document,
+                focusPane: true,
+                focusEditor: true,
+                saveSession: true);
             e.Effects = DragDropEffects.Move;
         }
         else
@@ -1778,6 +1810,7 @@ public partial class NoteEditorWindow : Window
 
     private void ShowSecondaryDocument(
         OpenNoteDocument document,
+        bool focusPane,
         bool focusEditor,
         bool saveSession)
     {
@@ -1793,7 +1826,7 @@ public partial class NoteEditorWindow : Window
             ActivateDocument(primaryDocument, focusEditor: false);
         }
 
-        _workspace.ShowSecondary(document, focusEditor);
+        _workspace.ShowSecondary(document, focusPane);
         _isLoadingSecondary = true;
         SecondaryEditorTextBox.Text = document.Content;
         SecondaryEditorTextBox.CaretIndex = Math.Clamp(document.CaretIndex, 0, document.Content.Length);
@@ -1821,6 +1854,18 @@ public partial class NoteEditorWindow : Window
     {
         CloseSecondaryPane(saveSession: true);
         FocusActiveSurface();
+    }
+
+    private void ClosePrimaryPaneButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_secondaryDocument is not { } remainingDocument)
+            return;
+
+        CaptureActiveDocument();
+        _workspace.CloseSecondary();
+        ClearSecondaryPaneSurface();
+        ActivateDocument(remainingDocument);
+        SaveEditorSession();
     }
 
     private void CloseSecondaryPane(bool saveSession)
