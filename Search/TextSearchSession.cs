@@ -49,12 +49,6 @@ internal sealed class TextSearchSession
         SourceIdentity = sourceIdentity;
         Matches = FindMatches(sourceSnapshot, query, options);
 
-        if (queryChanged && !optionsChanged && !sourceChanged && !identityChanged &&
-            previousCurrentMatch is { } previousQueryMatch &&
-            TryPreserveCurrentOccurrence(previousQueryMatch, navigationAnchor))
-        {
-            return;
-        }
 
         if (!queryChanged && !optionsChanged && !identityChanged && sourceChanged &&
             previousCurrentMatch is { } currentMatch &&
@@ -136,23 +130,6 @@ internal sealed class TextSearchSession
             0,
             sourceSnapshot.Length);
         return true;
-    }
-
-    private bool TryPreserveCurrentOccurrence(
-        TextSearchMatch previousMatch,
-        int navigationAnchor)
-    {
-        for (var index = 0; index < Matches.Count; index++)
-        {
-            if (Matches[index].Start != previousMatch.Start)
-                continue;
-
-            CurrentMatchIndex = index;
-            PreferredNavigationPosition = navigationAnchor;
-            return true;
-        }
-
-        return false;
     }
 
     private void SetCurrent(TextSearchMatch? match)

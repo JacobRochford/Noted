@@ -351,6 +351,12 @@ internal sealed class TextBoxSearchPresenter : IDisposable
         if (_applyingSearchSelection)
             return;
 
+        if (_editor.SelectionStart == _userSelectionStart &&
+            _editor.SelectionLength == _userSelectionLength)
+        {
+            return;
+        }
+
         CaptureUserSelection();
         _hasPendingManualNavigationAnchor = true;
     }

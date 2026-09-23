@@ -304,7 +304,7 @@ public sealed class TextBoxSearchPresenterTests
     }
 
     [TestMethod]
-    public void KnownBug_RedundantSameRangeSelectionNotificationCanArmManualNavigationAnchor()
+    public void RedundantSameRangeSelectionNotificationDoesNotArmManualNavigationAnchor()
     {
         RunOnSta(() =>
         {
@@ -319,9 +319,29 @@ public sealed class TextBoxSearchPresenterTests
                 new RoutedEventArgs(System.Windows.Controls.Primitives.TextBoxBase.SelectionChangedEvent));
             surface.MoveFind(forward: true);
 
-            Assert.AreEqual(new TextSearchMatch(0, 3), surface.Session.CurrentMatch);
+            Assert.AreEqual(new TextSearchMatch(14, 3), surface.Session.CurrentMatch);
             Assert.AreEqual(1, surface.Editor.SelectionStart);
             Assert.AreEqual(0, surface.Editor.SelectionLength);
+        });
+    }
+
+    [TestMethod]
+    public void ReopeningFindReanchorsAnUnchangedQueryToTheEditorCaret()
+    {
+        RunOnSta(() =>
+        {
+            using var surface = new MiniPadLikeFindSurface("foo xx foo xx foo", 300, 140);
+            surface.Editor.Select(1, 0);
+            surface.OpenFind();
+            surface.SetQuery("foo");
+            surface.MoveFind(forward: true);
+            Assert.AreEqual(new TextSearchMatch(7, 3), surface.Session.CurrentMatch);
+
+            surface.Editor.Select(1, 0);
+            surface.OpenFind();
+
+            Assert.AreEqual(new TextSearchMatch(0, 3), surface.Session.CurrentMatch);
+            Assert.AreEqual(0, surface.Session.CurrentMatchIndex);
         });
     }
 
@@ -850,10 +870,9 @@ public sealed class TextBoxSearchPresenterTests
 
         internal void OpenFind()
         {
-            var openingFind = _findPanel.Visibility != Visibility.Visible;
             _findPanel.Visibility = Visibility.Visible;
-            if (openingFind)
-                Presenter.BeginFind();
+            Session.Reset();
+            Presenter.BeginFind();
             if (Editor.SelectionLength > 0 && !Editor.SelectedText.Contains('\n'))
                 FindTextBox.Text = Editor.SelectedText;
             RefreshFind();

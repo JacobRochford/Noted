@@ -245,10 +245,9 @@ public partial class MiniPadWindow : OverlayWindow
     private void FindMenuItem_Click(object sender, RoutedEventArgs e) => OpenFind();
     private void OpenFind()
     {
-        var openingFind = FindPanel.Visibility != Visibility.Visible;
         FindPanel.Visibility = Visibility.Visible;
-        if (openingFind)
-            _findPresenter?.BeginFind();
+        _findSession.Reset();
+        _findPresenter?.BeginFind();
         if (Editor.SelectionLength > 0 && !Editor.SelectedText.Contains('\n')) FindTextBox.Text = Editor.SelectedText;
         RefreshFindResults(revealCurrent: true);
         FindTextBox.Focus();
