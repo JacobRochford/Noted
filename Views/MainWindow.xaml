@@ -106,7 +106,7 @@
             <Setter Property="Height" Value="28"/>
             <Setter Property="Padding" Value="9,0"/>
             <Setter Property="MinWidth" Value="0"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource NotedKeyboardFocusVisual}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -137,7 +137,7 @@
             <Setter Property="Foreground" Value="{DynamicResource NotedSecondaryTextBrush}"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource NotedKeyboardFocusVisual}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -333,7 +333,7 @@
                                      Foreground="{DynamicResource NotedTextBrush}"
                                      VerticalAlignment="Center"
                                      MinWidth="80"
-                                     FocusVisualStyle="{x:Null}"
+                                     FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}"
                                      ToolTip="Enter or click away to save"
                                      LostFocus="HeaderEditBox_LostFocus"
                                      KeyDown="HeaderEditBox_KeyDown"
@@ -1014,7 +1014,7 @@
                                         <Setter Property="Padding" Value="10,7"/>
                                         <Setter Property="Margin" Value="0,2"/>
                                         <Setter Property="Cursor" Value="Hand"/>
-                                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                        <Setter Property="FocusVisualStyle" Value="{StaticResource NotedKeyboardFocusVisual}"/>
                                         <EventSetter Event="PreviewMouseLeftButtonUp" Handler="ListBoxItem_MouseLeftButtonUp"/>
                                         <Setter Property="Template">
                                             <Setter.Value>

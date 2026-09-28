@@ -145,7 +145,7 @@
                                           ItemsSource="{Binding FilteredItems}"
                                           Padding="2,0,3,0"
                                           Focusable="True"
-                                          FocusVisualStyle="{x:Null}">
+                                          FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Margin="0,1" Padding="5,0,4,0" CornerRadius="6"

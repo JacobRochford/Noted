@@ -31,6 +31,25 @@
         <SolidColorBrush x:Key="NotedSearchCurrentLineBrush" Color="#205BA8C8"/>
         <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#397B99"/>
         <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="White"/>
+        <!-- Keep the focus outline visible inside clipped tabs and list items,
+                while maintaining contrast with custom accent colors. -->
+        <Style x:Key="NotedKeyboardFocusVisual" TargetType="Control">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Control">
+                        <Grid IsHitTestVisible="False" SnapsToDevicePixels="True">
+                            <Border Margin="1" BorderThickness="3" CornerRadius="3"
+                                    BorderBrush="{DynamicResource NotedSurfaceBrush}"/>
+                            <Border Margin="2" BorderThickness="1" CornerRadius="2"
+                                    BorderBrush="{DynamicResource NotedTextBrush}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="{x:Static SystemParameters.FocusVisualStyleKey}"
+               TargetType="Control" BasedOn="{StaticResource NotedKeyboardFocusVisual}"/>
+
         <Style TargetType="TextBox">
             <Setter Property="CaretBrush" Value="{DynamicResource NotedTextBrush}"/>
             <Setter Property="SelectionBrush" Value="{DynamicResource NotedSelectionBrush}"/>
@@ -161,7 +180,7 @@
             <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource NotedKeyboardFocusVisual}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -192,7 +211,7 @@
             <Setter Property="Padding" Value="10,5"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource NotedKeyboardFocusVisual}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -244,7 +263,7 @@
             <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
             <Setter Property="Padding" Value="8,4"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource NotedKeyboardFocusVisual}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -277,7 +296,7 @@
         <Style x:Key="NotedCheckBox" TargetType="CheckBox">
             <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource NotedKeyboardFocusVisual}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
@@ -331,7 +350,7 @@
         <Style x:Key="NotedRadioButton" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="FocusVisualStyle" Value="{StaticResource NotedKeyboardFocusVisual}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
