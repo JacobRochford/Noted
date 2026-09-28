@@ -1994,12 +1994,17 @@ public partial class NoteEditorWindow : Window
 
     private void Editor_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        // Leave modified gestures and fine-grained touchpad deltas to the editor.
+        // Let the editor handle modified inputs and smaller touchpad movements
         if (sender is not TextBox editor || _scrollSpeed == 1 || Keyboard.Modifiers != ModifierKeys.None || e.Delta % 120 != 0) return;
+        
         var lines = SystemParameters.WheelScrollLines;
         if (lines == 0) return;
+        
         var distance = lines < 0 ? editor.ViewportHeight : lines * editor.FontSize * 1.2;
-        editor.ScrollToVerticalOffset(editor.VerticalOffset - e.Delta / 120.0 * distance * _scrollSpeed);
+        
+        // Scroll one step in the wheel direction and apply the configured speed.
+        editor.ScrollToVerticalOffset(editor.VerticalOffset - Math.Sign(e.Delta) * distance * _scrollSpeed);
+        
         e.Handled = true;
     }
 
