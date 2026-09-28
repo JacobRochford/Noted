@@ -751,6 +751,33 @@
                                             <TextBlock Text="✎" FontSize="13"/>
                                         </Button>
                                     </Grid>
+                                    <Border Height="1" Background="{DynamicResource NotedBorderBrush}"/>
+                                    <Grid Height="32">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="78"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="30"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="MiniPad"
+                                                   Foreground="{DynamicResource NotedTextBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="CurrentMiniPadHotkeyDisplay" ToolTip="{Binding MiniPadHotkeyTooltip}" Text="{Binding MiniPadHotkey}"
+                                                   Grid.Column="1"
+                                                   Foreground="{DynamicResource NotedAccentBrush}"
+                                                   FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center"
+                                                   HorizontalAlignment="Right"
+                                                   Margin="4,0,4,0"/>
+                                        <Button Grid.Column="2"
+                                                Tag="MiniPad"
+                                                Click="EditHotkeyButton_Click"
+                                                Style="{DynamicResource HeaderChromeButtonStyle}"
+                                                ToolTip="Change MiniPad hotkey"
+                                                AutomationProperties.Name="Change MiniPad hotkey">
+                                            <TextBlock Text="✎" FontSize="13"/>
+                                        </Button>
+                                    </Grid>
 
                                     <Popup x:Name="HotkeyEditorPopup" IsOpen="{Binding IsHotkeyEditorOpen, Mode=TwoWay}"
                                            Placement="Bottom"

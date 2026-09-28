@@ -32,6 +32,8 @@ internal sealed record AppSettingsDocument
     public string ChecklistHotkeyKey { get; init; } = "C";
     public string DictionaryHotkeyModifiers { get; init; } = "Alt";
     public string DictionaryHotkeyKey { get; init; } = "D";
+    public string MiniPadHotkeyModifiers { get; init; } = "Alt";
+    public string MiniPadHotkeyKey { get; init; } = "M";
     public string[]? AlwaysVisibleWindows { get; init; }
     public bool GhostModeEnabled { get; init; }
     public double GhostModeOpacity { get; init; } = 0.25;

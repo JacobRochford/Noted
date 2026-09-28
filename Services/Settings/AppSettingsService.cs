@@ -172,6 +172,17 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { DictionaryHotkeyModifiers = modifiers, DictionaryHotkeyKey = key });
     }
 
+    public (string modifiers, string key) LoadMiniPadHotkey()
+    {
+        var setting = LoadSettings();
+        return (setting.MiniPadHotkeyModifiers ?? "Alt", setting.MiniPadHotkeyKey ?? "M");
+    }
+
+    public void SaveMiniPadHotkey(string modifiers, string key)
+    {
+        SaveSetting(s => s with { MiniPadHotkeyModifiers = modifiers, MiniPadHotkeyKey = key });
+    }
+
     public event EventHandler? AppearanceChanged;
 
     public bool LoadWindowAlwaysVisible(string windowType) =>
@@ -676,6 +687,8 @@ public sealed class AppSettingsService : IAppSettingsService {
             ChecklistHotkeyKey = string.IsNullOrWhiteSpace(settings.ChecklistHotkeyKey) ? "C" : settings.ChecklistHotkeyKey,
             DictionaryHotkeyModifiers = string.IsNullOrWhiteSpace(settings.DictionaryHotkeyModifiers) ? "Alt" : settings.DictionaryHotkeyModifiers,
             DictionaryHotkeyKey = string.IsNullOrWhiteSpace(settings.DictionaryHotkeyKey) ? "D" : settings.DictionaryHotkeyKey,
+            MiniPadHotkeyModifiers = string.IsNullOrWhiteSpace(settings.MiniPadHotkeyModifiers) ? "Alt" : settings.MiniPadHotkeyModifiers,
+            MiniPadHotkeyKey = string.IsNullOrWhiteSpace(settings.MiniPadHotkeyKey) ? "M" : settings.MiniPadHotkeyKey,
             GhostModeOpacity = NormalizeOpacity(settings.GhostModeOpacity, 0, 0.25),
             DefaultOpacity = NormalizeOpacity(settings.DefaultOpacity, 0.05, 0.88),
             AppThemeMode = Enum.IsDefined(settings.AppThemeMode)

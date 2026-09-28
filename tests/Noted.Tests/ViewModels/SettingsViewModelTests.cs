@@ -221,6 +221,31 @@ public sealed class SettingsViewModelTests
         Assert.IsFalse(context.Model.ApplyHotkeyCommand.CanExecute(null));
     }
 
+    [TestMethod]
+    public void MiniPadHotkeyCanBeEditedPersistedAndResetToDefault()
+    {
+        using var context = new Context();
+        context.Hotkeys.Initialize();
+        Assert.AreEqual("Alt+M", context.Model.MiniPadHotkey);
+        context.Model.BeginHotkeyEdit(HotkeyFeature.MiniPad);
+        Assert.AreEqual("MiniPad hotkey", context.Model.HotkeyEditorTitle);
+        Assert.AreEqual("Alt+M", context.Model.HotkeyPreview);
+
+        context.Model.HotkeyShift = true;
+        context.Model.HotkeyKey = "P";
+        context.Model.ApplyHotkeyCommand.Execute(null);
+
+        Assert.IsFalse(context.Model.IsHotkeyEditorOpen);
+        Assert.AreEqual("Alt+Shift+P", context.Model.MiniPadHotkey);
+        Assert.AreEqual(("Alt+Shift", "P"), new AppSettingsService(context.Directory.Path).LoadMiniPadHotkey());
+        context.Model.BeginHotkeyEdit(HotkeyFeature.MiniPad);
+        context.Model.ResetHotkeyCommand.Execute(null);
+        Assert.AreEqual("Alt+M", context.Model.HotkeyPreview);
+        context.Model.ApplyHotkeyCommand.Execute(null);
+        Assert.AreEqual("Alt+M", context.Model.MiniPadHotkey);
+        Assert.AreEqual(("Alt", "M"), new AppSettingsService(context.Directory.Path).LoadMiniPadHotkey());
+    }
+
     private sealed class Context : IDisposable
     {
         internal TemporaryTestDirectory Directory { get; } = new();

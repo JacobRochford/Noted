@@ -226,6 +226,10 @@ public partial class MainWindow : Window {
     {
         WindowManager.ToggleDictionary();
     }
+    private void OnMiniPadHotkeyPressed()
+    {
+        WindowManager.ToggleMiniPad();
+    }
 
     private void OnNotesLoaded(object? sender, EventArgs e) {
         UpdateNotesDirectoryDisplay();
@@ -389,6 +393,7 @@ public partial class MainWindow : Window {
         HotkeyFeature.Notes => OnNotesHotkeyPressed,
         HotkeyFeature.Checklist => OnChecklistHotkeyPressed,
         HotkeyFeature.Dictionary => OnDictionaryHotkeyPressed,
+        HotkeyFeature.MiniPad => OnMiniPadHotkeyPressed,
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
     };
 

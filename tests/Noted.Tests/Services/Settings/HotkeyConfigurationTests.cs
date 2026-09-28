@@ -21,14 +21,35 @@ public sealed class HotkeyConfigurationTests
         Assert.AreEqual(0, configuration.Initialize().Count);
         Assert.AreEqual(0, configuration.Initialize().Count);
         Assert.AreEqual(1, creates);
-        CollectionAssert.AreEqual(new[] { "Ctrl+Shift+Space", "Alt+C", "Alt+D" }, native.Attempts);
+        CollectionAssert.AreEqual(new[] { "Ctrl+Shift+Space", "Alt+C", "Alt+D", "Alt+M" }, native.Attempts);
 
         configuration.Dispose();
         configuration.Dispose();
         Assert.AreEqual(1, native.DisposeCalls);
         Assert.IsNull(configuration.GetHotkeyRegistration(HotkeyFeature.Notes));
+        Assert.IsNull(configuration.GetHotkeyRegistration(HotkeyFeature.MiniPad));
         Assert.AreEqual(0, configuration.Initialize().Count);
         Assert.AreEqual(1, creates);
+    }
+
+    [TestMethod]
+    public void MiniPadFallbackPersistsAndIsRestoredOnNextInitialization()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        var native = new ControlledHotkeyService();
+        native.Unavailable.Add("Alt+M");
+        using var configuration = new HotkeyConfiguration(settings, () => native, _ => () => { });
+
+        var warnings = configuration.Initialize();
+
+        StringAssert.Contains(warnings.Single(), "MiniPad hotkey Alt+M was unavailable.");
+        Assert.AreEqual("Alt+Shift+M", configuration.GetHotkeyRegistration(HotkeyFeature.MiniPad)!.Combination);
+        var reloaded = new AppSettingsService(directory.Path);
+        Assert.AreEqual(("Alt+Shift", "M"), reloaded.LoadMiniPadHotkey());
+        using var restarted = new HotkeyConfiguration(reloaded, () => new ControlledHotkeyService(), _ => () => { });
+        Assert.AreEqual(0, restarted.Initialize().Count);
+        Assert.AreEqual("Alt+Shift+M", restarted.GetHotkeyRegistration(HotkeyFeature.MiniPad)!.Combination);
     }
 
     [TestMethod]

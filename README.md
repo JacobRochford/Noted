@@ -43,6 +43,7 @@ Default hotkeys:
 | Show or hide Noted | `Ctrl+Shift+Space` |
 | Show or hide Checklist | `Alt+C` |
 | Show or hide Dictionary | `Alt+D` |
+| Show or hide MiniPad | `Alt+M` |
 
 The Notes hotkey hides Notes, Checklist, Dictionary, Scratchpad, MiniPad, and the editor together. Pressing it again restores the same windows that were visible before they were hidden.
 
