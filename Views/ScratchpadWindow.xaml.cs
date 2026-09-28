@@ -26,13 +26,8 @@ public partial class ScratchpadWindow : OverlayWindow
     private readonly SaveScheduler<long> _contentSaveScheduler;
     private readonly DispatcherTimer _windowStateSaveTimer;
     private readonly TextSearchSession _findSession = new();
-    private SearchTextSnapshot? _findSnapshot;
-    private int _findUserSelectionStart;
-    private int _findUserSelectionLength;
-    private bool _hasPendingFindManualAnchor;
-    private bool _applyingFindSelection;
-    private bool _findSelectionVisualInitialized;
-    private bool _isApplyingFindReplacement;
+    private readonly RichTextBoxSearchPresenter _findPresenter;
+    private bool _isSeedingFindQuery;
     private bool _suppressFontSizeChange;
     private bool _isInitializing = true;
     private bool _isRestoringContent;
@@ -62,6 +57,8 @@ public partial class ScratchpadWindow : OverlayWindow
         InitializeComponent();
 
         _viewModel = viewModel;
+        _findPresenter = new RichTextBoxSearchPresenter(Editor);
+        _findSession.QueryOrOptionsChanged += _findPresenter.ClearPendingManualNavigationAnchor;
         var state = NormalizeWindowState(_viewModel.InitialWindowState);
         _viewModel.ApplyNormalizedWindowState(state);
         _reopenOnStartup = state.ReopenOnStartup;
@@ -170,7 +167,7 @@ public partial class ScratchpadWindow : OverlayWindow
                 ApplyWordWrap(_viewModel.WordWrapEnabled);
                 break;
             case nameof(ScratchpadWindowViewModel.FindText):
-                if (_viewModel.IsFindBarVisible)
+                if (_viewModel.IsFindBarVisible && !_isSeedingFindQuery)
                     RefreshFindResults(revealCurrent: true);
                 break;
         }
@@ -372,6 +369,8 @@ public partial class ScratchpadWindow : OverlayWindow
             return;
 
         _cleanupCompleted = true;
+        _findSession.QueryOrOptionsChanged -= _findPresenter.ClearPendingManualNavigationAnchor;
+        _findPresenter.Dispose();
         _contentSaveScheduler.Dispose();
         _windowStateSaveTimer.Stop();
         _windowStateSaveTimer.Tick -= WindowStateSaveTimer_Tick;
@@ -428,15 +427,13 @@ public partial class ScratchpadWindow : OverlayWindow
         _isContentDirty = true;
         _contentSaveScheduler.Schedule(checked(++_contentRevision));
 
-        if (_viewModel.IsFindBarVisible && !_isApplyingFindReplacement)
+        if (_viewModel.IsFindBarVisible && !_findPresenter.IsApplyingReplacement)
             RefreshFindResults(revealCurrent: false);
     }
 
     private void Editor_SelectionChanged(object sender, RoutedEventArgs e)
     {
         UpdateToolbarState();
-        if (_viewModel.IsFindBarVisible && !_applyingFindSelection)
-            CaptureFindUserSelection(markPending: true);
     }
 
     private void Editor_PreviewMouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -493,15 +490,17 @@ public partial class ScratchpadWindow : OverlayWindow
         return current;
     }
 
-    private void Editor_PreviewKeyDown(object sender, KeyEventArgs e)
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
         {
             OpenFind();
             e.Handled = true;
-            return;
         }
+    }
 
+    private void Editor_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
         if (e.Key == Key.F3 && _viewModel.IsFindBarVisible)
         {
             if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
@@ -695,18 +694,26 @@ public partial class ScratchpadWindow : OverlayWindow
 
     private void OpenFind()
     {
-        var selectedText = Editor.Selection.Text;
-        if (!string.IsNullOrEmpty(selectedText) &&
-            selectedText.IndexOfAny(['\r', '\n']) < 0)
+        var wasVisible = _viewModel.IsFindBarVisible;
+        var seed = FindSelectionSeed.GetQuery(Editor.Selection.Text, wasVisible, Editor.IsKeyboardFocusWithin);
+        if (wasVisible && seed is null)
         {
-            _viewModel.FindText = selectedText;
+            FindTextBox.Focus();
+            FindTextBox.SelectAll();
+            return;
+        }
+
+        if (seed is not null)
+        {
+            _isSeedingFindQuery = true;
+            try { _viewModel.FindText = seed; }
+            finally { _isSeedingFindQuery = false; }
         }
 
         _viewModel.IsFindBarVisible = true;
         _findSession.Reset();
-        _findSnapshot = BuildSearchTextSnapshot();
-        CaptureFindUserSelection(markPending: false);
-        RefreshFindResults(revealCurrent: true);
+        _findPresenter.BeginFind();
+        RefreshFindResults(revealCurrent: false);
         Dispatcher.BeginInvoke(
             DispatcherPriority.Render,
             new Action(() =>
@@ -722,8 +729,7 @@ public partial class ScratchpadWindow : OverlayWindow
     {
         _viewModel.IsFindBarVisible = false;
         _findSession.Reset();
-        _findSnapshot = null;
-        _hasPendingFindManualAnchor = false;
+        _findPresenter.EndFind();
         _viewModel.FindResultText = string.Empty;
         Editor.Focus();
     }
@@ -758,87 +764,21 @@ public partial class ScratchpadWindow : OverlayWindow
         if (_findSession.Matches.Count == 0)
             return;
 
-        var manualAnchor = ConsumePendingFindManualAnchor(forward);
+        var manualAnchor = _findPresenter.ConsumePendingManualNavigationAnchor();
         if (forward)
             _findSession.Next(manualAnchor);
         else
             _findSession.Previous(manualAnchor);
-        PresentCurrentFindMatch(revealCurrent: true);
-    }
-
-    private void RefreshFindResults(
-        bool revealCurrent,
-        int? navigationAnchor = null)
-    {
-        _findSnapshot = BuildSearchTextSnapshot();
-        _findSession.Refresh(
-            _findSnapshot.Text,
-            Editor.Document,
-            _viewModel.FindText,
-            new TextSearchOptions { MatchCase = false },
-            Math.Clamp(
-                navigationAnchor ?? _findUserSelectionStart,
-                0,
-                _findSnapshot.Text.Length));
-        PresentCurrentFindMatch(revealCurrent);
-    }
-
-    private void PresentCurrentFindMatch(bool revealCurrent)
-    {
+        _findPresenter.Present(_findSession, bringCurrentIntoView: true);
         UpdateFindResultText();
-        if (_findSession.CurrentMatch is not { } match || _findSnapshot is null)
-            return;
-
-        var range = _findSnapshot.CreateRange(match);
-        var initializeSelectionVisual =
-            !_findSelectionVisualInitialized &&
-            !Editor.IsKeyboardFocusWithin;
-        if (initializeSelectionVisual)
-            Editor.Focus();
-
-        _applyingFindSelection = true;
-        try
-        {
-            Editor.Selection.Select(range.Start, range.End);
-        }
-        finally
-        {
-            _applyingFindSelection = false;
-        }
-
-        if (initializeSelectionVisual)
-        {
-            _findSelectionVisualInitialized = true;
-            FindTextBox.Focus();
-        }
-
-        if (revealCurrent)
-            range.Start.Paragraph?.BringIntoView();
     }
 
-    private void CaptureFindUserSelection(bool markPending)
+    private void RefreshFindResults(bool revealCurrent, int? navigationAnchor = null)
     {
-        var snapshot = BuildSearchTextSnapshot();
-        _findSnapshot = snapshot;
-        var start = snapshot.GetOffset(Editor.Selection.Start, preferEnd: false);
-        var end = snapshot.GetOffset(Editor.Selection.End, preferEnd: true);
-        _findUserSelectionStart = Math.Clamp(start, 0, snapshot.Text.Length);
-        _findUserSelectionLength = Math.Clamp(
-            end - _findUserSelectionStart,
-            0,
-            snapshot.Text.Length - _findUserSelectionStart);
-        _hasPendingFindManualAnchor = markPending;
-    }
-
-    private int? ConsumePendingFindManualAnchor(bool forward)
-    {
-        if (!_hasPendingFindManualAnchor)
-            return null;
-
-        _hasPendingFindManualAnchor = false;
-        return forward
-            ? _findUserSelectionStart + _findUserSelectionLength
-            : _findUserSelectionStart;
+        _findPresenter.Refresh(_findSession, _viewModel.FindText,
+            new TextSearchOptions { MatchCase = false }, navigationAnchor);
+        _findPresenter.Present(_findSession, bringCurrentIntoView: revealCurrent);
+        UpdateFindResultText();
     }
 
     private void ReplaceButton_Click(object sender, RoutedEventArgs e)
@@ -847,24 +787,13 @@ public partial class ScratchpadWindow : OverlayWindow
             return;
 
         RefreshFindResults(revealCurrent: false);
-        if (_findSession.CurrentMatch is not { } match || _findSnapshot is null)
+        if (_findSession.CurrentMatch is not { } match)
         {
             FindNext();
             return;
         }
 
-        var range = _findSnapshot.CreateRange(match);
-        _isApplyingFindReplacement = true;
-        try
-        {
-            range.Text = _viewModel.ReplaceText;
-        }
-        finally
-        {
-            _isApplyingFindReplacement = false;
-        }
-
-        _hasPendingFindManualAnchor = false;
+        _findPresenter.Replace([match], _viewModel.ReplaceText);
         RefreshFindResults(
             revealCurrent: true,
             navigationAnchor: match.Start + _viewModel.ReplaceText.Length);
@@ -876,25 +805,14 @@ public partial class ScratchpadWindow : OverlayWindow
             return;
 
         RefreshFindResults(revealCurrent: false);
-        if (_findSession.Matches.Count == 0 || _findSnapshot is null)
+        if (_findSession.Matches.Count == 0)
         {
             _viewModel.FindResultText = "Not found";
             return;
         }
 
         var matches = _findSession.Matches.ToArray();
-        _isApplyingFindReplacement = true;
-        try
-        {
-            for (var index = matches.Length - 1; index >= 0; index--)
-                _findSnapshot.CreateRange(matches[index]).Text = _viewModel.ReplaceText;
-        }
-        finally
-        {
-            _isApplyingFindReplacement = false;
-        }
-
-        _hasPendingFindManualAnchor = false;
+        _findPresenter.Replace(matches, _viewModel.ReplaceText);
         _findSession.Reset();
         RefreshFindResults(revealCurrent: false);
         _viewModel.FindResultText = $"Replaced {matches.Length}";
@@ -909,67 +827,4 @@ public partial class ScratchpadWindow : OverlayWindow
                 : $"{_findSession.CurrentMatchIndex + 1} of {_findSession.Matches.Count}";
     }
 
-    private SearchTextSnapshot BuildSearchTextSnapshot()
-    {
-        var text = new StringBuilder();
-        var characterStarts = new List<TextPointer>();
-        var characterEnds = new List<TextPointer>();
-        var position = Editor.Document.ContentStart.GetInsertionPosition(LogicalDirection.Forward);
-        while (position is not null && position.CompareTo(Editor.Document.ContentEnd) < 0)
-        {
-            var next = position.GetNextInsertionPosition(LogicalDirection.Forward);
-            if (next is null)
-                break;
-
-            var segment = new TextRange(position, next).Text;
-            foreach (var character in segment)
-            {
-                text.Append(character);
-                characterStarts.Add(position);
-                characterEnds.Add(next);
-            }
-            position = next;
-        }
-
-        return new SearchTextSnapshot(text.ToString(), characterStarts, characterEnds);
-    }
-
-    private sealed class SearchTextSnapshot
-    {
-        private readonly IReadOnlyList<TextPointer> _characterStarts;
-        private readonly IReadOnlyList<TextPointer> _characterEnds;
-
-        internal SearchTextSnapshot(
-            string text,
-            IReadOnlyList<TextPointer> characterStarts,
-            IReadOnlyList<TextPointer> characterEnds)
-        {
-            Text = text;
-            _characterStarts = characterStarts;
-            _characterEnds = characterEnds;
-        }
-
-        internal string Text { get; }
-
-        internal TextRange CreateRange(TextSearchMatch match)
-        {
-            return new TextRange(
-                _characterStarts[match.Start],
-                _characterEnds[match.End - 1]);
-        }
-
-        internal int GetOffset(TextPointer position, bool preferEnd)
-        {
-            for (var index = 0; index < _characterStarts.Count; index++)
-            {
-                if (position.CompareTo(_characterStarts[index]) <= 0)
-                    return index;
-
-                if (position.CompareTo(_characterEnds[index]) <= 0)
-                    return preferEnd ? index + 1 : index;
-            }
-
-            return Text.Length;
-        }
-    }
 }

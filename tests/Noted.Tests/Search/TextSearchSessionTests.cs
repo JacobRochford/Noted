@@ -189,7 +189,7 @@ public sealed class TextSearchSessionTests
     }
 
     [TestMethod]
-    public void QueryShortening_PreservesSameCurrentOccurrenceWhenItStillMatches()
+    public void QueryShortening_ResolvesEachQueryFromSuppliedAnchor()
     {
         const string text = "den early dental later";
         var dentalStart = text.IndexOf("dental", StringComparison.Ordinal);
@@ -203,11 +203,11 @@ public sealed class TextSearchSessionTests
         Assert.AreEqual(new TextSearchMatch(dentalStart, 4), _session.CurrentMatch);
 
         Refresh(text, "den", anchor: 0);
-        Assert.AreEqual(new TextSearchMatch(dentalStart, 3), _session.CurrentMatch);
+        Assert.AreEqual(new TextSearchMatch(0, 3), _session.CurrentMatch);
     }
 
     [TestMethod]
-    public void QueryShortening_DoesNotMoveBackwardToEarlierNewlyMatchingOccurrence()
+    public void QueryShortening_ResolvesEarlierNewMatchFromSuppliedAnchor()
     {
         const string text = "den early dental later den";
         var dentalStart = text.IndexOf("dental", StringComparison.Ordinal);
@@ -215,8 +215,8 @@ public sealed class TextSearchSessionTests
 
         Refresh(text, "den", anchor: 0);
 
-        Assert.AreEqual(new TextSearchMatch(dentalStart, 3), _session.CurrentMatch);
-        Assert.AreEqual(1, _session.CurrentMatchIndex);
+        Assert.AreEqual(new TextSearchMatch(0, 3), _session.CurrentMatch);
+        Assert.AreEqual(0, _session.CurrentMatchIndex);
     }
 
     [TestMethod]
@@ -242,6 +242,38 @@ public sealed class TextSearchSessionTests
 
         Assert.AreEqual(new TextSearchMatch(4, 3), _session.CurrentMatch);
         Assert.AreEqual(matchCase, _session.Options);
+    }
+
+    [TestMethod]
+    public void QueryOrOptionsChange_NotifiesAfterEstablishingCurrentResult()
+    {
+        Refresh("foo xx foo xx foo", "foo", anchor: 0);
+        var notifications = 0;
+        _session.QueryOrOptionsChanged += () =>
+        {
+            notifications++;
+            Assert.AreEqual(1, _session.CurrentMatchIndex);
+            Assert.AreEqual("fo", _session.Query);
+        };
+
+        Refresh("foo xx foo xx foo", "fo", anchor: 8);
+        Assert.AreEqual(1, notifications);
+        _session.Refresh("foo xx foo xx foo", "document", "fo",
+            new TextSearchOptions { MatchCase = true }, navigationAnchor: 8);
+        Assert.AreEqual(2, notifications);
+    }
+
+    [TestMethod]
+    public void UnchangedQueryAndOptions_DoNotNotifyForRefreshOrDocumentChanges()
+    {
+        Refresh("foo xx foo", "foo", anchor: 0);
+        var notifications = 0;
+        _session.QueryOrOptionsChanged += () => notifications++;
+
+        Refresh("foo xx foo", "foo", anchor: 8);
+        Refresh("foo xx foo!", "foo", anchor: 8);
+
+        Assert.AreEqual(0, notifications);
     }
 
     [TestMethod]

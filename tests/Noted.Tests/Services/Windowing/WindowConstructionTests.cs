@@ -8,6 +8,8 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Noted.Helpers;
+using Noted.Search;
+using System.Windows.Documents;
 using Noted.Models;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Noted.ViewModels;
@@ -69,6 +71,7 @@ public sealed class WindowConstructionTests
                 Assert.AreEqual(settingsModel.ThemeMode,
                     ((ComboBox)settingsView.FindName("AppearanceModeCombo")).SelectedValue);
                 VerifySettingsBindings(settingsView, settings, files);
+                VerifyFindLifecycle(editor, miniPad, scratchpad, directory);
                 main.CleanupResources();
                 main.Close();
                 VerifyShutdownPreparation(editor, scratchpad, directory);
@@ -87,6 +90,267 @@ public sealed class WindowConstructionTests
         thread.Start();
         Assert.IsTrue(thread.Join(TimeSpan.FromSeconds(20)), "Window construction did not complete.");
         if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
+    }
+
+    private static void VerifyFindLifecycle(
+        NoteEditorWindow noteEditor, MiniPadWindow miniPad, ScratchpadWindow scratchpad,
+        TemporaryTestDirectory directory)
+    {
+        const string text = "foo xx foo xx foo";
+        var path = directory.File("find-lifecycle.txt");
+        File.WriteAllText(path, text);
+        var document = new OpenNoteDocument(path, text, text, isDirty: false);
+        noteEditor.Workspace.Add(document);
+        Invoke(noteEditor, "ActivateDocument", document, false);
+        ((TextBox)miniPad.FindName("Editor")).Text = text;
+        var richEditor = (RichTextBox)scratchpad.FindName("Editor");
+        new TextRange(richEditor.Document.ContentStart, richEditor.Document.ContentEnd).Text = text;
+
+        foreach (var window in new Window[] { miniPad, noteEditor, scratchpad })
+        {
+            var input = (TextBox)window.FindName("FindTextBox");
+            var session = (TextSearchSession)Field(window, "_findSession");
+            void Open()
+            {
+                Invoke(window, "OpenFind", window is NoteEditorWindow ? [false] : []);
+                if (window is ScratchpadWindow)
+                    input.GetBindingExpression(TextBox.TextProperty)!.UpdateTarget();
+            }
+            void Close() => Invoke(window, "CloseFind", window is NoteEditorWindow ? [false] : []);
+            void Select(int start, int length)
+            {
+                if (window is ScratchpadWindow)
+                {
+                    var beginning = richEditor.Document.ContentStart.GetInsertionPosition(LogicalDirection.Forward)!;
+                    richEditor.Selection.Select(beginning.GetPositionAtOffset(start)!,
+                        beginning.GetPositionAtOffset(start + length)!);
+                }
+                else
+                {
+                    var editor = (TextBox)window.FindName(window is MiniPadWindow ? "Editor" : "EditorTextBox");
+                    editor.Select(start, length);
+                }
+            }
+
+            input.Text = "foo";
+            if (window is ScratchpadWindow)
+                input.GetBindingExpression(TextBox.TextProperty)!.UpdateSource();
+            var presenter = Field(window, window is NoteEditorWindow ? "_primaryFindPresenter" : "_findPresenter");
+            int ScrollVersion() => presenter is null ? 0 : (int)Field(presenter, "_scrollRequestVersion");
+            Select(8, 0);
+            var scrollVersion = ScrollVersion();
+            var richSelection = richEditor.Selection.Start;
+            Open();
+            Assert.AreEqual(scrollVersion, ScrollVersion(), "Opening must not request result reveal.");
+            if (window is ScratchpadWindow)
+                Assert.AreEqual(0, richSelection.CompareTo(richEditor.Selection.Start), "Opening must not select/reveal a rich-text result.");
+            Assert.AreEqual(1, session.CurrentMatchIndex, window.GetType().Name + " must open from the editor state.");
+            Invoke(window, "FindNext");
+            Assert.AreEqual(2, session.CurrentMatchIndex);
+            Select(3, 3); // With the editor unfocused, refocusing must preserve the query.
+            var matches = session.Matches;
+            var preferredPosition = session.PreferredNavigationPosition;
+            var pendingOwner = Field(window, window is NoteEditorWindow ? "_activeFindPresenter" : "_findPresenter");
+            var pendingField = "_hasPendingManualNavigationAnchor";
+            Assert.AreEqual(true, Field(pendingOwner, pendingField));
+            scrollVersion = ScrollVersion();
+            Open();
+            Assert.AreEqual(scrollVersion, ScrollVersion(), "Refocusing must not request result reveal.");
+            Assert.AreEqual("foo", input.Text);
+            Assert.AreSame(matches, session.Matches);
+            Assert.AreEqual(2, session.CurrentMatchIndex);
+            Assert.AreEqual(preferredPosition, session.PreferredNavigationPosition);
+            Assert.AreEqual(true, Field(pendingOwner, pendingField), "Refocusing must preserve pending navigation.");
+            Invoke(window, "FindNext");
+            Assert.AreEqual(1, session.CurrentMatchIndex, "The preserved manual anchor must affect the next navigation.");
+            Close();
+            Select(1, 0);
+            Open();
+            Assert.AreEqual(0, session.CurrentMatchIndex, "Reopening must create a fresh session.");
+            Assert.AreEqual(false, Field(pendingOwner, pendingField));
+            Close();
+
+            // Seeding a different query must not trigger a reveal or schedule a query refresh.
+            Select(4, 2);
+            scrollVersion = ScrollVersion();
+            var refreshVersion = window is NoteEditorWindow ? Field(window, "_findRefreshVersion") : null;
+            Open();
+            Assert.AreEqual("xx", input.Text);
+            Assert.AreEqual(scrollVersion, ScrollVersion());
+            if (window is NoteEditorWindow)
+                Assert.AreEqual(refreshVersion, Field(window, "_findRefreshVersion"));
+            Close();
+
+            void Refresh() => Invoke(window, "RefreshFindResults", window switch
+            {
+                MiniPadWindow => [false],
+                NoteEditorWindow => [false, null!],
+                _ => [false, null!]
+            });
+            void SetQuery(string query)
+            {
+                input.Text = query;
+                if (window is ScratchpadWindow)
+                    input.GetBindingExpression(TextBox.TextProperty)!.UpdateSource();
+                Refresh(); // NoteEditor normally dispatches this refresh after typing.
+            }
+
+            Select(1, 0);
+            Open();
+            foreach (var forward in new[] { true, false })
+            {
+                SetQuery("foo");
+                Select(9, 0);
+                Select(8, 0);
+                Assert.AreEqual(true, Field(pendingOwner, pendingField));
+                Refresh();
+                Assert.AreEqual(true, Field(pendingOwner, pendingField), "An unchanged refresh must preserve manual navigation.");
+                SetQuery("fo");
+                Assert.AreEqual(1, session.CurrentMatchIndex);
+                Assert.AreEqual(false, Field(pendingOwner, pendingField), "A new query must discard the old manual anchor.");
+                Invoke(window, forward ? "FindNext" : "FindPrevious");
+                Assert.AreEqual(forward ? 2 : 0, session.CurrentMatchIndex,
+                    window.GetType().Name + " must navigate from the new query's active result.");
+
+                if (window is NoteEditorWindow)
+                {
+                    Select(9, 0);
+                    Select(8, 0);
+                    var matchCase = (CheckBox)window.FindName("MatchCaseOption");
+                    matchCase.IsChecked = matchCase.IsChecked != true;
+                    Assert.AreEqual(1, session.CurrentMatchIndex);
+                    Assert.AreEqual(false, Field(pendingOwner, pendingField), "An option change must discard the old manual anchor.");
+                    Invoke(window, forward ? "FindNext" : "FindPrevious");
+                    Assert.AreEqual(forward ? 2 : 0, session.CurrentMatchIndex);
+                }
+
+                SetQuery("foo");
+                Select(10, 0);
+                Select(9, 0);
+                Assert.AreEqual(true, Field(pendingOwner, pendingField), "Later manual movement must still arm navigation.");
+                Invoke(window, forward ? "FindNext" : "FindPrevious");
+                Assert.AreEqual(1, session.CurrentMatchIndex);
+                Invoke(window, forward ? "FindNext" : "FindPrevious");
+                Assert.AreEqual(forward ? 2 : 0, session.CurrentMatchIndex, "The manual anchor must be consumed only once.");
+            }
+            Close();
+
+            foreach (var selectionLength in new[] { 0, 3 })
+            {
+                Select(1, 0);
+                Open();
+                SetQuery("foo");
+                Invoke(window, "FindNext");
+                Invoke(window, "FindNext");
+                Assert.AreEqual(2, session.CurrentMatchIndex);
+                Select(3, selectionLength);
+                if (window is ScratchpadWindow)
+                {
+                    var caret = richEditor.CaretPosition;
+                    var start = richEditor.Selection.Start;
+                    var end = richEditor.Selection.End;
+                    Close();
+                    Assert.AreEqual(0, caret.CompareTo(richEditor.CaretPosition));
+                    Assert.AreEqual(0, start.CompareTo(richEditor.Selection.Start));
+                    Assert.AreEqual(0, end.CompareTo(richEditor.Selection.End));
+                    Assert.AreEqual(0, ((RichTextBoxSearchPresenter)presenter).GetGeometrySnapshot().Matches.Count);
+                }
+                else
+                {
+                    var editor = (TextBox)window.FindName(window is MiniPadWindow ? "Editor" : "EditorTextBox");
+                    var caret = editor.CaretIndex;
+                    Close();
+                    Assert.AreEqual(caret, editor.CaretIndex);
+                    Assert.AreEqual(3, editor.SelectionStart);
+                    Assert.AreEqual(selectionLength, editor.SelectionLength);
+                    Assert.AreEqual(0, ((TextBoxSearchPresenter)presenter!).GetGeometrySnapshot().Matches.Count);
+                }
+                Assert.IsNull(session.CurrentMatch);
+                Assert.AreEqual(0, session.Matches.Count);
+                Assert.AreEqual(false, Field(pendingOwner, pendingField));
+                Assert.AreEqual(string.Empty, window is ScratchpadWindow
+                    ? ((ScratchpadWindowViewModel)window.DataContext).FindResultText
+                    : ((TextBlock)window.FindName("FindResultText")).Text);
+            }
+            // Exercise real keyboard focus on an undisplayed native surface.
+            // Do not pump the application dispatcher: this construction test must
+            // not start App or its single-instance integration.
+            var content = (FrameworkElement)window.Content;
+            var localDataContext = content.ReadLocalValue(FrameworkElement.DataContextProperty);
+            var inheritedDataContext = content.DataContext;
+            window.Content = null;
+            content.DataContext = inheritedDataContext;
+            using var source = new HwndSource(new HwndSourceParameters("Noted Find seeding regression")
+            { Width = 900, Height = 700, WindowStyle = unchecked((int)0x80000000) });
+            try
+            {
+                source.RootVisual = content;
+                content.Measure(new Size(900, 700));
+                content.Arrange(new Rect(0, 0, 900, 700));
+                content.UpdateLayout();
+                var editorControl = window is ScratchpadWindow ? (Control)richEditor :
+                    (Control)window.FindName(window is MiniPadWindow ? "Editor" : "EditorTextBox");
+                Select(1, 0);
+                Open();
+                SetQuery("foo");
+                Invoke(window, "FindNext");
+                Invoke(window, "FindNext");
+                Assert.IsTrue(editorControl.Focus(), window.GetType().Name + " editor must receive keyboard focus.");
+                Select(4, 2);
+                Assert.IsTrue(editorControl.IsKeyboardFocusWithin, window.GetType().Name + " editor must have actual keyboard focus.");
+                var versionBeforeSeed = ScrollVersion();
+                Open();
+                Assert.AreEqual("xx", input.Text, "Ctrl+F from the focused editor must seed the selected text.");
+                Assert.AreEqual(new TextSearchMatch(4, 2), session.CurrentMatch);
+                Assert.AreEqual(false, Field(pendingOwner, pendingField));
+                // A changed RichTextBox result cancels old scroll work, but must not actually scroll.
+                if (window is not ScratchpadWindow)
+                    Assert.AreEqual(versionBeforeSeed, ScrollVersion());
+                Invoke(window, "FindNext");
+                Assert.AreEqual(1, session.CurrentMatchIndex);
+
+                Assert.IsTrue(editorControl.Focus());
+                Select(0, 0);
+                var preservedMatches = session.Matches;
+                Open();
+                Assert.AreEqual("xx", input.Text);
+                Assert.AreSame(preservedMatches, session.Matches);
+                Assert.AreEqual(1, session.CurrentMatchIndex);
+                Assert.AreEqual(true, Field(pendingOwner, pendingField));
+
+                Assert.IsTrue(editorControl.Focus());
+                Select(7, 3);
+                Assert.IsTrue(input.Focus());
+                Open();
+                Assert.AreEqual("xx", input.Text, "Ctrl+F in Find must ignore the editor's retained selection.");
+                Assert.AreSame(preservedMatches, session.Matches);
+                Assert.AreEqual(1, session.CurrentMatchIndex);
+                Assert.AreEqual(input.Text.Length, input.SelectionLength);
+
+                Invoke(window, "FindNext");
+                Assert.IsTrue(editorControl.Focus());
+                Select(11, 2);
+                Open();
+                Assert.AreEqual("xx", input.Text);
+                Assert.AreEqual(new TextSearchMatch(11, 2), session.CurrentMatch,
+                    "Seeding the same query must establish the selected occurrence from SelectionStart.");
+                Close();
+            }
+            finally
+            {
+                source.RootVisual = null;
+                window.Content = content;
+                if (localDataContext == DependencyProperty.UnsetValue)
+                    content.ClearValue(FrameworkElement.DataContextProperty);
+                else
+                    content.SetValue(FrameworkElement.DataContextProperty, localDataContext);
+            }
+        }
+
+        static object Field(object target, string name) => target.GetType()
+            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
+        static void Invoke(object target, string name, params object[] args) => target.GetType()
+            .GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
     }
 
     private static Button? FindHotkeyEditButton(DependencyObject parent)

@@ -14,7 +14,8 @@
         Left="150"
         Top="150"
         MinWidth="300"
-        MinHeight="250">
+        MinHeight="250"
+        PreviewKeyDown="Window_PreviewKeyDown">
 
     <noted:OverlayWindow.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
@@ -262,21 +263,23 @@
                         Background="{DynamicResource NotedSurfaceBrush}"
                         BorderBrush="{DynamicResource NotedBorderBrush}"
                         BorderThickness="1" CornerRadius="8" ClipToBounds="True">
-                    <RichTextBox x:Name="Editor"
-                                Background="{DynamicResource NotedInputBackgroundBrush}"
-                                Foreground="{DynamicResource NotedTextBrush}"
-                                BorderThickness="0" Padding="11,9"
-                                FontFamily="Segoe UI" FontSize="13"
-                                CaretBrush="{DynamicResource NotedTextBrush}"
-                                SelectionBrush="{DynamicResource NotedSelectionBrush}"
-                                IsInactiveSelectionHighlightEnabled="True"
-                                 VerticalScrollBarVisibility="Auto"
-                                 AcceptsReturn="True" AcceptsTab="True"
-                                 SpellCheck.IsEnabled="True"
-                                 TextChanged="Editor_TextChanged"
-                                 SelectionChanged="Editor_SelectionChanged"
-                                 PreviewMouseDoubleClick="Editor_PreviewMouseDoubleClick"
-                                 PreviewKeyDown="Editor_PreviewKeyDown"/>
+                    <AdornerDecorator>
+                        <RichTextBox x:Name="Editor"
+                                    Background="{DynamicResource NotedInputBackgroundBrush}"
+                                    Foreground="{DynamicResource NotedTextBrush}"
+                                    BorderThickness="0" Padding="11,9"
+                                    FontFamily="Segoe UI" FontSize="13"
+                                    CaretBrush="{DynamicResource NotedTextBrush}"
+                                    SelectionBrush="{DynamicResource NotedSelectionBrush}"
+                                    IsInactiveSelectionHighlightEnabled="True"
+                                     VerticalScrollBarVisibility="Auto"
+                                     AcceptsReturn="True" AcceptsTab="True"
+                                     SpellCheck.IsEnabled="True"
+                                     TextChanged="Editor_TextChanged"
+                                     SelectionChanged="Editor_SelectionChanged"
+                                     PreviewMouseDoubleClick="Editor_PreviewMouseDoubleClick"
+                                     PreviewKeyDown="Editor_PreviewKeyDown"/>
+                    </AdornerDecorator>
                 </Border>
 
                 <Grid Grid.Row="4" Margin="1,8,1,0">

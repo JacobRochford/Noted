@@ -17,6 +17,7 @@ public partial class MiniPadWindow : OverlayWindow
     private readonly SaveScheduler<string> _saveScheduler;
     private readonly TextSearchSession _findSession = new();
     private TextBoxSearchPresenter? _findPresenter;
+    private bool _isSeedingFindQuery;
     private bool _keepDraftOnClose;
     private bool _preserveOpenStateOnClose;
     private bool _reopenOnStartup;
@@ -35,6 +36,7 @@ public partial class MiniPadWindow : OverlayWindow
 
         InitializeComponent();
         _findPresenter = new TextBoxSearchPresenter(Editor);
+        _findSession.QueryOrOptionsChanged += _findPresenter.ClearPendingManualNavigationAnchor;
         InitializeOverlay(false, settingsService.LoadGhostModeOpacity(), settingsService.LoadDefaultOpacity());
         SetWordWrap(settingsService.LoadMiniPadWindowState().WordWrapEnabled);
         AlwaysVisibleMenuItem.IsChecked = settingsService.LoadWindowAlwaysVisible(nameof(MiniPadWindow));
@@ -245,11 +247,25 @@ public partial class MiniPadWindow : OverlayWindow
     private void FindMenuItem_Click(object sender, RoutedEventArgs e) => OpenFind();
     private void OpenFind()
     {
-        FindPanel.Visibility = Visibility.Visible;
+        var wasVisible = FindPanel.Visibility == Visibility.Visible;
+        var seed = FindSelectionSeed.GetQuery(Editor.SelectedText, wasVisible, Editor.IsKeyboardFocusWithin);
+        if (wasVisible && seed is null)
+        {
+            FindTextBox.Focus();
+            FindTextBox.SelectAll();
+            return;
+        }
+
         _findSession.Reset();
         _findPresenter?.BeginFind();
-        if (Editor.SelectionLength > 0 && !Editor.SelectedText.Contains('\n')) FindTextBox.Text = Editor.SelectedText;
-        RefreshFindResults(revealCurrent: true);
+        if (seed is not null)
+        {
+            _isSeedingFindQuery = true;
+            try { FindTextBox.Text = seed; }
+            finally { _isSeedingFindQuery = false; }
+        }
+        FindPanel.Visibility = Visibility.Visible;
+        RefreshFindResults(revealCurrent: false);
         FindTextBox.Focus();
         FindTextBox.SelectAll();
     }
@@ -258,8 +274,9 @@ public partial class MiniPadWindow : OverlayWindow
     private void CloseFind()
     {
         FindPanel.Visibility = Visibility.Collapsed;
-        _findPresenter?.EndFind(_findSession.CurrentMatch);
+        _findPresenter?.EndFind();
         _findSession.Reset();
+        FindResultText.Text = string.Empty;
         Editor.Focus();
     }
 
@@ -278,8 +295,11 @@ public partial class MiniPadWindow : OverlayWindow
         e.Handled = true;
     }
 
-    private void FindTextBox_TextChanged(object sender, TextChangedEventArgs e) =>
-        RefreshFindResults(revealCurrent: true);
+    private void FindTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (FindPanel.Visibility == Visibility.Visible && !_isSeedingFindQuery)
+            RefreshFindResults(revealCurrent: true);
+    }
 
     private void RefreshFindResults(bool revealCurrent)
     {
@@ -324,7 +344,7 @@ public partial class MiniPadWindow : OverlayWindow
             return;
         }
 
-        var manualAnchor = _findPresenter.ConsumePendingManualNavigationAnchor(forward);
+        var manualAnchor = _findPresenter.ConsumePendingManualNavigationAnchor();
         if (forward)
             _findSession.Next(manualAnchor);
         else

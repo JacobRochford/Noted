@@ -29,7 +29,6 @@ internal sealed class TextBoxSearchPresenter : IDisposable
     private int _userSelectionLength;
     private int _scrollRequestVersion;
     private bool _hasPendingManualNavigationAnchor;
-    private bool _applyingSearchSelection;
     private bool _disposed;
 
     internal TextBoxSearchPresenter(TextBox editor)
@@ -90,28 +89,21 @@ internal sealed class TextBoxSearchPresenter : IDisposable
     internal int GetQueryRefreshAnchor() =>
         Math.Clamp(_userSelectionStart, 0, _editor.Text.Length);
 
-    internal int? ConsumePendingManualNavigationAnchor(bool forward)
+    internal void ClearPendingManualNavigationAnchor() =>
+        _hasPendingManualNavigationAnchor = false;
+
+    internal int? ConsumePendingManualNavigationAnchor()
     {
         if (!_hasPendingManualNavigationAnchor)
             return null;
 
         _hasPendingManualNavigationAnchor = false;
-        var selectionStart = Math.Clamp(_userSelectionStart, 0, _editor.Text.Length);
-        var selectionLength = Math.Clamp(
-            _userSelectionLength,
-            0,
-            _editor.Text.Length - selectionStart);
-        return forward
-            ? Math.Clamp(selectionStart + selectionLength, 0, _editor.Text.Length)
-            : selectionStart;
+        return Math.Clamp(_userSelectionStart, 0, _editor.Text.Length);
     }
 
-    internal void EndFind(TextSearchMatch? currentMatch)
+    internal void EndFind()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-
-        if (currentMatch is { } match)
-            SynchronizeSearchSelection(match);
 
         _hasPendingManualNavigationAnchor = false;
         Clear();
@@ -190,26 +182,6 @@ internal sealed class TextBoxSearchPresenter : IDisposable
         _ = _editor.Dispatcher.BeginInvoke(
             DispatcherPriority.Render,
             new Action(() => BringCurrentIntoView(requestVersion, allowCorrection: false)));
-    }
-
-    private void SynchronizeSearchSelection(TextSearchMatch currentMatch)
-    {
-        if (currentMatch.Start < 0 ||
-            currentMatch.Length <= 0 ||
-            currentMatch.End > _editor.Text.Length)
-        {
-            return;
-        }
-
-        _applyingSearchSelection = true;
-        try
-        {
-            _editor.Select(currentMatch.Start, currentMatch.Length);
-        }
-        finally
-        {
-            _applyingSearchSelection = false;
-        }
     }
 
     private bool RevealVertical(TextSearchMatch match)
@@ -348,9 +320,6 @@ internal sealed class TextBoxSearchPresenter : IDisposable
 
     private void Editor_SelectionChanged(object sender, RoutedEventArgs e)
     {
-        if (_applyingSearchSelection)
-            return;
-
         if (_editor.SelectionStart == _userSelectionStart &&
             _editor.SelectionLength == _userSelectionLength)
         {

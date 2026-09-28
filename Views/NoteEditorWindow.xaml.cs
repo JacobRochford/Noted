@@ -62,6 +62,7 @@ public partial class NoteEditorWindow : Window
     private OpenNoteDocument? _activeFindDocument;
     private bool _isApplyingFindReplacement;
     private int _findRefreshVersion;
+    private bool _isSeedingFindQuery;
     private ReadOnlyObservableCollection<OpenNoteDocument> _documents => _workspace.Documents;
     private OpenNoteDocument? _activeDocument => _workspace.ActiveDocument;
     private OpenNoteDocument? _secondaryDocument => _workspace.SecondaryDocument;
@@ -87,6 +88,8 @@ public partial class NoteEditorWindow : Window
         InitializeComponent();
         _primaryFindPresenter = new TextBoxSearchPresenter(EditorTextBox);
         _secondaryFindPresenter = new TextBoxSearchPresenter(SecondaryEditorTextBox);
+        _findSession.QueryOrOptionsChanged += _primaryFindPresenter.ClearPendingManualNavigationAnchor;
+        _findSession.QueryOrOptionsChanged += _secondaryFindPresenter.ClearPendingManualNavigationAnchor;
         _recoverySaveScheduler = new SaveScheduler<IReadOnlyList<RecoveryDraftSnapshot>>(
             Dispatcher,
             quietPeriod: TimeSpan.FromMilliseconds(750),
@@ -1230,6 +1233,20 @@ public partial class NoteEditorWindow : Window
 
     private void OpenFind(bool showReplace)
     {
+        var wasVisible = FindPanel.Visibility == Visibility.Visible;
+        var seed = FindSelectionSeed.GetQuery(CurrentEditorTextBox.SelectedText, wasVisible, CurrentEditorTextBox.IsKeyboardFocusWithin);
+        if (wasVisible && seed is null)
+        {
+            if (showReplace)
+            {
+                ShowReplaceToggle.IsChecked = true;
+                UpdateReplaceRowVisibility();
+            }
+            FindTextBox.Focus();
+            FindTextBox.SelectAll();
+            return;
+        }
+
         var targetDocument = CurrentDocument;
         if (targetDocument is null)
             return;
@@ -1244,24 +1261,26 @@ public partial class NoteEditorWindow : Window
             }
         }
 
-        var wasVisible = FindPanel.Visibility == Visibility.Visible;
         PositionFindPanel();
-        FindPanel.Visibility = Visibility.Visible;
-        ActivateFindPresenter();
-        if (showReplace)
-            ShowReplaceToggle.IsChecked = true;
-        else if (!wasVisible)
-            ShowReplaceToggle.IsChecked = false;
+        var presenter = ActivateFindPresenter();
+        if (wasVisible)
+        {
+            _findRefreshVersion++;
+            _findSession.Reset();
+            presenter.BeginFind();
+        }
+        if (showReplace || !wasVisible)
+            ShowReplaceToggle.IsChecked = showReplace;
         UpdateReplaceRowVisibility();
 
-        var selectedText = CurrentEditorTextBox.SelectedText;
-        if (!string.IsNullOrEmpty(selectedText)
-            && selectedText.Length <= 200
-            && selectedText.IndexOfAny(['\r', '\n']) < 0)
+        if (seed is not null)
         {
-            FindTextBox.Text = selectedText;
+            _isSeedingFindQuery = true;
+            try { FindTextBox.Text = seed; }
+            finally { _isSeedingFindQuery = false; }
         }
-        RefreshFindResults(revealCurrent: true);
+        FindPanel.Visibility = Visibility.Visible;
+        RefreshFindResults(revealCurrent: false);
 
         FindTextBox.Focus();
         FindTextBox.SelectAll();
@@ -1278,7 +1297,7 @@ public partial class NoteEditorWindow : Window
         FindPanel.Visibility = Visibility.Collapsed;
 
         var editorToFocus = _activeFindEditor ?? CurrentEditorTextBox;
-        _activeFindPresenter?.EndFind(_findSession.CurrentMatch);
+        _activeFindPresenter?.EndFind();
         _primaryFindPresenter.Clear();
         _secondaryFindPresenter.Clear();
         _findSession.Reset();
@@ -1315,7 +1334,7 @@ public partial class NoteEditorWindow : Window
 
     private void FindTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (FindPanel.Visibility != Visibility.Visible)
+        if (FindPanel.Visibility != Visibility.Visible || _isSeedingFindQuery)
             return;
 
         var refreshVersion = ++_findRefreshVersion;
@@ -1370,7 +1389,7 @@ public partial class NoteEditorWindow : Window
             return;
 
         var presenter = ActivateFindPresenter();
-        var manualAnchor = presenter.ConsumePendingManualNavigationAnchor(forward);
+        var manualAnchor = presenter.ConsumePendingManualNavigationAnchor();
         if (forward)
             _findSession.Next(manualAnchor);
         else

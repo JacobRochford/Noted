@@ -337,6 +337,7 @@ public sealed class TextBoxSearchPresenterTests
             surface.MoveFind(forward: true);
             Assert.AreEqual(new TextSearchMatch(7, 3), surface.Session.CurrentMatch);
 
+            surface.CloseFind();
             surface.Editor.Select(1, 0);
             surface.OpenFind();
 
@@ -346,7 +347,79 @@ public sealed class TextBoxSearchPresenterTests
     }
 
     [TestMethod]
-    public void ManualRangeReanchor_UsesDirectionalEndpointOnceThenCurrentMatch()
+    [DataRow(true, 1, 0)]
+    [DataRow(false, 1, 0)]
+    public void OpeningFind_UsesSelectionStartRegardlessOfDirection(bool forward, int expectedAnchor, int expectedMatchIndex)
+    {
+        RunOnSta(() =>
+        {
+            using var surface = new TextBoxSurface("foo xx foo xx foo", 300, 140);
+            SelectRangeWithKeyboard(surface.Editor, 1, 8, forward);
+            surface.Presenter.BeginFind();
+            Assert.AreEqual(expectedAnchor, surface.Presenter.GetQueryRefreshAnchor());
+            var session = CreateSession(surface.Editor, "foo", surface.Presenter.GetQueryRefreshAnchor());
+            surface.Presenter.Present(session, bringCurrentIntoView: false);
+            Assert.AreEqual(expectedMatchIndex, session.CurrentMatchIndex);
+            Assert.AreEqual(1, surface.Editor.SelectionStart);
+            Assert.AreEqual(7, surface.Editor.SelectionLength);
+        });
+    }
+
+    [TestMethod]
+    [DataRow(true, 1, 0)]
+    [DataRow(false, 1, 0)]
+    public void QueryChange_UsesSelectionStartRegardlessOfDirection(bool forward, int expectedAnchor, int expectedMatchIndex)
+    {
+        RunOnSta(() =>
+        {
+            using var surface = new TextBoxSurface("foo xx foo xx foo", 300, 140);
+            surface.Presenter.BeginFind();
+            var session = CreateSession(surface.Editor, "foo", 14);
+            surface.Presenter.Present(session, bringCurrentIntoView: false);
+            SelectRangeWithKeyboard(surface.Editor, 1, 8, forward);
+            Assert.AreEqual(2, session.CurrentMatchIndex, "Manual selection must not promote another match.");
+            Assert.AreEqual(expectedAnchor, surface.Presenter.GetQueryRefreshAnchor());
+            session.Refresh(surface.Editor.Text, surface.Editor, "fo", default, surface.Presenter.GetQueryRefreshAnchor());
+            Assert.AreEqual(expectedMatchIndex, session.CurrentMatchIndex);
+            Assert.AreEqual(1, surface.Editor.SelectionStart);
+            Assert.AreEqual(7, surface.Editor.SelectionLength);
+        });
+    }
+
+    [TestMethod]
+    public void SameRangeWithReversedDirection_DoesNotChangeFindState()
+    {
+        RunOnSta(() =>
+        {
+            using var surface = new TextBoxSurface("foo xx foo xx foo", 300, 140);
+            SelectRangeWithKeyboard(surface.Editor, 1, 8, forward: true);
+            surface.Presenter.BeginFind();
+            Assert.AreEqual(1, surface.Presenter.GetQueryRefreshAnchor());
+            surface.Editor.BeginChange();
+            try { SelectRangeWithKeyboard(surface.Editor, 1, 8, forward: false); }
+            finally { surface.Editor.EndChange(); }
+            Assert.AreEqual(1, surface.Editor.SelectionStart);
+            Assert.AreEqual(7, surface.Editor.SelectionLength);
+            Assert.AreEqual(1, surface.Presenter.GetQueryRefreshAnchor());
+            Assert.IsNull(surface.Presenter.ConsumePendingManualNavigationAnchor());
+            surface.Editor.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.TextBoxBase.SelectionChangedEvent));
+            Assert.IsNull(surface.Presenter.ConsumePendingManualNavigationAnchor());
+        });
+    }
+
+    private static void SelectRangeWithKeyboard(TextBox editor, int start, int end, bool forward)
+    {
+        editor.Focus();
+        editor.Select(forward ? start : end, 0);
+        var command = forward ? EditingCommands.SelectRightByCharacter : EditingCommands.SelectLeftByCharacter;
+        for (var index = start; index < end; index++)
+            command.Execute(null, editor);
+        Assert.AreEqual(start, editor.SelectionStart);
+        Assert.AreEqual(end - start, editor.SelectionLength);
+    }
+
+    [TestMethod]
+    public void ManualRangeReanchor_UsesSelectionStartOnceThenCurrentMatch()
     {
         RunOnSta(() =>
         {
@@ -356,9 +429,9 @@ public sealed class TextBoxSearchPresenterTests
 
             surface.Editor.Select(8, 4);
             surface.MoveFind(forward: true);
-            Assert.AreEqual(new TextSearchMatch(14, 3), surface.Session.CurrentMatch);
+            Assert.AreEqual(new TextSearchMatch(7, 3), surface.Session.CurrentMatch);
             surface.MoveFind(forward: true);
-            Assert.AreEqual(new TextSearchMatch(21, 3), surface.Session.CurrentMatch);
+            Assert.AreEqual(new TextSearchMatch(14, 3), surface.Session.CurrentMatch);
             Assert.AreEqual(8, surface.Editor.SelectionStart);
             Assert.AreEqual(4, surface.Editor.SelectionLength);
 
@@ -487,7 +560,9 @@ public sealed class TextBoxSearchPresenterTests
     }
 
     [TestMethod]
-    public void CloseFind_ExplicitlyHandsCurrentMatchBackToNativeEditorSelection()
+    [DataRow(1, 0)]
+    [DataRow(3, 3)]
+    public void CloseFind_PreservesCaretAndSelectionInsteadOfSelectingCurrentMatch(int selectionStart, int selectionLength)
     {
         RunOnSta(() =>
         {
@@ -498,15 +573,16 @@ public sealed class TextBoxSearchPresenterTests
             surface.SetQuery("foo");
             surface.MoveFind(forward: true);
             surface.MoveFind(forward: true);
-            var finalMatch = surface.Session.CurrentMatch!.Value;
-            Assert.AreEqual(1, surface.Editor.SelectionStart);
-            Assert.AreEqual(0, surface.Editor.SelectionLength);
+            Assert.AreEqual(new TextSearchMatch(14, 3), surface.Session.CurrentMatch);
+            surface.Editor.Select(selectionStart, selectionLength);
+            var caret = surface.Editor.CaretIndex;
 
             surface.CloseFind();
 
-            Assert.AreEqual(finalMatch.Start, surface.Editor.SelectionStart);
-            Assert.AreEqual(finalMatch.Length, surface.Editor.SelectionLength);
-            Assert.AreEqual(finalMatch.Length, surface.Editor.SelectedText.Length);
+            Assert.AreEqual(caret, surface.Editor.CaretIndex);
+            Assert.AreEqual(selectionStart, surface.Editor.SelectionStart);
+            Assert.AreEqual(selectionLength, surface.Editor.SelectionLength);
+            Assert.IsNull(surface.Presenter.ConsumePendingManualNavigationAnchor());
             Assert.AreEqual(0, surface.Presenter.GetGeometrySnapshot().Matches.Count);
             Assert.IsNull(surface.Presenter.GetGeometrySnapshot().CurrentVisualRow);
             Assert.IsNull(surface.Session.CurrentMatch);
@@ -889,7 +965,7 @@ public sealed class TextBoxSearchPresenterTests
         internal void CloseFind()
         {
             _findPanel.Visibility = Visibility.Collapsed;
-            Presenter.EndFind(Session.CurrentMatch);
+            Presenter.EndFind();
             Session.Reset();
             Editor.Focus();
             Pump();
@@ -906,7 +982,7 @@ public sealed class TextBoxSearchPresenterTests
             if (Session.Matches.Count == 0)
                 return;
 
-            var manualAnchor = Presenter.ConsumePendingManualNavigationAnchor(forward);
+            var manualAnchor = Presenter.ConsumePendingManualNavigationAnchor();
             if (forward)
                 Session.Next(manualAnchor);
             else

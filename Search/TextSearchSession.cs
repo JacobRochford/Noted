@@ -2,6 +2,8 @@ namespace Noted.Search;
 
 internal sealed class TextSearchSession
 {
+    internal event Action? QueryOrOptionsChanged;
+
     internal string Query { get; private set; } = string.Empty;
 
     internal TextSearchOptions Options { get; private set; }
@@ -63,6 +65,8 @@ internal sealed class TextSearchSession
 
         PreferredNavigationPosition = navigationAnchor;
         SetCurrent(FindNextMatch(Matches, navigationAnchor));
+        if (queryChanged || optionsChanged)
+            QueryOrOptionsChanged?.Invoke();
     }
 
     internal TextSearchMatch? Next(int? navigationAnchor = null)
