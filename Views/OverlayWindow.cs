@@ -145,7 +145,8 @@ public abstract class OverlayWindow : Window
 
     private void ShowWindowCore()
     {
-        Visibility = Visibility.Visible;
+        // Show synchronously so the native handle exists before requesting activation
+        Show();
         var hwnd = new WindowInteropHelper(this).Handle;
         WindowInterop.StripNoActivate(hwnd);
         WindowInterop.SetForegroundWindow(hwnd);
