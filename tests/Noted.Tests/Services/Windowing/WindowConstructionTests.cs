@@ -1,4 +1,3 @@
-using System.Runtime.ExceptionServices;
 using System.Reflection;
 using System.IO;
 using System.Windows;
@@ -23,17 +22,14 @@ public sealed class WindowConstructionTests
     [TestMethod]
     public void SharedResourcesAndChangedWindowsLoadWithoutStartingTheApplication()
     {
-        Exception? failure = null;
-        var thread = new Thread(() =>
+        WpfTestHost.Invoke(() =>
         {
+            using var directory = new TemporaryTestDirectory();
+            var existingWindows = Application.Current.Windows.Cast<Window>().ToHashSet();
             try
             {
-                using var directory = new TemporaryTestDirectory();
                 System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(typeof(App).TypeHandle);
                 VerifyRenderingDuringDocumentChanges();
-                var app = new App();
-                app.InitializeComponent();
-                app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 var settings = new AppSettingsService(directory.Path);
                 var editor = new NoteEditorWindow(new NoteContentService(directory.Path), settings,
                     new NoteRecoveryService(directory.Path), new NoteEditorSessionService(directory.Path));
@@ -81,15 +77,18 @@ public sealed class WindowConstructionTests
                 dictionary.Close();
                 checklist.Close();
                 scratchpad.Close();
-                app.Shutdown();
             }
-            catch (Exception ex) { failure = ex; }
+            finally
+            {
+                foreach (var window in Application.Current.Windows.Cast<Window>()
+                    .Where(window => !existingWindows.Contains(window)).ToArray())
+                {
+                    if (window is MainWindow main) main.CleanupResources();
+                    if (window is MiniPadWindow miniPad) miniPad.KeepDraftOnClose();
+                    window.Close();
+                }
+            }
         });
-        thread.IsBackground = true;
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        Assert.IsTrue(thread.Join(TimeSpan.FromSeconds(20)), "Window construction did not complete.");
-        if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     private static void VerifyFindLifecycle(
@@ -273,8 +272,7 @@ public sealed class WindowConstructionTests
                     : ((TextBlock)window.FindName("FindResultText")).Text);
             }
             // Exercise real keyboard focus on an undisplayed native surface.
-            // Do not pump the application dispatcher: this construction test must
-            // not start App or its single-instance integration.
+            // Keep focus assertions synchronous so queued Find work cannot change their state.
             var content = (FrameworkElement)window.Content;
             var localDataContext = content.ReadLocalValue(FrameworkElement.DataContextProperty);
             var inheritedDataContext = content.DataContext;
