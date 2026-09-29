@@ -46,12 +46,14 @@ public sealed class SettingsViewModelTests
         context.Model.TimestampPlacementBottom = true;
         context.Model.ShowModifiedSubtitle = false;
         context.Model.ConfirmNoteDeletion = false;
+        context.Model.NormalizePastedText = false;
 
         Assert.AreEqual(NewNoteMode.Quick, context.Settings.LoadNewNoteMode());
         Assert.AreEqual(FolderNavigationMode.Expand, context.Settings.LoadFolderNavigationMode());
         Assert.AreEqual(NoteTimestampPlacement.Bottom, context.Settings.LoadTimestampPlacement());
         Assert.IsFalse(context.Settings.LoadShowModifiedSubtitle());
         Assert.IsFalse(context.Settings.LoadConfirmNoteDeletion());
+        Assert.IsFalse(context.Settings.LoadNormalizePastedText());
         CollectionAssert.Contains(changes, nameof(SettingsViewModel.NewNoteMode));
         CollectionAssert.Contains(changes, nameof(SettingsViewModel.FolderNavigationMode));
     }

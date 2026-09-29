@@ -12,6 +12,18 @@ namespace Noted.Tests.Services;
 public sealed class AppSettingsServiceTests
 {
     [TestMethod]
+    public void PasteNormalizationDefaultsToEnabledAndPersistsChanges()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        Assert.IsTrue(settings.LoadNormalizePastedText());
+        settings.SaveNormalizePastedText(false);
+        Assert.IsFalse(new AppSettingsService(directory.Path).LoadNormalizePastedText());
+        settings.SaveNormalizePastedText(true);
+        Assert.IsTrue(new AppSettingsService(directory.Path).LoadNormalizePastedText());
+    }
+
+    [TestMethod]
     public void RetryableWriteFailurePreservesItsCauseAndExplainsHowToRetry()
     {
         using var directory = new TemporaryTestDirectory();

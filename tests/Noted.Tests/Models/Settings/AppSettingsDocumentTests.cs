@@ -8,6 +8,14 @@ namespace Noted.Tests.Models;
 public sealed class AppSettingsDocumentTests
 {
     [TestMethod]
+    public void ExistingSettingsWithoutPastePreferenceDefaultToEnabled()
+    {
+        var document = JsonSerializer.Deserialize<AppSettingsDocument>("{}");
+        Assert.IsNotNull(document);
+        Assert.IsTrue(document.NormalizePastedText);
+    }
+
+    [TestMethod]
     public void SerializationKeepsEstablishedSettingsPropertyNames()
     {
         var document = new AppSettingsDocument

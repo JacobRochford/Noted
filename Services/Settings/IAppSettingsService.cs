@@ -47,6 +47,8 @@ public interface IAppSettingsService {
     void SaveDictionaryWindowState(DictionaryWindowState state);
     bool LoadMainHideButtonHidesAll();
     void SaveMainHideButtonHidesAll(bool hidesAll);
+    bool LoadNormalizePastedText();
+    void SaveNormalizePastedText(bool enabled);
     bool LoadConfirmNoteDeletion();
     void SaveConfirmNoteDeletion(bool confirm);
     ScratchpadWindowState LoadScratchpadWindowState();

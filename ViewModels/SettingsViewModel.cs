@@ -120,6 +120,7 @@ internal sealed class SettingsViewModel : ObservableObject
             ShowModifiedSubtitle = _settings.LoadShowModifiedSubtitle();
             ShowNotesHeader = _settings.LoadShowNotesHeader();
             ConfirmNoteDeletion = _settings.LoadConfirmNoteDeletion();
+            NormalizePastedText = _settings.LoadNormalizePastedText();
             ThemeMode = _settings.LoadAppThemeMode();
             _activeAccent = _settings.LoadAccentColor();
             AccentText = _activeAccent;
@@ -196,6 +197,18 @@ internal sealed class SettingsViewModel : ObservableObject
         {
             if (!SetProperty(ref _showNotesHeader, value)) return;
             Save(() => _settings.SaveShowNotesHeader(value), nameof(ShowNotesHeader));
+            NotifyAll();
+        }
+    }
+
+    private bool _normalizePastedText = true;
+    public bool NormalizePastedText
+    {
+        get => _normalizePastedText;
+        set
+        {
+            if (!SetProperty(ref _normalizePastedText, value)) return;
+            Save(() => _settings.SaveNormalizePastedText(value), nameof(NormalizePastedText));
             NotifyAll();
         }
     }

@@ -86,6 +86,8 @@ public partial class NoteEditorWindow : Window
         _workspace.DocumentPathsChanged += Workspace_DocumentPathsChanged;
 
         InitializeComponent();
+        PlainTextPaste.Attach(EditorTextBox, _settingsService.LoadNormalizePastedText);
+        PlainTextPaste.Attach(SecondaryEditorTextBox, _settingsService.LoadNormalizePastedText);
         _primaryFindPresenter = new TextBoxSearchPresenter(EditorTextBox);
         _secondaryFindPresenter = new TextBoxSearchPresenter(SecondaryEditorTextBox);
         _findSession.QueryOrOptionsChanged += _primaryFindPresenter.ClearPendingManualNavigationAnchor;

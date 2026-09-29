@@ -267,6 +267,11 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { MainHideButtonHidesAll = hidesAll });
     }
 
+    public bool LoadNormalizePastedText() => LoadSetting(s => s.NormalizePastedText);
+
+    public void SaveNormalizePastedText(bool enabled) =>
+        SaveSetting(s => s with { NormalizePastedText = enabled });
+
     public bool LoadConfirmNoteDeletion()
     {
         return LoadSetting(s => s.ConfirmNoteDeletion);

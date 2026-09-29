@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using Noted.Helpers;
 using Noted.Models;
 using Noted.Search;
 using Noted.Services;
@@ -35,6 +36,7 @@ public partial class MiniPadWindow : OverlayWindow
         _reopenOnStartup = settingsService.LoadMiniPadWindowState().ReopenOnStartup;
 
         InitializeComponent();
+        PlainTextPaste.Attach(Editor, _settingsService.LoadNormalizePastedText);
         _findPresenter = new TextBoxSearchPresenter(Editor);
         _findSession.QueryOrOptionsChanged += _findPresenter.ClearPendingManualNavigationAnchor;
         InitializeOverlay(false, settingsService.LoadGhostModeOpacity(), settingsService.LoadDefaultOpacity());

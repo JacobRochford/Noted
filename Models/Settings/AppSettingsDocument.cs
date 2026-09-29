@@ -47,6 +47,7 @@ internal sealed record AppSettingsDocument
     [JsonPropertyName("HideButtonClosesAll")]
     public bool MainHideButtonHidesAll { get; init; } = true;
 
+    public bool NormalizePastedText { get; init; } = true;
     public bool ConfirmNoteDeletion { get; init; } = true;
     public ScratchpadWindowState? ScratchpadWindowState { get; init; }
     public NoteEditorWindowState? NoteEditorWindowState { get; init; }
