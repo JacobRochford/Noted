@@ -35,6 +35,48 @@ public sealed class EditorIndentationTests
     }
 
     [TestMethod]
+    public void MultilineTextBoxIndentationExcludesLineAtSelectionEndAndUndoesTogether()
+    {
+        RunSta(() =>
+        {
+            var editor = new TextBox { Text = "one\r\ntwo\r\nthree", AcceptsReturn = true };
+            using var surface = new WpfEditorTestSurface(editor);
+            editor.Select(1, 9);
+            EditorIndentation.Insert(editor, new());
+            Assert.AreEqual("    one\r\n    two\r\nthree", editor.Text);
+            Assert.AreEqual(5, editor.SelectionStart);
+            Assert.AreEqual("ne\r\n    two\r\n", editor.SelectedText);
+            Assert.IsTrue(editor.Undo());
+            Assert.AreEqual("one\r\ntwo\r\nthree", editor.Text);
+            Assert.IsTrue(editor.Redo());
+            Assert.AreEqual("    one\r\n    two\r\nthree", editor.Text);
+        });
+    }
+
+    [TestMethod]
+    public void MultilineRichTextIndentationPreservesFormattingAndUndoesTogether()
+    {
+        RunSta(() =>
+        {
+            var first = new Run("one") { FontWeight = FontWeights.Bold };
+            var second = new Run("two") { FontStyle = FontStyles.Italic };
+            var document = new FlowDocument(new Paragraph(first));
+            document.Blocks.Add(new Paragraph(second));
+            var editor = new RichTextBox(document);
+            using var surface = new WpfEditorTestSurface(editor);
+            editor.Selection.Select(first.ContentStart, second.ContentEnd);
+            EditorIndentation.Insert(editor, new() { Mode = IndentationMode.Tabs });
+            Assert.AreEqual("\tone\r\n\ttwo\r\n", new TextRange(document.ContentStart, document.ContentEnd).Text);
+            Assert.AreEqual("one\r\n\ttwo", editor.Selection.Text);
+            Assert.AreEqual(FontWeights.Bold, first.FontWeight);
+            Assert.AreEqual(FontStyles.Italic, second.FontStyle);
+            Assert.AreSame(document, editor.Document);
+            Assert.IsTrue(editor.Undo());
+            Assert.AreEqual("one\r\ntwo\r\n", new TextRange(document.ContentStart, document.ContentEnd).Text);
+        });
+    }
+
+    [TestMethod]
     public void RichTextBoxInsertionPreservesFormattingAndSupportsUndoRedo()
     {
         RunSta(() =>

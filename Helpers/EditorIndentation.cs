@@ -29,6 +29,9 @@ internal static class EditorIndentation
         if (editor.IsReadOnly || !editor.IsEnabled)
             return;
 
+        if (IndentSelectedLines(editor, settings))
+            return;
+
         editor.BeginChange();
         try
         {
@@ -53,6 +56,65 @@ internal static class EditorIndentation
         {
             editor.EndChange();
         }
+    }
+
+    private static bool IndentSelectedLines(TextBoxBase editor, IndentationSettings settings)
+    {
+        if (editor is TextBox { SelectionLength: 0 } || editor is RichTextBox { Selection.IsEmpty: true })
+            return false;
+
+        var snapshot = editor is RichTextBox rich
+            ? new RichTextSearchSnapshot(rich.Document, markStructuralWhitespace: true) : null;
+        var text = editor is TextBox plain ? plain.Text : snapshot!.Text;
+        var start = editor is TextBox box ? box.SelectionStart
+            : snapshot!.GetOffset(((RichTextBox)editor).Selection.Start);
+        var end = editor is TextBox textBox ? start + textBox.SelectionLength
+            : snapshot!.GetOffset(((RichTextBox)editor).Selection.End);
+        var lines = new TextLineMap(text);
+        var first = lines.LineAt(start);
+        if (start == end || first == lines.LineAt(end))
+            return false;
+
+        // A selection ending at the next line's start does not include that line.
+        var last = lines.LineAt(end);
+        if (lines.Starts[last] == end)
+            last--;
+        var insertion = Indentation.GetInsertion(ReadOnlySpan<char>.Empty, settings);
+        var newStart = start + insertion.Length;
+        var newEnd = end + (last - first + 1) * insertion.Length;
+        editor.BeginChange();
+        try
+        {
+            if (editor is TextBox plainEditor)
+            {
+                for (var line = last; line >= first; line--)
+                {
+                    plainEditor.Select(lines.Starts[line], 0);
+                    plainEditor.SelectedText = insertion;
+                }
+                plainEditor.Select(newStart, newEnd - newStart);
+            }
+            else if (editor is RichTextBox richEditor)
+            {
+                var backward = richEditor.CaretPosition.CompareTo(richEditor.Selection.Start) == 0;
+                for (var line = last; line >= first; line--)
+                {
+                    var position = snapshot!.GetStart(lines.Starts[line]);
+                    new TextRange(position, position).Text = insertion;
+                }
+                var updated = new RichTextSearchSnapshot(richEditor.Document, markStructuralWhitespace: true);
+                TextPointer Position(int offset) => offset < updated.Text.Length
+                    ? updated.GetStart(offset)
+                    : richEditor.Document.ContentEnd.GetInsertionPosition(LogicalDirection.Backward);
+                richEditor.Selection.Select(Position(backward ? newEnd : newStart),
+                    Position(backward ? newStart : newEnd));
+            }
+        }
+        finally
+        {
+            editor.EndChange();
+        }
+        return true;
     }
 
     internal static string GetLabel(IndentationSettings settings) => $"{settings.Mode}: {settings.TabSize}";
