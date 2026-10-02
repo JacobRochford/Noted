@@ -303,10 +303,15 @@
                            Foreground="{DynamicResource NotedMutedTextBrush}"
                            FontSize="10"
                            TextTrimming="CharacterEllipsis"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button x:Name="IndentationButton" Focusable="False" Margin="0,0,12,0"
+                            Padding="3,0" FontSize="10" Background="Transparent" BorderThickness="0"
+                            Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                            ToolTip="Indentation for the current document"/>
                 <TextBlock x:Name="CaretPositionText"
-                           Grid.Column="2"
                            Foreground="{DynamicResource NotedSecondaryTextBrush}"
                            FontSize="10"/>
+                </StackPanel>
             </Grid>
         </Border>
 

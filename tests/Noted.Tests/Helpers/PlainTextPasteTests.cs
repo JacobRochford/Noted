@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Noted.Helpers;
+using Noted.Tests.Services;
 
 namespace Noted.Tests.Helpers;
 
@@ -50,15 +51,18 @@ public sealed class PlainTextPasteTests
                 Clipboard.SetDataObject(data);
                 var enabled = true;
                 var editor = new TextBox { Text = "\u2018before REMOVE after\u2019", AcceptsReturn = true };
+                using var surface = new WpfEditorTestSurface(editor);
                 PlainTextPaste.Attach(editor, () => enabled);
                 editor.Select(8, 6);
                 editor.Paste();
                 Assert.AreEqual("\u2018before \"paste\"  after\u2019", editor.Text);
                 Assert.AreEqual(16, editor.CaretIndex);
                 Assert.AreEqual(0, editor.SelectionLength);
-                editor.Undo();
+                Assert.IsTrue(editor.CanUndo, "Native paste must create a WPF undo unit.");
+                Assert.IsTrue(editor.Undo());
                 Assert.AreEqual("\u2018before REMOVE after\u2019", editor.Text);
-                editor.Redo();
+                Assert.IsTrue(editor.CanRedo);
+                Assert.IsTrue(editor.Redo());
                 Assert.AreEqual("\u2018before \"paste\"  after\u2019", editor.Text);
 
                 enabled = false;

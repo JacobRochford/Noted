@@ -18,6 +18,7 @@ public partial class MiniPadWindow : OverlayWindow
     private readonly SaveScheduler<string> _saveScheduler;
     private readonly TextSearchSession _findSession = new();
     private TextBoxSearchPresenter? _findPresenter;
+    private IndentationSettings _indentation;
     private bool _isSeedingFindQuery;
     private bool _keepDraftOnClose;
     private bool _preserveOpenStateOnClose;
@@ -35,7 +36,17 @@ public partial class MiniPadWindow : OverlayWindow
         _settingsService = settingsService;
         _reopenOnStartup = settingsService.LoadMiniPadWindowState().ReopenOnStartup;
 
+        _indentation = settingsService.LoadMiniPadWindowState().Indentation ?? settingsService.LoadDefaultIndentation();
         InitializeComponent();
+        EditorIndentation.Attach(Editor, () => _indentation);
+        IndentationButton.Content = EditorIndentation.GetLabel(_indentation);
+        EditorIndentation.AttachIndicator(IndentationButton, () => _indentation, value =>
+        {
+            var previous = _indentation;
+            _indentation = value;
+            try { SaveWindowState(); }
+            catch (SettingsPersistenceException) { _indentation = previous; throw; }
+        }, () => Editor);
         PlainTextPaste.Attach(Editor, _settingsService.LoadNormalizePastedText);
         _findPresenter = new TextBoxSearchPresenter(Editor);
         _findSession.QueryOrOptionsChanged += _findPresenter.ClearPendingManualNavigationAnchor;
@@ -89,6 +100,7 @@ public partial class MiniPadWindow : OverlayWindow
     {
         _settingsService.SaveMiniPadWindowState(new MiniPadWindowState
         {
+            Indentation = _indentation,
             WordWrapEnabled = Editor.TextWrapping == TextWrapping.Wrap,
             ReopenOnStartup = _reopenOnStartup
         });

@@ -120,6 +120,7 @@ internal sealed class SettingsViewModel : ObservableObject
             ShowModifiedSubtitle = _settings.LoadShowModifiedSubtitle();
             ShowNotesHeader = _settings.LoadShowNotesHeader();
             ConfirmNoteDeletion = _settings.LoadConfirmNoteDeletion();
+            _defaultIndentation = _settings.LoadDefaultIndentation();
             NormalizePastedText = _settings.LoadNormalizePastedText();
             ThemeMode = _settings.LoadAppThemeMode();
             _activeAccent = _settings.LoadAccentColor();
@@ -199,6 +200,28 @@ internal sealed class SettingsViewModel : ObservableObject
             Save(() => _settings.SaveShowNotesHeader(value), nameof(ShowNotesHeader));
             NotifyAll();
         }
+    }
+
+    private IndentationSettings _defaultIndentation = new();
+    public IReadOnlyList<IndentationMode> IndentationModes { get; } = Enum.GetValues<IndentationMode>();
+    public IReadOnlyList<int> TabSizes { get; } = Enumerable.Range(1, IndentationSettings.MaximumTabSize).ToArray();
+    public IndentationMode DefaultIndentationMode
+    {
+        get => _defaultIndentation.Mode;
+        set => SetDefaultIndentation(_defaultIndentation with { Mode = value });
+    }
+    public int DefaultTabSize
+    {
+        get => _defaultIndentation.TabSize;
+        set => SetDefaultIndentation(_defaultIndentation with { TabSize = value });
+    }
+    private void SetDefaultIndentation(IndentationSettings value)
+    {
+        if (_defaultIndentation == value) return;
+        if (!_loading && !TrySave(() => _settings.SaveDefaultIndentation(value))) return;
+        _defaultIndentation = value;
+        OnPropertyChanged(nameof(DefaultIndentationMode));
+        OnPropertyChanged(nameof(DefaultTabSize));
     }
 
     private bool _normalizePastedText = true;
@@ -398,10 +421,10 @@ internal sealed class SettingsViewModel : ObservableObject
     private void ResetAppearance()
     {
         _accentText = AppTheme.DefaultAccentColor;
-        _themeMode = AppThemeMode.System;
+        _themeMode = AppTheme.DefaultMode;
         OnPropertyChanged(nameof(AccentText));
         OnPropertyChanged(nameof(ThemeMode));
-        ApplyAppearance(AppThemeMode.System, AppTheme.DefaultAccentColor);
+        ApplyAppearance(AppTheme.DefaultMode, AppTheme.DefaultAccentColor);
     }
     internal void CommitTimestampLine()
     {

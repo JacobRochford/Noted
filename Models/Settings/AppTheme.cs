@@ -10,7 +10,8 @@ public enum AppThemeMode
 
 public static class AppTheme
 {
-    public const string DefaultAccentColor = "#5BA8C8";
+    public const AppThemeMode DefaultMode = AppThemeMode.System;
+    public const string DefaultAccentColor = "#15FFFF";
 
     public static string NormalizeAccentColor(string? value) =>
         TryNormalizeAccentColor(value, out var normalized)

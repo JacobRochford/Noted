@@ -99,6 +99,16 @@ public sealed class ScratchpadWindowViewModel : ObservableObject
             SetContentPersistenceError(loadResult.Warning);
     }
 
+    public IndentationSettings Indentation => _windowState.Indentation ?? new();
+
+    public void SetIndentation(IndentationSettings indentation)
+    {
+        var previous = _windowState;
+        _windowState = _windowState with { Indentation = indentation };
+        if (!TrySaveWindowState())
+            _windowState = previous;
+    }
+
     public void ApplyNormalizedWindowState(ScratchpadWindowState state)
     {
         _windowState = state;
@@ -164,7 +174,8 @@ public sealed class ScratchpadWindowViewModel : ObservableObject
     {
         try
         {
-            return _settingsService.LoadScratchpadWindowState();
+            var state = _settingsService.LoadScratchpadWindowState();
+            return state with { Indentation = state.Indentation ?? _settingsService.LoadDefaultIndentation() };
         }
         catch (SettingsPersistenceException ex)
         {

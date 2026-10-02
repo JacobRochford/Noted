@@ -8,7 +8,7 @@ internal sealed class RichTextSearchSnapshot
     private readonly List<TextPointer> _starts = [];
     private readonly List<TextPointer> _ends = [];
 
-    internal RichTextSearchSnapshot(FlowDocument document)
+    internal RichTextSearchSnapshot(FlowDocument document, bool markStructuralWhitespace = false)
     {
         var text = new StringBuilder();
         var position = document.ContentStart.GetInsertionPosition(LogicalDirection.Forward);
@@ -23,10 +23,14 @@ internal sealed class RichTextSearchSnapshot
             while (textStart.CompareTo(next) < 0 && textStart.GetPointerContext(LogicalDirection.Forward) != TextPointerContext.Text)
                 textStart = textStart.GetNextContextPosition(LogicalDirection.Forward) ?? next;
             var run = textStart.GetTextInRun(LogicalDirection.Forward);
-            var isText = segment.Length > 0 && run.StartsWith(segment, StringComparison.Ordinal);
+            var isText = textStart.CompareTo(next) < 0 && segment.Length > 0 &&
+                run.StartsWith(segment, StringComparison.Ordinal);
             for (var index = 0; index < segment.Length; index++)
             {
-                text.Append(segment[index]);
+                // TextRange can use spaces or tabs for objects and table boundaries.
+                // Don't treat those as indentation
+                text.Append(markStructuralWhitespace && !isText && segment[index] is ' ' or '\t'
+                    ? '\uFFFC' : segment[index]);
                 _starts.Add(isText ? textStart.GetPositionAtOffset(index)! : position);
                 _ends.Add(isText ? textStart.GetPositionAtOffset(index + 1)! : next);
             }

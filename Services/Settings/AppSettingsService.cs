@@ -267,6 +267,14 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { MainHideButtonHidesAll = hidesAll });
     }
 
+    public IndentationSettings LoadDefaultIndentation() => LoadSetting(s => s.DefaultIndentation ?? new());
+
+    public void SaveDefaultIndentation(IndentationSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        SaveSetting(s => s with { DefaultIndentation = settings });
+    }
+
     public bool LoadNormalizePastedText() => LoadSetting(s => s.NormalizePastedText);
 
     public void SaveNormalizePastedText(bool enabled) =>
@@ -698,7 +706,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             DefaultOpacity = NormalizeOpacity(settings.DefaultOpacity, 0.05, 0.88),
             AppThemeMode = Enum.IsDefined(settings.AppThemeMode)
                 ? settings.AppThemeMode
-                : AppThemeMode.System,
+                : AppTheme.DefaultMode,
             AccentColor = AppTheme.NormalizeAccentColor(settings.AccentColor),
             FolderNavigationMode = Enum.IsDefined(settings.FolderNavigationMode)
                 ? settings.FolderNavigationMode

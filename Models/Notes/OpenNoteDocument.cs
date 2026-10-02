@@ -19,7 +19,8 @@ public sealed class OpenNoteDocument : ObservableObject
         bool markdownPreviewEnabled = false,
         bool isMissing = false,
         bool usesGeneratedName = false,
-        string? initialFileContent = null)
+        string? initialFileContent = null,
+        IndentationSettings? indentation = null)
     {
         _filePath = Path.GetFullPath(filePath);
         Content = content;
@@ -31,7 +32,10 @@ public sealed class OpenNoteDocument : ObservableObject
         MarkdownPreviewEnabled = markdownPreviewEnabled;
         UsesGeneratedName = usesGeneratedName;
         InitialFileContent = initialFileContent;
+        Indentation = indentation ?? new();
     }
+
+    public IndentationSettings Indentation { get; internal set; }
 
     public Guid DocumentId { get; } = Guid.NewGuid();
     public string FilePath => _filePath;

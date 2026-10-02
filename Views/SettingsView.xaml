@@ -256,6 +256,15 @@
                                                TextWrapping="Wrap"
                                                VerticalAlignment="Center"/>
                                     </CheckBox>
+                                    <TextBlock Text="Default indentation for newly opened editors" Margin="0,12,0,4"
+                                               Foreground="{DynamicResource NotedTextBrush}"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ComboBox ItemsSource="{Binding IndentationModes}" SelectedItem="{Binding DefaultIndentationMode}"
+                                                  Width="100" Margin="0,0,8,0"/>
+                                        <TextBlock Text="Tab size" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                   Foreground="{DynamicResource NotedTextBrush}"/>
+                                        <ComboBox ItemsSource="{Binding TabSizes}" SelectedItem="{Binding DefaultTabSize}" Width="60"/>
+                                    </StackPanel>
                                     <CheckBox IsChecked="{Binding NormalizePastedText}"
                                               Foreground="{DynamicResource NotedTextBrush}"
                                               FontWeight="SemiBold"

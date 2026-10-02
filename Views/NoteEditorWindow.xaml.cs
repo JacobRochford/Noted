@@ -82,10 +82,19 @@ public partial class NoteEditorWindow : Window
         _contentService = contentService;
         _settingsService = settingsService;
         _recoveryService = recoveryService;
-        _persistence = new NoteEditorPersistence(contentService, recoveryService, sessionService);
+        _persistence = new NoteEditorPersistence(contentService, recoveryService, sessionService, settingsService.LoadDefaultIndentation);
         _workspace.DocumentPathsChanged += Workspace_DocumentPathsChanged;
 
         InitializeComponent();
+        EditorIndentation.Attach(EditorTextBox, () => _activeDocument?.Indentation);
+        EditorIndentation.Attach(SecondaryEditorTextBox, () => _secondaryDocument?.Indentation);
+        EditorIndentation.AttachIndicator(IndentationButton, () => CurrentDocument?.Indentation, value =>
+        {
+            if (CurrentDocument is not { } document) return;
+            document.Indentation = value;
+            SaveEditorSession();
+            UpdateDocumentFooter();
+        }, () => CurrentEditorTextBox);
         PlainTextPaste.Attach(EditorTextBox, _settingsService.LoadNormalizePastedText);
         PlainTextPaste.Attach(SecondaryEditorTextBox, _settingsService.LoadNormalizePastedText);
         _primaryFindPresenter = new TextBoxSearchPresenter(EditorTextBox);
@@ -466,7 +475,8 @@ public partial class NoteEditorWindow : Window
                 persistedContent,
                 isDirty: !string.Equals(recoveredContent, persistedContent, StringComparison.Ordinal),
                 usesGeneratedName: usesGeneratedName,
-                initialFileContent: initialFileContent);
+                initialFileContent: initialFileContent,
+                indentation: _settingsService.LoadDefaultIndentation());
             _workspace.Add(document);
             OpenDocumentInFocusedPane(document, focusEditor: true, saveSession: true);
             ShowWindow();
@@ -1126,6 +1136,8 @@ public partial class NoteEditorWindow : Window
     private void UpdateDocumentFooter()
     {
         var document = CurrentDocument;
+        IndentationButton.IsEnabled = document is not null;
+        IndentationButton.Content = document is null ? string.Empty : EditorIndentation.GetLabel(document.Indentation);
         var textBox = ReferenceEquals(document, _secondaryDocument)
             ? SecondaryEditorTextBox
             : EditorTextBox;

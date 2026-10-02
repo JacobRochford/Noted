@@ -113,6 +113,7 @@ public sealed class NoteEditorSessionService : INoteEditorSessionService
             var leftTab = left.Tabs[index];
             var rightTab = right.Tabs[index];
             if (!string.Equals(leftTab.FilePath, rightTab.FilePath, StringComparison.OrdinalIgnoreCase) ||
+                leftTab.Indentation != rightTab.Indentation ||
                 leftTab.CaretIndex != rightTab.CaretIndex ||
                 !leftTab.VerticalOffset.Equals(rightTab.VerticalOffset) ||
                 leftTab.MarkdownPreviewEnabled != rightTab.MarkdownPreviewEnabled ||

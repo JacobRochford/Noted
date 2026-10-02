@@ -17,11 +17,13 @@ internal sealed class NoteEditorPersistence
     private readonly INoteRecoveryService _recoveryService;
     private readonly INoteEditorSessionService _sessionService;
     private string? _recoveryOperationError;
+    private readonly Func<IndentationSettings> _getDefaultIndentation;
 
     internal NoteEditorPersistence(
         INoteContentService contentService,
         INoteRecoveryService recoveryService,
-        INoteEditorSessionService sessionService)
+        INoteEditorSessionService sessionService,
+        Func<IndentationSettings>? getDefaultIndentation = null)
     {
         ArgumentNullException.ThrowIfNull(contentService);
         ArgumentNullException.ThrowIfNull(recoveryService);
@@ -29,6 +31,7 @@ internal sealed class NoteEditorPersistence
         _contentService = contentService;
         _recoveryService = recoveryService;
         _sessionService = sessionService;
+        _getDefaultIndentation = getDefaultIndentation ?? (() => new());
     }
 
     internal NoteEditorWorkspaceLoadResult LoadWorkspace(bool loadSavedSession)
@@ -115,6 +118,7 @@ internal sealed class NoteEditorPersistence
             Tabs = workspace.Documents.Select(document => new NoteEditorTabState
             {
                 FilePath = document.FilePath,
+                Indentation = document.Indentation,
                 CaretIndex = document.CaretIndex,
                 VerticalOffset = document.VerticalOffset,
                 MarkdownPreviewEnabled = document.MarkdownPreviewEnabled,
@@ -212,7 +216,8 @@ internal sealed class NoteEditorPersistence
                     savedContent: string.Empty,
                     isDirty: true,
                     caretIndex: draft.Content.Length,
-                    isMissing: true);
+                    isMissing: true,
+                    indentation: _getDefaultIndentation());
                 return true;
             }
 
@@ -228,7 +233,8 @@ internal sealed class NoteEditorPersistence
                 draft.Content,
                 persistedContent,
                 isDirty: true,
-                caretIndex: draft.Content.Length);
+                caretIndex: draft.Content.Length,
+                indentation: _getDefaultIndentation());
             return true;
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
@@ -258,7 +264,7 @@ internal sealed class NoteEditorPersistence
         }
     }
 
-    private static OpenNoteDocument CreateDocument(
+    private OpenNoteDocument CreateDocument(
         NoteEditorTabState tabState,
         string filePath,
         string content,
@@ -275,7 +281,8 @@ internal sealed class NoteEditorPersistence
             markdownPreviewEnabled: tabState.MarkdownPreviewEnabled,
             isMissing: isMissing,
             usesGeneratedName: tabState.UsesGeneratedName,
-            initialFileContent: tabState.InitialFileContent);
+            initialFileContent: tabState.InitialFileContent,
+            indentation: tabState.Indentation ?? _getDefaultIndentation());
 
     private static OpenNoteDocument? FindBySavedPath(
         string? savedPath,

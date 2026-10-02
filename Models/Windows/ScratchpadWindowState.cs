@@ -9,6 +9,7 @@ public sealed record ScratchpadWindowState
     public double Opacity { get; init; } = 0.88;
     public double GhostModeOpacity { get; init; } = 0.25;
     public bool GhostModeEnabled { get; init; }
+    public IndentationSettings? Indentation { get; init; }
     public bool WordWrapEnabled { get; init; } = true;
     public double FontSize { get; init; } = 13;
     public bool ReopenOnStartup { get; init; }

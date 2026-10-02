@@ -1,8 +1,11 @@
+using Noted.Models;
+
 namespace Noted.Services;
 
 public sealed record NoteEditorTabState
 {
     public string FilePath { get; init; } = string.Empty;
+    public IndentationSettings? Indentation { get; init; }
     public int CaretIndex { get; init; }
     public double VerticalOffset { get; init; }
     public bool MarkdownPreviewEnabled { get; init; }

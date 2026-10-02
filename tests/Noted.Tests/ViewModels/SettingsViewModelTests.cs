@@ -11,6 +11,27 @@ namespace Noted.Tests.ViewModels;
 public sealed class SettingsViewModelTests
 {
     [TestMethod]
+    public void IndentationDefaultsReloadAndChangesPersistWithoutChangingEditorOverrides()
+    {
+        using var context = new Context();
+        var local = new IndentationSettings { Mode = IndentationMode.Tabs, TabSize = 2 };
+        context.Settings.SaveMiniPadWindowState(new() { Indentation = local });
+        context.Model.Reload();
+        Assert.AreEqual(IndentationMode.Spaces, context.Model.DefaultIndentationMode);
+        Assert.AreEqual(4, context.Model.DefaultTabSize);
+        context.Model.DefaultIndentationMode = IndentationMode.Tabs;
+        context.Model.DefaultTabSize = 8;
+        var expected = new IndentationSettings { Mode = IndentationMode.Tabs, TabSize = 8 };
+        Assert.AreEqual(expected, context.Settings.LoadDefaultIndentation());
+        Assert.AreEqual(local, context.Settings.LoadMiniPadWindowState().Indentation);
+        var bytes = File.ReadAllBytes(context.Directory.File("settings.json"));
+        context.Model.Reload();
+        Assert.AreEqual(expected.Mode, context.Model.DefaultIndentationMode);
+        Assert.AreEqual(expected.TabSize, context.Model.DefaultTabSize);
+        CollectionAssert.AreEqual(bytes, File.ReadAllBytes(context.Directory.File("settings.json")));
+    }
+
+    [TestMethod]
     public void ReloadReadsSettingsWithoutSavingOrInvokingIntegrationActions()
     {
         using var context = new Context();
@@ -98,7 +119,7 @@ public sealed class SettingsViewModelTests
         Assert.AreEqual(AppThemeMode.Dark, context.Settings.LoadAppThemeMode());
         Assert.AreEqual((AppThemeMode.Dark, "#AABBCC"), context.AppliedThemes.Last());
         context.Model.ResetAppearanceCommand.Execute(null);
-        Assert.AreEqual((AppThemeMode.System, AppTheme.DefaultAccentColor), context.AppliedThemes.Last());
+        Assert.AreEqual((AppThemeMode.Midnight, "#15FFFF"), context.AppliedThemes.Last());
     }
 
     [TestMethod]

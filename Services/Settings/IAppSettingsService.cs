@@ -47,6 +47,8 @@ public interface IAppSettingsService {
     void SaveDictionaryWindowState(DictionaryWindowState state);
     bool LoadMainHideButtonHidesAll();
     void SaveMainHideButtonHidesAll(bool hidesAll);
+    IndentationSettings LoadDefaultIndentation();
+    void SaveDefaultIndentation(IndentationSettings settings);
     bool LoadNormalizePastedText();
     void SaveNormalizePastedText(bool enabled);
     bool LoadConfirmNoteDeletion();

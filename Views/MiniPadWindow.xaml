@@ -88,6 +88,11 @@
                         CornerRadius="0"
                         ClipToBounds="True">
                     <DockPanel>
+                        <Button x:Name="IndentationButton" DockPanel.Dock="Bottom" Focusable="False"
+                                HorizontalAlignment="Right" Margin="0,5,0,0" Padding="3,0" FontSize="11"
+                                Background="Transparent" BorderThickness="0"
+                                Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                ToolTip="Indentation for this MiniPad"/>
                         <Border x:Name="FindPanel" DockPanel.Dock="Top" Padding="6" Visibility="Collapsed"
                                 Background="{DynamicResource NotedSubtleSurfaceBrush}">
                             <StackPanel>

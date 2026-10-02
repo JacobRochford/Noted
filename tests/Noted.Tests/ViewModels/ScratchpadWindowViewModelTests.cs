@@ -43,7 +43,7 @@ public sealed class ScratchpadWindowViewModelTests
             "Settings retry failure: " + viewModel.PersistenceError);
         Assert.IsFalse(viewModel.HasPersistenceError);
         Assert.IsNull(viewModel.PersistenceError);
-        Assert.AreEqual(initialState with { Left = 30, Top = 40, Width = 640, Height = 480 },
+        Assert.AreEqual(initialState with { Left = 30, Top = 40, Width = 640, Height = 480, Indentation = new() },
             new AppSettingsService(directory.Path).LoadScratchpadWindowState());
     }
 

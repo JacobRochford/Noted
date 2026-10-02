@@ -38,7 +38,7 @@ internal sealed record AppSettingsDocument
     public bool GhostModeEnabled { get; init; }
     public double GhostModeOpacity { get; init; } = 0.25;
     public double DefaultOpacity { get; init; } = 0.88;
-    public AppThemeMode AppThemeMode { get; init; } = AppThemeMode.System;
+    public AppThemeMode AppThemeMode { get; init; } = AppTheme.DefaultMode;
     public string AccentColor { get; init; } = AppTheme.DefaultAccentColor;
     public FolderNavigationMode FolderNavigationMode { get; init; } = FolderNavigationMode.DrillDown;
     public ChecklistWindowState? ChecklistWindowState { get; init; }
@@ -46,6 +46,8 @@ internal sealed record AppSettingsDocument
 
     [JsonPropertyName("HideButtonClosesAll")]
     public bool MainHideButtonHidesAll { get; init; } = true;
+
+    public IndentationSettings DefaultIndentation { get; init; } = new();
 
     public bool NormalizePastedText { get; init; } = true;
     public bool ConfirmNoteDeletion { get; init; } = true;

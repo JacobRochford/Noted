@@ -300,6 +300,11 @@
                         <TextBlock Text="{Binding FindResultText}" Margin="12,0,0,0"
                                    Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="11" VerticalAlignment="Center"/>
                     </StackPanel>
+                    <Button x:Name="IndentationButton" Grid.Row="1" Grid.Column="0" Focusable="False"
+                            HorizontalAlignment="Left" Margin="0,5,0,0" Padding="3,0" FontSize="11"
+                            Background="Transparent" BorderThickness="0"
+                            Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                            ToolTip="Indentation for this Scratchpad"/>
                     <CheckBox Grid.Row="1" Grid.Column="1" Margin="0,5,0,0" Content="Always visible" ToolTip="Use the app visible opacity even when this window is inactive"
                               IsChecked="{Binding Path=(s:WindowAppearance.AlwaysVisible), RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
