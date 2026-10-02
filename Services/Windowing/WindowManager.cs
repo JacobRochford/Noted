@@ -35,6 +35,9 @@ namespace Noted.Services
 
         public static void HideAll()
         {
+            if (Editor?.CanChangeGroupVisibility == false)
+                return;
+
             var visibleWindows = new NotedWindowVisibility(
                 Main?.IsNotesPanelVisible == true,
                 Checklist?.IsWindowVisible == true,
@@ -111,6 +114,9 @@ namespace Noted.Services
 
         public static void ToggleNotedWindows()
         {
+            if (Editor?.CanChangeGroupVisibility == false)
+                return;
+
             if (AnyWindowVisible())
             {
                 HideAll();

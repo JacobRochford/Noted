@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -49,6 +50,7 @@ public partial class NoteEditorWindow : Window
     private bool _isTabsPanelCollapsed;
     private bool _reopenOnStartup;
     private bool _isHiddenTogether;
+    private WindowState _restoreWindowState = WindowState.Normal;
     private bool _suppressSessionSave;
     private bool _recoveryIssuesFoundThisRun;
     private string? _recoveryOperationError;
@@ -128,7 +130,16 @@ public partial class NoteEditorWindow : Window
 
     public string? OpenFilePath => CurrentDocument?.FilePath;
     public bool IsDirty => _workspace.IsDirty;
-    public bool IsWindowVisible => IsVisible;
+    public bool IsWindowVisible => IsVisible && WindowState != WindowState.Minimized;
+    internal bool CanChangeGroupVisibility
+    {
+        get
+        {
+            // Modal dialogs disable the native owner, including native file dialogs.
+            var handle = new WindowInteropHelper(this).Handle;
+            return handle == IntPtr.Zero || WindowInterop.IsWindowEnabled(handle);
+        }
+    }
     internal bool RecoveryBlocksBackup =>
         _unsavedRecoveredPaths.Count > 0 || _recoveryIssuesFoundThisRun;
 
@@ -147,6 +158,16 @@ public partial class NoteEditorWindow : Window
     {
         base.OnSourceInitialized(e);
         AppThemeManager.ApplyTitleBar(this);
+    }
+
+    protected override void OnStateChanged(EventArgs e)
+    {
+        if (WindowState != WindowState.Minimized)
+        {
+            _restoreWindowState = WindowState;
+            _isHiddenTogether = false;
+        }
+        base.OnStateChanged(e);
     }
 
     public bool OpenNote(string filePath)
@@ -368,6 +389,9 @@ public partial class NoteEditorWindow : Window
 
     internal void RestoreTogether()
     {
+        if (!_isHiddenTogether)
+            return;
+
         _isHiddenTogether = false;
         ShowWindowCore();
     }
@@ -377,7 +401,7 @@ public partial class NoteEditorWindow : Window
         if (!IsVisible)
             Show();
         if (WindowState == WindowState.Minimized)
-            WindowState = WindowState.Normal;
+            WindowState = _restoreWindowState;
 
         Activate();
         FocusActiveSurface();
@@ -396,12 +420,15 @@ public partial class NoteEditorWindow : Window
 
     internal void HideTogether()
     {
+        if (!IsWindowVisible || !CanChangeGroupVisibility)
+            return;
+
         CaptureActiveDocument();
         TryFlushRecoveryDraft(out _);
         SaveEditorSession();
         _isHiddenTogether = true;
         SaveWindowSize();
-        Hide();
+        WindowState = WindowState.Minimized;
     }
 
     internal void BeginEditingCreatedNote(bool moveCaretToEnd)
@@ -2325,6 +2352,7 @@ public partial class NoteEditorWindow : Window
             return;
 
         e.Cancel = true;
+        _isHiddenTogether = false;
         CaptureActiveDocument();
         TryFlushRecoveryDraft(out _);
         SaveEditorSession();

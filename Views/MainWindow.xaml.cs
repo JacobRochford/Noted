@@ -434,11 +434,14 @@ public partial class MainWindow : Window {
         }
     }
 
-    private void HideNotesPanelAndEditor() {
+    private void HideNotesPanelAndEditor(bool minimizeEditor = false) {
         try {
             HideNotesPanel();
         } finally {
-            WindowManager.HideEditor();
+            if (minimizeEditor)
+                _noteEditor.HideTogether();
+            else
+                WindowManager.HideEditor();
         }
     }
 
@@ -449,10 +452,13 @@ public partial class MainWindow : Window {
 
 
     private void HideNotesButton_Click(object sender, RoutedEventArgs e) {
+        if (!_noteEditor.CanChangeGroupVisibility)
+            return;
+
         if (_settingsViewModel.MainHideButtonHidesAll)
             WindowManager.HideAll();
         else
-            HideNotesPanelAndEditor();
+            HideNotesPanelAndEditor(minimizeEditor: true);
     }
 
 
