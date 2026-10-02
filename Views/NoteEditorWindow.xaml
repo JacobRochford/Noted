@@ -11,6 +11,7 @@
         Background="{DynamicResource NotedWindowBackgroundBrush}"
         Foreground="{DynamicResource NotedTextBrush}"
         FontFamily="Segoe UI"
+        Topmost="True"
         WindowStartupLocation="CenterScreen"
         Closing="Window_Closing"
         Loaded="Window_Loaded"
@@ -308,9 +309,9 @@
                             Padding="3,0" FontSize="10" Background="Transparent" BorderThickness="0"
                             Foreground="{DynamicResource NotedSecondaryTextBrush}"
                             ToolTip="Indentation for the current document"/>
-                <TextBlock x:Name="CaretPositionText"
-                           Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                           FontSize="10"/>
+                    <TextBlock x:Name="CaretPositionText"
+                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                               FontSize="10"/>
                 </StackPanel>
             </Grid>
         </Border>
