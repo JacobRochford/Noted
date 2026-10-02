@@ -891,8 +891,7 @@
                                                                Text="{Binding DisplayName}"
                                                                FontSize="13"
                                                                FontWeight="SemiBold"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               ToolTip="{Binding DisplayName}"/>
+                                                               TextTrimming="CharacterEllipsis"/>
                                                     <TextBlock Text="{Binding Subtitle}"
                                                                Margin="0,2,0,0"
                                                                FontSize="11"
@@ -1011,6 +1010,7 @@
                                 </ListBox.ItemTemplate>
                                 <ListBox.ItemContainerStyle>
                                     <Style TargetType="ListBoxItem">
+                                        <Setter Property="ToolTip" Value="{Binding DisplayName}"/>
                                         <Setter Property="Padding" Value="10,7"/>
                                         <Setter Property="Margin" Value="0,2"/>
                                         <Setter Property="Cursor" Value="Hand"/>

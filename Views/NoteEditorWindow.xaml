@@ -387,6 +387,7 @@
                                  ScrollViewer.VerticalScrollBarVisibility="Auto">
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem">
+                                    <Setter Property="ToolTip" Value="{Binding FilePath}"/>
                                     <Setter Property="Background" Value="Transparent"/>
                                     <Setter Property="BorderThickness" Value="0"/>
                                     <Setter Property="Cursor" Value="Hand"/>
@@ -446,8 +447,7 @@
                                                    Foreground="{DynamicResource NotedTextBrush}"
                                                    FontSize="12"
                                                    Text="{Binding TabLabel}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   ToolTip="{Binding FilePath}"/>
+                                                   TextTrimming="CharacterEllipsis"/>
                                         <Button Grid.Column="1"
                                                 Margin="7,0,0,0"
                                                 Click="CloseTabButton_Click"

@@ -46,6 +46,37 @@
     <Style x:Key="{x:Static SystemParameters.FocusVisualStyleKey}"
            TargetType="Control" BasedOn="{StaticResource NotedKeyboardFocusVisual}"/>
 
+    <Style TargetType="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource NotedSurfaceBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource NotedBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="MaxWidth" Value="480"/>
+        <Setter Property="ContentTemplate">
+            <Setter.Value>
+                <DataTemplate>
+                    <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
+                </DataTemplate>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            CornerRadius="5">
+                        <ContentPresenter/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style TargetType="TextBox">
         <Setter Property="CaretBrush" Value="{DynamicResource NotedTextBrush}"/>
         <Setter Property="SelectionBrush" Value="{DynamicResource NotedSelectionBrush}"/>
