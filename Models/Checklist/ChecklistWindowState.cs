@@ -10,5 +10,6 @@ public sealed record ChecklistWindowState
     public double GhostModeOpacity { get; init; } = 0.25;
     public bool GhostModeEnabled { get; init; } = false;
     public bool ReopenOnStartup { get; init; }
+    public string? SelectedTabId { get; init; }
     public ChecklistPriorityColors PriorityColors { get; init; } = new();
 }

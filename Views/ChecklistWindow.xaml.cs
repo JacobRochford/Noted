@@ -43,6 +43,8 @@ public partial class ChecklistWindow : OverlayWindow
             Dispatcher,
             action => Dispatcher.Invoke(action),
             state.GhostModeEnabled);
+        if (state.SelectedTabId is { } selectedTabId)
+            _viewModel.SelectTab(_viewModel.FindTab(selectedTabId));
         DataContext = _viewModel;
         InitializeOverlay(state.GhostModeEnabled, state.GhostModeOpacity, state.Opacity);
 
@@ -52,6 +54,18 @@ public partial class ChecklistWindow : OverlayWindow
             {
                 ApplyGhostMode(_viewModel.GhostModeEnabled);
                 SaveWindowState();
+            }
+            else if (e.PropertyName == nameof(ChecklistWindowViewModel.SelectedTab))
+            {
+                try
+                {
+                    SaveWindowState();
+                }
+                catch (SettingsPersistenceException ex)
+                {
+                    ExceptionDiagnostics.Record(ex);
+                    ShowPersistenceWarningOnce(ex.Message);
+                }
             }
             else if (e.PropertyName == nameof(ChecklistWindowViewModel.PersistenceError) &&
                      !_viewModel.HasPersistenceError)
@@ -121,6 +135,7 @@ public partial class ChecklistWindow : OverlayWindow
             GhostModeOpacity = _ghostModeOpacity,
             GhostModeEnabled = _ghostModeEnabled,
             ReopenOnStartup = _reopenOnStartup,
+            SelectedTabId = _viewModel.SelectedTab?.Id,
             PriorityColors = _priorityColors
         });
     }
