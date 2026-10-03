@@ -119,7 +119,7 @@ public sealed class SettingsViewModelTests
         Assert.AreEqual(AppThemeMode.Dark, context.Settings.LoadAppThemeMode());
         Assert.AreEqual((AppThemeMode.Dark, "#AABBCC"), context.AppliedThemes.Last());
         context.Model.ResetAppearanceCommand.Execute(null);
-        Assert.AreEqual((AppThemeMode.Midnight, "#15FFFF"), context.AppliedThemes.Last());
+        Assert.AreEqual((AppThemeMode.System, "#15FFFF"), context.AppliedThemes.Last());
     }
 
     [TestMethod]
