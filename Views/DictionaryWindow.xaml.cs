@@ -239,15 +239,25 @@ public partial class DictionaryWindow : OverlayWindow
         if (sender is not FrameworkElement { DataContext: DictionaryItem item }) return;
         item.FinishAutoSave();
         item.BeginEdit();
-        Dispatcher.BeginInvoke(() =>
-        {
-            if (ItemsList.ItemContainerGenerator.ContainerFromItem(item) is DependencyObject container)
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Input,
+            new Action(() =>
             {
+                if (!item.IsEditing)
+                    return;
+
+                ItemsList.UpdateLayout();
+                if (ItemsList.ItemContainerGenerator.ContainerFromItem(item) is not FrameworkElement container)
+                    return;
+
                 var wordBox = VisualTreeHelpers.FindDescendant<TextBox>(container, "WordTextBox");
                 wordBox?.Focus();
                 wordBox?.SelectAll();
-            }
-        });
+                ItemsList.UpdateLayout();
+                container.BringIntoView();
+                // keep Save/Cancel visible
+                VisualTreeHelpers.FindDescendant<StackPanel>(container, "EditActionsPanel")?.BringIntoView();
+            }));
     }
 
     private void SaveEntry_Click(object sender, RoutedEventArgs e)

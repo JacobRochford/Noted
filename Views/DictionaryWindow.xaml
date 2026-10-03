@@ -236,7 +236,7 @@
                                                                 <DataTrigger Binding="{Binding IsEditing}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
                                                             </Style.Triggers></Style></TextBox.Style>
                                                         </TextBox>
-                                                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0"
+                                                        <StackPanel x:Name="EditActionsPanel" Orientation="Horizontal" Margin="0,8,0,0"
                                                                     Visibility="{Binding ShowEditActions, Converter={StaticResource BoolToVisibility}}">
                                                             <Button Content="Save" Click="SaveEntry_Click" Style="{StaticResource NotedPrimaryButton}"/>
                                                             <Button Content="Cancel" Click="CancelEntry_Click" Margin="6,0,0,0" Style="{StaticResource NotedSecondaryButton}"/>
