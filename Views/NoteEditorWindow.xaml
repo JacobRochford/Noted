@@ -11,7 +11,7 @@
         Background="{DynamicResource NotedWindowBackgroundBrush}"
         Foreground="{DynamicResource NotedTextBrush}"
         FontFamily="Segoe UI"
-        Topmost="True"
+        Topmost="{Binding IsActive, RelativeSource={RelativeSource Self}}"
         WindowStartupLocation="CenterScreen"
         Closing="Window_Closing"
         Loaded="Window_Loaded"
