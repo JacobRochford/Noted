@@ -913,4 +913,19 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <!-- Footer controls blend into the window until interacted with. -->
+    <Style x:Key="NotedFooterText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource NotedSecondaryTextBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style x:Key="NotedFooterButton" TargetType="Button" BasedOn="{StaticResource NotedSecondaryButton}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource NotedSecondaryTextBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Padding" Value="4,3"/>
+    </Style>
 </ResourceDictionary>

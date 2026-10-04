@@ -276,15 +276,14 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="{Binding Items.Count, StringFormat={}{0} entries}"
-                               Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="11" VerticalAlignment="Center"/>
+                    <TextBlock Style="{StaticResource NotedFooterText}" Grid.Column="0" Text="{Binding Items.Count, StringFormat={}{0} entries}"/>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                         <CheckBox Content="Always visible" ToolTip="Use the app visible opacity even when this window is inactive" Margin="0,0,8,0"
                                   IsChecked="{Binding Path=(s:WindowAppearance.AlwaysVisible), RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                   Style="{StaticResource NotedToggleSwitch}"
                                   FontSize="11" VerticalAlignment="Center"/>
-                        <Button Content="+ Add" Style="{StaticResource PrimaryBtn}"
+                        <Button Content="+ Add" Style="{StaticResource NotedFooterButton}" Height="30" Padding="10,0"
                                 Click="AddButton_Click" ToolTip="Add entry"/>
                     </StackPanel>
                 </Grid>

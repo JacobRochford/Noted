@@ -248,11 +248,9 @@
                 </Grid>
 
                 <Grid Grid.Row="3" Margin="0,13,0,0">
-                    <TextBlock x:Name="FooterText"
+                    <TextBlock Style="{StaticResource NotedFooterText}" x:Name="FooterText"
                                Text="Preview is read-only. Restore verifies every file again."
-                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                               FontSize="10"
-                               VerticalAlignment="Center"/>
+                               FontSize="10"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Content="Close" IsCancel="True"
                                 Click="CloseButton_Click"

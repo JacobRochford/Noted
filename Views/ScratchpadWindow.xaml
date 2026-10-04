@@ -289,21 +289,18 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" Grid.ColumnSpan="2" Orientation="Vertical" VerticalAlignment="Center">
-                        <TextBlock Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="11">
+                        <TextBlock Style="{StaticResource NotedFooterText}">
                             <Run Text="Words "/>
-                            <Run Text="{Binding WordCount, Mode=OneWay}" Foreground="{DynamicResource NotedAccentBrush}" FontWeight="SemiBold"/>
+                            <Run Text="{Binding WordCount, Mode=OneWay}"/>
                             <Run Text="   Characters "/>
-                            <Run Text="{Binding CharacterCount, Mode=OneWay}" Foreground="{DynamicResource NotedAccentBrush}" FontWeight="SemiBold"/>
+                            <Run Text="{Binding CharacterCount, Mode=OneWay}"/>
                             <Run Text="   Lines "/>
-                            <Run Text="{Binding LineCount, Mode=OneWay}" Foreground="{DynamicResource NotedAccentBrush}" FontWeight="SemiBold"/>
+                            <Run Text="{Binding LineCount, Mode=OneWay}"/>
                         </TextBlock>
-                        <TextBlock Text="{Binding FindResultText}" Margin="12,0,0,0"
-                                   Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Style="{StaticResource NotedFooterText}" Text="{Binding FindResultText}" Margin="12,0,0,0"/>
                     </StackPanel>
                     <Button x:Name="IndentationButton" Grid.Row="1" Grid.Column="0" Focusable="False"
-                            HorizontalAlignment="Left" Margin="0,5,0,0" Padding="3,0" FontSize="11"
-                            Background="Transparent" BorderThickness="0"
-                            Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                            HorizontalAlignment="Left" Margin="0,5,0,0" Style="{StaticResource NotedFooterButton}" Padding="3,0"
                             ToolTip="Indentation for this Scratchpad"/>
                     <CheckBox Grid.Row="1" Grid.Column="1" Margin="0,5,0,0" Content="Always visible" ToolTip="Use the app visible opacity even when this window is inactive"
                               IsChecked="{Binding Path=(s:WindowAppearance.AlwaysVisible), RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"

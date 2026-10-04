@@ -618,17 +618,16 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding FooterText}" Margin="0,0,4,0"
-                                   Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Style="{StaticResource NotedFooterText}" Text="{Binding FooterText}" Margin="0,0,4,0"/>
                         <Button Content="Clear done" Margin="2,0,0,0"
-                                Style="{StaticResource FooterLinkBtn}" Click="ClearCompleted_Click"
+                                Style="{StaticResource NotedFooterButton}" Click="ClearCompleted_Click"
                                 ToolTip="Remove all completed items"
                                 Visibility="{Binding HasCompleted, Converter={StaticResource BoolToVisibility}}"/>
                         <Button Content="Check all" Margin="2,0,0,0"
-                                Style="{StaticResource FooterLinkBtn}" Click="CheckAll_Click"
+                                Style="{StaticResource NotedFooterButton}" Click="CheckAll_Click"
                                 ToolTip="Mark all items as done"/>
                         <Button Content="Uncheck all" Margin="2,0,0,0"
-                                Style="{StaticResource FooterLinkBtn}" Click="UncheckAll_Click"
+                                Style="{StaticResource NotedFooterButton}" Click="UncheckAll_Click"
                                 ToolTip="Unmark completed items"
                                 Visibility="{Binding HasCompleted, Converter={StaticResource BoolToVisibility}}"/>
                     </WrapPanel>
@@ -639,7 +638,7 @@
                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                   Style="{StaticResource NotedToggleSwitch}"
                                   FontSize="11" VerticalAlignment="Center"/>
-                        <Button Content="+ Add" Style="{StaticResource PrimaryBtn}"
+                        <Button Content="+ Add" Style="{StaticResource NotedFooterButton}" Padding="11,6"
                                 IsEnabled="{Binding CanAddItem}"
                                 Click="AddButton_Click" ToolTip="Add item"/>
                     </StackPanel>
