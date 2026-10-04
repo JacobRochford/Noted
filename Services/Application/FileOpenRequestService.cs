@@ -1,6 +1,8 @@
 using System.IO;
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
 using System.Text;
+using Microsoft.Win32.SafeHandles;
 
 namespace Noted.Services;
 
@@ -15,6 +17,14 @@ internal sealed class FileOpenRequestService : IDisposable, IAsyncDisposable
     private Task? _disposeTask;
     private readonly CancellationTokenSource _cancellation = new();
     private Task? _listener;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint serverProcessId);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AllowSetForegroundWindow(uint processId);
 
     internal FileOpenRequestService(
         Action<string> openFile,
@@ -48,6 +58,11 @@ internal sealed class FileOpenRequestService : IDisposable, IAsyncDisposable
                 PipeDirection.Out,
                 PipeOptions.None);
             client.Connect(timeoutMilliseconds);
+            // Pass Explorer's foreground permission to the running instance before
+            // it receives the request and activates the editor. Still open the file
+            // if Windows declines the foreground request.
+            if (GetNamedPipeServerProcessId(client.SafePipeHandle, out var serverProcessId))
+                _ = AllowSetForegroundWindow(serverProcessId);
             using var writer = new StreamWriter(client, new UTF8Encoding(false))
             {
                 AutoFlush = true
