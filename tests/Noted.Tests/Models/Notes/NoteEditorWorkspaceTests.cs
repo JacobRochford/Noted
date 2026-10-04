@@ -6,6 +6,30 @@ namespace Noted.Tests.Models;
 public sealed class NoteEditorWorkspaceTests
 {
     [TestMethod]
+    public void EncodingChangesRemainDirtyThroughTextUpdatesAndBecomeSaved()
+    {
+        var workspace = new NoteEditorWorkspace();
+        var document = CreateDocument("encoding.txt", content: "saved");
+        workspace.Add(document);
+
+        workspace.SetEncoding(document, TextFileEncoding.Utf8Bom);
+        Assert.IsTrue(document.IsDirty);
+        Assert.AreEqual("saved", document.Content);
+        workspace.UpdateContent(document, "saved", caretIndex: 0);
+        Assert.IsTrue(document.IsDirty);
+
+        workspace.SetEncoding(document, TextFileEncoding.Utf8);
+        Assert.IsFalse(document.IsDirty);
+        workspace.SetEncoding(document, TextFileEncoding.Utf16BE);
+        workspace.MarkSaved(document);
+        Assert.IsFalse(document.IsDirty);
+        Assert.AreEqual(TextFileEncoding.Utf16BE, document.SavedEncoding);
+        workspace.UpdateContent(document, "edited", caretIndex: 0);
+        workspace.SetEncoding(document, TextFileEncoding.Utf16BE);
+        Assert.IsTrue(document.IsDirty);
+    }
+
+    [TestMethod]
     public void DocumentChangesFlowThroughWorkspaceOperations()
     {
         var workspace = new NoteEditorWorkspace();
@@ -130,6 +154,8 @@ public sealed class NoteEditorWorkspaceTests
         {
             nameof(OpenNoteDocument.Content),
             nameof(OpenNoteDocument.SavedContent),
+            nameof(OpenNoteDocument.Encoding),
+            nameof(OpenNoteDocument.SavedEncoding),
             nameof(OpenNoteDocument.CaretIndex),
             nameof(OpenNoteDocument.VerticalOffset),
             nameof(OpenNoteDocument.MarkdownPreviewEnabled),

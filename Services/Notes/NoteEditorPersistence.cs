@@ -119,6 +119,7 @@ internal sealed class NoteEditorPersistence
             {
                 FilePath = document.FilePath,
                 Indentation = document.Indentation,
+                PendingEncoding = document.Encoding != document.SavedEncoding ? document.Encoding : null,
                 CaretIndex = document.CaretIndex,
                 VerticalOffset = document.VerticalOffset,
                 MarkdownPreviewEnabled = document.MarkdownPreviewEnabled,
@@ -175,7 +176,8 @@ internal sealed class NoteEditorPersistence
                 return true;
             }
 
-            var persistedContent = _contentService.Load(normalizedPath);
+            var loadedFile = _contentService.LoadWithEncoding(normalizedPath);
+            var persistedContent = loadedFile.Content;
             drafts.TryGetValue(normalizedPath, out var draft);
             var content = draft is not null &&
                           !string.Equals(draft.Content, persistedContent, StringComparison.Ordinal)
@@ -190,7 +192,8 @@ internal sealed class NoteEditorPersistence
                 content,
                 persistedContent,
                 isDirty: !string.Equals(content, persistedContent, StringComparison.Ordinal),
-                isMissing: false);
+                isMissing: false,
+                encoding: loadedFile.Encoding);
             return true;
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
@@ -221,7 +224,8 @@ internal sealed class NoteEditorPersistence
                 return true;
             }
 
-            var persistedContent = _contentService.Load(draft.FilePath);
+            var loadedFile = _contentService.LoadWithEncoding(draft.FilePath);
+            var persistedContent = loadedFile.Content;
             if (string.Equals(draft.Content, persistedContent, StringComparison.Ordinal))
             {
                 TryDeleteRedundantDraft(draft.FilePath, issues);
@@ -234,7 +238,8 @@ internal sealed class NoteEditorPersistence
                 persistedContent,
                 isDirty: true,
                 caretIndex: draft.Content.Length,
-                indentation: _getDefaultIndentation());
+                indentation: _getDefaultIndentation(),
+                encoding: loadedFile.Encoding);
             return true;
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
@@ -270,8 +275,10 @@ internal sealed class NoteEditorPersistence
         string content,
         string savedContent,
         bool isDirty,
-        bool isMissing) =>
-        new(
+        bool isMissing,
+        TextFileEncoding encoding = TextFileEncoding.Utf8)
+    {
+        var document = new OpenNoteDocument(
             filePath,
             content,
             savedContent,
@@ -282,7 +289,15 @@ internal sealed class NoteEditorPersistence
             isMissing: isMissing,
             usesGeneratedName: tabState.UsesGeneratedName,
             initialFileContent: tabState.InitialFileContent,
-            indentation: tabState.Indentation ?? _getDefaultIndentation());
+            indentation: tabState.Indentation ?? _getDefaultIndentation(),
+            encoding: encoding);
+        if (tabState.PendingEncoding is { } pending && Enum.IsDefined(pending))
+        {
+            document.Encoding = pending;
+            document.IsDirty |= pending != document.SavedEncoding;
+        }
+        return document;
+    }
 
     private static OpenNoteDocument? FindBySavedPath(
         string? savedPath,

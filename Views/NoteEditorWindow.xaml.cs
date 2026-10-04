@@ -486,7 +486,8 @@ public partial class NoteEditorWindow : Window
 
         try
         {
-            var persistedContent = _contentService.Load(normalizedPath);
+            var loadedFile = _contentService.LoadWithEncoding(normalizedPath);
+            var persistedContent = loadedFile.Content;
             var loadResult = _recoveryService.LoadDraft(normalizedPath);
             var issues = loadResult.Issues.ToList();
             var draft = loadResult.Draft;
@@ -506,12 +507,18 @@ public partial class NoteEditorWindow : Window
                 isDirty: !string.Equals(recoveredContent, persistedContent, StringComparison.Ordinal),
                 usesGeneratedName: usesGeneratedName,
                 initialFileContent: initialFileContent,
-                indentation: _settingsService.LoadDefaultIndentation());
+                indentation: _settingsService.LoadDefaultIndentation(),
+                encoding: loadedFile.Encoding);
             _workspace.Add(document);
             OpenDocumentInFocusedPane(document, focusEditor: true, saveSession: true);
             ShowWindow();
             ShowRecoveryIssues(issues, []);
             return true;
+        }
+        catch (TextEncodingException ex)
+        {
+            ShowError("Unable to open note", ex.Message);
+            return false;
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
@@ -638,14 +645,15 @@ public partial class NoteEditorWindow : Window
 
         try
         {
-            var persistedContent = _contentService.Load(document.FilePath);
-            var shouldWriteContent = string.Equals(
+            var loadedFile = _contentService.LoadWithEncoding(document.FilePath);
+            var persistedContent = loadedFile.Content;
+            var shouldWriteContent = loadedFile.Encoding == document.SavedEncoding && string.Equals(
                 persistedContent,
                 document.SavedContent,
                 StringComparison.Ordinal);
             if (!shouldWriteContent)
             {
-                if (!string.Equals(
+                if (loadedFile.Encoding != document.Encoding || !string.Equals(
                         persistedContent,
                         document.Content,
                         StringComparison.Ordinal))
@@ -668,7 +676,8 @@ public partial class NoteEditorWindow : Window
             {
                 _noteSaveWarning = _contentService.Save(
                     document.FilePath,
-                    document.Content);
+                    document.Content,
+                    document.Encoding);
             }
 
             _workspace.MarkSaved(document);
@@ -684,6 +693,11 @@ public partial class NoteEditorWindow : Window
             if (ReferenceEquals(document, CurrentDocument))
                 UpdateEditorState();
             return true;
+        }
+        catch (TextEncodingException ex)
+        {
+            ShowError("Unable to save note", ex.Message);
+            return false;
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
@@ -849,7 +863,32 @@ public partial class NoteEditorWindow : Window
         Title = currentDocument is not null
             ? $"{(currentDocument.IsDirty ? "*" : string.Empty)}{currentDocument.DisplayName} - Noted"
             : "Noted";
+        UpdateEncodingMenu();
         UpdateDocumentFooter();
+    }
+
+    private void UpdateEncodingMenu()
+    {
+        var document = CurrentDocument;
+        EncodingMenu.IsEnabled = document is not null;
+        EncodingMenu.Header = document is null
+            ? "Encoding"
+            : $"Encoding: {TextFileCodec.GetDisplayName(document.Encoding)}";
+        foreach (var item in EncodingMenu.Items.OfType<MenuItem>())
+            item.IsChecked = document is not null && item.Tag is string tag &&
+                Enum.TryParse<TextFileEncoding>(tag, out var encoding) && document.Encoding == encoding;
+    }
+
+    private void EncodingMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (CurrentDocument is not { } document || sender is not MenuItem { Tag: string tag } ||
+            !Enum.TryParse<TextFileEncoding>(tag, out var encoding))
+            return;
+        CaptureActiveDocument();
+        _workspace.SetEncoding(document, encoding);
+        UpdateEditorState();
+        ScheduleRecoveryDraftSave();
+        SaveEditorSession();
     }
 
     private void ScheduleRecoveryDraftSave()
@@ -1631,8 +1670,8 @@ public partial class NoteEditorWindow : Window
         {
             var oldPath = document.FilePath;
             _noteSaveWarning = document.InitialFileContent is { } initialContent
-                ? _contentService.SaveNewNoteAs(oldPath, newPath, document.Content, initialContent)
-                : _contentService.SaveAs(newPath, document.Content);
+                ? _contentService.SaveNewNoteAs(oldPath, newPath, document.Content, initialContent, document.Encoding)
+                : _contentService.SaveAs(newPath, document.Content, document.Encoding);
             _workspace.UpdatePath(
                 document,
                 newPath,
@@ -1653,6 +1692,11 @@ public partial class NoteEditorWindow : Window
             SaveEditorSession();
             UpdateEditorState();
             return true;
+        }
+        catch (TextEncodingException ex)
+        {
+            ShowError("Unable to save note", ex.Message);
+            return false;
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {

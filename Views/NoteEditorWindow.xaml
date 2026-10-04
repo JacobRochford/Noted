@@ -166,6 +166,14 @@
                             <MenuItem Header="Save As..."
                                       InputGestureText="Ctrl+Shift+S"
                                       Click="SaveAsMenuItem_Click"/>
+                            <MenuItem x:Name="EncodingMenu" Header="Encoding"
+                                      ToolTip="Select the encoding for saving. Opening this menu does not reinterpret text. Files without a BOM use valid UTF-8, otherwise Windows-1252.">
+                                <MenuItem Header="UTF-8 without BOM" Tag="Utf8" IsCheckable="True" Click="EncodingMenuItem_Click"/>
+                                <MenuItem Header="UTF-8 with BOM" Tag="Utf8Bom" IsCheckable="True" Click="EncodingMenuItem_Click"/>
+                                <MenuItem Header="UTF-16 LE (with BOM)" Tag="Utf16LE" IsCheckable="True" Click="EncodingMenuItem_Click"/>
+                                <MenuItem Header="UTF-16 BE (with BOM)" Tag="Utf16BE" IsCheckable="True" Click="EncodingMenuItem_Click"/>
+                                <MenuItem Header="Windows-1252" Tag="Windows1252" IsCheckable="True" Click="EncodingMenuItem_Click"/>
+                            </MenuItem>
                             <MenuItem Header="Show in File Explorer"
                                       InputGestureText="Ctrl+O"
                                       Click="ShowInFileExplorerMenuItem_Click"/>

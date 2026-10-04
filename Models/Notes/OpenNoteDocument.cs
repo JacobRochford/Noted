@@ -20,7 +20,8 @@ public sealed class OpenNoteDocument : ObservableObject
         bool isMissing = false,
         bool usesGeneratedName = false,
         string? initialFileContent = null,
-        IndentationSettings? indentation = null)
+        IndentationSettings? indentation = null,
+        TextFileEncoding encoding = TextFileEncoding.Utf8)
     {
         _filePath = Path.GetFullPath(filePath);
         Content = content;
@@ -33,6 +34,8 @@ public sealed class OpenNoteDocument : ObservableObject
         UsesGeneratedName = usesGeneratedName;
         InitialFileContent = initialFileContent;
         Indentation = indentation ?? new();
+        Encoding = encoding;
+        SavedEncoding = encoding;
     }
 
     public IndentationSettings Indentation { get; internal set; }
@@ -46,6 +49,8 @@ public sealed class OpenNoteDocument : ObservableObject
         $"{DisplayName}{(_isMissing ? "  (missing)" : string.Empty)}{(_isDirty ? "  •" : string.Empty)}";
     public string Content { get; internal set; }
     public string SavedContent { get; internal set; }
+    public TextFileEncoding Encoding { get; internal set; }
+    public TextFileEncoding SavedEncoding { get; internal set; }
     public int CaretIndex { get; internal set; }
     public double VerticalOffset { get; internal set; }
     public bool MarkdownPreviewEnabled { get; internal set; }

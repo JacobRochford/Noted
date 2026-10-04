@@ -109,7 +109,8 @@ internal sealed class NoteEditorWorkspace
         ArgumentNullException.ThrowIfNull(content);
         document.Content = content;
         document.CaretIndex = Math.Clamp(caretIndex, 0, content.Length);
-        document.IsDirty = !string.Equals(content, document.SavedContent, StringComparison.Ordinal);
+        document.IsDirty = document.Encoding != document.SavedEncoding ||
+            !string.Equals(content, document.SavedContent, StringComparison.Ordinal);
     }
 
     internal void UpdateViewState(
@@ -203,11 +204,20 @@ internal sealed class NoteEditorWorkspace
             document.InitialFileContent = initialFileContent;
     }
 
+    internal void SetEncoding(OpenNoteDocument document, TextFileEncoding encoding)
+    {
+        EnsureOwned(document);
+        document.Encoding = encoding;
+        document.IsDirty = encoding != document.SavedEncoding ||
+            !string.Equals(document.Content, document.SavedContent, StringComparison.Ordinal);
+    }
+
     internal void MarkSaved(OpenNoteDocument document)
     {
         EnsureOwned(document);
         document.InitialFileContent = null;
         document.SavedContent = document.Content;
+        document.SavedEncoding = document.Encoding;
         document.IsDirty = false;
         document.IsMissing = false;
     }

@@ -4,6 +4,7 @@ using System.Text;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
+using Noted.Models;
 
 namespace Noted.Services;
 
@@ -36,19 +37,21 @@ public sealed class NoteContentService : INoteContentService
         _historyLimit = historyLimit;
     }
 
-    public string Load(string filePath)
-    {
-        var validatedPath = ValidateNotePath(filePath);
-        return File.ReadAllText(validatedPath, Encoding.UTF8);
-    }
+    public string Load(string filePath) => LoadWithEncoding(filePath).Content;
 
-    public string? Save(string filePath, string content)
+    public TextFileContent LoadWithEncoding(string filePath) =>
+        TextFileCodec.Read(ValidateNotePath(filePath));
+
+    public string? Save(string filePath, string content, TextFileEncoding? encoding = null)
     {
         ArgumentNullException.ThrowIfNull(content);
 
         var validatedPath = ValidateNotePath(filePath);
-        var previousContent = File.ReadAllText(validatedPath, Encoding.UTF8);
-        if (string.Equals(previousContent, content, StringComparison.Ordinal))
+        var previous = TextFileCodec.Read(validatedPath);
+        var targetEncoding = encoding ?? previous.Encoding;
+        var bytes = TextFileCodec.Encode(content, targetEncoding);
+        var previousContent = previous.Content;
+        if (previous.Encoding == targetEncoding && string.Equals(previousContent, content, StringComparison.Ordinal))
             return null;
 
         var warnings = new List<string>();
@@ -63,11 +66,11 @@ public sealed class NoteContentService : INoteContentService
                 $"'{Path.GetFileName(validatedPath)}' was saved, but its previous version could not be added to note history.");
         }
 
-        FileWriter.WriteAllText(validatedPath, content);
-        string persistedContent;
+        FileWriter.WriteAllBytes(validatedPath, bytes);
+        byte[] persistedBytes;
         try
         {
-            persistedContent = File.ReadAllText(validatedPath, Encoding.UTF8);
+            persistedBytes = File.ReadAllBytes(validatedPath);
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
@@ -76,7 +79,7 @@ public sealed class NoteContentService : INoteContentService
                 ex);
         }
 
-        if (!string.Equals(persistedContent, content, StringComparison.Ordinal))
+        if (!persistedBytes.AsSpan().SequenceEqual(bytes))
         {
             throw new FileVerificationException(
                 $"'{Path.GetFileName(validatedPath)}' did not match the text that was saved.");
@@ -87,19 +90,20 @@ public sealed class NoteContentService : INoteContentService
             : string.Join(" ", warnings);
     }
 
-    public string? SaveAs(string filePath, string content)
+    public string? SaveAs(string filePath, string content, TextFileEncoding? encoding = null)
     {
         ArgumentNullException.ThrowIfNull(content);
 
         var validatedPath = ValidateNotePath(filePath);
         if (File.Exists(validatedPath))
-            return Save(validatedPath, content);
+            return Save(validatedPath, content, encoding);
 
-        FileWriter.WriteAllText(validatedPath, content);
-        string persistedContent;
+        var bytes = TextFileCodec.Encode(content, encoding ?? TextFileEncoding.Utf8);
+        FileWriter.WriteAllBytes(validatedPath, bytes);
+        byte[] persistedBytes;
         try
         {
-            persistedContent = File.ReadAllText(validatedPath, Encoding.UTF8);
+            persistedBytes = File.ReadAllBytes(validatedPath);
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
@@ -108,7 +112,7 @@ public sealed class NoteContentService : INoteContentService
                 ex);
         }
 
-        if (!string.Equals(persistedContent, content, StringComparison.Ordinal))
+        if (!persistedBytes.AsSpan().SequenceEqual(bytes))
         {
             throw new FileVerificationException(
                 $"'{Path.GetFileName(validatedPath)}' did not match the text that was saved.");
@@ -117,11 +121,11 @@ public sealed class NoteContentService : INoteContentService
         return null;
     }
 
-    public string? SaveNewNoteAs(string initialPath, string destinationPath, string content, string initialContent)
+    public string? SaveNewNoteAs(string initialPath, string destinationPath, string content, string initialContent, TextFileEncoding? encoding = null)
     {
         var source = ValidateNotePath(initialPath);
         var destination = ValidateNotePath(destinationPath);
-        var warning = SaveAs(destination, content);
+        var warning = SaveAs(destination, content, encoding ?? TextFileEncoding.Utf8);
         if (string.Equals(source, destination, StringComparison.OrdinalIgnoreCase)) return warning;
 
         try
@@ -137,8 +141,9 @@ public sealed class NoteContentService : INoteContentService
                 throw new IOException("The original note could not be opened for cleanup.", new Win32Exception(error));
             }
             using var stream = new FileStream(handle, FileAccess.Read);
-            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-            if (!string.Equals(reader.ReadToEnd(), initialContent, StringComparison.Ordinal))
+            using var buffer = new MemoryStream();
+            stream.CopyTo(buffer);
+            if (!string.Equals(TextFileCodec.Decode(buffer.ToArray()).Content, initialContent, StringComparison.Ordinal))
                 throw new IOException("Its content changed after the note was created.");
 
             var disposition = new FileDispositionInfo { DeleteFile = 1 };

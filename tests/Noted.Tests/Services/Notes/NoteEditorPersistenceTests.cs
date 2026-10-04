@@ -7,6 +7,54 @@ namespace Noted.Tests.Services;
 public sealed class NoteEditorPersistenceTests
 {
     [TestMethod]
+    public void SessionRestoresDetectedEncodingAndPendingConversionWithoutChangingText()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("encoded.txt");
+        File.WriteAllBytes(path, Convert.FromHexString("FFFEE900"));
+        var workspace = new NoteEditorWorkspace();
+        var document = new OpenNoteDocument(path, "é", "é", isDirty: false,
+            encoding: TextFileEncoding.Utf16LE);
+        workspace.Add(document);
+        workspace.SetEncoding(document, TextFileEncoding.Windows1252);
+        var session = NoteEditorPersistence.CreateSession(workspace);
+        Assert.AreEqual(TextFileEncoding.Windows1252, session.Tabs[0].PendingEncoding);
+        var persistence = new NoteEditorPersistence(new NoteContentService(directory.Path),
+            new StubRecoveryService(), new StubSessionService(session));
+
+        var restored = persistence.LoadWorkspace(loadSavedSession: true).Documents.Single();
+
+        Assert.AreEqual("é", restored.Content);
+        Assert.AreEqual(TextFileEncoding.Utf16LE, restored.SavedEncoding);
+        Assert.AreEqual(TextFileEncoding.Windows1252, restored.Encoding);
+        Assert.IsTrue(restored.IsDirty);
+        CollectionAssert.AreEqual(Convert.FromHexString("FFFEE900"), File.ReadAllBytes(path));
+    }
+
+    [TestMethod]
+    public void SessionWithoutPendingConversionUsesCurrentDiskEncoding()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("encoded.txt");
+        File.WriteAllBytes(path, Convert.FromHexString("FEFF00E9"));
+        var session = new NoteEditorSession
+        {
+            Tabs = [new NoteEditorTabState { FilePath = path }]
+        };
+        var persistence = new NoteEditorPersistence(new NoteContentService(directory.Path),
+            new StubRecoveryService(), new StubSessionService(session));
+
+        var restored = persistence.LoadWorkspace(loadSavedSession: true).Documents.Single();
+
+        Assert.AreEqual(TextFileEncoding.Utf16BE, restored.Encoding);
+        Assert.AreEqual(TextFileEncoding.Utf16BE, restored.SavedEncoding);
+        Assert.IsFalse(restored.IsDirty);
+        var workspace = new NoteEditorWorkspace();
+        workspace.Add(restored);
+        Assert.IsNull(NoteEditorPersistence.CreateSession(workspace).Tabs[0].PendingEncoding);
+    }
+
+    [TestMethod]
     public void DuplicateNormalizedSessionPathsCreateOneDocumentFromTheFirstSuccessfulEntry()
     {
         using var directory = new TemporaryTestDirectory();
@@ -200,13 +248,15 @@ public sealed class NoteEditorPersistenceTests
             return contentByPath[Path.GetFullPath(filePath)];
         }
 
-        public string? Save(string filePath, string content) => throw new NotSupportedException();
-        public string? SaveAs(string filePath, string content) => throw new NotSupportedException();
+        public TextFileContent LoadWithEncoding(string filePath) => new(Load(filePath), TextFileEncoding.Utf8);
+
+        public string? Save(string filePath, string content, TextFileEncoding? encoding = null) => throw new NotSupportedException();
+        public string? SaveAs(string filePath, string content, TextFileEncoding? encoding = null) => throw new NotSupportedException();
         public string? SaveNewNoteAs(
             string initialPath,
             string destinationPath,
             string content,
-            string initialContent) => throw new NotSupportedException();
+            string initialContent, TextFileEncoding? encoding = null) => throw new NotSupportedException();
     }
 
     private sealed class StubRecoveryService : INoteRecoveryService
