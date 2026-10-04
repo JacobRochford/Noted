@@ -64,6 +64,7 @@ public partial class ScratchpadWindow : OverlayWindow
         _reopenOnStartup = state.ReopenOnStartup;
         DataContext = _viewModel;
         EditorIndentation.Attach(Editor, () => _viewModel.Indentation);
+        EditorLineCommands.Attach(Editor);
         IndentationButton.Content = EditorIndentation.GetLabel(_viewModel.Indentation);
         EditorIndentation.AttachIndicator(IndentationButton, () => _viewModel.Indentation, _viewModel.SetIndentation, () => Editor);
 

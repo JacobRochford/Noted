@@ -89,7 +89,9 @@ public partial class NoteEditorWindow : Window
 
         InitializeComponent();
         EditorIndentation.Attach(EditorTextBox, () => _activeDocument?.Indentation);
+        EditorLineCommands.Attach(EditorTextBox);
         EditorIndentation.Attach(SecondaryEditorTextBox, () => _secondaryDocument?.Indentation);
+        EditorLineCommands.Attach(SecondaryEditorTextBox);
         EditorIndentation.AttachIndicator(IndentationButton, () => CurrentDocument?.Indentation, value =>
         {
             if (CurrentDocument is not { } document) return;

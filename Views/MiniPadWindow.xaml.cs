@@ -39,6 +39,7 @@ public partial class MiniPadWindow : OverlayWindow
         _indentation = settingsService.LoadMiniPadWindowState().Indentation ?? settingsService.LoadDefaultIndentation();
         InitializeComponent();
         EditorIndentation.Attach(Editor, () => _indentation);
+        EditorLineCommands.Attach(Editor);
         IndentationButton.Content = EditorIndentation.GetLabel(_indentation);
         EditorIndentation.AttachIndicator(IndentationButton, () => _indentation, value =>
         {
