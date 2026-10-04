@@ -236,6 +236,7 @@
         <!-- Tray context menu (opened manually to ensure proper foreground activation) -->
         <ContextMenu x:Key="TrayContextMenu" Style="{StaticResource TrayContextMenuStyle}">
             <MenuItem Header="Show/Hide Notes" Click="TrayShowHideNotes_Click" Style="{StaticResource TrayMenuItemStyle}"/>
+            <MenuItem Header="Restore Window Positions" Click="TrayRestoreWindows_Click" Style="{StaticResource TrayMenuItemStyle}"/>
             <MenuItem Header="⚙" Click="TraySettings_Click" Style="{StaticResource TrayMenuItemStyle}"/>
             <Separator Style="{StaticResource TrayMenuSeparatorStyle}"/>
             <MenuItem Header="Exit" Click="TrayExit_Click" Style="{StaticResource TrayMenuItemStyle}"/>

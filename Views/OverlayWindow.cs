@@ -12,6 +12,7 @@ public abstract class OverlayWindow : Window
 {
     private bool _isChangingGroupVisibility;
     private WindowEdgeResizer? _edgeResizer;
+    private WindowState _restoreWindowState = WindowState.Normal;
 
     protected bool _ghostModeEnabled;
     protected double _ghostModeOpacity;
@@ -99,7 +100,14 @@ public abstract class OverlayWindow : Window
     protected abstract void SaveWindowState();
     protected abstract void RequestHide();
 
-    internal bool IsWindowVisible => Visibility == Visibility.Visible;
+    protected override void OnStateChanged(EventArgs e)
+    {
+        if (WindowState != WindowState.Minimized)
+            _restoreWindowState = WindowState;
+        base.OnStateChanged(e);
+    }
+
+    internal bool IsWindowVisible => IsVisible && WindowState != WindowState.Minimized;
     internal bool IsHiddenTogether { get; private set; }
     protected bool IsChangingGroupVisibility => _isChangingGroupVisibility;
 
@@ -146,7 +154,7 @@ public abstract class OverlayWindow : Window
     private void ShowWindowCore()
     {
         // Show synchronously so the native handle exists before requesting activation
-        Show();
+        WindowInterop.RestoreWindow(this, _restoreWindowState);
         var hwnd = new WindowInteropHelper(this).Handle;
         WindowInterop.StripNoActivate(hwnd);
         WindowInterop.SetForegroundWindow(hwnd);

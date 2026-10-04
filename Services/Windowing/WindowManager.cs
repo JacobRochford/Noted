@@ -66,6 +66,25 @@ namespace Noted.Services
             Main?.ShowNotesPanel();
         }
 
+        internal static void RestoreWindowPositions()
+        {
+            if (Editor?.CanChangeGroupVisibility == false)
+                return;
+
+            // Include minimized windows, but leave intentionally hidden utilities closed.
+            if (Checklist?.IsVisible == true)
+                Checklist.ShowWindow();
+            if (Dictionary?.IsVisible == true)
+                Dictionary.ShowWindow();
+            if (Scratchpad?.IsVisible == true)
+                Scratchpad.ShowWindow();
+            if (MiniPad?.IsVisible == true)
+                MiniPad.ShowWindow();
+            if (Editor?.IsVisible == true)
+                Editor.ShowWindow();
+            Main?.RestoreNotesPosition();
+        }
+
         public static void HideChecklist() => Checklist?.HideWindow();
         public static void HideDictionary() => Dictionary?.HideWindow();
         public static void HideScratchpad() => Scratchpad?.HideWindow();

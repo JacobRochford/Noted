@@ -136,6 +136,26 @@ internal static class WindowInterop {
         SetWindowLong(hwnd, GWL_EXSTYLE, style | WS_EX_TOOLWINDOW);
     }
 
+    internal static void RestoreWindow(Window window, WindowState restoreState)
+    {
+        if (window.WindowState == WindowState.Minimized)
+            window.WindowState = restoreState;
+        if (!window.IsVisible)
+            window.Show();
+
+        // Maximized windows are positioned by Windows; preserve that state.
+        if (window.WindowState != WindowState.Normal)
+            return;
+
+        var bounds = NormalizeWindowBounds(
+            window.Left, window.Top, window.Width, window.Height,
+            window.MinWidth, window.MinHeight, window.ActualWidth, window.ActualHeight);
+        window.Left = bounds.Left;
+        window.Top = bounds.Top;
+        window.Width = bounds.Width;
+        window.Height = bounds.Height;
+    }
+
     internal static Rect NormalizeWindowBounds(
         double left,
         double top,

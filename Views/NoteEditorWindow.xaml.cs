@@ -379,7 +379,7 @@ public partial class NoteEditorWindow : Window
         SaveEditorSession();
     }
 
-    private void ShowWindow()
+    internal void ShowWindow()
     {
         _isHiddenTogether = false;
         _reopenOnStartup = true;
@@ -398,10 +398,7 @@ public partial class NoteEditorWindow : Window
 
     private void ShowWindowCore()
     {
-        if (!IsVisible)
-            Show();
-        if (WindowState == WindowState.Minimized)
-            WindowState = _restoreWindowState;
+        WindowInterop.RestoreWindow(this, _restoreWindowState);
 
         Activate();
         FocusActiveSurface();

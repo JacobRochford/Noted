@@ -190,11 +190,7 @@ public partial class MainWindow : Window {
         var newNoteMode = _settingsService.LoadNewNoteMode();
         QuickNoteButton.Visibility = newNoteMode == NewNoteMode.Both ? Visibility.Visible : Visibility.Collapsed;
 
-        // overlay: span all monitors
-        Left = SystemParameters.VirtualScreenLeft;
-        Top = SystemParameters.VirtualScreenTop;
-        Width = SystemParameters.VirtualScreenWidth;
-        Height = SystemParameters.VirtualScreenHeight;
+        ResetOverlayBounds();
 
         Dispatcher.BeginInvoke(
             PositionNotedOnPreferredDisplay,
@@ -337,6 +333,15 @@ public partial class MainWindow : Window {
         }
     }
 
+    private void ResetOverlayBounds()
+    {
+        // The transparent host must span all monitors for canvas positioning.
+        Left = SystemParameters.VirtualScreenLeft;
+        Top = SystemParameters.VirtualScreenTop;
+        Width = SystemParameters.VirtualScreenWidth;
+        Height = SystemParameters.VirtualScreenHeight;
+    }
+
     private void PositionNotedOnPreferredDisplay()
     {
         var screen = ResolvePreferredDisplay();
@@ -397,9 +402,14 @@ public partial class MainWindow : Window {
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
     };
 
-    internal bool IsNotesPanelVisible => NotesPanel.Visibility == Visibility.Visible;
+    internal bool IsNotesPanelVisible => IsVisible && WindowState != WindowState.Minimized
+        && NotesPanel.Visibility == Visibility.Visible;
 
     internal void ShowNotesPanel() {
+        if (!IsVisible)
+            Show();
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
         NotesPanel.Visibility = Visibility.Visible;
         WindowAppearance.Refresh(this);
         // force focus for overlay
@@ -1680,6 +1690,24 @@ public partial class MainWindow : Window {
     private void TrayShowHideNotes_Click(object sender, RoutedEventArgs e)
     {
         WindowManager.ToggleNotedWindows();
+    }
+
+    private void TrayRestoreWindows_Click(object sender, RoutedEventArgs e)
+    {
+        WindowManager.RestoreWindowPositions();
+    }
+
+    internal void RestoreNotesPosition()
+    {
+        if (!IsVisible)
+            Show();
+        WindowState = WindowState.Normal;
+        ResetOverlayBounds();
+        Dispatcher.BeginInvoke(() =>
+        {
+            PositionNotedOnPreferredDisplay();
+            ShowNotesPanel();
+        }, DispatcherPriority.Loaded);
     }
 
 
