@@ -88,6 +88,7 @@ internal sealed class AppThemeManager : IDisposable
         SetBrush("NotedSurfaceBrush", surface);
         SetBrush("NotedSubtleSurfaceBrush", subtleSurface);
         SetBrush("NotedInputBackgroundBrush", input);
+        SetBrush("NotedEditorBackgroundBrush", dark ? ParseColor("#262928") : input);
         SetBrush("NotedBorderBrush", border);
         SetBrush("NotedStrongBorderBrush", strongBorder);
         SetBrush("NotedTextBrush", text);

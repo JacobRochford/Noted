@@ -4,6 +4,7 @@
     <SolidColorBrush x:Key="NotedSurfaceBrush" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="NotedSubtleSurfaceBrush" Color="#F2F8FB"/>
     <SolidColorBrush x:Key="NotedInputBackgroundBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="NotedEditorBackgroundBrush" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="NotedBorderBrush" Color="#C9DFEC"/>
     <SolidColorBrush x:Key="NotedStrongBorderBrush" Color="#87CEEB"/>
     <SolidColorBrush x:Key="NotedTextBrush" Color="#355A6E"/>
@@ -82,6 +83,11 @@
         <Setter Property="SelectionBrush" Value="{DynamicResource NotedSelectionBrush}"/>
         <Setter Property="SelectionTextBrush" Value="{DynamicResource NotedSelectionTextBrush}"/>
         <Setter Property="SelectionOpacity" Value="1"/>
+    </Style>
+    <Style x:Key="NotedEditorTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+        <Setter Property="Background" Value="{DynamicResource NotedEditorBackgroundBrush}"/>
+        <Setter Property="FontFamily" Value="Consolas"/>
+        <Setter Property="FontSize" Value="15"/>
     </Style>
     <Style TargetType="RichTextBox">
         <Setter Property="CaretBrush" Value="{DynamicResource NotedTextBrush}"/>
