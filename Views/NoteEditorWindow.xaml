@@ -230,9 +230,7 @@
                                       Click="WordWrapMenuItem_Click"/>
                             <MenuItem x:Name="HeaderMarkdownMenuItem"
                                       Header="Markdown Preview"
-                                      InputGestureText="Ctrl+Shift+V"
-                                      IsCheckable="True"
-                                      Click="MarkdownMenuItem_Click"/>
+                                      InputGestureText="Ctrl+Shift+V"/>
                             <Separator/>
                             <MenuItem x:Name="ReopenTabsOnStartupMenuItem"
                                       Header="Reopen Tabs on Startup"
@@ -511,7 +509,12 @@
                                     ToolTip="Close side-by-side view and keep the right pane"/>
                         </Grid>
                     </Border>
-                    <Grid x:Name="PrimaryTextEditor" Grid.Row="1">
+                    <Grid x:Name="PrimaryPreviewLayout" Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="0"/>
+                        </Grid.ColumnDefinitions>
+                    <Grid x:Name="PrimaryTextEditor">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                         <Border Background="{DynamicResource NotedEditorBackgroundBrush}">
                             <h:LineNumberGutter x:Name="PrimaryLineNumbers" Editor="{Binding ElementName=EditorTextBox}"
@@ -558,9 +561,7 @@
                                           Click="WordWrapMenuItem_Click"/>
                                 <MenuItem x:Name="ContextMarkdownMenuItem"
                                           Header="Markdown Preview"
-                                          InputGestureText="Ctrl+Shift+V"
-                                          IsCheckable="True"
-                                          Click="MarkdownMenuItem_Click"/>
+                                          InputGestureText="Ctrl+Shift+V"/>
                                 <Separator/>
                                 <MenuItem Header="Delete Note..."
                                           Foreground="{DynamicResource NotedDangerBrush}"
@@ -571,7 +572,7 @@
                     </Grid>
 
                     <FlowDocumentScrollViewer x:Name="MarkdownPreview"
-                                              Grid.Row="1"
+                                              Grid.Column="1"
                                               Background="{DynamicResource NotedInputBackgroundBrush}"
                                               Foreground="{DynamicResource NotedTextBrush}"
                                               BorderThickness="0"
@@ -588,9 +589,7 @@
                                 <Separator/>
                                 <MenuItem x:Name="PreviewMarkdownMenuItem"
                                           Header="Markdown Preview"
-                                          InputGestureText="Ctrl+Shift+V"
-                                          IsCheckable="True"
-                                          Click="MarkdownMenuItem_Click"/>
+                                          InputGestureText="Ctrl+Shift+V"/>
                                 <Separator/>
                                 <MenuItem Header="Delete Note..."
                                           Foreground="{DynamicResource NotedDangerBrush}"
@@ -598,6 +597,7 @@
                             </ContextMenu>
                         </FlowDocumentScrollViewer.ContextMenu>
                     </FlowDocumentScrollViewer>
+                    </Grid>
                     </Grid>
 
                     <Border x:Name="FindPanel"
@@ -753,6 +753,11 @@
                                             ToolTip="Close side-by-side view"/>
                                 </Grid>
                             </Border>
+                            <Grid x:Name="SecondaryPreviewLayout">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="0"/>
+                                </Grid.ColumnDefinitions>
                             <Grid x:Name="SecondaryTextEditor">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                         <Border Background="{DynamicResource NotedEditorBackgroundBrush}">
@@ -799,6 +804,10 @@
                                 </TextBox.ContextMenu>
                             </TextBox>
                     </Grid>
+                            <FlowDocumentScrollViewer x:Name="SecondaryMarkdownPreview" Grid.Column="1"
+                                                      IsToolBarVisible="False" BorderThickness="0"
+                                                      Visibility="Collapsed" VerticalScrollBarVisibility="Auto"/>
+                            </Grid>
                         </DockPanel>
                     </Border>
 

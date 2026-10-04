@@ -9,6 +9,31 @@ namespace Noted.Tests.Services;
 public sealed class NoteEditorSessionServiceTests
 {
     [TestMethod]
+    public void PreviewModesSurviveSessionSaveAndModeOnlyChangesArePersisted()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var service = new NoteEditorSessionService(directory.Path);
+        foreach (var mode in Enum.GetValues<MarkdownPreviewMode>())
+        {
+            service.Save(new NoteEditorSession
+            {
+                Tabs = [new NoteEditorTabState { FilePath = directory.File("note.md"), MarkdownPreviewMode = mode }]
+            });
+            Assert.AreEqual(mode, new NoteEditorSessionService(directory.Path).Load().Session.Tabs[0].MarkdownPreviewMode);
+        }
+    }
+
+    [TestMethod]
+    public void LegacyBooleanPreviewSessionsRestorePreviewMode()
+    {
+        var tab = System.Text.Json.JsonSerializer.Deserialize<NoteEditorTabState>(
+            "{\"FilePath\":\"note.md\",\"MarkdownPreviewEnabled\":true}")!;
+        Assert.AreEqual(MarkdownPreviewMode.Preview, tab.MarkdownPreviewMode);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(tab);
+        Assert.IsFalse(serialized.Contains("MarkdownPreviewEnabled", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void CreationProvenanceSurvivesRestartAndIsRemovedAfterFirstSave()
     {
         using var directory = new TemporaryTestDirectory();

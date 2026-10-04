@@ -9,7 +9,25 @@ public sealed record NoteEditorTabState
     public TextFileEncoding? PendingEncoding { get; init; }
     public int CaretIndex { get; init; }
     public double VerticalOffset { get; init; }
-    public bool MarkdownPreviewEnabled { get; init; }
+    public MarkdownPreviewMode MarkdownPreviewMode { get; init; }
+    // Compatibility for callers and sessions using the former boolean mode.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool MarkdownPreviewEnabled
+    {
+        get => MarkdownPreviewMode != MarkdownPreviewMode.Off;
+        init
+        {
+            if (value && MarkdownPreviewMode == MarkdownPreviewMode.Off)
+                MarkdownPreviewMode = MarkdownPreviewMode.Preview;
+        }
+    }
+    [System.Text.Json.Serialization.JsonPropertyName("MarkdownPreviewEnabled")]
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool LegacyMarkdownPreviewEnabled
+    {
+        get => false;
+        init => MarkdownPreviewEnabled = value;
+    }
     public bool UsesGeneratedName { get; init; }
     public string? InitialFileContent { get; init; }
 }

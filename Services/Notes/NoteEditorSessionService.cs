@@ -116,7 +116,7 @@ public sealed class NoteEditorSessionService : INoteEditorSessionService
                 leftTab.Indentation != rightTab.Indentation ||
                 leftTab.CaretIndex != rightTab.CaretIndex ||
                 !leftTab.VerticalOffset.Equals(rightTab.VerticalOffset) ||
-                leftTab.MarkdownPreviewEnabled != rightTab.MarkdownPreviewEnabled ||
+                leftTab.MarkdownPreviewMode != rightTab.MarkdownPreviewMode ||
                 leftTab.PendingEncoding != rightTab.PendingEncoding ||
                 leftTab.UsesGeneratedName != rightTab.UsesGeneratedName ||
                 !string.Equals(leftTab.InitialFileContent, rightTab.InitialFileContent, StringComparison.Ordinal))

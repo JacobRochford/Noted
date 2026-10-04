@@ -18,6 +18,10 @@ internal static class NoteFileExtensions
     internal static string FileDialogFilter =>
         $"Supported text files ({s_supportedPattern})|{s_supportedPattern}";
 
+    internal static bool IsMarkdown(string filePath) =>
+        Path.GetExtension(filePath).Equals(".md", StringComparison.OrdinalIgnoreCase) ||
+        Path.GetExtension(filePath).Equals(".markdown", StringComparison.OrdinalIgnoreCase);
+
     internal static bool IsSupported(string filePath)
     {
         var extension = Path.GetExtension(filePath);

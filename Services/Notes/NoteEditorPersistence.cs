@@ -122,7 +122,7 @@ internal sealed class NoteEditorPersistence
                 PendingEncoding = document.Encoding != document.SavedEncoding ? document.Encoding : null,
                 CaretIndex = document.CaretIndex,
                 VerticalOffset = document.VerticalOffset,
-                MarkdownPreviewEnabled = document.MarkdownPreviewEnabled,
+                MarkdownPreviewMode = document.MarkdownPreviewMode,
                 UsesGeneratedName = document.UsesGeneratedName,
                 InitialFileContent = document.InitialFileContent
             }).ToList(),
@@ -285,12 +285,15 @@ internal sealed class NoteEditorPersistence
             isDirty,
             caretIndex: Math.Clamp(tabState.CaretIndex, 0, content.Length),
             verticalOffset: tabState.VerticalOffset,
-            markdownPreviewEnabled: tabState.MarkdownPreviewEnabled,
+            markdownPreviewEnabled: false,
             isMissing: isMissing,
             usesGeneratedName: tabState.UsesGeneratedName,
             initialFileContent: tabState.InitialFileContent,
             indentation: tabState.Indentation ?? _getDefaultIndentation(),
             encoding: encoding);
+        document.MarkdownPreviewMode = Enum.IsDefined(tabState.MarkdownPreviewMode)
+            ? tabState.MarkdownPreviewMode
+            : MarkdownPreviewMode.Off;
         if (tabState.PendingEncoding is { } pending && Enum.IsDefined(pending))
         {
             document.Encoding = pending;

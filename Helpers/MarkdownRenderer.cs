@@ -8,11 +8,20 @@ namespace Noted;
 
 internal static partial class MarkdownRenderer
 {
-    private static readonly Brush s_textBrush = new SolidColorBrush(Color.FromRgb(51, 51, 51));
-    private static readonly Brush s_accentBrush = new SolidColorBrush(Color.FromRgb(44, 110, 145));
-    private static readonly Brush s_mutedBrush = new SolidColorBrush(Color.FromRgb(91, 113, 125));
-    private static readonly Brush s_codeBackground = new SolidColorBrush(Color.FromRgb(238, 244, 247));
+    private static readonly Brush s_textBrush = CreateBrush(51, 51, 51);
+    private static readonly Brush s_accentBrush = CreateBrush(44, 110, 145);
+    private static readonly Brush s_mutedBrush = CreateBrush(91, 113, 125);
+    private static readonly Brush s_codeBackground = CreateBrush(238, 244, 247);
 
+    private static Brush CreateBrush(byte red, byte green, byte blue)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(red, green, blue));
+        brush.Freeze();
+        return brush;
+    }
+
+    // Markdown becomes native document objects only. HTML, URLs and image paths never
+    // become executable markup, navigation targets or resource-loading controls.
     internal static FlowDocument Render(string markdown)
     {
         var document = new FlowDocument
@@ -232,7 +241,14 @@ internal static partial class MarkdownRenderer
                 inlines.Add(new Run(text[position..match.Index]));
 
             var token = match.Value;
-            if (token.StartsWith('`'))
+            if (token.StartsWith('['))
+            {
+                var separator = token.IndexOf("](", StringComparison.Ordinal);
+                var label = token[1..separator];
+                var destination = token[(separator + 2)..^1];
+                inlines.Add(new Run($"{label} ({destination})") { Foreground = s_accentBrush });
+            }
+            else if (token.StartsWith('`'))
             {
                 inlines.Add(new Run(token[1..^1])
                 {
@@ -272,6 +288,6 @@ internal static partial class MarkdownRenderer
     [GeneratedRegex(@"^\s*\d+[.)]\s+(.+)$")]
     private static partial Regex OrderedListPattern();
 
-    [GeneratedRegex(@"(`[^`\r\n]+`)|(\*\*[^*\r\n]+\*\*)|(__[^_\r\n]+__)|(\*[^*\r\n]+\*)|(_[^_\r\n]+_)")]
+    [GeneratedRegex(@"(\[[^\]\r\n]+\]\([^()\r\n]*\))|(`[^`\r\n]+`)|(\*\*[^*\r\n]+\*\*)|(__[^_\r\n]+__)|(\*[^*\r\n]+\*)|(_[^_\r\n]+_)")]
     private static partial Regex InlinePattern();
 }

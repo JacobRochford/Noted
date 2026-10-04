@@ -43,7 +43,9 @@ public partial class NoteEditorWindow : Window
     private bool _isLoading;
     private bool _isLoadingSecondary;
     private bool _hasLoaded;
-    private bool _isMarkdownPreviewEnabled;
+    private readonly MarkdownPreviewPresenter _primaryPreview;
+    private readonly MarkdownPreviewPresenter _secondaryPreview;
+    private readonly List<(MenuItem Menu, Func<OpenNoteDocument?> Document)> _previewMenus = [];
     private int _scrollSpeed = 2;
     private bool _isPreparedForApplicationClose;
     private double _tabsPanelWidth = DefaultTabsPanelWidth;
@@ -88,6 +90,20 @@ public partial class NoteEditorWindow : Window
         _workspace.DocumentPathsChanged += Workspace_DocumentPathsChanged;
 
         InitializeComponent();
+        _primaryPreview = new MarkdownPreviewPresenter(EditorTextBox, PrimaryTextEditor, MarkdownPreview, PrimaryPreviewLayout);
+        _secondaryPreview = new MarkdownPreviewPresenter(SecondaryEditorTextBox, SecondaryTextEditor, SecondaryMarkdownPreview, SecondaryPreviewLayout);
+        AddMarkdownPreviewMenu(HeaderMarkdownMenuItem, () => CurrentDocument);
+        AddMarkdownPreviewMenu(ContextMarkdownMenuItem, () => _activeDocument);
+        AddMarkdownPreviewMenu(PreviewMarkdownMenuItem, () => _activeDocument);
+        var secondaryMenu = new MenuItem { Header = "Markdown Preview" };
+        SecondaryEditorTextBox.ContextMenu.Items.Add(secondaryMenu);
+        AddMarkdownPreviewMenu(secondaryMenu, () => _secondaryDocument);
+        SecondaryMarkdownPreview.ContextMenu = new ContextMenu { Style = EditorTextBox.ContextMenu.Style };
+        var secondaryPreviewMenu = new MenuItem { Header = "Markdown Preview" };
+        SecondaryMarkdownPreview.ContextMenu.Items.Add(secondaryPreviewMenu);
+        AddMarkdownPreviewMenu(secondaryPreviewMenu, () => _secondaryDocument);
+        MarkdownPreview.GotKeyboardFocus += (_, _) => { _workspace.Focus(_activeDocument); UpdateEditorState(); };
+        SecondaryMarkdownPreview.GotKeyboardFocus += (_, _) => { _workspace.Focus(_secondaryDocument); UpdateEditorState(); };
         WindowManager.ConfigureEditorActivation(this);
         EditorIndentation.Attach(EditorTextBox, () => _activeDocument?.Indentation);
         EditorLineCommands.Attach(EditorTextBox);
@@ -567,7 +583,7 @@ public partial class NoteEditorWindow : Window
         _isLoading = false;
 
         OpenTabsList.SelectedItem = document;
-        SetMarkdownPreviewEnabled(document.MarkdownPreviewEnabled, saveSession: false);
+        _primaryPreview.SetMode(EffectivePreviewMode(document));
         UpdateEditorState();
         SaveEditorSession();
         if (FindPanel.Visibility == Visibility.Visible)
@@ -587,8 +603,7 @@ public partial class NoteEditorWindow : Window
             _workspace.UpdateViewState(
                 _activeDocument,
                 EditorTextBox.CaretIndex,
-                EditorTextBox.VerticalOffset,
-                _isMarkdownPreviewEnabled);
+                EditorTextBox.VerticalOffset);
         }
 
         if (!_isLoadingSecondary && _secondaryDocument is not null)
@@ -863,6 +878,7 @@ public partial class NoteEditorWindow : Window
         Title = currentDocument is not null
             ? $"{(currentDocument.IsDirty ? "*" : string.Empty)}{currentDocument.DisplayName} - Noted"
             : "Noted";
+        UpdateMarkdownPreviewMenus();
         UpdateEncodingMenu();
         UpdateDocumentFooter();
     }
@@ -1270,7 +1286,6 @@ public partial class NoteEditorWindow : Window
             EditorTextBox.Text,
             EditorTextBox.CaretIndex);
         ScheduleRecoveryDraftSave();
-        UpdateMarkdownPreview();
         UpdateEditorState();
     }
 
@@ -1334,9 +1349,9 @@ public partial class NoteEditorWindow : Window
         if (targetDocument is null)
             return;
 
-        if (_isMarkdownPreviewEnabled)
+        if (CurrentPreview.Mode == MarkdownPreviewMode.Preview)
         {
-            SetMarkdownPreviewEnabled(false);
+            SetMarkdownPreviewMode(targetDocument, MarkdownPreviewMode.Off);
             if (ReferenceEquals(targetDocument, _secondaryDocument))
             {
                 _workspace.Focus(targetDocument);
@@ -1943,6 +1958,7 @@ public partial class NoteEditorWindow : Window
         ResetSecondaryUndoHistory();
         SecondaryDocumentTitle.Text = document.TabLabel;
         _isLoadingSecondary = false;
+        _secondaryPreview.SetMode(EffectivePreviewMode(document));
 
         EditorSplitterColumn.Width = new GridLength(5);
         SecondaryEditorColumn.Width = new GridLength(1, GridUnitType.Star);
@@ -2117,11 +2133,6 @@ public partial class NoteEditorWindow : Window
         ContextWordWrapMenuItem.IsChecked = enabled;
     }
 
-    private void MarkdownMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        SetMarkdownPreviewEnabled(sender is MenuItem { IsChecked: true });
-    }
-
     private void ReopenTabsOnStartupMenuItem_Click(object sender, RoutedEventArgs e)
     {
         var enabled = sender is MenuItem { IsChecked: true };
@@ -2213,49 +2224,85 @@ public partial class NoteEditorWindow : Window
         _tabsPanelWidth = NormalizeTabsPanelWidth(TabsColumn.ActualWidth);
     }
 
+    private MarkdownPreviewPresenter CurrentPreview => ReferenceEquals(CurrentDocument, _secondaryDocument)
+        ? _secondaryPreview : _primaryPreview;
+
+    private static MarkdownPreviewMode EffectivePreviewMode(OpenNoteDocument? document) =>
+        document is not null && NoteFileExtensions.IsMarkdown(document.FilePath) && Enum.IsDefined(document.MarkdownPreviewMode)
+            ? document.MarkdownPreviewMode : MarkdownPreviewMode.Off;
+
+    private void AddMarkdownPreviewMenu(MenuItem menu, Func<OpenNoteDocument?> document)
+    {
+        foreach (var (label, mode) in new[]
+        {
+            ("Preview Off", MarkdownPreviewMode.Off),
+            ("Preview", MarkdownPreviewMode.Preview),
+            ("Open Preview to Side", MarkdownPreviewMode.SideBySide)
+        })
+        {
+            var item = new MenuItem { Header = label, Tag = mode, IsCheckable = true };
+            item.Click += (_, _) =>
+            {
+                if (document() is { } target)
+                    SetMarkdownPreviewMode(target, mode);
+            };
+            menu.Items.Add(item);
+        }
+        _previewMenus.Add((menu, document));
+    }
+
+    private void UpdateMarkdownPreviewMenus()
+    {
+        // Reconcile file-type changes (including Save As) without changing source text.
+        var primaryMode = EffectivePreviewMode(_activeDocument);
+        var secondaryMode = EffectivePreviewMode(_secondaryDocument);
+        if (_primaryPreview.Mode != primaryMode) _primaryPreview.SetMode(primaryMode);
+        if (_secondaryPreview.Mode != secondaryMode) _secondaryPreview.SetMode(secondaryMode);
+        foreach (var (menu, getDocument) in _previewMenus)
+        {
+            var document = getDocument();
+            menu.Visibility = document is not null && NoteFileExtensions.IsMarkdown(document.FilePath)
+                ? Visibility.Visible : Visibility.Collapsed;
+            foreach (MenuItem item in menu.Items)
+                item.IsChecked = (MarkdownPreviewMode)item.Tag == EffectivePreviewMode(document);
+        }
+    }
+
     private void ToggleMarkdownPreview()
     {
-        SetMarkdownPreviewEnabled(!_isMarkdownPreviewEnabled);
+        if (CurrentDocument is { } document && NoteFileExtensions.IsMarkdown(document.FilePath))
+            SetMarkdownPreviewMode(document, CurrentPreview.Mode == MarkdownPreviewMode.Off
+                ? MarkdownPreviewMode.Preview : MarkdownPreviewMode.Off);
     }
 
     private void SetMarkdownPreviewEnabled(bool enabled, bool saveSession = true)
     {
-        if (enabled && FindPanel.Visibility == Visibility.Visible)
-            CloseFind(focusEditor: false);
-
-        _isMarkdownPreviewEnabled = enabled;
-        if (_activeDocument is not null)
-            _workspace.SetMarkdownPreview(_activeDocument, enabled);
-        HeaderMarkdownMenuItem.IsChecked = enabled;
-        ContextMarkdownMenuItem.IsChecked = enabled;
-        PreviewMarkdownMenuItem.IsChecked = enabled;
-        PrimaryTextEditor.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
-        MarkdownPreview.Visibility = enabled ? Visibility.Visible : Visibility.Collapsed;
-
-        if (enabled)
-            UpdateMarkdownPreview();
-        if (saveSession)
-            SaveEditorSession();
-        FocusActiveSurface();
+        if (_activeDocument is { } document)
+            SetMarkdownPreviewMode(document, enabled ? MarkdownPreviewMode.Preview : MarkdownPreviewMode.Off, saveSession);
+        else
+            _primaryPreview.SetMode(MarkdownPreviewMode.Off);
     }
 
-    private void UpdateMarkdownPreview()
+    private void SetMarkdownPreviewMode(OpenNoteDocument document, MarkdownPreviewMode mode, bool saveSession = true)
     {
-        if (_isMarkdownPreviewEnabled)
-            MarkdownPreview.Document = MarkdownRenderer.Render(EditorTextBox.Text);
+        if (mode == MarkdownPreviewMode.Preview && FindPanel.Visibility == Visibility.Visible)
+            CloseFind(focusEditor: false);
+        _workspace.SetMarkdownPreviewMode(document, mode);
+        var presenter = ReferenceEquals(document, _secondaryDocument) ? _secondaryPreview : _primaryPreview;
+        presenter.SetMode(EffectivePreviewMode(document));
+        _workspace.Focus(document);
+        UpdateEditorState();
+        if (saveSession) SaveEditorSession();
+        FocusActiveSurface();
     }
 
     private void FocusActiveSurface()
     {
-        if (_isMarkdownPreviewEnabled)
-        {
-            MarkdownPreview.Focus();
-            Keyboard.Focus(MarkdownPreview);
-            return;
-        }
-
-        EditorTextBox.Focus();
-        Keyboard.Focus(EditorTextBox);
+        Control surface = CurrentPreview.Mode == MarkdownPreviewMode.Preview
+            ? (ReferenceEquals(CurrentDocument, _secondaryDocument) ? SecondaryMarkdownPreview : MarkdownPreview)
+            : CurrentEditorTextBox;
+        surface.Focus();
+        Keyboard.Focus(surface);
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -2324,7 +2371,8 @@ public partial class NoteEditorWindow : Window
             return;
         }
 
-        if (e.Key == Key.V && modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+        if (e.Key == Key.V && modifiers == (ModifierKeys.Control | ModifierKeys.Shift) &&
+            CurrentDocument is { } markdownDocument && NoteFileExtensions.IsMarkdown(markdownDocument.FilePath))
         {
             ToggleMarkdownPreview();
             e.Handled = true;
@@ -2416,6 +2464,8 @@ public partial class NoteEditorWindow : Window
         _recoverySaveScheduler.StateChanged -= RecoverySaveScheduler_StateChanged;
         _workspace.DocumentPathsChanged -= Workspace_DocumentPathsChanged;
         _recoverySaveScheduler.Dispose();
+        _primaryPreview.Dispose();
+        _secondaryPreview.Dispose();
         _primaryFindPresenter.Dispose();
         _secondaryFindPresenter.Dispose();
         Closed -= Window_Closed;

@@ -7,6 +7,25 @@ namespace Noted.Tests.Services;
 public sealed class NoteEditorPersistenceTests
 {
     [TestMethod]
+    public void SidePreviewRestoresThroughWorkspacePersistenceWithoutChangingText()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = CreateNote(directory, "note.md", "# source");
+        var workspace = new NoteEditorWorkspace();
+        var document = new OpenNoteDocument(path, "# source", "# source", false);
+        workspace.Add(document);
+        workspace.SetMarkdownPreviewMode(document, MarkdownPreviewMode.SideBySide);
+        var persistence = new NoteEditorPersistence(new NoteContentService(directory.Path),
+            new StubRecoveryService(), new StubSessionService(NoteEditorPersistence.CreateSession(workspace)));
+
+        var restored = persistence.LoadWorkspace(loadSavedSession: true).Documents.Single();
+
+        Assert.AreEqual(MarkdownPreviewMode.SideBySide, restored.MarkdownPreviewMode);
+        Assert.AreEqual("# source", restored.Content);
+        Assert.IsFalse(restored.IsDirty);
+    }
+
+    [TestMethod]
     public void SessionRestoresDetectedEncodingAndPendingConversionWithoutChangingText()
     {
         using var directory = new TemporaryTestDirectory();

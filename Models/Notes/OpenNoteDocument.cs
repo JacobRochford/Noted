@@ -53,7 +53,12 @@ public sealed class OpenNoteDocument : ObservableObject
     public TextFileEncoding SavedEncoding { get; internal set; }
     public int CaretIndex { get; internal set; }
     public double VerticalOffset { get; internal set; }
-    public bool MarkdownPreviewEnabled { get; internal set; }
+    public MarkdownPreviewMode MarkdownPreviewMode { get; internal set; }
+    public bool MarkdownPreviewEnabled
+    {
+        get => MarkdownPreviewMode != MarkdownPreviewMode.Off;
+        internal set => MarkdownPreviewMode = value ? MarkdownPreviewMode.Preview : MarkdownPreviewMode.Off;
+    }
     public bool UsesGeneratedName { get; internal set; }
     // Non-null only for a file created by this app that has not been explicitly saved yet.
     public string? InitialFileContent { get; internal set; }
