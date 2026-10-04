@@ -323,7 +323,7 @@ public partial class MiniPadWindow : OverlayWindow
             Editor.Text,
             Editor,
             FindTextBox.Text,
-            new TextSearchOptions { MatchCase = false },
+            GetFindOptions(),
             _findPresenter.GetQueryRefreshAnchor());
         _findPresenter.Present(
             _findSession,
@@ -351,7 +351,7 @@ public partial class MiniPadWindow : OverlayWindow
             Editor.Text,
             Editor,
             FindTextBox.Text,
-            new TextSearchOptions { MatchCase = false },
+            GetFindOptions(),
             _findPresenter.GetQueryRefreshAnchor());
         if (_findSession.Matches.Count == 0)
         {
@@ -370,13 +370,25 @@ public partial class MiniPadWindow : OverlayWindow
         UpdateFindResultText();
     }
 
+    private TextSearchOptions GetFindOptions() => new()
+    {
+        MatchWholeWord = MatchWholeWordOption.IsChecked == true,
+        UseRegex = RegexOption.IsChecked == true
+    };
+
+    private void FindOption_Changed(object sender, RoutedEventArgs e)
+    {
+        if (FindPanel.Visibility == Visibility.Visible)
+            RefreshFindResults(revealCurrent: true);
+    }
+
     private void UpdateFindResultText()
     {
         FindResultText.Text = string.IsNullOrEmpty(FindTextBox.Text)
             ? string.Empty
-            : _findSession.Matches.Count == 0
+            : _findSession.ValidationMessage ?? (_findSession.Matches.Count == 0
                 ? "Not found"
-                : $"{_findSession.CurrentMatchIndex + 1} of {_findSession.Matches.Count}";
+                : $"{_findSession.CurrentMatchIndex + 1} of {_findSession.Matches.Count}");
     }
 
     private static bool IsExpectedRecoveryException(Exception exception) =>

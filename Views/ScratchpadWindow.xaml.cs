@@ -780,7 +780,7 @@ public partial class ScratchpadWindow : OverlayWindow
     private void RefreshFindResults(bool revealCurrent, int? navigationAnchor = null)
     {
         _findPresenter.Refresh(_findSession, _viewModel.FindText,
-            new TextSearchOptions { MatchCase = false }, navigationAnchor);
+            GetFindOptions(), navigationAnchor);
         _findPresenter.Present(_findSession, bringCurrentIntoView: revealCurrent);
         UpdateFindResultText();
     }
@@ -811,7 +811,7 @@ public partial class ScratchpadWindow : OverlayWindow
         RefreshFindResults(revealCurrent: false);
         if (_findSession.Matches.Count == 0)
         {
-            _viewModel.FindResultText = "Not found";
+            UpdateFindResultText();
             return;
         }
 
@@ -822,13 +822,25 @@ public partial class ScratchpadWindow : OverlayWindow
         _viewModel.FindResultText = $"Replaced {matches.Length}";
     }
 
+    private TextSearchOptions GetFindOptions() => new()
+    {
+        MatchWholeWord = MatchWholeWordOption.IsChecked == true,
+        UseRegex = RegexOption.IsChecked == true
+    };
+
+    private void FindOption_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel.IsFindBarVisible)
+            RefreshFindResults(revealCurrent: true);
+    }
+
     private void UpdateFindResultText()
     {
         _viewModel.FindResultText = string.IsNullOrEmpty(_viewModel.FindText)
             ? string.Empty
-            : _findSession.Matches.Count == 0
+            : _findSession.ValidationMessage ?? (_findSession.Matches.Count == 0
                 ? "Not found"
-                : $"{_findSession.CurrentMatchIndex + 1} of {_findSession.Matches.Count}";
+                : $"{_findSession.CurrentMatchIndex + 1} of {_findSession.Matches.Count}");
     }
 
 }

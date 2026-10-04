@@ -98,6 +98,16 @@
                                 <TextBox x:Name="FindTextBox" Style="{StaticResource NotedTextInput}" TextChanged="FindTextBox_TextChanged"
                                          ToolTip="Find text (Enter: next, Shift+Enter: previous)"/>
                                 <WrapPanel Margin="0,4,0,0">
+                                    <CheckBox x:Name="MatchWholeWordOption" Content="Match whole word"
+                                              Checked="FindOption_Changed" Unchecked="FindOption_Changed"
+                                              Style="{StaticResource NotedCheckBox}" FontSize="10" Margin="0,0,8,0"
+                                              ToolTip="Require text edges or non-word characters around the entire match. Letters, digits, nonspacing marks and underscores are word characters."/>
+                                    <CheckBox x:Name="RegexOption" Content="Regex"
+                                              Checked="FindOption_Changed" Unchecked="FindOption_Changed"
+                                              Style="{StaticResource NotedCheckBox}" FontSize="10"
+                                              ToolTip=".NET regular expression. Empty matches are ignored. Replacement text is literal."/>
+                                </WrapPanel>
+                                <WrapPanel Margin="0,4,0,0">
                                     <Button Content="Previous" Click="FindPreviousButton_Click" Padding="4,2" Style="{StaticResource NotedSecondaryButton}"/>
                                     <Button Content="Next" Click="FindNextButton_Click" Padding="4,2" Margin="4,0,0,0" Style="{StaticResource NotedSecondaryButton}"/>
                                     <Button Content="Close" Click="CloseFindButton_Click" Padding="4,2" Margin="4,0,0,0" Style="{StaticResource NotedSecondaryButton}"/>

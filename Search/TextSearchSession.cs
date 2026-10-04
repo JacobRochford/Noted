@@ -1,3 +1,7 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Text.RegularExpressions;
+
 namespace Noted.Search;
 
 internal sealed class TextSearchSession
@@ -13,6 +17,8 @@ internal sealed class TextSearchSession
     internal object? SourceIdentity { get; private set; }
 
     internal IReadOnlyList<TextSearchMatch> Matches { get; private set; } = [];
+
+    internal string? ValidationMessage { get; private set; }
 
     internal int CurrentMatchIndex { get; private set; } = -1;
 
@@ -94,6 +100,7 @@ internal sealed class TextSearchSession
         SourceSnapshot = string.Empty;
         SourceIdentity = null;
         Matches = [];
+        ValidationMessage = null;
         CurrentMatchIndex = -1;
         PreferredNavigationPosition = 0;
     }
@@ -155,12 +162,19 @@ internal sealed class TextSearchSession
         return -1;
     }
 
-    private static IReadOnlyList<TextSearchMatch> FindMatches(
+    private IReadOnlyList<TextSearchMatch> FindMatches(
         string text,
         string query,
         TextSearchOptions options)
     {
-        if (text.Length == 0 || query.Length == 0 || query.Length > text.Length)
+        ValidationMessage = null;
+        if (query.Length == 0)
+            return [];
+
+        if (options.UseRegex)
+            return FindRegexMatches(text, query, options);
+
+        if (text.Length == 0 || query.Length > text.Length)
             return [];
 
         var comparison = options.MatchCase
@@ -175,12 +189,76 @@ internal sealed class TextSearchSession
             if (matchStart < 0)
                 break;
 
-            matches.Add(new TextSearchMatch(matchStart, query.Length));
-            searchStart = matchStart + query.Length;
+            if (!options.MatchWholeWord || HasWholeWordBoundaries(text, matchStart, query.Length))
+            {
+                matches.Add(new TextSearchMatch(matchStart, query.Length));
+                searchStart = matchStart + query.Length;
+            }
+            else
+            {
+                searchStart = matchStart + 1;
+            }
         }
 
         return matches;
     }
+
+    private IReadOnlyList<TextSearchMatch> FindRegexMatches(
+        string text,
+        string query,
+        TextSearchOptions options)
+    {
+        var timeout = TimeSpan.FromMilliseconds(250);
+        var elapsed = Stopwatch.StartNew();
+        try
+        {
+            var regexOptions = RegexOptions.CultureInvariant;
+            if (!options.MatchCase)
+                regexOptions |= RegexOptions.IgnoreCase;
+            var regex = new Regex(query, regexOptions, timeout);
+            var matches = new List<TextSearchMatch>();
+            foreach (Match match in regex.Matches(text))
+            {
+                // Bound the entire enumeration as well as individual regex operations.
+                if (elapsed.Elapsed > timeout)
+                {
+                    ValidationMessage = "Regex search timed out";
+                    return [];
+                }
+
+                // All consumers operate on nonempty text ranges, including replacement.
+                if (match.Length > 0 &&
+                    (!options.MatchWholeWord || HasWholeWordBoundaries(text, match.Index, match.Length)))
+                {
+                    matches.Add(new TextSearchMatch(match.Index, match.Length));
+                }
+            }
+            return matches;
+        }
+        catch (ArgumentException)
+        {
+            ValidationMessage = "Invalid regular expression";
+            return [];
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            ValidationMessage = "Regex search timed out";
+            return [];
+        }
+    }
+
+    // Filter complete returned spans without changing regex alternation or inline options.
+    private static bool HasWholeWordBoundaries(string text, int start, int length) =>
+        (start == 0 || !IsWordCharacter(text[start - 1])) &&
+        (start + length == text.Length || !IsWordCharacter(text[start + length]));
+
+    // The Unicode categories used by .NET regex \w (UTF-16 code units).
+    private static bool IsWordCharacter(char character) =>
+        char.GetUnicodeCategory(character) is
+            UnicodeCategory.UppercaseLetter or UnicodeCategory.LowercaseLetter or
+            UnicodeCategory.TitlecaseLetter or UnicodeCategory.ModifierLetter or
+            UnicodeCategory.OtherLetter or UnicodeCategory.NonSpacingMark or
+            UnicodeCategory.DecimalDigitNumber or UnicodeCategory.ConnectorPunctuation;
 
     private static TextSearchMatch? FindNextMatch(
         IReadOnlyList<TextSearchMatch> matches,

@@ -15,6 +15,28 @@ namespace Noted.Tests.Search;
 public sealed class TextBoxSearchPresenterTests
 {
     [TestMethod]
+    public void RegexWholeWord_HighlightsSharedRangesWithoutChangingSelection()
+    {
+        RunOnSta(() =>
+        {
+            using var surface = new TextBoxSurface("cat1 cat22 cat333x CAT4", 320, 100);
+            surface.Editor.Select(6, 2);
+            var session = new TextSearchSession();
+            var options = new TextSearchOptions { UseRegex = true, MatchWholeWord = true };
+            session.Refresh(surface.Editor.Text, surface.Editor, @"cat\d+", options, 0);
+            surface.Presenter.Present(session, false);
+            var geometry = surface.Presenter.GetGeometrySnapshot();
+            CollectionAssert.AreEqual(session.Matches.ToArray(), geometry.Matches.Select(match => match.Match).ToArray());
+            Assert.AreEqual(3, geometry.Matches.Count);
+            Assert.AreEqual(6, surface.Editor.SelectionStart);
+            Assert.AreEqual(2, surface.Editor.SelectionLength);
+            session.Refresh(surface.Editor.Text, surface.Editor, "[", options, 0);
+            surface.Presenter.Present(session, false);
+            Assert.AreEqual(0, surface.Presenter.GetGeometrySnapshot().Matches.Count);
+        });
+    }
+
+    [TestMethod]
     public void RenderingAllMatches_DoesNotMutateTextOrUndoState()
     {
         RunOnSta(() =>

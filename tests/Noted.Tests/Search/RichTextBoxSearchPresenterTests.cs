@@ -13,6 +13,34 @@ namespace Noted.Tests.Search;
 public sealed class RichTextBoxSearchPresenterTests
 {
     [TestMethod]
+    public void RegexWholeWord_HighlightsSharedRangesAcrossFormattingWithoutChangingSelection()
+    {
+        RunOnSta(() =>
+        {
+            using var surface = new Surface("");
+            surface.Editor.Document = new FlowDocument(new Paragraph());
+            var paragraph = (Paragraph)surface.Editor.Document.Blocks.FirstBlock!;
+            paragraph.Inlines.Add(new Run("cat"));
+            paragraph.Inlines.Add(new Run("1 cat22 cat333x CAT4") { FontWeight = FontWeights.Bold });
+            surface.Pump();
+            surface.Select(6, 2);
+            var selectionStart = surface.Editor.Selection.Start;
+            var selectionEnd = surface.Editor.Selection.End;
+            var options = new TextSearchOptions { UseRegex = true, MatchWholeWord = true };
+            surface.Presenter.Refresh(surface.Session, @"cat\d+", options);
+            surface.Presenter.Present(surface.Session, false);
+            var geometry = surface.Presenter.GetGeometrySnapshot();
+            CollectionAssert.AreEqual(surface.Session.Matches.ToArray(), geometry.Matches.Select(match => match.Match).ToArray());
+            Assert.AreEqual(3, geometry.Matches.Count);
+            Assert.AreEqual(0, selectionStart.CompareTo(surface.Editor.Selection.Start));
+            Assert.AreEqual(0, selectionEnd.CompareTo(surface.Editor.Selection.End));
+            surface.Presenter.Refresh(surface.Session, "[", options);
+            surface.Presenter.Present(surface.Session, false);
+            Assert.AreEqual(0, surface.Presenter.GetGeometrySnapshot().Matches.Count);
+        });
+    }
+
+    [TestMethod]
     public void Snapshot_MapsEveryTextBoundaryAcrossFormattingAndUtf16Characters()
     {
         RunOnSta(() =>

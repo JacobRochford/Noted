@@ -683,11 +683,21 @@
                                         ToolTip="Replace all"/>
                             </Grid>
 
-                            <Grid Margin="31,4,2,0">
+                            <WrapPanel Margin="0,4,0,0">
+                                <CheckBox x:Name="MatchWholeWordOption" Content="Match whole word"
+                                          Checked="FindOption_Changed" Unchecked="FindOption_Changed"
+                                          Style="{StaticResource NotedCheckBox}" FontSize="10" Margin="0,0,8,0"
+                                          ToolTip="Require text edges or non-word characters around the entire match. Letters, digits, nonspacing marks and underscores are word characters."/>
+                                <CheckBox x:Name="RegexOption" Content="Regex"
+                                          Checked="FindOption_Changed" Unchecked="FindOption_Changed"
+                                          Style="{StaticResource NotedCheckBox}" FontSize="10"
+                                          ToolTip=".NET regular expression. Empty matches are ignored. Replacement text is literal."/>
+                            </WrapPanel>
+                            <StackPanel Margin="0,4,2,0">
                                 <CheckBox x:Name="MatchCaseOption"
                                           Content="Match case"
-                                          Checked="MatchCaseOption_Changed"
-                                          Unchecked="MatchCaseOption_Changed"
+                                          Checked="FindOption_Changed"
+                                          Unchecked="FindOption_Changed"
                                           Style="{StaticResource NotedCheckBox}"
                                           FontSize="10"/>
                                 <TextBlock x:Name="FindResultText"
@@ -695,7 +705,7 @@
                                            VerticalAlignment="Center"
                                            Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                            FontSize="10"/>
-                            </Grid>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 

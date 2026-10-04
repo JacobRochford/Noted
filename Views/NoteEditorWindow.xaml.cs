@@ -1403,7 +1403,7 @@ public partial class NoteEditorWindow : Window
         e.Handled = true;
     }
 
-    private void MatchCaseOption_Changed(object sender, RoutedEventArgs e)
+    private void FindOption_Changed(object sender, RoutedEventArgs e)
     {
         if (FindPanel.Visibility == Visibility.Visible)
             RefreshFindResults(revealCurrent: true);
@@ -1466,7 +1466,9 @@ public partial class NoteEditorWindow : Window
 
     private TextSearchOptions GetFindOptions() => new()
     {
-        MatchCase = MatchCaseOption.IsChecked == true
+        MatchCase = MatchCaseOption.IsChecked == true,
+        MatchWholeWord = MatchWholeWordOption.IsChecked == true,
+        UseRegex = RegexOption.IsChecked == true
     };
 
     private TextBoxSearchPresenter ActivateFindPresenter()
@@ -1495,9 +1497,9 @@ public partial class NoteEditorWindow : Window
     {
         FindResultText.Text = string.IsNullOrEmpty(FindTextBox.Text)
             ? string.Empty
-            : _findSession.Matches.Count == 0
+            : _findSession.ValidationMessage ?? (_findSession.Matches.Count == 0
                 ? "Not found"
-                : $"{_findSession.CurrentMatchIndex + 1} of {_findSession.Matches.Count}";
+                : $"{_findSession.CurrentMatchIndex + 1} of {_findSession.Matches.Count}");
     }
 
     private void ReplaceButton_Click(object sender, RoutedEventArgs e)

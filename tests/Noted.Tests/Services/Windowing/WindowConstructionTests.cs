@@ -68,6 +68,7 @@ public sealed class WindowConstructionTests
                     ((ComboBox)settingsView.FindName("AppearanceModeCombo")).SelectedValue);
                 VerifySettingsBindings(settingsView, settings, files);
                 VerifyFindLifecycle(editor, miniPad, scratchpad, directory);
+                VerifySearchOptionsAndReplacement(editor, miniPad, scratchpad);
                 main.CleanupResources();
                 main.Close();
                 VerifyShutdownPreparation(editor, scratchpad, directory);
@@ -89,6 +90,72 @@ public sealed class WindowConstructionTests
                 }
             }
         });
+    }
+
+    private static void VerifySearchOptionsAndReplacement(
+        NoteEditorWindow noteEditor, MiniPadWindow miniPad, ScratchpadWindow scratchpad)
+    {
+        foreach (var window in new Window[] { noteEditor, miniPad, scratchpad })
+        {
+            const string original = "cat1 cat22 cat333x CAT4";
+            var richEditor = window is ScratchpadWindow ? (RichTextBox)window.FindName("Editor") : null;
+            var editor = richEditor is null
+                ? (TextBox)window.FindName(window is MiniPadWindow ? "Editor" : "EditorTextBox") : null;
+            if (richEditor is not null)
+                new TextRange(richEditor.Document.ContentStart, richEditor.Document.ContentEnd).Text = original;
+            else
+                editor!.Text = original;
+            string Text() => richEditor is not null
+                ? new RichTextSearchSnapshot(richEditor.Document).Text : editor!.Text;
+            Invoke(window, "OpenFind", window is NoteEditorWindow ? [false] : []);
+            if (window is NoteEditorWindow)
+                ((CheckBox)window.FindName("MatchCaseOption")).IsChecked = false;
+            var query = (TextBox)window.FindName("FindTextBox");
+            var session = (TextSearchSession)Field(window, "_findSession");
+            void Refresh() => Invoke(window, "RefreshFindResults",
+                window is MiniPadWindow ? [false] : [false, null!]);
+            void SetQuery(string value)
+            {
+                query.Text = value;
+                query.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+                Refresh();
+            }
+            SetQuery(@"cat\d+");
+            Assert.AreEqual(0, session.Matches.Count);
+            ((CheckBox)window.FindName("RegexOption")).IsChecked = true;
+            Assert.AreEqual(4, session.Matches.Count);
+            ((CheckBox)window.FindName("MatchWholeWordOption")).IsChecked = true;
+            Assert.AreEqual(3, session.Matches.Count);
+            Assert.AreEqual(original, Text());
+            SetQuery("[");
+            Assert.AreEqual("Invalid regular expression", session.ValidationMessage);
+            string Status() => window is ScratchpadWindow
+                ? ((ScratchpadWindowViewModel)window.DataContext).FindResultText
+                : ((TextBlock)window.FindName("FindResultText")).Text;
+            Assert.AreEqual(session.ValidationMessage, Status());
+            if (window is not MiniPadWindow)
+            {
+                const string replacement = "$1\\literal";
+                if (window is ScratchpadWindow)
+                    ((ScratchpadWindowViewModel)window.DataContext).ReplaceText = replacement;
+                else
+                    ((TextBox)window.FindName("ReplaceTextBox")).Text = replacement;
+                Invoke(window, "ReplaceAllButton_Click", window, new RoutedEventArgs());
+                Invoke(window, "ReplaceButton_Click", window, new RoutedEventArgs());
+                Assert.AreEqual(original, Text());
+                Assert.AreEqual("Invalid regular expression", Status());
+                SetQuery(@"cat\d+");
+                session.Next(0);
+                Invoke(window, "ReplaceButton_Click", window, new RoutedEventArgs());
+                Assert.AreEqual(replacement + " cat22 cat333x CAT4", Text());
+                Invoke(window, "ReplaceAllButton_Click", window, new RoutedEventArgs());
+                Assert.AreEqual(replacement + " " + replacement + " cat333x " + replacement, Text());
+                Assert.AreEqual("Replaced 2", Status());
+            }
+            ((CheckBox)window.FindName("RegexOption")).IsChecked = false;
+            ((CheckBox)window.FindName("MatchWholeWordOption")).IsChecked = false;
+            Invoke(window, "CloseFind", window is NoteEditorWindow ? [false] : []);
+        }
     }
 
     private static void VerifyFindLifecycle(
@@ -345,11 +412,13 @@ public sealed class WindowConstructionTests
             }
         }
 
-        static object Field(object target, string name) => target.GetType()
-            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
-        static void Invoke(object target, string name, params object[] args) => target.GetType()
-            .GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
     }
+
+    private static object Field(object target, string name) => target.GetType()
+        .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
+
+    private static void Invoke(object target, string name, params object[] args) => target.GetType()
+        .GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
 
     private static Button? FindHotkeyEditButton(DependencyObject parent)
     {
