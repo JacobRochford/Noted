@@ -40,6 +40,8 @@ public partial class MiniPadWindow : OverlayWindow
         InitializeComponent();
         EditorIndentation.Attach(Editor, () => _indentation);
         EditorLineCommands.Attach(Editor);
+        EditorJsonFormatting.Attach(Editor, () => _indentation);
+        EditorJsonFormatting.AddMenuItems(EditorMenu, () => Editor);
         IndentationButton.Content = EditorIndentation.GetLabel(_indentation);
         EditorIndentation.AttachIndicator(IndentationButton, () => _indentation, value =>
         {

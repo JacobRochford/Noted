@@ -66,7 +66,7 @@
                                     VerticalAlignment="Center">
                             <Button Content="&#xE712;" Style="{StaticResource HeaderIconBtn}" Click="OptionsButton_Click" ToolTip="Options">
                                 <Button.ContextMenu>
-                                    <ContextMenu Style="{StaticResource NotedContextMenu}">
+                                    <ContextMenu x:Name="EditorMenu" Style="{StaticResource NotedContextMenu}">
                                         <ContextMenu.Resources><Style TargetType="MenuItem" BasedOn="{StaticResource NotedContextMenuItem}"/></ContextMenu.Resources>
                                         <MenuItem Header="Find..." InputGestureText="Ctrl+F" Click="FindMenuItem_Click"/>
                                         <MenuItem x:Name="WordWrapMenuItem" Header="Word Wrap" IsCheckable="True" IsChecked="True" Click="WordWrapMenuItem_Click"/>

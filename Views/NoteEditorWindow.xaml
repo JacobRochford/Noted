@@ -177,7 +177,7 @@
                             <MenuItem Header="Delete Note..."
                                       Click="DeleteActiveNoteMenuItem_Click"/>
                         </MenuItem>
-                        <MenuItem Header="Edit">
+                        <MenuItem x:Name="EditMenu" Header="Edit">
                             <MenuItem Header="Undo"
                                       Command="ApplicationCommands.Undo"
                                       CommandTarget="{Binding ElementName=EditorTextBox}"/>
