@@ -34,14 +34,19 @@ internal static class WindowInterop {
     internal const uint SWP_NOSIZE      = 0x0001;
     internal const uint SWP_NOMOVE      = 0x0002;
     internal const uint SWP_NOACTIVATE  = 0x0010;
+    internal const uint SWP_NOOWNERZORDER = 0x0200;
 
     internal const int  GWL_EXSTYLE     = -20;
+    internal const int  WS_EX_TOPMOST    = 0x00000008;
     internal const int  WS_EX_TOOLWINDOW = 0x00000080;
     internal const int  WS_EX_NOACTIVATE = 0x08000000;
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

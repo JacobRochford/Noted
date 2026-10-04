@@ -88,6 +88,7 @@ public partial class NoteEditorWindow : Window
         _workspace.DocumentPathsChanged += Workspace_DocumentPathsChanged;
 
         InitializeComponent();
+        WindowManager.ConfigureEditorActivation(this);
         EditorIndentation.Attach(EditorTextBox, () => _activeDocument?.Indentation);
         EditorLineCommands.Attach(EditorTextBox);
         EditorIndentation.Attach(SecondaryEditorTextBox, () => _secondaryDocument?.Indentation);

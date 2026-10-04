@@ -1,6 +1,9 @@
+using System.Windows.Interop;
+using Noted.Helpers;
+
 namespace Noted.Services
 {
-    // Coordinates the visibility of windows owned by the application.
+    // Coordinates application window visibility and editor activation priority.
     public static class WindowManager
     {
         private sealed record NotedWindowVisibility(
@@ -24,6 +27,39 @@ namespace Noted.Services
         internal static Func<DictionaryWindow?>? DictionaryProvider { get; set; }
         internal static Func<ScratchpadWindow?>? ScratchpadProvider { get; set; }
         internal static Func<MiniPadWindow?>? MiniPadProvider { get; set; }
+
+        internal static void ConfigureEditorActivation(NoteEditorWindow editor)
+        {
+            editor.Activated += EditorActivationChanged;
+            editor.Deactivated += EditorActivationChanged;
+        }
+
+        private static void EditorActivationChanged(object? sender, EventArgs e)
+        {
+            if (sender is not NoteEditorWindow editor)
+                return;
+
+            // Apply priority synchronously to each editor's own activation state.
+            editor.Topmost = editor.IsActive;
+            if (editor.IsActive)
+                return;
+
+            var handle = new WindowInteropHelper(editor).Handle;
+            var foreground = WindowInterop.GetForegroundWindow();
+            if (handle == IntPtr.Zero || foreground == IntPtr.Zero || foreground == handle)
+                return;
+
+            // HWND_NOTOPMOST places the editor above all normal windows. Move it
+            // behind the foreground window without activating or moving that window.
+            // Inserting after a topmost window could promote the editor again.
+            if ((WindowInterop.GetWindowLong(foreground, WindowInterop.GWL_EXSTYLE) &
+                 WindowInterop.WS_EX_TOPMOST) != 0)
+                return;
+
+            WindowInterop.SetWindowPos(handle, foreground, 0, 0, 0, 0,
+                WindowInterop.SWP_NOMOVE | WindowInterop.SWP_NOSIZE |
+                WindowInterop.SWP_NOACTIVATE | WindowInterop.SWP_NOOWNERZORDER);
+        }
 
         public static bool AnyWindowVisible()
             => (Main?.IsNotesPanelVisible == true)
