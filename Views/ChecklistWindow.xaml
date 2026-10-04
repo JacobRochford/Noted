@@ -462,7 +462,7 @@
                                             </ContextMenu>
                                         </Grid.ContextMenu>
 
-                                        <Grid Grid.Row="0" MinHeight="40" Margin="5,0,4,0">
+                                        <Grid x:Name="ItemDragArea" Grid.Row="0" MinHeight="40" Margin="5,0,4,0" Background="Transparent">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="20"/>
                                                 <ColumnDefinition Width="30"/>
@@ -486,11 +486,8 @@
                                                 <TextBox.Style>
                                                     <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                                         <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
-                                                        <Setter Property="Cursor" Value="Hand"/>
+                                                        <Setter Property="Cursor" Value="IBeam"/>
                                                         <Style.Triggers>
-                                                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                                                <Setter Property="Cursor" Value="IBeam"/>
-                                                            </Trigger>
                                                             <DataTrigger Binding="{Binding IsChecked}" Value="True">
                                                                 <Setter Property="TextDecorations" Value="Strikethrough"/>
                                                                 <Setter Property="Foreground" Value="{DynamicResource NotedMutedTextBrush}"/>

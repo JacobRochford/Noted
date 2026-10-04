@@ -587,12 +587,12 @@ public partial class ChecklistWindow : OverlayWindow
     private void ItemsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         ClearPendingDrag();
+        // Only the header background starts reordering; child controls keep their mouse gestures.
         if (!_viewModel.CanManuallyReorder ||
-            VisualTreeHelpers.FindAncestor<TextBox>(e.OriginalSource as DependencyObject) is not
-                { Name: "ItemTitleTextBox", DataContext: ChecklistItem item } textBox)
+            e.OriginalSource is not Grid { Name: "ItemDragArea", DataContext: ChecklistItem item } dragArea)
             return;
 
-        var container = VisualTreeHelpers.FindAncestor<ListBoxItem>(textBox);
+        var container = VisualTreeHelpers.FindAncestor<ListBoxItem>(dragArea);
         if (container is null) return;
 
         _dragStartPoint = e.GetPosition(ItemsList);
