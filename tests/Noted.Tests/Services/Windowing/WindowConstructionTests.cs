@@ -69,6 +69,7 @@ public sealed class WindowConstructionTests
                 VerifySettingsBindings(settingsView, settings, files);
                 VerifyFindLifecycle(editor, miniPad, scratchpad, directory);
                 VerifySearchOptionsAndReplacement(editor, miniPad, scratchpad);
+                VerifyUtilityToolbar(main, settingsModel, settings, files, editor);
                 main.CleanupResources();
                 main.Close();
                 VerifyShutdownPreparation(editor, scratchpad, directory);
@@ -90,6 +91,69 @@ public sealed class WindowConstructionTests
                 }
             }
         });
+    }
+
+    private static void VerifyUtilityToolbar(MainWindow main, SettingsViewModel model,
+        AppSettingsService settings, NoteFileService files, NoteEditorWindow editor)
+    {
+        var toolbar = (ItemsControl)main.FindName("UtilityToolbarItems");
+        var utilityMenu = (Grid)main.FindName("UtilityMenu");
+        var compactButton = (Button)main.FindName("CompactUtilityMenuButton");
+        var menu = compactButton.ContextMenu;
+        Assert.IsNotNull(menu);
+        menu.PlacementTarget = compactButton;
+        Invoke(main, "SetSettingsViewVisible", [false]);
+        Assert.AreEqual(4, toolbar.Items.Count);
+        Assert.AreEqual(4, menu.Items.Count);
+        var panel = (Border)main.FindName("NotesPanel");
+        var originalWidth = panel.Width;
+        model.NewNoteMode = NewNoteMode.Both;
+        foreach (var width in new[] { 220d, 250d, 300d, 360d })
+        {
+            panel.Width = width;
+            main.UpdateLayout();
+            Assert.AreEqual(width < 300 ? Visibility.Visible : Visibility.Collapsed, compactButton.Visibility);
+            Assert.AreEqual(width < 300 ? Visibility.Collapsed : Visibility.Visible, toolbar.Visibility);
+            var actions = (StackPanel)main.FindName("NotesToolbar");
+            Assert.IsTrue(actions.ActualWidth <= ((Grid)actions.Parent).ActualWidth,
+                $"Toolbar actions must fit at panel width {width}.");
+        }
+        panel.Width = originalWidth;
+        main.UpdateLayout();
+        model.UtilityVisibility.Utilities[0].IsVisible = false;
+        main.UpdateLayout();
+        Assert.AreEqual(3, toolbar.Items.Count);
+        Assert.AreEqual(3, menu.Items.Count);
+        CollectionAssert.AreEqual(new[] { "Dictionary", "Scratchpad", "MiniPad" },
+            toolbar.Items.Cast<UtilityOption>().Select(option => option.DisplayName).ToArray());
+        foreach (var option in model.UtilityVisibility.Utilities) option.IsVisible = false;
+        main.UpdateLayout();
+        Assert.AreEqual(Visibility.Collapsed, utilityMenu.Visibility);
+        Assert.AreEqual(0, menu.Items.Count);
+
+        var newNote = (Button)main.FindName("NewNoteButton");
+        Assert.AreSame(main.FindName("NotesToolbar"), newNote.Parent);
+        Assert.AreEqual(Visibility.Visible, newNote.Visibility);
+        Assert.AreSame(main.FindResource("HeaderChromeButtonStyle"), newNote.Style.BasedOn);
+        // Exercise the existing click handler with every optional utility hidden.
+        settings.SaveNewNoteMode(NewNoteMode.Quick);
+        var noteCount = files.GetNotes().Count;
+        newNote.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.AreEqual(noteCount + 1, files.GetNotes().Count);
+        Assert.IsNotNull(editor.OpenFilePath);
+        Assert.IsTrue(File.Exists(editor.OpenFilePath));
+        editor.HideWindow();
+
+        foreach (var option in model.UtilityVisibility.Utilities) option.IsVisible = true;
+        main.UpdateLayout();
+        Assert.AreEqual(Visibility.Visible, utilityMenu.Visibility);
+        Assert.AreEqual(4, toolbar.Items.Count);
+        Assert.AreEqual(4, menu.Items.Count);
+        foreach (var option in toolbar.Items.Cast<UtilityOption>())
+        {
+            var menuOption = menu.Items.Cast<UtilityOption>().Single(item => item.Id == option.Id);
+            Assert.AreSame(option.OpenCommand, menuOption.OpenCommand);
+        }
     }
 
     private static void VerifySearchOptionsAndReplacement(

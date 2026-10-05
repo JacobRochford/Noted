@@ -16,11 +16,16 @@
     <Window.Resources>
         <local:WidthToActionButtonVisibilityConverter x:Key="WidthToActionButtonVisibilityConverter"/>
         <local:WidthToHeaderVisibilityConverter x:Key="WidthToHeaderVisibilityConverter"/>
-        <local:WidthBelowThresholdConverter x:Key="WidthBelow200" Threshold="200"/>
+        <local:WidthBelowThresholdConverter x:Key="WidthBelow300" Threshold="300"/>
         <local:WidthBelowThresholdConverter x:Key="WidthBelow250" Threshold="250"/>
         <local:WidthBelowThresholdConverter x:Key="WidthBelow340" Threshold="340"/>
         <local:WidthBelowThresholdConverter x:Key="WidthBelow400" Threshold="400"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <DataTemplate x:Key="UtilityIconTemplate">
+            <TextBlock Text="{Binding Icon}"
+                       FontSize="{Binding IconFontSize}"
+                       FontWeight="{Binding IconFontWeight}"/>
+        </DataTemplate>
         <local:IndentLevelToMarginConverter x:Key="IndentLevelToMarginConverter"/>
         
         <!-- Low-emphasis scrollbar: neutral at rest, accent on interaction -->
@@ -348,7 +353,7 @@
                             </Grid>
                         </Border>
 
-                        <StackPanel Orientation="Horizontal">
+                        <StackPanel x:Name="NotesToolbar" Orientation="Horizontal">
                             <StackPanel.Style>
                                 <Style TargetType="StackPanel">
                                     <Setter Property="Grid.Column" Value="1"/>
@@ -371,9 +376,13 @@
                     <Button x:Name="NewNoteButton"
                             Click="NewNoteButton_Click"
                             Margin="0,0,4,0"
-                            ToolTip="Create a new note">
+                            ToolTip="Create a new note"
+                            AutomationProperties.Name="New note">
                         <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource PrimaryHeaderButtonStyle}">
+                            <Style TargetType="Button" BasedOn="{StaticResource HeaderChromeButtonStyle}">
+                                <Setter Property="Width" Value="54"/>
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="FontWeight" Value="Medium"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow250}}" Value="True">
                                         <Setter Property="Width" Value="28"/>
@@ -382,22 +391,14 @@
                                 </Style.Triggers>
                             </Style>
                         </Button.Style>
-                        <StackPanel Orientation="Horizontal"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center">
-                            <TextBlock Text="&#xE710;"
-                                       FontFamily="Segoe MDL2 Assets"
-                                       FontSize="11"
-                                       VerticalAlignment="Center"/>
-                            <TextBlock Text="New"
-                                       Margin="5,0,0,0"
-                                       VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="11" VerticalAlignment="Center"/>
+                            <TextBlock Text="Note" Margin="5,0,0,0" VerticalAlignment="Center">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow250}}" Value="True">
                                                 <Setter Property="Visibility" Value="Collapsed"/>
-                                                <Setter Property="Margin" Value="0"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -425,93 +426,62 @@
                         </Button.Style>
                     </Button>
 
-                    <Grid x:Name="UtilityMenu">
-                        <StackPanel Orientation="Horizontal">
-                            <StackPanel.Style>
-                                <Style TargetType="StackPanel">
+                    <Grid x:Name="UtilityMenu"
+                          DataContext="{Binding DataContext.UtilityVisibility, ElementName=SettingsView}"
+                          Visibility="{Binding HasVisibleUtilities, Converter={StaticResource BoolToVisibility}}">
+                        <ItemsControl x:Name="UtilityToolbarItems" ItemsSource="{Binding VisibleUtilities}">
+                            <ItemsControl.Style>
+                                <Style TargetType="ItemsControl">
                                     <Setter Property="Visibility" Value="Visible"/>
                                     <Style.Triggers>
-                                        <MultiDataTrigger>
-                                            <MultiDataTrigger.Conditions>
-                                                <Condition Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow200}}" Value="True"/>
-                                                <Condition Binding="{Binding ElementName=QuickNoteButton, Path=Visibility}" Value="Visible"/>
-                                            </MultiDataTrigger.Conditions>
+                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow300}}" Value="True">
                                             <Setter Property="Visibility" Value="Collapsed"/>
-                                        </MultiDataTrigger>
+                                        </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </StackPanel.Style>
-
-                            <Button x:Name="ChecklistButton"
-                                    Click="ChecklistButton_Click"
-                                    Style="{StaticResource UtilityMenuButtonStyle}"
-                                    ToolTip="Show or hide Checklist"
-                                    AutomationProperties.Name="Checklist">
-                                <TextBlock Text="✓" FontSize="13"/>
-                            </Button>
-
-                            <Button x:Name="DictionaryButton"
-                                    Click="DictionaryButton_Click"
-                                    Style="{StaticResource UtilityMenuButtonStyle}"
-                                    ToolTip="Show or hide Dictionary"
-                                    AutomationProperties.Name="Dictionary">
-                                <TextBlock Text="Aa" FontWeight="Bold" FontSize="10"/>
-                            </Button>
-
-                            <Button x:Name="ScratchpadButton"
-                                    Click="ScratchpadButton_Click"
-                                    Style="{StaticResource UtilityMenuButtonStyle}"
-                                    ToolTip="Show or hide Scratchpad"
-                                    AutomationProperties.Name="Scratchpad">
-                                <TextBlock Text="✎" FontSize="13"/>
-                            </Button>
-
-                            <Button x:Name="MiniPadButton"
-                                    Click="MiniPadButton_Click"
-                                    Style="{StaticResource UtilityMenuButtonStyle}"
-                                    ToolTip="Show or hide MiniPad"
-                                    AutomationProperties.Name="MiniPad">
-                                <TextBlock Text="▤" FontSize="12"/>
-                            </Button>
-                        </StackPanel>
+                            </ItemsControl.Style>
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Command="{Binding OpenCommand}"
+                                            Style="{StaticResource UtilityMenuButtonStyle}"
+                                            ToolTip="{Binding ToolTip}"
+                                            AutomationProperties.Name="{Binding DisplayName}">
+                                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource UtilityIconTemplate}"/>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
                         <Button x:Name="CompactUtilityMenuButton"
                                 Click="UtilityMenuButton_Click"
+                                Tag="{Binding VisibleUtilities}"
                                 ToolTip="Open utility menu"
                                 AutomationProperties.Name="Utility menu">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource HeaderChromeButtonStyle}">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
-                                        <MultiDataTrigger>
-                                            <MultiDataTrigger.Conditions>
-                                                <Condition Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow200}}" Value="True"/>
-                                                <Condition Binding="{Binding ElementName=QuickNoteButton, Path=Visibility}" Value="Visible"/>
-                                            </MultiDataTrigger.Conditions>
+                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow300}}" Value="True">
                                             <Setter Property="Visibility" Value="Visible"/>
-                                        </MultiDataTrigger>
+                                        </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Button.Style>
                             <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE712;" FontSize="15"/>
                             <Button.ContextMenu>
                                 <ContextMenu Style="{StaticResource NotedContextMenu}"
-                                             Placement="Bottom">
-                                    <ContextMenu.Resources>
-                                        <Style TargetType="MenuItem" BasedOn="{StaticResource NotedContextMenuItem}"/>
-                                    </ContextMenu.Resources>
-                                    <MenuItem Header="Checklist" Click="ChecklistButton_Click">
-                                        <MenuItem.Icon><TextBlock Text="✓" FontSize="13"/></MenuItem.Icon>
-                                    </MenuItem>
-                                    <MenuItem Header="Dictionary" Click="DictionaryButton_Click">
-                                        <MenuItem.Icon><TextBlock Text="Aa" FontSize="10" FontWeight="Bold"/></MenuItem.Icon>
-                                    </MenuItem>
-                                    <MenuItem Header="Scratchpad" Click="ScratchpadButton_Click">
-                                        <MenuItem.Icon><TextBlock Text="✎" FontSize="13"/></MenuItem.Icon>
-                                    </MenuItem>
-                                    <MenuItem Header="MiniPad" Click="MiniPadButton_Click">
-                                        <MenuItem.Icon><TextBlock Text="▤" FontSize="12"/></MenuItem.Icon>
-                                    </MenuItem>
+                                             Placement="Bottom"
+                                             ItemsSource="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
+                                    <ContextMenu.ItemContainerStyle>
+                                        <Style TargetType="MenuItem" BasedOn="{StaticResource NotedContextMenuItem}">
+                                            <Setter Property="Header" Value="{Binding DisplayName}"/>
+                                            <Setter Property="Icon" Value="{Binding Icon}"/>
+                                            <Setter Property="Command" Value="{Binding OpenCommand}"/>
+                                        </Style>
+                                    </ContextMenu.ItemContainerStyle>
                                 </ContextMenu>
                             </Button.ContextMenu>
                         </Button>

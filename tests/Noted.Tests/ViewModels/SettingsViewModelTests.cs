@@ -11,6 +11,27 @@ namespace Noted.Tests.ViewModels;
 public sealed class SettingsViewModelTests
 {
     [TestMethod]
+    public void UtilityOptionsReloadWithoutSavingAndRecoverFromPersistenceFailure()
+    {
+        using var context = new Context();
+        context.Settings.SaveHiddenUtilities(new[] { "Scratchpad" });
+        var original = File.ReadAllBytes(context.Directory.File("settings.json"));
+        context.Model.Reload();
+        Assert.IsFalse(context.Model.UtilityVisibility.Utilities.Single(option => option.Id == "Scratchpad").IsVisible);
+        CollectionAssert.AreEqual(original, File.ReadAllBytes(context.Directory.File("settings.json")));
+
+        var notices = new List<SettingsNotice>();
+        context.Model.NoticeRaised += notices.Add;
+        using (var lockedFile = new FileStream(context.Directory.File("settings.json"), FileMode.Open, FileAccess.Read, FileShare.Read))
+            context.Model.UtilityVisibility.Utilities[0].IsVisible = false;
+        Assert.IsTrue(context.Model.UtilityVisibility.Utilities[0].IsVisible);
+        Assert.AreEqual(1, notices.Count);
+        context.Model.UtilityVisibility.Utilities[0].IsVisible = false;
+        CollectionAssert.AreEquivalent(new[] { "Checklist", "Scratchpad" },
+            new AppSettingsService(context.Directory.Path).LoadHiddenUtilities().ToArray());
+    }
+
+    [TestMethod]
     public void IndentationDefaultsReloadAndChangesPersistWithoutChangingEditorOverrides()
     {
         using var context = new Context();

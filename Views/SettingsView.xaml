@@ -17,6 +17,26 @@
                                           VerticalScrollBarVisibility="Auto">
                             <StackPanel>
 
+                            <Border BorderBrush="{DynamicResource NotedBorderBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="12,0,12,16" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="Utilities" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                    <TextBlock Text="Choose which utilities appear in the toolbar. Hidden utilities keep their data, open windows, startup behavior, and hotkeys. Show them again here at any time."
+                                               FontSize="11" Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                               TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                    <ItemsControl ItemsSource="{Binding UtilityVisibility.Utilities}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <CheckBox Content="{Binding DisplayName}"
+                                                          IsChecked="{Binding IsVisible, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                          Margin="0,3,0,3"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+
                             <Border Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="0,0,0,1"

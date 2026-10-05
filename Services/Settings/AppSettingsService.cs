@@ -67,6 +67,12 @@ public sealed class AppSettingsService : IAppSettingsService {
         }
     }
 
+    public IReadOnlyList<string> LoadHiddenUtilities() =>
+        LoadSetting(s => s.HiddenUtilities?.ToArray() ?? Array.Empty<string>());
+
+    public void SaveHiddenUtilities(IReadOnlyList<string> hiddenUtilities) =>
+        SaveSetting(s => s with { HiddenUtilities = hiddenUtilities.Distinct(StringComparer.Ordinal).ToList() });
+
     public string? LoadNotesDirectory() {
         var dir = LoadSetting(s => s.NotesDirectory);
         return string.IsNullOrWhiteSpace(dir) ? null : dir;

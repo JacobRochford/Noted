@@ -252,7 +252,7 @@ public partial class MainWindow : Window {
     private void SetSettingsViewVisible(bool setVisible) {
         NotesListView.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
         SettingsView.Visibility = setVisible ? Visibility.Visible : Visibility.Collapsed;
-        UtilityMenu.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
+        NotesToolbar.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
         NewNoteButton.Visibility = setVisible ? Visibility.Collapsed : Visibility.Visible;
         QuickNoteButton.Visibility = setVisible
             ? Visibility.Collapsed
@@ -824,26 +824,6 @@ public partial class MainWindow : Window {
     private void RefreshUserBackupControls(bool updateStatusText = true)
     {
         _settingsViewModel.UpdateBackupInfo(_backupCoordinator.GetUserBackupInfo(), updateStatusText);
-    }
-
-    private void ChecklistButton_Click(object sender, RoutedEventArgs e)
-    {
-        WindowManager.ToggleChecklist();
-    }
-
-    private void DictionaryButton_Click(object sender, RoutedEventArgs e)
-    {
-        WindowManager.ToggleDictionary();
-    }
-
-    private void ScratchpadButton_Click(object sender, RoutedEventArgs e)
-    {
-        WindowManager.ToggleScratchpad();
-    }
-
-    private void MiniPadButton_Click(object sender, RoutedEventArgs e)
-    {
-        WindowManager.ToggleMiniPad();
     }
 
     private void CopyNoteName_Click(object sender, RoutedEventArgs e)

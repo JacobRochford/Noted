@@ -33,6 +33,7 @@ internal sealed class SettingsViewModel : ObservableObject
         new AppearanceOption(AppThemeMode.Midnight, "Midnight blue")
     };
     public IReadOnlyList<string> HotkeyKeys => HotkeyConstants.ValidKeys;
+    public UtilityVisibilityViewModel UtilityVisibility { get; }
     public IReadOnlyList<DisplayOption> DisplayOptions { get; private set; } = Array.Empty<DisplayOption>();
     internal bool LastBackupAttemptFailed { get; set; }
     internal void RefreshNotesDirectory() => OnPropertyChanged(nameof(NotesDirectory));
@@ -77,6 +78,7 @@ internal sealed class SettingsViewModel : ObservableObject
         ApplyHotkeyCommand = new SettingsCommand(ApplyHotkey, () => _editingFeature.HasValue);
         ResetHotkeyCommand = new SettingsCommand(ResetHotkey, () => _editingFeature.HasValue);
         CancelHotkeyCommand = new SettingsCommand(() => IsHotkeyEditorOpen = false);
+        UtilityVisibility = new UtilityVisibilityViewModel(settings, TrySave);
         Reload();
     }
 
@@ -114,6 +116,7 @@ internal sealed class SettingsViewModel : ObservableObject
         _loading = true;
         try
         {
+            UtilityVisibility.Reload();
             NewNoteMode = _settings.LoadNewNoteMode();
             TimestampPlacement = _settings.LoadTimestampPlacement();
             TimestampLineText = _settings.LoadTimestampLine().ToString(CultureInfo.InvariantCulture);

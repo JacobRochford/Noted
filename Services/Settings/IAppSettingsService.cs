@@ -4,6 +4,8 @@ namespace Noted.Services;
 
 public interface IAppSettingsService {
     string AppDataDirectory { get; }
+    IReadOnlyList<string> LoadHiddenUtilities();
+    void SaveHiddenUtilities(IReadOnlyList<string> hiddenUtilities);
     string? LoadNotesDirectory();
     void SaveNotesDirectory(string notesDirectory);
     IReadOnlyList<string> LoadPinnedNotes();

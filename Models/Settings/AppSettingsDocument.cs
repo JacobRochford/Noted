@@ -21,6 +21,7 @@ internal sealed record AppSettingsDocument
     public bool ShowNotesHeader { get; init; } = false;
     public string? CustomHeader { get; init; }
     public List<string>? PinnedNotes { get; init; }
+    public List<string>? HiddenUtilities { get; init; }
 
     [JsonPropertyName("HotkeyModifiers")]
     public string NotesHotkeyModifiers { get; init; } = "Ctrl+Shift";
