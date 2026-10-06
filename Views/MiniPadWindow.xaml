@@ -38,8 +38,7 @@
                 <Border x:Name="TitleBar"
                         Grid.Row="0"
                         Padding="2,0,0,5"
-                        Background="Transparent"
-                        Cursor="SizeAll">
+                        Background="Transparent">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>

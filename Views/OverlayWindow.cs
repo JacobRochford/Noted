@@ -21,12 +21,13 @@ public abstract class OverlayWindow : Window
     protected void InitializeOverlay(bool ghostModeEnabled, double ghostModeOpacity, double defaultOpacity)
     {
         _edgeResizer ??= new WindowEdgeResizer(this, SaveWindowState);
+        PreviewMouseLeftButtonDown += Background_MouseLeftButtonDown;
+        AddHandler(Mouse.QueryCursorEvent, new QueryCursorEventHandler(Background_QueryCursor), true);
         // Retain legacy state fields for persistence; WindowAppearance owns the live opacity.
         _ghostModeEnabled = ghostModeEnabled;
         _ghostModeOpacity = NormalizeOpacity(ghostModeOpacity, 0.25);
         _defaultOpacity = NormalizeOpacity(defaultOpacity, 0.88);
 
-        Loaded += OnOverlayLoaded;
         Closing += OnOverlayClosing;
     }
 
@@ -53,27 +54,40 @@ public abstract class OverlayWindow : Window
         Height = bounds.Height;
     }
 
-    private void OnOverlayLoaded(object sender, RoutedEventArgs e)
-    {
-        if (FindName("TitleBar") is Border titleBar)
-            titleBar.MouseLeftButtonDown += TitleBar_MouseLeftButtonDown;
-    }
-
     private void OnOverlayClosing(object? sender, CancelEventArgs e)
     {
         SaveWindowState();
     }
 
-    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void Background_QueryCursor(object sender, QueryCursorEventArgs e)
     {
-        if (VisualTreeHelpers.FindAncestor<System.Windows.Controls.Primitives.ButtonBase>(e.OriginalSource as DependencyObject) is not null) return;
+        if (IsNearResizeEdge(Mouse.GetPosition(this)))
+            return;
+
+        WindowDragHitTest.QueryCursor(e.OriginalSource as DependencyObject, this, e);
+    }
+
+    private bool IsNearResizeEdge(Point point) => WindowState == WindowState.Normal &&
+        ResizeEdgeHitTest.Find(point, ActualWidth, ActualHeight, ResizeEdgeHitTest.DefaultThickness) != ResizeEdge.None;
+
+    private void Background_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.Handled || Mouse.Captured is not null || IsNearResizeEdge(e.GetPosition(this)) ||
+            !WindowDragHitTest.CanDrag(e.OriginalSource as DependencyObject, this))
+            return;
 
         if (e.ClickCount == 2)
         {
-            RequestHide();
+            if (FindName("TitleBar") is Border titleBar &&
+                WindowDragHitTest.CanDrag(e.OriginalSource as DependencyObject, titleBar))
+            {
+                e.Handled = true;
+                RequestHide();
+            }
             return;
         }
 
+        e.Handled = true;
         try
         {
             DragMove();

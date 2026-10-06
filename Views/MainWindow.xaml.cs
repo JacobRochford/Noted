@@ -90,6 +90,8 @@ public partial class MainWindow : Window {
         NotesPanel.PreviewMouseLeftButtonDown += NotesPanel_PreviewMouseLeftButtonDown;
         NotesPanel.PreviewMouseMove += NotesPanel_PreviewMouseMove;
         NotesPanel.PreviewMouseLeftButtonUp += NotesPanel_PreviewMouseLeftButtonUp;
+        NotesPanel.AddHandler(Mouse.QueryCursorEvent, new QueryCursorEventHandler(NotesPanel_QueryCursor), true);
+        NotesPanel.LostMouseCapture += NotesPanel_LostMouseCapture;
         MainCanvas.MouseLeftButtonDown += MainCanvas_MouseLeftButtonDown;
         PreviewMouseDown += MainWindow_PreviewMouseDown;
         KeyDown += MainWindow_KeyDown;
@@ -1522,7 +1524,8 @@ public partial class MainWindow : Window {
     }
 
     private void NotesPanel_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) {
-        if (_notesPanelResizer.IsResizing || _notesPanelResizer.IsNearEdge(e.GetPosition(NotesPanel)))
+        if (e.Handled || e.ClickCount != 1 || Mouse.Captured is not null ||
+            _notesPanelResizer.IsResizing || _notesPanelResizer.IsNearEdge(e.GetPosition(NotesPanel)))
             return;
 
         if (HeaderTextEdit.IsVisible && HeaderTextEdit.IsFocused) {
@@ -1534,6 +1537,24 @@ public partial class MainWindow : Window {
             return;
 
         BeginDrag(NotesPanel, e);
+        e.Handled = true;
+    }
+
+    private void NotesPanel_QueryCursor(object sender, QueryCursorEventArgs e) {
+        if (_notesPanelResizer.IsResizing || _notesPanelResizer.IsNearEdge(Mouse.GetPosition(NotesPanel)) ||
+            HeaderTextEdit.IsVisible && HeaderTextEdit.IsFocused)
+            return;
+
+        WindowDragHitTest.QueryCursor(e.OriginalSource as DependencyObject, NotesPanel, e);
+    }
+
+    private void NotesPanel_LostMouseCapture(object sender, MouseEventArgs e) {
+        if (_dragElement != NotesPanel)
+            return;
+
+        _dragElement = null;
+        _dragStart = null;
+        _isDragging = false;
     }
 
     private void NotesPanel_PreviewMouseMove(object sender, MouseEventArgs e) {
@@ -1559,6 +1580,13 @@ public partial class MainWindow : Window {
     }
 
     private void UpdateDrag(FrameworkElement element, MouseEventArgs e) {
+        if (element == NotesPanel && _dragElement == element && Mouse.Captured is not null && Mouse.Captured != element) {
+            _dragElement = null;
+            _dragStart = null;
+            _isDragging = false;
+            return;
+        }
+
         if (_dragElement != element || !_dragStart.HasValue || e.LeftButton != MouseButtonState.Pressed)
             return;
 
@@ -1593,26 +1621,14 @@ public partial class MainWindow : Window {
         }
     }
 
-    private static bool CanStartNotesPanelDrag(DependencyObject? source) {
-        return !IsWithinInteractiveControl(source);
+    private bool CanStartNotesPanelDrag(DependencyObject? source) {
+        return WindowDragHitTest.CanDrag(source, NotesPanel);
     }
 
     private static bool IsWithinNoteRowActionControl(DependencyObject? source) {
         var current = source;
         while (current is not null) {
             if (current is ButtonBase or TextBox or ScrollBar or Thumb)
-                return true;
-
-            current = GetParent(current);
-        }
-
-        return false;
-    }
-
-    private static bool IsWithinInteractiveControl(DependencyObject? source) {
-        var current = source;
-        while (current is not null) {
-            if (current is ButtonBase or TextBox or ListBox or ListBoxItem or ScrollBar or Thumb)
                 return true;
 
             current = GetParent(current);
@@ -1725,6 +1741,8 @@ public partial class MainWindow : Window {
         NotesPanel.PreviewMouseLeftButtonDown -= NotesPanel_PreviewMouseLeftButtonDown;
         NotesPanel.PreviewMouseMove -= NotesPanel_PreviewMouseMove;
         NotesPanel.PreviewMouseLeftButtonUp -= NotesPanel_PreviewMouseLeftButtonUp;
+        NotesPanel.RemoveHandler(Mouse.QueryCursorEvent, new QueryCursorEventHandler(NotesPanel_QueryCursor));
+        NotesPanel.LostMouseCapture -= NotesPanel_LostMouseCapture;
 
 
         MainCanvas.MouseLeftButtonDown -= MainCanvas_MouseLeftButtonDown;

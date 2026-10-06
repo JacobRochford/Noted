@@ -54,6 +54,7 @@ public sealed class WindowConstructionTests
                     window.Arrange(new Rect(0, 0, window.Width, window.Height));
                     window.UpdateLayout();
                 }
+                VerifyWindowDragTargets(main, checklist, dictionary, scratchpad, miniPad, editor);
                 var settingsView = (SettingsView)main.FindName("SettingsView");
                 settingsView.Visibility = Visibility.Visible;
                 settingsView.Measure(new Size(430, 900));
@@ -561,6 +562,49 @@ public sealed class WindowConstructionTests
             }
         }
 
+    }
+
+    private static void VerifyWindowDragTargets(
+        MainWindow main, ChecklistWindow checklist, DictionaryWindow dictionary,
+        ScratchpadWindow scratchpad, MiniPadWindow miniPad, NoteEditorWindow editor)
+    {
+        foreach (var window in new OverlayWindow[] { checklist, dictionary, scratchpad, miniPad })
+        {
+            var header = (Border)window.FindName("TitleBar");
+            Assert.IsTrue(WindowDragHitTest.CanDrag(header, window), window.GetType().Name);
+            var query = new System.Windows.Input.QueryCursorEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0)
+            {
+                RoutedEvent = System.Windows.Input.Mouse.QueryCursorEvent,
+                Cursor = System.Windows.Input.Cursors.Arrow
+            };
+            WindowDragHitTest.QueryCursor(header, window, query);
+            Assert.AreEqual(System.Windows.Input.Cursors.SizeAll, query.Cursor, window.GetType().Name);
+        }
+
+        var panel = (Border)main.FindName("NotesPanel");
+        Assert.IsTrue(WindowDragHitTest.CanDrag(main.FindName("NotesPanelDragHandle") as DependencyObject, panel));
+        foreach (var (window, name, surface) in new (Window, string, DependencyObject)[]
+        {
+            (main, "SearchBox", panel), (main, "SettingsView", panel),
+            (checklist, "SearchBox", checklist), (dictionary, "SearchTextBox", dictionary),
+            (scratchpad, "Editor", scratchpad), (miniPad, "Editor", miniPad)
+        })
+            Assert.IsFalse(WindowDragHitTest.CanDrag(window.FindName(name) as DependencyObject, surface), name);
+
+        foreach (var (window, name) in new (Window, string)[]
+        {
+            (main, "FileList"), (checklist, "ItemsList"), (dictionary, "ItemsList")
+        })
+            Assert.IsTrue(WindowDragHitTest.GetAllowBackgroundDrag((DependencyObject)window.FindName(name)));
+
+        var editorText = (TextBox)editor.FindName("EditorTextBox");
+        var editorQuery = new System.Windows.Input.QueryCursorEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0)
+        {
+            RoutedEvent = System.Windows.Input.Mouse.QueryCursorEvent,
+            Cursor = System.Windows.Input.Cursors.Arrow
+        };
+        editorText.RaiseEvent(editorQuery);
+        Assert.AreNotEqual(System.Windows.Input.Cursors.SizeAll, editorQuery.Cursor);
     }
 
     private static object Field(object target, string name) => target.GetType()

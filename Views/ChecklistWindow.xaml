@@ -202,7 +202,7 @@
                 </Grid.RowDefinitions>
 
                 <Border x:Name="TitleBar" Grid.Row="0" Background="Transparent"
-                        Padding="2,0,0,5" Cursor="SizeAll">
+                        Padding="2,0,0,5">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -367,6 +367,7 @@
                         BorderThickness="0" CornerRadius="0" ClipToBounds="True">
                     <Grid>
                         <ListBox x:Name="ItemsList" ItemsSource="{Binding FilteredItems}"
+                                 h:WindowDragHitTest.AllowBackgroundDrag="True"
                                  Padding="2,0,3,0" Background="Transparent" BorderThickness="0"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  VirtualizingPanel.IsVirtualizing="False" AllowDrop="True"

@@ -255,7 +255,7 @@
 
         <Canvas x:Name="MainCanvas"
             Background="Transparent"
-            Focusable="True" Cursor="SizeAll">
+            Focusable="True">
 
         <Border x:Name="NotesPanel"
             Background="{DynamicResource NotedWindowBackgroundBrush}"
@@ -269,8 +269,7 @@
             MinHeight="180"
             Width="360" Height="620"
             Canvas.Right="40" Canvas.Top="60"
-            Visibility="Visible"
-            Cursor="SizeAll">
+            Visibility="Visible">
 
             <Grid>
                 <DockPanel>
@@ -291,7 +290,6 @@
                                 Grid.Column="0"
                                 Background="Transparent"
                                 Focusable="True"
-                                Cursor="SizeAll"
                                 Padding="0,3,6,3">
                             <Border.Style>
                                 <Style TargetType="Border">
@@ -703,6 +701,7 @@
 
                         <!-- File list -->
                         <ListBox x:Name="FileList"
+                                 local:WindowDragHitTest.AllowBackgroundDrag="True"
                                  Foreground="{DynamicResource NotedTextBrush}"
                                  Background="Transparent"
                                  BorderThickness="0"

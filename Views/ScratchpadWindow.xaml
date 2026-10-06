@@ -115,7 +115,7 @@
                 </Grid.RowDefinitions>
 
                 <Border x:Name="TitleBar" Grid.Row="0" Background="Transparent"
-                        Padding="2,1,0,8" Cursor="SizeAll">
+                        Padding="2,1,0,8">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>

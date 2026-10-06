@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:s="clr-namespace:Noted.Services"
         xmlns:noted="clr-namespace:Noted"
+        xmlns:h="clr-namespace:Noted.Helpers"
         Title="Dictionary"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -60,7 +61,7 @@
                 </Grid.RowDefinitions>
 
                 <Border x:Name="TitleBar" Grid.Row="0" Background="Transparent"
-                        Padding="2,0,0,5" Cursor="SizeAll">
+                        Padding="2,0,0,5">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -142,6 +143,7 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled">
                             <ItemsControl x:Name="ItemsList"
+                                          h:WindowDragHitTest.AllowBackgroundDrag="True"
                                           ItemsSource="{Binding FilteredItems}"
                                           Padding="2,0,3,0"
                                           Focusable="True"
