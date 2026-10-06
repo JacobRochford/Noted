@@ -25,10 +25,9 @@
         <SolidColorBrush x:Key="ChecklistHighPriorityBrush" Color="#FF0000"/>
         <SolidColorBrush x:Key="ChecklistMediumPriorityBrush" Color="#FFA500"/>
         <SolidColorBrush x:Key="ChecklistLowPriorityBrush" Color="#0000FF"/>
-        <SolidColorBrush x:Key="ChecklistNoPriorityBrush" Color="#C5D2D9"/>
 
         <Style x:Key="PriorityDotStyle" TargetType="Ellipse">
-            <Setter Property="Fill" Value="{DynamicResource ChecklistNoPriorityBrush}"/>
+            <Setter Property="Fill" Value="{DynamicResource NotedMutedTextBrush}"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding Priority}" Value="{x:Static m:ChecklistPriority.High}">
                     <Setter Property="Fill" Value="{DynamicResource ChecklistHighPriorityBrush}"/>
@@ -439,7 +438,7 @@
                                                 <MenuItem Header="No priority" Tag="None"
                                                           Style="{StaticResource NotedContextMenuItem}"
                                                           Click="SetPriority_Click">
-                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="{DynamicResource ChecklistNoPriorityBrush}"/></MenuItem.Icon>
+                                                    <MenuItem.Icon><Ellipse Width="8" Height="8" Fill="{DynamicResource NotedMutedTextBrush}"/></MenuItem.Icon>
                                                 </MenuItem>
                                                 <Separator/>
                                                 <MenuItem Header="Priority colors..."

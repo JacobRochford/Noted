@@ -11,6 +11,27 @@ namespace Noted.Tests.ViewModels;
 public sealed class SettingsViewModelTests
 {
     [TestMethod]
+    public void EveryAppearanceOptionPreservesAccentAndReloadsSavedSelection()
+    {
+        using var context = new Context();
+        CollectionAssert.AreEqual(Enum.GetValues<AppThemeMode>(),
+            context.Model.AppearanceOptions.Select(option => option.Mode).ToArray());
+        CollectionAssert.AreEqual(new[] { "Use Windows setting", "Light", "Dark", "Midnight Blue", "OLED", "Warm" },
+            context.Model.AppearanceOptions.Select(option => option.Label).ToArray());
+        foreach (var option in context.Model.AppearanceOptions)
+        {
+            context.Model.AccentText = "#7A5CB8";
+            context.Model.ThemeMode = option.Mode;
+            Assert.AreEqual((option.Mode, "#7A5CB8"), context.AppliedThemes.Last());
+            context.Model.AccentText = "#008080";
+            Assert.AreEqual((option.Mode, "#008080"), context.AppliedThemes.Last());
+            context.Model.Reload();
+            Assert.AreEqual(option.Mode, context.Model.ThemeMode);
+            Assert.AreEqual("#008080", context.Model.AccentText);
+        }
+    }
+
+    [TestMethod]
     public void UtilityOptionsReloadWithoutSavingAndRecoverFromPersistenceFailure()
     {
         using var context = new Context();
@@ -140,7 +161,7 @@ public sealed class SettingsViewModelTests
         Assert.AreEqual(AppThemeMode.Dark, context.Settings.LoadAppThemeMode());
         Assert.AreEqual((AppThemeMode.Dark, "#AABBCC"), context.AppliedThemes.Last());
         context.Model.ResetAppearanceCommand.Execute(null);
-        Assert.AreEqual((AppThemeMode.System, "#15FFFF"), context.AppliedThemes.Last());
+        Assert.AreEqual((AppThemeMode.Dark, "#15FFFF"), context.AppliedThemes.Last());
     }
 
     [TestMethod]
@@ -226,14 +247,14 @@ public sealed class SettingsViewModelTests
         var original = context.Model.ThemeMode;
         using (var locked = new FileStream(context.Directory.File("settings.json"), FileMode.Open, FileAccess.Read, FileShare.Read))
         {
-            context.Model.ThemeMode = AppThemeMode.Dark;
+            context.Model.ThemeMode = AppThemeMode.OLED;
             Assert.AreEqual(original, context.Model.ThemeMode);
             Assert.AreEqual(0, context.AppliedThemes.Count);
             Assert.AreEqual("Noted - Settings Error", notices.Single().Title);
             StringAssert.Contains(notices.Single().Message, "try again");
         }
-        context.Model.ThemeMode = AppThemeMode.Dark;
-        Assert.AreEqual(AppThemeMode.Dark, context.Settings.LoadAppThemeMode());
+        context.Model.ThemeMode = AppThemeMode.OLED;
+        Assert.AreEqual(AppThemeMode.OLED, context.Settings.LoadAppThemeMode());
     }
 
     [TestMethod]

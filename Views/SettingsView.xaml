@@ -17,26 +17,6 @@
                                           VerticalScrollBarVisibility="Auto">
                             <StackPanel>
 
-                            <Border BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    Padding="12,0,12,16" Margin="0,0,0,16">
-                                <StackPanel>
-                                    <TextBlock Text="Utilities" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                    <TextBlock Text="Choose which utilities appear in the toolbar. Hidden utilities keep their data, open windows, startup behavior, and hotkeys. Show them again here at any time."
-                                               FontSize="11" Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                               TextWrapping="Wrap" Margin="0,0,0,8"/>
-                                    <ItemsControl ItemsSource="{Binding UtilityVisibility.Utilities}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <CheckBox Content="{Binding DisplayName}"
-                                                          IsChecked="{Binding IsVisible, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                          Margin="0,3,0,3"/>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </StackPanel>
-                            </Border>
-
                             <Border Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="0,0,0,1"
@@ -238,6 +218,40 @@
                                     Padding="12,0,12,16"
                                     Margin="0,0,0,16">
                                 <StackPanel>
+                                    <TextBlock Text="Editor"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource NotedTextBrush}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBlock Text="Default indentation for newly opened editors" Margin="0,0,0,4"
+                                               Foreground="{DynamicResource NotedTextBrush}"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ComboBox ItemsSource="{Binding IndentationModes}" SelectedItem="{Binding DefaultIndentationMode}"
+                                                  Width="100" Margin="0,0,8,0"/>
+                                        <TextBlock Text="Tab size" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                   Foreground="{DynamicResource NotedTextBrush}"/>
+                                        <ComboBox ItemsSource="{Binding TabSizes}" SelectedItem="{Binding DefaultTabSize}" Width="60"/>
+                                    </StackPanel>
+                                    <CheckBox IsChecked="{Binding NormalizePastedText}"
+                                              Foreground="{DynamicResource NotedTextBrush}"
+                                              FontWeight="SemiBold"
+                                              Margin="0,10,0,0"
+                                              HorizontalAlignment="Stretch"
+                                              ToolTip="Normalize curly quotes, no-break spaces, and soft hyphens. Ctrl+Alt+V pastes without normalization.">
+                                        <TextBlock Text="Normalize pasted text in NoteEditor and MiniPad"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="Transparent"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,16"
+                                    Margin="0,0,0,16">
+                                <StackPanel>
                                     <TextBlock Text="Note Behavior"
                                                FontSize="12"
                                                FontWeight="SemiBold"
@@ -267,248 +281,11 @@
                                                    TextWrapping="Wrap"
                                                    VerticalAlignment="Center"/>
                                     </RadioButton>
-                                    <CheckBox x:Name="ShowModifiedSubtitleOption" IsChecked="{Binding ShowModifiedSubtitle}"
-                                            Foreground="{DynamicResource NotedTextBrush}"
-                                            FontWeight="SemiBold"
-                                            Margin="0,12,0,0"
-                                            HorizontalAlignment="Stretch">
-                                        <TextBlock Text="Show 'Modified' timestamp in note subtitle"
-                                               TextWrapping="Wrap"
-                                               VerticalAlignment="Center"/>
-                                    </CheckBox>
-                                    <TextBlock Text="Default indentation for newly opened editors" Margin="0,12,0,4"
-                                               Foreground="{DynamicResource NotedTextBrush}"/>
-                                    <StackPanel Orientation="Horizontal">
-                                        <ComboBox ItemsSource="{Binding IndentationModes}" SelectedItem="{Binding DefaultIndentationMode}"
-                                                  Width="100" Margin="0,0,8,0"/>
-                                        <TextBlock Text="Tab size" VerticalAlignment="Center" Margin="0,0,8,0"
-                                                   Foreground="{DynamicResource NotedTextBrush}"/>
-                                        <ComboBox ItemsSource="{Binding TabSizes}" SelectedItem="{Binding DefaultTabSize}" Width="60"/>
-                                    </StackPanel>
-                                    <CheckBox IsChecked="{Binding NormalizePastedText}"
-                                              Foreground="{DynamicResource NotedTextBrush}"
-                                              FontWeight="SemiBold"
-                                              Margin="0,10,0,0"
-                                              HorizontalAlignment="Stretch"
-                                              ToolTip="Normalize curly quotes, no-break spaces, and soft hyphens. Ctrl+Alt+V pastes without normalization.">
-                                        <TextBlock Text="Normalize pasted text in NoteEditor and MiniPad"
-                                                   TextWrapping="Wrap"
-                                                   VerticalAlignment="Center"/>
-                                    </CheckBox>
-                                    <CheckBox x:Name="ConfirmNoteDeletionOption" IsChecked="{Binding ConfirmNoteDeletion}"
-                                              Foreground="{DynamicResource NotedTextBrush}"
-                                              FontWeight="SemiBold"
-                                              Margin="0,10,0,0"
-                                              HorizontalAlignment="Stretch">
-                                        <TextBlock Text="Confirm before deleting notes"
-                                                   TextWrapping="Wrap"
-                                                   VerticalAlignment="Center"/>
-                                    </CheckBox>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Background="Transparent"
-                                    BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    CornerRadius="0"
-                                    Padding="12,0,12,16"
-                                    Margin="0,0,0,16">
-                                <StackPanel>
-                                    <TextBlock Text="Folder Navigation"
-                                               FontSize="12"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource NotedTextBrush}"
-                                               Margin="0,0,0,8"/>
-                                    <TextBlock Text="How clicking a folder opens it"
-                                               FontSize="11"
-                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                               TextWrapping="Wrap"
-                                               Margin="0,0,0,8"/>
-                                    <RadioButton x:Name="FolderNavDrillDownOption" IsChecked="{Binding FolderNavigationModeDrillDown}"
-                                                 GroupName="FolderNavigation"
-                                                 Margin="0,0,0,6"
-                                                 HorizontalAlignment="Stretch">
-                                        <TextBlock Text="Navigate into folder (drill-down)"
-                                                   TextWrapping="Wrap"
-                                                   VerticalAlignment="Center"/>
-                                    </RadioButton>
-                                    <RadioButton x:Name="FolderNavExpandOption" IsChecked="{Binding FolderNavigationModeExpand}"
-                                                 GroupName="FolderNavigation"
-                                                 HorizontalAlignment="Stretch">
-                                        <TextBlock Text="Expand folder inline (tree view)"
-                                                   TextWrapping="Wrap"
-                                                   VerticalAlignment="Center"/>
-                                    </RadioButton>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Background="Transparent"
-                                    BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    CornerRadius="0"
-                                    Padding="12,0,12,16"
-                                    Margin="0,0,0,16">
-                                <StackPanel>
-                                    <TextBlock Text="Startup"
-                                               FontSize="12"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource NotedTextBrush}"
-                                               Margin="0,0,0,8"/>
-                                    <CheckBox x:Name="RunOnStartupOption" IsChecked="{Binding RunOnStartup}"
-                                            Foreground="{DynamicResource NotedTextBrush}"
-                                            FontWeight="SemiBold"
-                                            HorizontalAlignment="Stretch">
-                                        <TextBlock Text="Launch Noted automatically when Windows starts"
-                                               TextWrapping="Wrap"
-                                               VerticalAlignment="Center"/>
-                                    </CheckBox>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Background="Transparent"
-                                    BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    CornerRadius="0"
-                                    Padding="12,0,12,16"
-                                    Margin="0,0,0,16">
-                                <StackPanel>
-                                    <TextBlock Text="Window Behavior"
-                                               FontSize="12"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource NotedTextBrush}"
-                                               Margin="0,0,0,8"/>
-                                    <TextBlock Text="Choose whether Hide also hides all other windows"
-                                               FontSize="11"
-                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                               TextWrapping="Wrap"
-                                               Margin="0,0,0,8"/>
-                                    <TextBlock Text="Open Noted on"
-                                               FontSize="11"
-                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                               Margin="0,0,0,4"/>
-                                    <ComboBox x:Name="PreferredDisplayCombo" SelectedItem="{Binding PreferredDisplay}" ItemsSource="{Binding DisplayOptions}"
-                                              Margin="0,0,0,12"
-                                              MinHeight="28"
-                                              DisplayMemberPath="Label"/>
-                                    <CheckBox x:Name="MainHideButtonHidesAllOption" IsChecked="{Binding MainHideButtonHidesAll}"
-                                            Foreground="{DynamicResource NotedTextBrush}"
-                                            FontWeight="SemiBold"
-                                            HorizontalAlignment="Stretch">
-                                        <TextBlock Text="Hide other windows when hiding notes"
-                                               TextWrapping="Wrap"
-                                               VerticalAlignment="Center"/>
-                                    </CheckBox>
-                                    <CheckBox x:Name="ShowNotesHeaderOption" IsChecked="{Binding ShowNotesHeader}"
-                                              Foreground="{DynamicResource NotedTextBrush}"
-                                              FontWeight="SemiBold"
-                                              Margin="0,8,0,0"
-                                              HorizontalAlignment="Stretch">
-                                        <TextBlock Text="Show notes header"
-                                                   TextWrapping="Wrap"
-                                                   VerticalAlignment="Center"/>
-                                    </CheckBox>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Background="Transparent"
-                                    BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    CornerRadius="0"
-                                    Padding="12,0,12,16"
-                                    Margin="0,0,0,16">
-                                <StackPanel>
-                                    <TextBlock Text="App Opacity"
-                                               FontSize="12"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource NotedTextBrush}"
-                                               Margin="0,0,0,8"/>
-
-                                    <!-- Visible opacity (always active) -->
-                                    <Grid Margin="0,0,0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Visible opacity"
-                                                   Grid.Column="0"
-                                                   FontSize="11"
-                                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="DefaultOpacityLabel" Text="{Binding DefaultOpacityLabel}"
-                                                   Grid.Column="1"
-                                                   FontSize="11"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource NotedAccentBrush}"
-                                                   VerticalAlignment="Center"
-                                                   MinWidth="32"
-                                                   TextAlignment="Right"/>
-                                    </Grid>
-                                    <Slider x:Name="DefaultOpacitySlider" Value="{Binding DefaultOpacityPercent}"
-                                            Minimum="5"
-                                            Maximum="100"
-                                            SmallChange="1"
-                                            LargeChange="1"
-                                            TickFrequency="1"
-                                            IsSnapToTickEnabled="False"
-                                            Margin="0,0,0,14"/>
-
-                                    <!-- Idle fade toggle -->
-                                    <CheckBox x:Name="GhostModeOption" IsChecked="{Binding GhostModeEnabled}"
-                                            Foreground="{DynamicResource NotedTextBrush}"
-                                            FontWeight="SemiBold"
-                                            Margin="0,0,0,10"
-                                            HorizontalAlignment="Stretch">
-                                        <TextBlock Text="Fade windows when inactive"
-                                                   TextWrapping="Wrap"
-                                                   VerticalAlignment="Center"/>
-                                    </CheckBox>
-
-                                    <CheckBox Style="{StaticResource NotedToggleSwitch}" Content="Always keep this window visible" ToolTip="Use the app visible opacity even when this window is inactive" Margin="0,0,0,10"
-                                              IsChecked="{Binding Path=(s:WindowAppearance.AlwaysVisible), RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"/>
-
-                                    <!-- Idle opacity (disabled when idle fade is off) -->
-                                    <Grid Margin="0,0,0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Idle opacity"
-                                                   Grid.Column="0"
-                                                   FontSize="11"
-                                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="GhostModeOpacityLabel" Text="{Binding GhostOpacityLabel}"
-                                                   Grid.Column="1"
-                                                   FontSize="11"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource NotedAccentBrush}"
-                                                   VerticalAlignment="Center"
-                                                   MinWidth="32"
-                                                   TextAlignment="Right"/>
-                                    </Grid>
-                                    <Slider x:Name="GhostModeOpacitySlider" Value="{Binding GhostOpacityPercent}"
-                                            Minimum="0"
-                                            Maximum="100"
-                                            SmallChange="1"
-                                            LargeChange="1"
-                                            TickFrequency="1"
-                                            IsSnapToTickEnabled="False"
-                                            IsEnabled="{Binding ElementName=GhostModeOption, Path=IsChecked}"/>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Background="Transparent"
-                                    BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    CornerRadius="0"
-                                    Padding="12,0,12,16"
-                                    Margin="0,0,0,16">
-                                <StackPanel>
                                     <TextBlock Text="New Note Timestamp"
                                                FontSize="12"
                                                FontWeight="SemiBold"
                                               Foreground="{DynamicResource NotedTextBrush}"
-                                               Margin="0,0,0,8"/>
+                                               Margin="0,16,0,8"/>
                                     <RadioButton x:Name="TimestampNoneOption" IsChecked="{Binding TimestampPlacementNone}"
                                                  GroupName="TimestampPlacement"
                                                  Margin="0,0,0,6"
@@ -552,152 +329,78 @@
                                                  Style="{StaticResource NotedTextInput}"
                                                  LostFocus="TimestampLineTextBox_LostFocus"/>
                                     </StackPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Background="Transparent"
-                                    BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    CornerRadius="0"
-                                    Padding="12,0,12,16"
-                                    Margin="0,0,0,16">
-                                <StackPanel>
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="Notes Folder"
-                                                   FontSize="12"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource NotedTextBrush}"
-                                                   Margin="0,0,8,0"/>
-                                        <Button x:Name="ToggleNotesFolderPathButton" Content="{Binding ToggleNotesDirectoryText}"
-                                                Command="{Binding ToggleNotesDirectoryCommand}"
-                                                FontSize="11"
-                                                FontWeight="SemiBold"
-                                                Foreground="{DynamicResource NotedTextBrush}"
-                                                Cursor="Hand"
-                                                Padding="6,2"
-                                                Margin="0,0,0,0"
-                                                Style="{StaticResource NotedSecondaryButton}"/>
-                                    </StackPanel>
-                                    <TextBlock x:Name="NotesFolderPathText" Text="{Binding NotesDirectory}"
-                                               FontSize="11"
-                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                               TextWrapping="Wrap"
-                                               Margin="0,6,0,10"
-                                               Visibility="{Binding ShowNotesDirectory, Converter={StaticResource BoolToVisibility}}"/>
-                                    <Button x:Name="ChangeFolderButton"
-                                            Content="Change Folder"
-                                            Command="{Binding ChangeFolderCommand}"
-                                            FontSize="11"
-                                            FontWeight="SemiBold"
+                                    <CheckBox x:Name="ShowModifiedSubtitleOption" IsChecked="{Binding ShowModifiedSubtitle}"
                                             Foreground="{DynamicResource NotedTextBrush}"
-                                            Cursor="Hand"
-                                            Padding="8,3"
-                                            HorizontalAlignment="Left"
-                                            Background="Transparent"
-                                            BorderBrush="{DynamicResource NotedStrongBorderBrush}"
-                                            BorderThickness="1">
-                                        <Button.Template>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border x:Name="bg"
-                                                        Background="{DynamicResource NotedSubtleSurfaceBrush}"
-                                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                                        BorderThickness="{TemplateBinding BorderThickness}"
-                                                        CornerRadius="6"
-                                                        Padding="{TemplateBinding Padding}">
-                                                    <ContentPresenter HorizontalAlignment="Center"
-                                                                      VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Button.Template>
-                                    </Button>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Background="Transparent"
-                                    BorderBrush="{DynamicResource NotedBorderBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    CornerRadius="0"
-                                    Padding="12,0,12,16"
-                                    Margin="0,0,0,16">
-                                <StackPanel>
-                                    <TextBlock Text="Data Protection"
+                                            FontWeight="SemiBold"
+                                            Margin="0,12,0,0"
+                                            HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Show 'Modified' timestamp in note subtitle"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center"/>
+                                    </CheckBox>
+                                    <CheckBox x:Name="ConfirmNoteDeletionOption" IsChecked="{Binding ConfirmNoteDeletion}"
+                                              Foreground="{DynamicResource NotedTextBrush}"
+                                              FontWeight="SemiBold"
+                                              Margin="0,10,0,0"
+                                              HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Confirm before deleting notes"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </CheckBox>
+                                    <TextBlock Text="Folder Navigation"
                                                FontSize="12"
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource NotedTextBrush}"
-                                               Margin="0,0,0,6"/>
-                                    <TextBlock Text="Create a verified backup of your notes, settings, checklist, dictionary, Scratchpad, MiniPad, and open-note recovery. View it before restoring, export a copy, or import one from another Noted installation. Noted changes this backup only when you choose Update Backup."
+                                               Margin="0,16,0,8"/>
+                                    <TextBlock Text="How clicking a folder opens it"
                                                FontSize="11"
                                                Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                TextWrapping="Wrap"
-                                               Margin="0,0,0,10"/>
-                                    <WrapPanel Margin="0,0,0,8">
-                                        <Button x:Name="CreateOrUpdateBackupButton" Content="{Binding CreateBackupText}"
-                                                Command="{Binding CreateBackupCommand}"
-                                                FontSize="11"
-                                                FontWeight="SemiBold"
-                                                Foreground="{DynamicResource NotedTextBrush}"
-                                                Cursor="Hand"
-                                                Padding="8,3"
-                                                Margin="0,0,8,6"
-                                                Style="{StaticResource NotedSecondaryButton}"/>
-                                        <Button x:Name="ViewBackupButton"
-                                                Content="View Backup"
-                                                Command="{Binding ViewBackupCommand}"
-                                                FontSize="11"
-                                                FontWeight="SemiBold"
-                                                Foreground="{DynamicResource NotedTextBrush}"
-                                                Cursor="Hand"
-                                                Padding="8,3"
-                                                Margin="0,0,8,6"
-                                                Style="{StaticResource NotedSecondaryButton}"/>
-                                        <Button x:Name="ExportBackupButton"
-                                                Content="Export"
-                                                Command="{Binding ExportBackupCommand}"
-                                                FontSize="11"
-                                                FontWeight="SemiBold"
-                                                Foreground="{DynamicResource NotedTextBrush}"
-                                                Cursor="Hand"
-                                                Padding="8,3"
-                                                Margin="0,0,8,6"
-                                                Style="{StaticResource NotedSecondaryButton}"/>
-                                        <Button x:Name="ImportBackupButton"
-                                                Content="Import"
-                                                Command="{Binding ImportBackupCommand}"
-                                                FontSize="11"
-                                                FontWeight="SemiBold"
-                                                Foreground="{DynamicResource NotedTextBrush}"
-                                                Cursor="Hand"
-                                                Padding="8,3"
-                                                Margin="0,0,8,6"
-                                                Style="{StaticResource NotedSecondaryButton}"/>
-                                        <Button x:Name="RestoreBackupButton"
-                                                Content="Restore Backup"
-                                                Command="{Binding RestoreBackupCommand}"
-                                                FontSize="11"
-                                                FontWeight="SemiBold"
-                                                Foreground="{DynamicResource NotedTextBrush}"
-                                                Cursor="Hand"
-                                                Padding="8,3"
-                                                Margin="0,0,0,6"
-                                                Style="{StaticResource NotedSecondaryButton}"/>
-                                    </WrapPanel>
-                                    <TextBlock x:Name="BackupStatusText" Text="{Binding BackupStatus}"
-                                               FontSize="10"
-                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                               TextWrapping="Wrap"/>
+                                               Margin="0,0,0,8"/>
+                                    <RadioButton x:Name="FolderNavDrillDownOption" IsChecked="{Binding FolderNavigationModeDrillDown}"
+                                                 GroupName="FolderNavigation"
+                                                 Margin="0,0,0,6"
+                                                 HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Navigate into folder (drill-down)"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </RadioButton>
+                                    <RadioButton x:Name="FolderNavExpandOption" IsChecked="{Binding FolderNavigationModeExpand}"
+                                                 GroupName="FolderNavigation"
+                                                 HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Expand folder inline (tree view)"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </RadioButton>
+                                </StackPanel>
+                            </Border>
+
+                            <Border BorderBrush="{DynamicResource NotedBorderBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    Padding="12,0,12,16" Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="Utilities" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                    <TextBlock Text="Choose which utilities appear in the toolbar. Hidden utilities keep their data, open windows, startup behavior, and hotkeys. Show them again here at any time."
+                                               FontSize="11" Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                               TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                    <ItemsControl ItemsSource="{Binding UtilityVisibility.Utilities}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <CheckBox Content="{Binding DisplayName}"
+                                                          IsChecked="{Binding IsVisible, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                          Margin="0,3,0,3"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </StackPanel>
                             </Border>
 
                             <Border Background="Transparent"
-                                    BorderThickness="0"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
+                                    BorderThickness="0,0,0,1"
                                     CornerRadius="0"
-                                    Padding="12,0,12,4"
-                                    Margin="0">
+                                    Padding="12,0,12,16"
+                                    Margin="0,0,0,16">
                                 <StackPanel>
                                     <TextBlock Text="Hotkeys"
                                                FontSize="12"
@@ -903,6 +606,279 @@
                                             </StackPanel>
                                         </Border>
                                     </Popup>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="Transparent"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,16"
+                                    Margin="0,0,0,16">
+                                <StackPanel>
+                                    <TextBlock Text="Window Behavior"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource NotedTextBrush}"
+                                               Margin="0,0,0,8"/>
+                                    <TextBlock Text="Choose whether Hide also hides all other windows"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,8"/>
+                                    <TextBlock Text="Open Noted on"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                               Margin="0,0,0,4"/>
+                                    <ComboBox x:Name="PreferredDisplayCombo" SelectedItem="{Binding PreferredDisplay}" ItemsSource="{Binding DisplayOptions}"
+                                              Margin="0,0,0,12"
+                                              MinHeight="28"
+                                              DisplayMemberPath="Label"/>
+                                    <CheckBox x:Name="MainHideButtonHidesAllOption" IsChecked="{Binding MainHideButtonHidesAll}"
+                                            Foreground="{DynamicResource NotedTextBrush}"
+                                            FontWeight="SemiBold"
+                                            HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Hide other windows when hiding notes"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center"/>
+                                    </CheckBox>
+                                    <CheckBox x:Name="ShowNotesHeaderOption" IsChecked="{Binding ShowNotesHeader}"
+                                              Foreground="{DynamicResource NotedTextBrush}"
+                                              FontWeight="SemiBold"
+                                              Margin="0,8,0,0"
+                                              HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Show notes header"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </CheckBox>
+                                    <TextBlock Text="Startup"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource NotedTextBrush}"
+                                               Margin="0,16,0,8"/>
+                                    <CheckBox x:Name="RunOnStartupOption" IsChecked="{Binding RunOnStartup}"
+                                            Foreground="{DynamicResource NotedTextBrush}"
+                                            FontWeight="SemiBold"
+                                            HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Launch Noted automatically when Windows starts"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center"/>
+                                    </CheckBox>
+                                    <TextBlock Text="App Opacity"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource NotedTextBrush}"
+                                               Margin="0,16,0,8"/>
+
+                                    <!-- Visible opacity (always active) -->
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Visible opacity"
+                                                   Grid.Column="0"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="DefaultOpacityLabel" Text="{Binding DefaultOpacityLabel}"
+                                                   Grid.Column="1"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource NotedAccentBrush}"
+                                                   VerticalAlignment="Center"
+                                                   MinWidth="32"
+                                                   TextAlignment="Right"/>
+                                    </Grid>
+                                    <Slider x:Name="DefaultOpacitySlider" Value="{Binding DefaultOpacityPercent}"
+                                            Minimum="5"
+                                            Maximum="100"
+                                            SmallChange="1"
+                                            LargeChange="1"
+                                            TickFrequency="1"
+                                            IsSnapToTickEnabled="False"
+                                            Margin="0,0,0,14"/>
+
+                                    <!-- Idle fade toggle -->
+                                    <CheckBox x:Name="GhostModeOption" IsChecked="{Binding GhostModeEnabled}"
+                                            Foreground="{DynamicResource NotedTextBrush}"
+                                            FontWeight="SemiBold"
+                                            Margin="0,0,0,10"
+                                            HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Fade windows when inactive"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </CheckBox>
+
+                                    <CheckBox Style="{StaticResource NotedToggleSwitch}" Content="Always keep this window visible" ToolTip="Use the app visible opacity even when this window is inactive" Margin="0,0,0,10"
+                                              IsChecked="{Binding Path=(s:WindowAppearance.AlwaysVisible), RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"/>
+
+                                    <!-- Idle opacity (disabled when idle fade is off) -->
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Idle opacity"
+                                                   Grid.Column="0"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="GhostModeOpacityLabel" Text="{Binding GhostOpacityLabel}"
+                                                   Grid.Column="1"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource NotedAccentBrush}"
+                                                   VerticalAlignment="Center"
+                                                   MinWidth="32"
+                                                   TextAlignment="Right"/>
+                                    </Grid>
+                                    <Slider x:Name="GhostModeOpacitySlider" Value="{Binding GhostOpacityPercent}"
+                                            Minimum="0"
+                                            Maximum="100"
+                                            SmallChange="1"
+                                            LargeChange="1"
+                                            TickFrequency="1"
+                                            IsSnapToTickEnabled="False"
+                                            IsEnabled="{Binding ElementName=GhostModeOption, Path=IsChecked}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="Transparent"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,16"
+                                    Margin="0,0,0,16">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="Notes Folder"
+                                                   FontSize="12"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource NotedTextBrush}"
+                                                   Margin="0,0,8,0"/>
+                                        <Button x:Name="ToggleNotesFolderPathButton" Content="{Binding ToggleNotesDirectoryText}"
+                                                Command="{Binding ToggleNotesDirectoryCommand}"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Foreground="{DynamicResource NotedTextBrush}"
+                                                Cursor="Hand"
+                                                Padding="6,2"
+                                                Margin="0,0,0,0"
+                                                Style="{StaticResource NotedSecondaryButton}"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="NotesFolderPathText" Text="{Binding NotesDirectory}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,6,0,10"
+                                               Visibility="{Binding ShowNotesDirectory, Converter={StaticResource BoolToVisibility}}"/>
+                                    <Button x:Name="ChangeFolderButton"
+                                            Content="Change Folder"
+                                            Command="{Binding ChangeFolderCommand}"
+                                            FontSize="11"
+                                            FontWeight="SemiBold"
+                                            Foreground="{DynamicResource NotedTextBrush}"
+                                            Cursor="Hand"
+                                            Padding="8,3"
+                                            HorizontalAlignment="Left"
+                                            Background="Transparent"
+                                            BorderBrush="{DynamicResource NotedStrongBorderBrush}"
+                                            BorderThickness="1">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="bg"
+                                                        Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                        CornerRadius="6"
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="bg" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="Transparent"
+                                    BorderBrush="{DynamicResource NotedBorderBrush}"
+                                    BorderThickness="0"
+                                    CornerRadius="0"
+                                    Padding="12,0,12,4"
+                                    Margin="0">
+                                <StackPanel>
+                                    <TextBlock Text="Data Protection"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource NotedTextBrush}"
+                                               Margin="0,0,0,6"/>
+                                    <TextBlock Text="Create a verified backup of your notes, settings, checklist, dictionary, Scratchpad, MiniPad, and open-note recovery. View it before restoring, export a copy, or import one from another Noted installation. Noted changes this backup only when you choose Update Backup."
+                                               FontSize="11"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,0,10"/>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <Button x:Name="CreateOrUpdateBackupButton" Content="{Binding CreateBackupText}"
+                                                Command="{Binding CreateBackupCommand}"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Foreground="{DynamicResource NotedTextBrush}"
+                                                Cursor="Hand"
+                                                Padding="8,3"
+                                                Margin="0,0,8,6"
+                                                Style="{StaticResource NotedSecondaryButton}"/>
+                                        <Button x:Name="ViewBackupButton"
+                                                Content="View Backup"
+                                                Command="{Binding ViewBackupCommand}"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Foreground="{DynamicResource NotedTextBrush}"
+                                                Cursor="Hand"
+                                                Padding="8,3"
+                                                Margin="0,0,8,6"
+                                                Style="{StaticResource NotedSecondaryButton}"/>
+                                        <Button x:Name="ExportBackupButton"
+                                                Content="Export"
+                                                Command="{Binding ExportBackupCommand}"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Foreground="{DynamicResource NotedTextBrush}"
+                                                Cursor="Hand"
+                                                Padding="8,3"
+                                                Margin="0,0,8,6"
+                                                Style="{StaticResource NotedSecondaryButton}"/>
+                                        <Button x:Name="ImportBackupButton"
+                                                Content="Import"
+                                                Command="{Binding ImportBackupCommand}"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Foreground="{DynamicResource NotedTextBrush}"
+                                                Cursor="Hand"
+                                                Padding="8,3"
+                                                Margin="0,0,8,6"
+                                                Style="{StaticResource NotedSecondaryButton}"/>
+                                        <Button x:Name="RestoreBackupButton"
+                                                Content="Restore Backup"
+                                                Command="{Binding RestoreBackupCommand}"
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Foreground="{DynamicResource NotedTextBrush}"
+                                                Cursor="Hand"
+                                                Padding="8,3"
+                                                Margin="0,0,0,6"
+                                                Style="{StaticResource NotedSecondaryButton}"/>
+                                    </WrapPanel>
+                                    <TextBlock x:Name="BackupStatusText" Text="{Binding BackupStatus}"
+                                               FontSize="10"
+                                               Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                               TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
 

@@ -8,6 +8,23 @@ namespace Noted.Tests.Models;
 public sealed class AppSettingsDocumentTests
 {
     [TestMethod]
+    [DataRow(0, AppThemeMode.System)]
+    [DataRow(1, AppThemeMode.Light)]
+    [DataRow(2, AppThemeMode.Dark)]
+    [DataRow(3, AppThemeMode.Midnight)]
+    [DataRow(4, AppThemeMode.OLED)]
+    [DataRow(5, AppThemeMode.Warm)]
+    public void ThemeIdentifiersRemainCompatible(int id, AppThemeMode mode)
+    {
+        var document = JsonSerializer.Deserialize<AppSettingsDocument>($"{{\"AppThemeMode\":{id},\"AccentColor\":\"#7A5CB8\"}}");
+        Assert.IsNotNull(document);
+        Assert.AreEqual(mode, document.AppThemeMode);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(document));
+        Assert.AreEqual(id, json.RootElement.GetProperty("AppThemeMode").GetInt32());
+        Assert.AreEqual("#7A5CB8", json.RootElement.GetProperty("AccentColor").GetString());
+    }
+
+    [TestMethod]
     public void ExistingSettingsWithoutPastePreferenceDefaultToEnabled()
     {
         var document = JsonSerializer.Deserialize<AppSettingsDocument>("{}");

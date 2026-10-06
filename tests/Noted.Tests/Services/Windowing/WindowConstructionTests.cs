@@ -93,6 +93,91 @@ public sealed class WindowConstructionTests
         });
     }
 
+    [TestMethod]
+    public void ExistingWindowsRenderAndResolveResourcesWhenThemesAndAccentsChange()
+    {
+        WpfTestHost.Invoke(() =>
+        {
+            using var directory = new TemporaryTestDirectory();
+            var settings = new AppSettingsService(directory.Path);
+            var windows = new Window[]
+            {
+                new NoteEditorWindow(new NoteContentService(directory.Path), settings,
+                    new NoteRecoveryService(directory.Path), new NoteEditorSessionService(directory.Path)),
+                new MiniPadWindow(new MiniPadRecoveryService(directory.Path), settings),
+                new DictionaryWindow(settings, new DictionaryContentService(directory.Path)),
+                new ChecklistWindow(settings, new ChecklistContentService(directory.Path)),
+                new ScratchpadWindow(new ScratchpadWindowViewModel(settings, new ScratchpadContentService(directory.Path)))
+            };
+            try
+            {
+                foreach (var window in windows)
+                {
+                    window.Measure(new Size(window.Width, window.Height));
+                    window.Arrange(new Rect(0, 0, window.Width, window.Height));
+                    window.UpdateLayout();
+                }
+                VerifyThemeSwitching(windows);
+            }
+            finally
+            {
+                foreach (var window in windows)
+                {
+                    if (window is MiniPadWindow miniPad) miniPad.KeepDraftOnClose();
+                    window.Close();
+                }
+            }
+        });
+    }
+
+    private static void VerifyThemeSwitching(Window[] windows)
+    {
+        var resources = Application.Current.Resources;
+        var original = resources.Keys.Cast<object>().ToDictionary(key => key, key => resources[key]);
+        try
+        {
+            using var manager = new AppThemeManager(resources, AppThemeMode.Dark, AppTheme.DefaultAccentColor);
+            foreach (var theme in new[] { AppThemeMode.Light, AppThemeMode.Dark, AppThemeMode.Midnight, AppThemeMode.OLED, AppThemeMode.Warm })
+            foreach (var accent in new[] { "#15FFFF", "#7A5CB8", "#008080" })
+            {
+                manager.Apply(theme, accent);
+                foreach (var window in windows)
+                {
+                    window.UpdateLayout();
+                    Assert.AreSame(resources["NotedAccentBrush"], window.FindResource("NotedAccentBrush"));
+                    foreach (var editor in VisualDescendants(window).OfType<TextBox>())
+                    {
+                        if (editor.Style == window.FindResource("NotedTextInput") ||
+                            editor.Style == window.FindResource("NotedEditorTextBox"))
+                        {
+                            Assert.AreSame(resources["NotedTextBrush"], editor.Foreground);
+                            Assert.AreSame(resources["NotedSelectionBrush"], editor.SelectionBrush);
+                        }
+                    }
+                    Assert.IsTrue(Render(window).Length > 0);
+                }
+            }
+        }
+        finally
+        {
+            foreach (var key in resources.Keys.Cast<object>().Where(key => !original.ContainsKey(key)).ToArray())
+                resources.Remove(key);
+            foreach (var pair in original)
+                resources[pair.Key] = pair.Value;
+        }
+    }
+
+    private static IEnumerable<DependencyObject> VisualDescendants(DependencyObject parent)
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            yield return child;
+            foreach (var descendant in VisualDescendants(child))
+                yield return descendant;
+        }
+    }
+
     private static void VerifyUtilityToolbar(MainWindow main, SettingsViewModel model,
         AppSettingsService settings, NoteFileService files, NoteEditorWindow editor)
     {

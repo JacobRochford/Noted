@@ -10,21 +10,85 @@ namespace Noted.Tests.Services;
 public sealed class AppThemeManagerTests
 {
     [TestMethod]
+    public void ThemeSwitchingPreservesAccentAndSeparatesSurfaces()
+    {
+        var resources = new ResourceDictionary();
+        using var manager = new AppThemeManager(resources, AppThemeMode.Dark, "#7A5CB8");
+        foreach (var theme in new[] { AppThemeMode.Light, AppThemeMode.Dark, AppThemeMode.Midnight, AppThemeMode.OLED, AppThemeMode.Warm })
+        {
+            manager.Apply(theme, manager.AccentColor);
+            Assert.AreEqual("#7A5CB8", manager.AccentColor);
+            Assert.AreEqual(Color.FromRgb(0x7A, 0x5C, 0xB8), GetColor(resources, "NotedAccentBrush"));
+            var surfaces = new[] { "NotedWindowBackgroundBrush", "NotedSurfaceBrush", "NotedEditorBackgroundBrush", "NotedSubtleSurfaceBrush" };
+            Assert.AreEqual(4, surfaces.Select(key => GetColor(resources, key)).Distinct().Count());
+            foreach (var key in surfaces)
+                Assert.IsGreaterThanOrEqualTo(4.5,
+                    AppThemeManager.Contrast(GetColor(resources, "NotedTextBrush"), GetColor(resources, key)));
+            var danger = GetColor(resources, "NotedDangerBrush");
+            var warning = GetColor(resources, "NotedWarningBrush");
+            manager.Apply(theme, "#00FF00");
+            Assert.AreEqual(Color.FromRgb(0, 255, 0), GetColor(resources, "NotedAccentBrush"));
+            Assert.AreEqual(danger, GetColor(resources, "NotedDangerBrush"));
+            Assert.AreEqual(warning, GetColor(resources, "NotedWarningBrush"));
+            manager.Apply(theme, "#7A5CB8");
+        }
+    }
+
+    [TestMethod]
     public void SelectionRemainsDistinctAndReadableForExtremeAccentsInEveryTheme()
     {
         var resources = new ResourceDictionary();
         using var manager = new AppThemeManager(resources, AppThemeMode.Light, "#FFFFFF");
-        foreach (var theme in new[] { AppThemeMode.Light, AppThemeMode.Dark, AppThemeMode.Midnight })
+        foreach (var theme in new[] { AppThemeMode.Light, AppThemeMode.Dark, AppThemeMode.Midnight, AppThemeMode.OLED, AppThemeMode.Warm })
         foreach (var accent in new[] { "#FFFFFF", "#000000", "#FF0000", "#FFFF00", "#5BA8C8" })
         {
             manager.Apply(theme, accent);
             var selection = GetColor(resources, "NotedSelectionBrush");
             var selectionText = GetColor(resources, "NotedSelectionTextBrush");
             Assert.IsGreaterThanOrEqualTo(3.0, AppThemeManager.Contrast(selection, GetColor(resources, "NotedInputBackgroundBrush")));
+            Assert.IsGreaterThanOrEqualTo(3.0, AppThemeManager.Contrast(selection, GetColor(resources, "NotedEditorBackgroundBrush")));
             Assert.IsGreaterThanOrEqualTo(4.5, AppThemeManager.Contrast(selection, selectionText));
             Assert.AreEqual(selection, GetColor(resources, SystemColors.InactiveSelectionHighlightBrushKey));
             Assert.AreEqual(selectionText, GetColor(resources, SystemColors.InactiveSelectionHighlightTextBrushKey));
         }
+    }
+
+    [TestMethod]
+    [DataRow("#FFFFFF")]
+    [DataRow("#000000")]
+    [DataRow("#15FFFF")]
+    [DataRow("#3366AA")]
+    public void LightSurfacesKeepTextAndControlOutlinesReadableWithCustomAccents(string accent)
+    {
+        var resources = new ResourceDictionary();
+        using var manager = new AppThemeManager(resources, AppThemeMode.Light, accent);
+        var surfaceKeys = new[]
+        {
+            "NotedWindowBackgroundBrush", "NotedSurfaceBrush", "NotedSubtleSurfaceBrush",
+            "NotedInputBackgroundBrush", "NotedEditorBackgroundBrush"
+        };
+        foreach (var surfaceKey in surfaceKeys)
+        {
+            var surface = GetColor(resources, surfaceKey);
+            foreach (var textKey in new[] { "NotedTextBrush", "NotedSecondaryTextBrush", "NotedMutedTextBrush" })
+            {
+                Assert.IsGreaterThanOrEqualTo(4.5,
+                    AppThemeManager.Contrast(GetColor(resources, textKey), surface),
+                    $"{textKey} must remain readable on {surfaceKey} with accent {accent}.");
+            }
+            Assert.IsGreaterThanOrEqualTo(3.0,
+                AppThemeManager.Contrast(GetColor(resources, "NotedStrongBorderBrush"), surface),
+                $"Control outlines must remain distinct on {surfaceKey} with accent {accent}.");
+        }
+
+        Assert.IsGreaterThanOrEqualTo(1.05,
+            AppThemeManager.Contrast(GetColor(resources, "NotedEditorBackgroundBrush"),
+                GetColor(resources, "NotedWindowBackgroundBrush")));
+        Assert.IsGreaterThanOrEqualTo(1.05,
+            AppThemeManager.Contrast(GetColor(resources, "NotedSurfaceBrush"),
+                GetColor(resources, "NotedSubtleSurfaceBrush")));
+        Assert.AreEqual(accent, manager.AccentColor);
+        Assert.AreEqual((Color)ColorConverter.ConvertFromString(accent), GetColor(resources, "NotedAccentBrush"));
     }
 
     [TestMethod]
@@ -80,8 +144,8 @@ public sealed class AppThemeManagerTests
             AppThemeMode.Midnight,
             AppTheme.DefaultAccentColor);
 
-        Assert.AreEqual(Color.FromRgb(0x17, 0x24, 0x2C), GetColor(resources, "NotedWindowBackgroundBrush"));
-        Assert.AreEqual(Color.FromRgb(0x1F, 0x30, 0x3A), GetColor(resources, "NotedSurfaceBrush"));
+        Assert.AreEqual(Color.FromRgb(0x10, 0x1B, 0x21), GetColor(resources, "NotedWindowBackgroundBrush"));
+        Assert.AreEqual(Color.FromRgb(0x14, 0x25, 0x2D), GetColor(resources, "NotedSurfaceBrush"));
         Assert.AreEqual(Color.FromRgb(0xE6, 0xF1, 0xF5), GetColor(resources, "NotedTextBrush"));
     }
 

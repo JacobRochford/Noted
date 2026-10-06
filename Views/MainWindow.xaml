@@ -47,6 +47,10 @@
                                 <Setter Property="Background"
                                         Value="{DynamicResource NotedAccentPressedBrush}"/>
                             </Trigger>
+                            <Trigger Property="Tag" Value="Accent">
+                                <Setter Property="Background"
+                                        Value="{DynamicResource NotedAccentBrush}"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -83,11 +87,11 @@
                                 <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ScrollThumb"
-                                                                       Storyboard.TargetProperty="Background"
+                                                                       Storyboard.TargetProperty="Tag"
                                                                        Duration="0:0:0.45"
                                                                        FillBehavior="Stop">
                                             <DiscreteObjectKeyFrame KeyTime="0"
-                                                                    Value="{StaticResource NotedAccentBrush}"/>
+                                                                    Value="Accent"/>
                                         </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </BeginStoryboard>

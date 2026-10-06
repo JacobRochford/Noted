@@ -68,19 +68,36 @@ internal sealed class AppThemeManager : IDisposable
 
     private void ApplyResources()
     {
-        var dark = _mode is AppThemeMode.Dark or AppThemeMode.Midnight ||
-            (_mode == AppThemeMode.System && SystemUsesDarkMode());
-        var midnight = _mode == AppThemeMode.Midnight;
+        var effectiveMode = _mode == AppThemeMode.System
+            ? SystemUsesDarkMode() ? AppThemeMode.Dark : AppThemeMode.Light
+            : _mode;
+        var dark = effectiveMode != AppThemeMode.Light;
+        // Match the existing shared roles, including raised chrome and editor surfaces.
+        var (windowHex, surfaceHex, subtleSurfaceHex, inputHex, editorHex,
+            borderHex, strongBorderHex, textHex, secondaryTextHex, mutedTextHex) = effectiveMode switch
+        {
+            AppThemeMode.Light => ("#E8EDF0", "#F0F3F5", "#FFFFFF", "#F7F8F8", "#F5F6F6",
+                "#CED7DC", "#718795", "#24323A", "#526670", "#5B6C76"),
+            AppThemeMode.Midnight => ("#101B21", "#14252D", "#19313B", "#17282E", "#17282E",
+                "#31505A", "#527386", "#E6F1F5", "#A9C0CA", "#819AA6"),
+            AppThemeMode.OLED => ("#000000", "#080A0B", "#171B1D", "#101315", "#101315",
+                "#292F32", "#596267", "#E9EEEE", "#AAB6BB", "#8B989D"),
+            AppThemeMode.Warm => ("#1B1916", "#24211D", "#383229", "#2B2722", "#302C26",
+                "#494238", "#756A5B", "#EEE8DC", "#C2B9AB", "#AAA193"),
+            _ => ("#1B1D1F", "#232629", "#2B2F33", "#17191B", "#282828",
+                "#41464B", "#5D646B", "#F0F2F4", "#B5BBC1", "#858D95")
+        };
         var accent = ParseColor(_accentColor);
-        var window = ParseColor(midnight ? "#17242C" : dark ? "#1B1D1F" : "#F5F9FC");
-        var surface = ParseColor(midnight ? "#1F303A" : dark ? "#232629" : "#FFFFFF");
-        var subtleSurface = ParseColor(midnight ? "#263A45" : dark ? "#2B2F33" : "#F2F8FB");
-        var input = ParseColor(midnight ? "#192932" : dark ? "#17191B" : "#FFFFFF");
-        var border = ParseColor(midnight ? "#3B5664" : dark ? "#41464B" : "#C9DFEC");
-        var strongBorder = ParseColor(midnight ? "#527386" : dark ? "#5D646B" : "#87CEEB");
-        var text = ParseColor(midnight ? "#E6F1F5" : dark ? "#F0F2F4" : "#355A6E");
-        var secondaryText = ParseColor(midnight ? "#A9C0CA" : dark ? "#B5BBC1" : "#78909C");
-        var mutedText = ParseColor(midnight ? "#819AA6" : dark ? "#858D95" : "#8BA5B2");
+        var window = ParseColor(windowHex);
+        var surface = ParseColor(surfaceHex);
+        var subtleSurface = ParseColor(subtleSurfaceHex);
+        var input = ParseColor(inputHex);
+        var editor = ParseColor(editorHex);
+        var border = ParseColor(borderHex);
+        var strongBorder = ParseColor(strongBorderHex);
+        var text = ParseColor(textHex);
+        var secondaryText = ParseColor(secondaryTextHex);
+        var mutedText = ParseColor(mutedTextHex);
         var accentSoft = Mix(accent, window, dark ? 0.76 : 0.82);
         var accentSoftHover = Mix(accent, window, dark ? 0.66 : 0.72);
 
@@ -88,7 +105,7 @@ internal sealed class AppThemeManager : IDisposable
         SetBrush("NotedSurfaceBrush", surface);
         SetBrush("NotedSubtleSurfaceBrush", subtleSurface);
         SetBrush("NotedInputBackgroundBrush", input);
-        SetBrush("NotedEditorBackgroundBrush", dark ? ParseColor("#262928") : input);
+        SetBrush("NotedEditorBackgroundBrush", editor);
         SetBrush("NotedBorderBrush", border);
         SetBrush("NotedStrongBorderBrush", strongBorder);
         SetBrush("NotedTextBrush", text);
@@ -100,9 +117,9 @@ internal sealed class AppThemeManager : IDisposable
         SetBrush("NotedAccentSoftBrush", accentSoft);
         SetBrush("NotedAccentSoftHoverBrush", accentSoftHover);
         SetBrush("NotedAccentTextBrush", UseDarkText(accent) ? ParseColor("#18252D") : Colors.White);
-        // Keep selections distinct even when a custom accent is close to the input color.
+        // Keep selections distinct on both text-entry surfaces for every accent.
         var selection = accent;
-        for (var i = 0; i < 20 && Contrast(selection, input) < 3; i++)
+        for (var i = 0; i < 20 && (Contrast(selection, input) < 3 || Contrast(selection, editor) < 3); i++)
             selection = Mix(selection, dark ? Colors.White : Colors.Black, 0.12);
         var selectionText = Contrast(selection, Colors.White) >= Contrast(selection, Colors.Black)
             ? Colors.White

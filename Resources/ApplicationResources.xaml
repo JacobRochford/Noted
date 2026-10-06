@@ -1,15 +1,15 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <SolidColorBrush x:Key="NotedWindowBackgroundBrush" Color="#F5F9FC"/>
-    <SolidColorBrush x:Key="NotedSurfaceBrush" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="NotedSubtleSurfaceBrush" Color="#F2F8FB"/>
-    <SolidColorBrush x:Key="NotedInputBackgroundBrush" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="NotedEditorBackgroundBrush" Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="NotedBorderBrush" Color="#C9DFEC"/>
-    <SolidColorBrush x:Key="NotedStrongBorderBrush" Color="#87CEEB"/>
-    <SolidColorBrush x:Key="NotedTextBrush" Color="#355A6E"/>
-    <SolidColorBrush x:Key="NotedSecondaryTextBrush" Color="#78909C"/>
-    <SolidColorBrush x:Key="NotedMutedTextBrush" Color="#8BA5B2"/>
+    <SolidColorBrush x:Key="NotedWindowBackgroundBrush" Color="#E8EDF0"/>
+    <SolidColorBrush x:Key="NotedSurfaceBrush" Color="#F0F3F5"/>
+    <SolidColorBrush x:Key="NotedSubtleSurfaceBrush" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="NotedInputBackgroundBrush" Color="#F7F8F8"/>
+    <SolidColorBrush x:Key="NotedEditorBackgroundBrush" Color="#F5F6F6"/>
+    <SolidColorBrush x:Key="NotedBorderBrush" Color="#CED7DC"/>
+    <SolidColorBrush x:Key="NotedStrongBorderBrush" Color="#718795"/>
+    <SolidColorBrush x:Key="NotedTextBrush" Color="#24323A"/>
+    <SolidColorBrush x:Key="NotedSecondaryTextBrush" Color="#526670"/>
+    <SolidColorBrush x:Key="NotedMutedTextBrush" Color="#5B6C76"/>
     <SolidColorBrush x:Key="NotedAccentBrush" Color="#5BA8C8"/>
     <SolidColorBrush x:Key="NotedAccentHoverBrush" Color="#4A97B7"/>
     <SolidColorBrush x:Key="NotedAccentPressedBrush" Color="#3E839F"/>

@@ -5,12 +5,14 @@ public enum AppThemeMode
     System,
     Light,
     Dark,
-    Midnight
+    Midnight,
+    OLED,
+    Warm
 }
 
 public static class AppTheme
 {
-    public const AppThemeMode DefaultMode = AppThemeMode.System;
+    public const AppThemeMode DefaultMode = AppThemeMode.Dark;
     public const string DefaultAccentColor = "#15FFFF";
 
     public static string NormalizeAccentColor(string? value) =>

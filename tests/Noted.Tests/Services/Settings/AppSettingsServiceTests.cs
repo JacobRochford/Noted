@@ -703,20 +703,26 @@ public sealed class AppSettingsServiceTests
         using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
 
-        Assert.AreEqual(AppThemeMode.System, service.LoadAppThemeMode());
+        Assert.AreEqual(AppThemeMode.Dark, service.LoadAppThemeMode());
         Assert.AreEqual(AppTheme.DefaultAccentColor, service.LoadAccentColor());
     }
 
     [TestMethod]
-    public void ThemeSettingsPersistNormalizedAccentColor()
+    [DataRow(AppThemeMode.System)]
+    [DataRow(AppThemeMode.Light)]
+    [DataRow(AppThemeMode.Dark)]
+    [DataRow(AppThemeMode.Midnight)]
+    [DataRow(AppThemeMode.OLED)]
+    [DataRow(AppThemeMode.Warm)]
+    public void ThemeSettingsPersistNormalizedAccentColor(AppThemeMode mode)
     {
         using var directory = new TemporaryTestDirectory();
         var service = CreateService(directory.Path);
 
-        service.SaveAppTheme(AppThemeMode.Midnight, "3366aa");
+        service.SaveAppTheme(mode, "3366aa");
 
         var reloaded = CreateService(directory.Path);
-        Assert.AreEqual(AppThemeMode.Midnight, reloaded.LoadAppThemeMode());
+        Assert.AreEqual(mode, reloaded.LoadAppThemeMode());
         Assert.AreEqual("#3366AA", reloaded.LoadAccentColor());
     }
 
@@ -730,7 +736,7 @@ public sealed class AppSettingsServiceTests
 
         var service = CreateService(directory.Path);
 
-        Assert.AreEqual(AppThemeMode.System, service.LoadAppThemeMode());
+        Assert.AreEqual(AppThemeMode.Dark, service.LoadAppThemeMode());
         Assert.AreEqual(AppTheme.DefaultAccentColor, service.LoadAccentColor());
         Assert.IsNull(service.RecoveryNotice);
     }

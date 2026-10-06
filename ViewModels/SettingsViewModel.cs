@@ -30,7 +30,9 @@ internal sealed class SettingsViewModel : ObservableObject
         new AppearanceOption(AppThemeMode.System, "Use Windows setting"),
         new AppearanceOption(AppThemeMode.Light, "Light"),
         new AppearanceOption(AppThemeMode.Dark, "Dark"),
-        new AppearanceOption(AppThemeMode.Midnight, "Midnight blue")
+        new AppearanceOption(AppThemeMode.Midnight, "Midnight Blue"),
+        new AppearanceOption(AppThemeMode.OLED, "OLED"),
+        new AppearanceOption(AppThemeMode.Warm, "Warm")
     };
     public IReadOnlyList<string> HotkeyKeys => HotkeyConstants.ValidKeys;
     public UtilityVisibilityViewModel UtilityVisibility { get; }
