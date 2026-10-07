@@ -232,6 +232,17 @@ namespace Noted.Services
                 ShowMiniPad();
         }
 
+        public static void ToggleEditor()
+        {
+            if (Editor?.CanChangeGroupVisibility == false)
+                return;
+
+            if (Editor?.IsWindowVisible == true)
+                HideEditor();
+            else
+                Editor?.ShowWindow();
+        }
+
         internal static bool TryPrepareForShutdown(out string? error)
         {
             try

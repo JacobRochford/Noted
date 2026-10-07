@@ -21,13 +21,14 @@ public sealed class HotkeyConfigurationTests
         Assert.AreEqual(0, configuration.Initialize().Count);
         Assert.AreEqual(0, configuration.Initialize().Count);
         Assert.AreEqual(1, creates);
-        CollectionAssert.AreEqual(new[] { "Ctrl+Shift+Space", "Alt+C", "Alt+D", "Alt+M" }, native.Attempts);
+        CollectionAssert.AreEqual(new[] { "Ctrl+Shift+Space", "Alt+C", "Alt+D", "Alt+M", "Alt+J" }, native.Attempts);
 
         configuration.Dispose();
         configuration.Dispose();
         Assert.AreEqual(1, native.DisposeCalls);
         Assert.IsNull(configuration.GetHotkeyRegistration(HotkeyFeature.Notes));
         Assert.IsNull(configuration.GetHotkeyRegistration(HotkeyFeature.MiniPad));
+        Assert.IsNull(configuration.GetHotkeyRegistration(HotkeyFeature.NoteEditor));
         Assert.AreEqual(0, configuration.Initialize().Count);
         Assert.AreEqual(1, creates);
     }

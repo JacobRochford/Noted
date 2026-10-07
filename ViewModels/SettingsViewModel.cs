@@ -446,10 +446,12 @@ internal sealed class SettingsViewModel : ObservableObject
     public string ChecklistHotkey => HotkeyText(HotkeyFeature.Checklist);
     public string DictionaryHotkey => HotkeyText(HotkeyFeature.Dictionary);
     public string MiniPadHotkey => HotkeyText(HotkeyFeature.MiniPad);
+    public string NoteEditorHotkey => HotkeyText(HotkeyFeature.NoteEditor);
     public string? NotesHotkeyTooltip => HotkeyTooltip(HotkeyFeature.Notes);
     public string? ChecklistHotkeyTooltip => HotkeyTooltip(HotkeyFeature.Checklist);
     public string? DictionaryHotkeyTooltip => HotkeyTooltip(HotkeyFeature.Dictionary);
     public string? MiniPadHotkeyTooltip => HotkeyTooltip(HotkeyFeature.MiniPad);
+    public string? NoteEditorHotkeyTooltip => HotkeyTooltip(HotkeyFeature.NoteEditor);
     private string HotkeyText(HotkeyFeature feature) => _hotkeys.GetHotkeyRegistration(feature) is not { } registration
         ? "Not registered" : _hotkeys.GetAdditionalHotkeyRegistration(feature) is not null ? "Multiple active" : registration.Combination;
     private string? HotkeyTooltip(HotkeyFeature feature) =>

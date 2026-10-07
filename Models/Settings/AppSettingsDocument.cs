@@ -35,6 +35,8 @@ internal sealed record AppSettingsDocument
     public string DictionaryHotkeyKey { get; init; } = "D";
     public string MiniPadHotkeyModifiers { get; init; } = "Alt";
     public string MiniPadHotkeyKey { get; init; } = "M";
+    public string NoteEditorHotkeyModifiers { get; init; } = "Alt";
+    public string NoteEditorHotkeyKey { get; init; } = "J";
     public string[]? AlwaysVisibleWindows { get; init; }
     public bool GhostModeEnabled { get; init; }
     public double GhostModeOpacity { get; init; } = 0.25;

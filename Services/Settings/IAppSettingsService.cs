@@ -30,6 +30,8 @@ public interface IAppSettingsService {
     void SaveDictionaryHotkey(string modifiers, string key);
     (string modifiers, string key) LoadMiniPadHotkey();
     void SaveMiniPadHotkey(string modifiers, string key);
+    (string modifiers, string key) LoadNoteEditorHotkey();
+    void SaveNoteEditorHotkey(string modifiers, string key);
     bool LoadWindowAlwaysVisible(string windowType);
     void SaveWindowAlwaysVisible(string windowType, bool alwaysVisible);
     bool LoadGhostModeEnabled();

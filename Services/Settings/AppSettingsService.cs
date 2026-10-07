@@ -189,6 +189,17 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { MiniPadHotkeyModifiers = modifiers, MiniPadHotkeyKey = key });
     }
 
+    public (string modifiers, string key) LoadNoteEditorHotkey()
+    {
+        var setting = LoadSettings();
+        return (setting.NoteEditorHotkeyModifiers ?? "Alt", setting.NoteEditorHotkeyKey ?? "J");
+    }
+
+    public void SaveNoteEditorHotkey(string modifiers, string key)
+    {
+        SaveSetting(s => s with { NoteEditorHotkeyModifiers = modifiers, NoteEditorHotkeyKey = key });
+    }
+
     public event EventHandler? AppearanceChanged;
 
     public bool LoadWindowAlwaysVisible(string windowType) =>
@@ -708,6 +719,8 @@ public sealed class AppSettingsService : IAppSettingsService {
             DictionaryHotkeyKey = string.IsNullOrWhiteSpace(settings.DictionaryHotkeyKey) ? "D" : settings.DictionaryHotkeyKey,
             MiniPadHotkeyModifiers = string.IsNullOrWhiteSpace(settings.MiniPadHotkeyModifiers) ? "Alt" : settings.MiniPadHotkeyModifiers,
             MiniPadHotkeyKey = string.IsNullOrWhiteSpace(settings.MiniPadHotkeyKey) ? "M" : settings.MiniPadHotkeyKey,
+            NoteEditorHotkeyModifiers = string.IsNullOrWhiteSpace(settings.NoteEditorHotkeyModifiers) ? "Alt" : settings.NoteEditorHotkeyModifiers,
+            NoteEditorHotkeyKey = string.IsNullOrWhiteSpace(settings.NoteEditorHotkeyKey) ? "J" : settings.NoteEditorHotkeyKey,
             GhostModeOpacity = NormalizeOpacity(settings.GhostModeOpacity, 0, 0.25),
             DefaultOpacity = NormalizeOpacity(settings.DefaultOpacity, 0.05, 0.88),
             AppThemeMode = Enum.IsDefined(settings.AppThemeMode)

@@ -2,7 +2,7 @@ using Noted.Helpers;
 
 namespace Noted.Services;
 
-internal enum HotkeyFeature { Notes, Checklist, Dictionary, MiniPad }
+internal enum HotkeyFeature { Notes, Checklist, Dictionary, MiniPad, NoteEditor }
 internal enum HotkeyChangeStatus { Unavailable, InvalidSelection, Invalid, Ambiguous, Failed, Unchanged, Saved, SaveFailed }
 internal sealed record HotkeyChangeResult(HotkeyChangeStatus Status, string Description);
 
@@ -30,6 +30,8 @@ internal sealed class HotkeyConfiguration : IDisposable
     private HotkeyRegistration? _additionalDictionaryHotkeyRegistration;
     private HotkeyRegistration? _miniPadHotkeyRegistration;
     private HotkeyRegistration? _additionalMiniPadHotkeyRegistration;
+    private HotkeyRegistration? _noteEditorHotkeyRegistration;
+    private HotkeyRegistration? _additionalNoteEditorHotkeyRegistration;
     private static readonly string[] s_fallbackHotkeyModifiers =
         { "Alt+Shift", "Ctrl+Alt", "Win+Alt", "Ctrl+Shift" };
 
@@ -120,6 +122,22 @@ internal sealed class HotkeyConfiguration : IDisposable
                     _getAction(HotkeyFeature.MiniPad),
                     _settingsService.SaveMiniPadHotkey);
                 _miniPadHotkeyRegistration = result.Registration;
+                if (result.Warning is not null)
+                    warnings.Add(result.Warning);
+            }
+
+            if (_noteEditorHotkeyRegistration is null)
+            {
+                var (modifiers, key) = _settingsService.LoadNoteEditorHotkey();
+                var result = RegisterWithFallback(
+                    "NoteEditor",
+                    modifiers,
+                    key,
+                    "Alt",
+                    "J",
+                    _getAction(HotkeyFeature.NoteEditor),
+                    _settingsService.SaveNoteEditorHotkey);
+                _noteEditorHotkeyRegistration = result.Registration;
                 if (result.Warning is not null)
                     warnings.Add(result.Warning);
             }
@@ -242,6 +260,7 @@ internal sealed class HotkeyConfiguration : IDisposable
         HotkeyFeature.Checklist => _checklistHotkeyRegistration,
         HotkeyFeature.Dictionary => _dictionaryHotkeyRegistration,
         HotkeyFeature.MiniPad => _miniPadHotkeyRegistration,
+        HotkeyFeature.NoteEditor => _noteEditorHotkeyRegistration,
         _ => null
     };
 
@@ -251,6 +270,7 @@ internal sealed class HotkeyConfiguration : IDisposable
         HotkeyFeature.Checklist => _additionalChecklistHotkeyRegistration,
         HotkeyFeature.Dictionary => _additionalDictionaryHotkeyRegistration,
         HotkeyFeature.MiniPad => _additionalMiniPadHotkeyRegistration,
+        HotkeyFeature.NoteEditor => _additionalNoteEditorHotkeyRegistration,
         _ => null
     };
 
@@ -277,6 +297,10 @@ internal sealed class HotkeyConfiguration : IDisposable
                 _miniPadHotkeyRegistration = registration;
                 _additionalMiniPadHotkeyRegistration = additionalRegistration;
                 break;
+            case HotkeyFeature.NoteEditor:
+                _noteEditorHotkeyRegistration = registration;
+                _additionalNoteEditorHotkeyRegistration = additionalRegistration;
+                break;
         }
     }
 
@@ -286,6 +310,7 @@ internal sealed class HotkeyConfiguration : IDisposable
         HotkeyFeature.Checklist => _settingsService.LoadChecklistHotkey(),
         HotkeyFeature.Dictionary => _settingsService.LoadDictionaryHotkey(),
         HotkeyFeature.MiniPad => _settingsService.LoadMiniPadHotkey(),
+        HotkeyFeature.NoteEditor => _settingsService.LoadNoteEditorHotkey(),
         _ => GetDefaultHotkey(feature)
     };
 
@@ -305,6 +330,9 @@ internal sealed class HotkeyConfiguration : IDisposable
             case HotkeyFeature.MiniPad:
                 _settingsService.SaveMiniPadHotkey(modifiers, key);
                 break;
+            case HotkeyFeature.NoteEditor:
+                _settingsService.SaveNoteEditorHotkey(modifiers, key);
+                break;
         }
     }
 
@@ -314,6 +342,7 @@ internal sealed class HotkeyConfiguration : IDisposable
         HotkeyFeature.Checklist => ("Alt", "C"),
         HotkeyFeature.Dictionary => ("Alt", "D"),
         HotkeyFeature.MiniPad => ("Alt", "M"),
+        HotkeyFeature.NoteEditor => ("Alt", "J"),
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
     };
 
@@ -323,6 +352,7 @@ internal sealed class HotkeyConfiguration : IDisposable
         HotkeyFeature.Checklist => "Checklist",
         HotkeyFeature.Dictionary => "Dictionary",
         HotkeyFeature.MiniPad => "MiniPad",
+        HotkeyFeature.NoteEditor => "NoteEditor",
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
     };
 
