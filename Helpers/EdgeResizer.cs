@@ -72,6 +72,7 @@ internal sealed class WindowEdgeResizer : IDisposable
     private readonly Window _window;
     private readonly Action _resizeCompleted;
     private readonly Cursor? _normalCursor;
+    private readonly Func<bool> _isLeftButtonPressed;
     private ResizeEdge _activeEdge;
     private NativePoint _startingPointer;
     private NativeRect _startingBounds;
@@ -81,7 +82,7 @@ internal sealed class WindowEdgeResizer : IDisposable
     private int? _maximumHeight;
     private bool _disposed;
 
-    internal WindowEdgeResizer(Window window, Action resizeCompleted)
+    internal WindowEdgeResizer(Window window, Action resizeCompleted, Func<bool>? isLeftButtonPressed = null)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(resizeCompleted);
@@ -89,6 +90,7 @@ internal sealed class WindowEdgeResizer : IDisposable
         _window = window;
         _resizeCompleted = resizeCompleted;
         _normalCursor = window.Cursor;
+        _isLeftButtonPressed = isLeftButtonPressed ?? IsLeftButtonPhysicallyPressed;
 
         window.AddHandler(Mouse.PreviewMouseMoveEvent, new MouseEventHandler(OnMouseMove), true);
         window.AddHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(OnMouseDown), true);
@@ -109,6 +111,13 @@ internal sealed class WindowEdgeResizer : IDisposable
             return;
         }
 
+        if (!_isLeftButtonPressed())
+        {
+            e.Handled = true;
+            FinishResize(saveState: true);
+            return;
+        }
+
         if (!GetCursorPos(out var pointer))
             return;
 
@@ -118,7 +127,14 @@ internal sealed class WindowEdgeResizer : IDisposable
 
     private void OnMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Left || _window.WindowState != WindowState.Normal)
+        // DragMove() can return after release while the original mouse-down is still routing
+        if (!_isLeftButtonPressed())
+        {
+            FinishResize(saveState: true);
+            return;
+        }
+
+        if (e.Handled || e.ChangedButton != MouseButton.Left || _window.WindowState != WindowState.Normal)
             return;
 
         var edge = ResizeEdgeHitTest.Find(
@@ -142,14 +158,22 @@ internal sealed class WindowEdgeResizer : IDisposable
         _minimumHeight = Math.Max(1, (int)Math.Ceiling(_window.MinHeight * dpi.DpiScaleY));
         _maximumWidth = ToPixelLimit(_window.MaxWidth, dpi.DpiScaleX);
         _maximumHeight = ToPixelLimit(_window.MaxHeight, dpi.DpiScaleY);
+        if (!_isLeftButtonPressed())
+            return;
+
         _activeEdge = edge;
-        Mouse.Capture(_window, CaptureMode.SubTree);
+        if (!Mouse.Capture(_window, CaptureMode.SubTree) || !_isLeftButtonPressed())
+        {
+            FinishResize(saveState: true);
+            return;
+        }
         e.Handled = true;
     }
 
     private void OnMouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Left || _activeEdge == ResizeEdge.None)
+        if (_activeEdge == ResizeEdge.None ||
+            e.ChangedButton != MouseButton.Left && _isLeftButtonPressed())
             return;
 
         e.Handled = true;
@@ -234,6 +258,13 @@ internal sealed class WindowEdgeResizer : IDisposable
             : Math.Max(1, (int)Math.Floor(value * scale));
     }
 
+    private static bool IsLeftButtonPhysicallyPressed()
+    {
+        // Map the physical button to WPF's logical left button when buttons are swapped.
+        var button = GetSystemMetrics(23) == 0 ? 0x01 : 0x02;
+        return (GetAsyncKeyState(button) & 0x8000) != 0;
+    }
+
     private void OnWindowClosed(object? sender, EventArgs e)
     {
         Dispose();
@@ -276,6 +307,12 @@ internal sealed class WindowEdgeResizer : IDisposable
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(IntPtr window, out NativeRect rectangle);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int index);
 }
 
 internal sealed class CanvasEdgeResizer : IDisposable
