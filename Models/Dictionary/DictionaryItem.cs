@@ -29,7 +29,10 @@ public sealed class DictionaryItem : ObservableObject
         private set
         {
             if (SetProperty(ref _isEditing, value))
+            {
+                OnPropertyChanged(nameof(HasPendingEdit));
                 OnPropertyChanged(nameof(ShowEditActions));
+            }
         }
     }
 
@@ -49,6 +52,7 @@ public sealed class DictionaryItem : ObservableObject
 
             if (IsAutoSaving)
                 Word = value;
+            OnPropertyChanged(nameof(HasPendingEdit));
         }
     }
 
@@ -62,6 +66,7 @@ public sealed class DictionaryItem : ObservableObject
 
             if (IsAutoSaving)
                 Definition = value;
+            OnPropertyChanged(nameof(HasPendingEdit));
         }
     }
 

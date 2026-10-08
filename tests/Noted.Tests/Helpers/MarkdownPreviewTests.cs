@@ -14,6 +14,36 @@ namespace Noted.Tests.Helpers;
 public sealed class MarkdownPreviewTests
 {
     [TestMethod]
+    public void RenderedMarkdownTracksThemeResourcesWithoutRerendering() => RunSta(() =>
+    {
+        var document = MarkdownRenderer.Render("# Heading\n\nbody **bold** *italic* `code` [link](example)\n\n> quote\n\n- item\n\n```\ncode\n```\n\n---");
+        using var manager = new AppThemeManager(document.Resources, AppThemeMode.Light, "#15FFFF");
+        var blocks = document.Blocks.ToArray();
+        foreach (var theme in new[] { AppThemeMode.Light, AppThemeMode.Dark, AppThemeMode.Midnight, AppThemeMode.OLED, AppThemeMode.Warm })
+        foreach (var accent in new[] { "#15FFFF", "#000000", "#FFFFFF" })
+        {
+            manager.Apply(theme, accent);
+            var text = document.Resources["NotedTextBrush"];
+            Assert.AreSame(text, document.Foreground);
+            Assert.AreSame(text, blocks[0].Foreground);
+            foreach (var inline in ((Paragraph)blocks[1]).Inlines)
+                Assert.AreSame(text, inline.Foreground);
+            var quote = (Paragraph)blocks[2];
+            Assert.AreSame(document.Resources["NotedSecondaryTextBrush"], quote.Foreground);
+            Assert.AreSame(document.Resources["NotedAccentBrush"], quote.BorderBrush);
+            var list = (System.Windows.Documents.List)blocks[3];
+            Assert.AreSame(text, list.Foreground);
+            Assert.AreSame(text, list.ListItems.First().Blocks.First().Foreground);
+            Assert.AreSame(document.Resources["NotedInputBackgroundBrush"], blocks[4].Background);
+            var code = ((Paragraph)blocks[1]).Inlines.OfType<Run>().Single(run => run.Text == "code");
+            Assert.AreSame(document.Resources["NotedInputBackgroundBrush"], code.Background);
+            var rule = (Border)((BlockUIContainer)blocks[5]).Child;
+            Assert.AreSame(document.Resources["NotedBorderBrush"], rule.Background);
+            Assert.AreEqual(System.Windows.Media.Brushes.Transparent, document.Background);
+        }
+    });
+
+    [TestMethod]
     public void RendererSupportsCommonBlocksAndInlineFormatting() => RunSta(() =>
     {
         var document = MarkdownRenderer.Render("# Heading\n\n**bold** *italic* `code`\n\n> quote\n\n- first\n- second\n\n1. ordered\n\n```cs\n<literal>\n```\n\n---");
@@ -116,6 +146,67 @@ public sealed class MarkdownPreviewTests
             Assert.IsFalse(document.IsDirty);
         }
     }
+
+    [TestMethod]
+    [DataRow("")]
+    [DataRow("Plain text\nsecond line")]
+    [DataRow("unfinished **bold and [link](\n\n```\nopen code fence")]
+    public void EmptyPlainTextAndMalformedMarkdownRemainReadable(string source) => RunSta(() =>
+    {
+        var document = MarkdownRenderer.Render(source);
+        Assert.IsTrue(document.Blocks.Count > 0);
+        var text = Text(document);
+        if (source.Length == 0)
+            Assert.AreEqual("", text.Trim());
+        else if (source.StartsWith("Plain", StringComparison.Ordinal))
+            Assert.AreEqual(source.Replace("\n", Environment.NewLine), text.TrimEnd('\r', '\n'));
+        else
+        {
+            StringAssert.Contains(text, "unfinished **bold and [link](");
+            StringAssert.Contains(text, "open code fence");
+        }
+    });
+
+    [TestMethod]
+    public void DictionaryReadSurfaceDefersHiddenRenderingAndPreservesSourceUndo() => RunSta(() =>
+    {
+        var item = new DictionaryItem { Word = "word", Definition = "# Saved" };
+        item.BeginEdit();
+        var editor = new TextBox { AcceptsReturn = true, DataContext = item };
+        editor.SetBinding(TextBox.TextProperty, new System.Windows.Data.Binding(nameof(DictionaryItem.DraftDefinition))
+        {
+            Mode = System.Windows.Data.BindingMode.TwoWay,
+            UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged
+        });
+        var preview = new MarkdownView { Visibility = Visibility.Collapsed, DataContext = item };
+        preview.SetBinding(MarkdownView.SourceProperty,
+            new System.Windows.Data.Binding(nameof(DictionaryItem.Definition)));
+        using var surface = new Noted.Tests.Services.WpfEditorTestSurface(editor, preview);
+        var hiddenDocument = preview.Document;
+        editor.SelectAll();
+        editor.SelectedText = "**raw draft**";
+        Assert.IsTrue(editor.CanUndo);
+        Assert.AreEqual("**raw draft**", item.DraftDefinition);
+        Assert.AreEqual("# Saved", preview.Source);
+        Assert.AreSame(hiddenDocument, preview.Document);
+
+        item.SaveEdit();
+        Assert.AreEqual("**raw draft**", preview.Source);
+        Assert.AreSame(hiddenDocument, preview.Document, "Hidden read mode must defer rendering.");
+        preview.Visibility = Visibility.Visible;
+        Assert.IsTrue(((Paragraph)preview.Document.Blocks.First()).Inlines.Any(inline => inline is Bold));
+        Assert.AreEqual("**raw draft**", editor.Text);
+        Assert.IsTrue(editor.CanUndo);
+
+        preview.Visibility = Visibility.Collapsed;
+        item.BeginEdit();
+        editor.SelectAll();
+        editor.SelectedText = "cancel this";
+        item.CancelEdit();
+        Assert.AreEqual("**raw draft**", editor.Text);
+        preview.Visibility = Visibility.Visible;
+        StringAssert.Contains(Text(preview.Document), "raw draft");
+    });
 
     private static string Text(FlowDocument document) => new TextRange(document.ContentStart, document.ContentEnd).Text;
 

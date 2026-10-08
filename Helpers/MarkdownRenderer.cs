@@ -8,31 +8,20 @@ namespace Noted;
 
 internal static partial class MarkdownRenderer
 {
-    private static readonly Brush s_textBrush = CreateBrush(51, 51, 51);
-    private static readonly Brush s_accentBrush = CreateBrush(44, 110, 145);
-    private static readonly Brush s_mutedBrush = CreateBrush(91, 113, 125);
-    private static readonly Brush s_codeBackground = CreateBrush(238, 244, 247);
-
-    private static Brush CreateBrush(byte red, byte green, byte blue)
-    {
-        var brush = new SolidColorBrush(Color.FromRgb(red, green, blue));
-        brush.Freeze();
-        return brush;
-    }
-
     // Markdown becomes native document objects only. HTML, URLs and image paths never
     // become executable markup, navigation targets or resource-loading controls.
     internal static FlowDocument Render(string markdown)
     {
         var document = new FlowDocument
         {
-            Background = Brushes.White,
-            Foreground = s_textBrush,
+            Background = Brushes.Transparent,
             FontFamily = new FontFamily("Segoe UI"),
             FontSize = 14,
             LineHeight = 21,
             PagePadding = new Thickness(18)
         };
+
+        document.SetResourceReference(FlowDocument.ForegroundProperty, "NotedTextBrush");
 
         var lines = NormalizeLines(markdown);
         for (var index = 0; index < lines.Length;)
@@ -91,14 +80,15 @@ internal static partial class MarkdownRenderer
         if (index < lines.Length)
             index++;
 
-        document.Blocks.Add(new Paragraph(new Run(string.Join(Environment.NewLine, codeLines)))
+        var paragraph = new Paragraph(new Run(string.Join(Environment.NewLine, codeLines)))
         {
-            Background = s_codeBackground,
             FontFamily = new FontFamily("Consolas"),
             FontSize = 13,
             Margin = new Thickness(0, 5, 0, 10),
             Padding = new Thickness(10)
-        });
+        };
+        paragraph.SetResourceReference(TextElement.BackgroundProperty, "NotedInputBackgroundBrush");
+        document.Blocks.Add(paragraph);
         return index;
     }
 
@@ -111,7 +101,6 @@ internal static partial class MarkdownRenderer
         var level = match.Groups[1].Length;
         var paragraph = new Paragraph
         {
-            Foreground = s_accentBrush,
             FontSize = level switch
             {
                 1 => 28,
@@ -135,12 +124,12 @@ internal static partial class MarkdownRenderer
 
         var paragraph = new Paragraph
         {
-            BorderBrush = s_accentBrush,
             BorderThickness = new Thickness(3, 0, 0, 0),
-            Foreground = s_mutedBrush,
             Margin = new Thickness(0, 4, 0, 8),
             Padding = new Thickness(10, 2, 0, 2)
         };
+        paragraph.SetResourceReference(Block.BorderBrushProperty, "NotedAccentBrush");
+        paragraph.SetResourceReference(TextElement.ForegroundProperty, "NotedSecondaryTextBrush");
         AddInlineContent(paragraph.Inlines, match.Groups[1].Value);
         document.Blocks.Add(paragraph);
         return true;
@@ -151,12 +140,13 @@ internal static partial class MarkdownRenderer
         if (!RulePattern().IsMatch(line))
             return false;
 
-        document.Blocks.Add(new BlockUIContainer(new Border
+        var rule = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(201, 223, 236)),
             Height = 1,
             Margin = new Thickness(0, 10, 0, 10)
-        }));
+        };
+        rule.SetResourceReference(Border.BackgroundProperty, "NotedBorderBrush");
+        document.Blocks.Add(new BlockUIContainer(rule));
         return true;
     }
 
@@ -246,15 +236,16 @@ internal static partial class MarkdownRenderer
                 var separator = token.IndexOf("](", StringComparison.Ordinal);
                 var label = token[1..separator];
                 var destination = token[(separator + 2)..^1];
-                inlines.Add(new Run($"{label} ({destination})") { Foreground = s_accentBrush });
+                inlines.Add(new Run($"{label} ({destination})") { TextDecorations = TextDecorations.Underline });
             }
             else if (token.StartsWith('`'))
             {
-                inlines.Add(new Run(token[1..^1])
+                var code = new Run(token[1..^1])
                 {
-                    Background = s_codeBackground,
                     FontFamily = new FontFamily("Consolas")
-                });
+                };
+                code.SetResourceReference(TextElement.BackgroundProperty, "NotedInputBackgroundBrush");
+                inlines.Add(code);
             }
             else if (token.StartsWith("**", StringComparison.Ordinal) ||
                      token.StartsWith("__", StringComparison.Ordinal))

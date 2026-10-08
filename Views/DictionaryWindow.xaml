@@ -140,7 +140,7 @@
                         Background="Transparent"
                         BorderThickness="0" CornerRadius="0" ClipToBounds="True">
                     <Grid>
-                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                        <ScrollViewer x:Name="ItemsScrollViewer" VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled">
                             <ItemsControl x:Name="ItemsList"
                                           h:WindowDragHitTest.AllowBackgroundDrag="True"
@@ -178,10 +178,11 @@
                                                 <Grid Grid.Row="0" MinHeight="43">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
                                                         <ColumnDefinition Width="30"/>
                                                     </Grid.ColumnDefinitions>
                                                     <Grid Grid.Column="0">
-                                                        <Button Content="{Binding Word}" Click="ViewDefinition_Click"
+                                                        <Button Content="{Binding Word}" Click="ViewDefinition_Click" MouseDoubleClick="WordHeader_MouseDoubleClick" ToolTip="Click to expand or collapse; double-click to edit"
                                                                 HorizontalContentAlignment="Left" Padding="5,4"
                                                                 Background="Transparent" BorderThickness="0"
                                                                 Foreground="{DynamicResource NotedTextBrush}" FontWeight="SemiBold">
@@ -205,7 +206,12 @@
                                                             </Style></TextBox.Style>
                                                         </TextBox>
                                                     </Grid>
-                                                    <Button Grid.Column="1" Style="{StaticResource DetailsButtonStyle}"
+                                                    <TextBlock Grid.Column="1" Text="Unsaved" Margin="6,0,6,0"
+                                                               VerticalAlignment="Center" FontSize="10"
+                                                               Foreground="{DynamicResource NotedWarningBrush}"
+                                                               Visibility="{Binding HasPendingEdit, Converter={StaticResource BoolToVisibility}}"
+                                                               ToolTip="Unsaved draft. Use Save (Ctrl+Enter) or Cancel."/>
+                                                    <Button Grid.Column="2" Style="{StaticResource DetailsButtonStyle}"
                                                             Tag="{Binding}" Click="EditDefinitionButton_Click" ToolTip="Edit word and definition"/>
                                                 </Grid>
 
@@ -215,10 +221,21 @@
                                                         BorderThickness="1" CornerRadius="6"
                                                         Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}">
                                                     <StackPanel>
-                                                        <TextBlock Text="DEFINITION" Margin="1,0,0,5"
+                                                        <TextBlock Margin="1,0,0,5"
                                                                    Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="10"
-                                                                   FontWeight="SemiBold"/>
-                                                        <TextBox x:Name="DefinitionBox"
+                                                                   FontWeight="SemiBold">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Text" Value="DEFINITION"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                                            <Setter Property="Text" Value="EDIT DEFINITION (MARKDOWN)"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <TextBox x:Name="DefinitionBox" PreviewMouseWheel="Definition_PreviewMouseWheel"
                                                                  Text="{Binding DraftDefinition, UpdateSourceTrigger=PropertyChanged}"
                                                                  MinHeight="48" MaxHeight="130"
                                                                  Padding="7,5"
@@ -231,16 +248,22 @@
                                                                  AcceptsReturn="True"
                                                                  VerticalScrollBarVisibility="Auto"
                                                                  Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"/>
-                                                        <TextBox Text="{Binding Definition, Mode=OneWay}" IsReadOnly="True"
-                                                                 TextWrapping="Wrap" MaxHeight="200" VerticalScrollBarVisibility="Auto"
-                                                                 BorderThickness="0" Background="Transparent">
-                                                            <TextBox.Style><Style TargetType="TextBox" BasedOn="{StaticResource NotedTextInput}"><Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsEditing}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
-                                                            </Style.Triggers></Style></TextBox.Style>
-                                                        </TextBox>
+                                                        <h:MarkdownView Source="{Binding Definition, Mode=OneWay}" PreviewMouseWheel="Definition_PreviewMouseWheel"
+                                                                        MaxHeight="200" VerticalScrollBarVisibility="Auto"
+                                                                        BorderThickness="0" Background="Transparent">
+                                                            <h:MarkdownView.Style>
+                                                                <Style TargetType="{x:Type h:MarkdownView}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </h:MarkdownView.Style>
+                                                        </h:MarkdownView>
                                                         <StackPanel x:Name="EditActionsPanel" Orientation="Horizontal" Margin="0,8,0,0"
                                                                     Visibility="{Binding ShowEditActions, Converter={StaticResource BoolToVisibility}}">
-                                                            <Button Content="Save" Click="SaveEntry_Click" Style="{StaticResource NotedPrimaryButton}"/>
+                                                            <Button Content="Save" ToolTip="Save entry (Ctrl+Enter)" Click="SaveEntry_Click" Style="{StaticResource NotedPrimaryButton}"/>
                                                             <Button Content="Cancel" Click="CancelEntry_Click" Margin="6,0,0,0" Style="{StaticResource NotedSecondaryButton}"/>
                                                         </StackPanel>
                                                     </StackPanel>
@@ -286,7 +309,7 @@
                                   Style="{StaticResource NotedToggleSwitch}"
                                   FontSize="11" VerticalAlignment="Center"/>
                         <Button Content="+ Add" Style="{StaticResource NotedFooterButton}" Height="30" Padding="10,0"
-                                Click="AddButton_Click" ToolTip="Add entry"/>
+                                Click="AddButton_Click" ToolTip="Add entry (Ctrl+N)"/>
                     </StackPanel>
                 </Grid>
             </Grid>
