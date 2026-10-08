@@ -659,6 +659,15 @@ public sealed class WindowConstructionTests
             Assert.IsFalse(settings.LoadShowNotesHeader());
 
             var accent = (TextBox)view.FindName("AccentHexTextBox");
+            var defaultPreset = VisualDescendants(view).OfType<Button>()
+                .Single(button => button.Tag is string color && color == "#15FFFF");
+            Assert.AreEqual(AppTheme.DefaultAccentColor, defaultPreset.Tag);
+            model.AccentText = "#7A5CB8";
+            defaultPreset.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.AreEqual("#15FFFF", model.ActiveAccent);
+            Assert.AreEqual("#15FFFF", settings.LoadAccentColor());
+            model.Reload();
+            Assert.AreEqual("#15FFFF", model.AccentText);
             accent.SetCurrentValue(TextBox.TextProperty, "#zzzzzz");
             Assert.IsTrue(model.AccentHasError);
             Assert.AreSame(view.FindResource("NotedDangerBrush"), accent.BorderBrush);

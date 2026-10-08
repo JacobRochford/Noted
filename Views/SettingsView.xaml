@@ -145,6 +145,10 @@
                                                 Background="#B85C9E" Tag="#B85C9E"
                                                 ToolTip="Magenta"
                                                 Click="AccentPresetButton_Click"/>
+                                        <Button Style="{StaticResource AccentSwatchButton}"
+                                                Background="#15FFFF" Tag="#15FFFF"
+                                                ToolTip="Default cyan"
+                                                Click="AccentPresetButton_Click"/>
                                         <Button Content="More colors..."
                                                 Height="27"
                                                 Margin="0,0,0,7"
