@@ -25,6 +25,8 @@ public partial class NoteEditorWindow : Window
     private const double MinimumTabsPanelWidth = 88;
     private const double MaximumTabsPanelWidth = 360;
     private const double TabsPanelCollapseThreshold = 36;
+    internal static RoutedUICommand ReopenClosedTabCommand { get; } = new(
+        "Reopen closed note", nameof(ReopenClosedTabCommand), typeof(NoteEditorWindow));
 
     private readonly INoteContentService _contentService;
     private readonly IAppSettingsService _settingsService;
@@ -90,6 +92,7 @@ public partial class NoteEditorWindow : Window
         _workspace.DocumentPathsChanged += Workspace_DocumentPathsChanged;
 
         InitializeComponent();
+        AttachReopenShortcut(this);
         _primaryPreview = new MarkdownPreviewPresenter(EditorTextBox, PrimaryTextEditor, MarkdownPreview, PrimaryPreviewLayout);
         _secondaryPreview = new MarkdownPreviewPresenter(SecondaryEditorTextBox, SecondaryTextEditor, SecondaryMarkdownPreview, SecondaryPreviewLayout);
         AddMarkdownPreviewMenu(HeaderMarkdownMenuItem, () => CurrentDocument);
@@ -195,6 +198,46 @@ public partial class NoteEditorWindow : Window
     public bool OpenNote(string filePath)
     {
         return OpenNoteCore(filePath, usesGeneratedName: false);
+    }
+
+    internal void AttachReopenShortcut(Window window, Func<bool>? isContextEnabled = null)
+    {
+        window.InputBindings.Add(new KeyBinding(ReopenClosedTabCommand,
+            Key.T, ModifierKeys.Control | ModifierKeys.Shift));
+        window.CommandBindings.Add(new CommandBinding(ReopenClosedTabCommand,
+            (_, e) => { ReopenClosedTab(); e.Handled = true; },
+            (_, e) =>
+            {
+                e.CanExecute = !_isPreparedForApplicationClose && CanChangeGroupVisibility &&
+                    _workspace.ClosedTabCount > 0 && (isContextEnabled?.Invoke() ?? true);
+                e.Handled = true;
+            }));
+    }
+
+    internal bool ReopenClosedTab()
+    {
+        if (_isPreparedForApplicationClose)
+            return false;
+        return _workspace.ReopenClosedTab(tab =>
+        {
+            if (!OpenNoteCore(tab.State.FilePath, tab.State.UsesGeneratedName, reopenState: tab.State))
+                return false;
+
+            var document = FindDocument(tab.State.FilePath)!;
+            var primary = tab.PrimaryPath is null ? null : FindDocument(tab.PrimaryPath);
+            var secondary = tab.SecondaryPath is null ? null : FindDocument(tab.SecondaryPath);
+            if (primary is not null && secondary is not null &&
+                (ReferenceEquals(document, primary) || ReferenceEquals(document, secondary)))
+            {
+                CloseSecondaryPane(saveSession: false);
+                ActivateDocument(primary, focusEditor: false);
+                ShowSecondaryDocument(secondary, focusPane: ReferenceEquals(document, secondary),
+                    focusEditor: ReferenceEquals(document, secondary), saveSession: true);
+                if (ReferenceEquals(document, primary))
+                    FocusActiveSurface();
+            }
+            return true;
+        });
     }
 
     internal bool OpenCreatedNote(string filePath, bool usesGeneratedName, string initialContent)
@@ -469,7 +512,8 @@ public partial class NoteEditorWindow : Window
         FocusActiveSurface();
     }
 
-    private bool OpenNoteCore(string filePath, bool usesGeneratedName, string? initialFileContent = null)
+    private bool OpenNoteCore(string filePath, bool usesGeneratedName, string? initialFileContent = null,
+        NoteEditorTabState? reopenState = null)
     {
         string normalizedPath;
         try
@@ -504,9 +548,10 @@ public partial class NoteEditorWindow : Window
         {
             var loadedFile = _contentService.LoadWithEncoding(normalizedPath);
             var persistedContent = loadedFile.Content;
-            var loadResult = _recoveryService.LoadDraft(normalizedPath);
-            var issues = loadResult.Issues.ToList();
-            var draft = loadResult.Draft;
+            // Reopening an explicitly closed tab always reads disk, respecting the close decision.
+            var loadResult = reopenState is null ? _recoveryService.LoadDraft(normalizedPath) : null;
+            var issues = loadResult?.Issues.ToList() ?? [];
+            var draft = loadResult?.Draft;
             var recoveredContent = draft is not null &&
                                    !string.Equals(draft.Content, persistedContent, StringComparison.Ordinal)
                 ? draft.Content
@@ -523,8 +568,12 @@ public partial class NoteEditorWindow : Window
                 isDirty: !string.Equals(recoveredContent, persistedContent, StringComparison.Ordinal),
                 usesGeneratedName: usesGeneratedName,
                 initialFileContent: initialFileContent,
-                indentation: _settingsService.LoadDefaultIndentation(),
+                caretIndex: Math.Clamp(reopenState?.CaretIndex ?? 0, 0, recoveredContent.Length),
+                verticalOffset: reopenState?.VerticalOffset ?? 0,
+                indentation: reopenState?.Indentation ?? _settingsService.LoadDefaultIndentation(),
                 encoding: loadedFile.Encoding);
+            if (reopenState is not null)
+                document.MarkdownPreviewMode = reopenState.MarkdownPreviewMode;
             _workspace.Add(document);
             OpenDocumentInFocusedPane(document, focusEditor: true, saveSession: true);
             ShowWindow();
@@ -751,7 +800,8 @@ public partial class NoteEditorWindow : Window
     private bool RemoveDocument(
         OpenNoteDocument document,
         bool deleteRecoveryDraft,
-        bool saveSession = true)
+        bool saveSession = true,
+        bool rememberClosed = false)
     {
         CaptureActiveDocument();
         if (deleteRecoveryDraft &&
@@ -765,7 +815,7 @@ public partial class NoteEditorWindow : Window
         _discardedDocumentsPendingDraftDeletion.Remove(document);
         _unsavedRecoveredPaths.Remove(document.FilePath);
         _documentTimeText.Remove(document.FilePath);
-        var closeResult = _workspace.Close(document);
+        var closeResult = _workspace.Close(document, rememberClosed && !_isPreparedForApplicationClose);
         if (closeResult.SecondaryDocumentClosed)
         {
             ClearSecondaryPaneSurface();
@@ -2060,10 +2110,11 @@ public partial class NoteEditorWindow : Window
 
     private bool TryCloseDocument(OpenNoteDocument document)
     {
+        CaptureActiveDocument();
         if (document.IsDirty && !TryResolveDirtyDocuments([document]))
             return false;
 
-        return RemoveDocument(document, deleteRecoveryDraft: true);
+        return RemoveDocument(document, deleteRecoveryDraft: true, rememberClosed: true);
     }
 
     private void LineNumbersMenuItem_Click(object sender, RoutedEventArgs e)
@@ -2416,8 +2467,7 @@ public partial class NoteEditorWindow : Window
 
         if (e.Key == Key.W && modifiers == ModifierKeys.Control && CurrentDocument is { } currentDocument)
         {
-            if (!currentDocument.IsDirty || TryResolveDirtyDocuments([currentDocument]))
-                RemoveDocument(currentDocument, deleteRecoveryDraft: true);
+            TryCloseDocument(currentDocument);
             e.Handled = true;
             return;
         }

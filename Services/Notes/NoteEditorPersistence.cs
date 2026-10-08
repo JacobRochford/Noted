@@ -115,17 +115,7 @@ internal sealed class NoteEditorPersistence
         ArgumentNullException.ThrowIfNull(workspace);
         return new NoteEditorSession
         {
-            Tabs = workspace.Documents.Select(document => new NoteEditorTabState
-            {
-                FilePath = document.FilePath,
-                Indentation = document.Indentation,
-                PendingEncoding = document.Encoding != document.SavedEncoding ? document.Encoding : null,
-                CaretIndex = document.CaretIndex,
-                VerticalOffset = document.VerticalOffset,
-                MarkdownPreviewMode = document.MarkdownPreviewMode,
-                UsesGeneratedName = document.UsesGeneratedName,
-                InitialFileContent = document.InitialFileContent
-            }).ToList(),
+            Tabs = workspace.Documents.Select(NoteEditorWorkspace.CaptureTabState).ToList(),
             ActiveFilePath = workspace.ActiveDocument?.FilePath,
             SecondaryFilePath = workspace.SecondaryDocument?.FilePath
         };

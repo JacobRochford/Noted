@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using Noted.Services;
 
 namespace Noted.Models;
 
@@ -21,6 +22,40 @@ internal sealed class NoteEditorDocumentPathsChangedEventArgs(
 
 internal sealed class NoteEditorWorkspace
 {
+    internal sealed record ClosedTab(NoteEditorTabState State, string? PrimaryPath, string? SecondaryPath);
+    private readonly List<ClosedTab> _closedTabs = [];
+    internal int ClosedTabCount => _closedTabs.Count;
+
+    internal static NoteEditorTabState CaptureTabState(OpenNoteDocument document) => new()
+    {
+        FilePath = document.FilePath,
+        Indentation = document.Indentation,
+        PendingEncoding = document.Encoding != document.SavedEncoding ? document.Encoding : null,
+        CaretIndex = document.CaretIndex,
+        VerticalOffset = document.VerticalOffset,
+        MarkdownPreviewMode = document.MarkdownPreviewMode,
+        UsesGeneratedName = document.UsesGeneratedName,
+        InitialFileContent = document.InitialFileContent
+    };
+
+    internal bool ReopenClosedTab(Func<ClosedTab, bool> reopen)
+    {
+        while (_closedTabs.Count > 0)
+        {
+            var tab = _closedTabs[^1];
+            if (FindByPath(tab.State.FilePath) is not null || !File.Exists(tab.State.FilePath))
+            {
+                _closedTabs.RemoveAt(_closedTabs.Count - 1);
+                continue;
+            }
+            if (!reopen(tab))
+                return false;
+            _closedTabs.Remove(tab);
+            return true;
+        }
+        return false;
+    }
+
     private readonly ObservableCollection<OpenNoteDocument> _documents = [];
 
     internal NoteEditorWorkspace()
@@ -236,9 +271,18 @@ internal sealed class NoteEditorWorkspace
         document.IsMissing = true;
     }
 
-    internal NoteEditorWorkspaceCloseResult Close(OpenNoteDocument document)
+    internal NoteEditorWorkspaceCloseResult Close(OpenNoteDocument document, bool rememberClosed = false)
     {
         EnsureOwned(document);
+        if (rememberClosed && document.InitialFileContent is null && File.Exists(document.FilePath))
+        {
+            _closedTabs.RemoveAll(tab => PathsEqual(tab.State.FilePath, document.FilePath));
+            // Explicit close has already resolved dirty content. Do not resurrect discarded encoding changes.
+            _closedTabs.Add(new ClosedTab(CaptureTabState(document) with { PendingEncoding = null },
+                ActiveDocument?.FilePath, SecondaryDocument?.FilePath));
+            if (_closedTabs.Count > 20)
+                _closedTabs.RemoveAt(0);
+        }
         var index = _documents.IndexOf(document);
         var activeChanged = ReferenceEquals(document, ActiveDocument);
         var secondaryClosed = ReferenceEquals(document, SecondaryDocument);

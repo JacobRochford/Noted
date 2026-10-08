@@ -63,6 +63,7 @@ public partial class MainWindow : Window {
         _hotkeys = new HotkeyConfiguration(settingsService, () => new GlobalHotkeysService(this), GetHotkeyAction);
         _fileService = fileService;
         _noteEditor = noteEditor;
+        _noteEditor.AttachReopenShortcut(this, () => SettingsView.Visibility != Visibility.Visible);
         _noteOperations = noteOperations ?? throw new ArgumentNullException(nameof(noteOperations));
         _backupCoordinator = backupCoordinator ?? throw new ArgumentNullException(nameof(backupCoordinator));
 
