@@ -3,6 +3,8 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Threading;
 using System.Windows.Media;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Noted.Helpers;
@@ -97,6 +99,7 @@ public sealed class WindowDragHitTestTests
                     AllowDrop = true
                 };
                 ScrollViewer.SetVerticalScrollBarVisibility(list, ScrollBarVisibility.Auto);
+                ScrollViewer.SetPanningMode(list, PanningMode.Both);
                 var root = new Border { Child = list, Width = 320, Height = 240 };
                 for (var index = 0; index < itemCount; index++)
                     list.Items.Add(new ListBoxItem
@@ -105,15 +108,31 @@ public sealed class WindowDragHitTestTests
                         Cursor = Cursors.Hand,
                         Content = new TextBlock { Text = "Item " + index }
                     });
+                // InputHitTest requires a presentation source for effective visibility.
+                using var source = new HwndSource(new HwndSourceParameters("Noted list drag hit test")
+                {
+                    Width = 320,
+                    Height = 240,
+                    WindowStyle = unchecked((int)0x80000000)
+                });
+                source.RootVisual = root;
+                Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 root.Measure(new Size(320, 240));
                 root.Arrange(new Rect(0, 0, 320, 240));
                 root.UpdateLayout();
 
+                Assert.IsTrue(root.IsVisible, "The list hit test requires an effectively visible visual tree.");
                 var target = (DependencyObject)root.InputHitTest(new Point(100, 210));
+                Assert.IsNotNull(target, $"Expected a list hit target with {itemCount} items.");
                 Assert.IsFalse(WindowDragHitTest.CanDrag(target, root), "List backgrounds require opt in.");
                 WindowDragHitTest.SetAllowBackgroundDrag(list, true);
-                Assert.AreEqual(itemCount < 30, WindowDragHitTest.CanDrag(target, root));
-                var cursor = new QueryCursorEventArgs(Mouse.PrimaryDevice, 0) { Cursor = Cursors.Arrow };
+                Assert.AreEqual(itemCount < 30, WindowDragHitTest.CanDrag(target, root),
+                    $"Unexpected drag decision for {target.GetType().Name} with {itemCount} items.");
+                var cursor = new QueryCursorEventArgs(Mouse.PrimaryDevice, 0)
+                {
+                    RoutedEvent = Mouse.QueryCursorEvent,
+                    Cursor = Cursors.Arrow
+                };
                 WindowDragHitTest.QueryCursor(target, root, cursor);
                 Assert.AreEqual(itemCount < 30 ? Cursors.SizeAll : Cursors.Arrow, cursor.Cursor);
 
@@ -124,12 +143,31 @@ public sealed class WindowDragHitTestTests
                 }
                 if (itemCount == 30)
                 {
-                    var scrollBar = VisualTreeHelpers.FindDescendant<ScrollBar>(list, "PART_VerticalScrollBar");
+                    var scrollBar = FindVisibleVerticalScrollBar(list);
                     Assert.IsNotNull(scrollBar);
                     Assert.IsTrue(scrollBar.IsVisible);
                     Assert.IsFalse(WindowDragHitTest.CanDrag(scrollBar, root));
                 }
             }
+        });
+    }
+
+    [TestMethod]
+    public void ListBackgroundOptInStillRequiresAnUnobstructedPathToTheSurface()
+    {
+        WpfTestHost.Invoke(() =>
+        {
+            var list = new ListBox { ContextMenu = new ContextMenu(), AllowDrop = true };
+            WindowDragHitTest.SetAllowBackgroundDrag(list, true);
+            var region = new Border { Child = list };
+            var root = new Border { Child = region };
+            Assert.IsTrue(WindowDragHitTest.CanDrag(list, root));
+            Assert.IsFalse(WindowDragHitTest.CanDrag(list, new Border()));
+            region.Cursor = Cursors.Hand;
+            Assert.IsFalse(WindowDragHitTest.CanDrag(list, root));
+            region.Cursor = null;
+            region.ContextMenu = new ContextMenu();
+            Assert.IsFalse(WindowDragHitTest.CanDrag(list, root));
         });
     }
 
@@ -167,4 +205,18 @@ public sealed class WindowDragHitTestTests
             Assert.IsFalse(WindowDragHitTest.CanDrag(scroll, root));
         });
     }
+
+    private static ScrollBar? FindVisibleVerticalScrollBar(DependencyObject parent)
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is ScrollBar { Orientation: Orientation.Vertical, IsVisible: true } scrollBar)
+                return scrollBar;
+            if (FindVisibleVerticalScrollBar(child) is { } descendant)
+                return descendant;
+        }
+        return null;
+    }
+
 }

@@ -9,8 +9,6 @@ namespace Noted.Helpers;
 
 internal static class WindowDragHitTest
 {
-    // Opt in only list hosts whose unused space has no left-button content gesture.
-    // This does not opt in their item containers or other interactive descendants.
     public static readonly DependencyProperty AllowBackgroundDragProperty = DependencyProperty.RegisterAttached(
         "AllowBackgroundDrag", typeof(bool), typeof(WindowDragHitTest), new PropertyMetadata(false));
 
@@ -22,6 +20,10 @@ internal static class WindowDragHitTest
 
     internal static bool CanDrag(DependencyObject? source, DependencyObject surface)
     {
+        var backgroundDragHost = FindBackgroundDragHost(source, surface);
+        if (backgroundDragHost is not null)
+            return CanDragThroughBackgroundHost(source, surface, backgroundDragHost);
+
         for (var current = source; current is not null; current = GetParent(current))
         {
             if (current == surface)
@@ -31,8 +33,7 @@ internal static class WindowDragHitTest
                 ItemsControl.ItemsControlFromItemContainer(current) is not null)
                 return false;
 
-            var listBackground = current is ItemsControl && GetAllowBackgroundDrag(current);
-            if (current is Control && !listBackground && current is not ScrollViewer)
+            if (current is Control && current is not ScrollViewer)
                 return false;
 
             if (current is ScrollViewer { PanningMode: not PanningMode.None })
@@ -40,14 +41,11 @@ internal static class WindowDragHitTest
 
             if (current is FrameworkElement element)
             {
-                // AllowDrop can be inherited from the list host. Judge its owner below,
-                // rather than treating the list's scrolling/template visuals as drop regions.
                 var ownsDropInteraction = element.AllowDrop &&
                     DependencyPropertyHelper.GetValueSource(element, UIElement.AllowDropProperty).BaseValueSource != BaseValueSource.Inherited;
-                if (!listBackground && (element.ContextMenu is not null || ownsDropInteraction))
+                if (element.ContextMenu is not null || ownsDropInteraction)
                     return false;
 
-                // Custom clickable text and shapes also advertise their own input cursor.
                 if (element.Cursor is { } cursor && cursor != Cursors.Arrow && cursor != Cursors.SizeAll)
                     return false;
             }
@@ -66,6 +64,64 @@ internal static class WindowDragHitTest
 
         e.Cursor = Cursors.SizeAll;
         e.Handled = true;
+    }
+
+    private static ItemsControl? FindBackgroundDragHost(DependencyObject? source, DependencyObject surface)
+    {
+        for (var current = source; current is not null && current != surface; current = GetParent(current))
+        {
+            // don't allow background dragging on list items
+        
+            if (ItemsControl.ItemsControlFromItemContainer(current) is not null)
+                return null;
+
+            if (current is ItemsControl itemsControl && GetAllowBackgroundDrag(itemsControl))
+                return itemsControl;
+        }
+
+        return null;
+    }
+
+    private static bool CanDragThroughBackgroundHost(
+        DependencyObject? source,
+        DependencyObject surface,
+        ItemsControl backgroundDragHost)
+    {
+        for (var current = source; current is not null; current = GetParent(current))
+        {
+            if (current == backgroundDragHost)
+                return CanDrag(GetParent(backgroundDragHost), surface);
+
+            if (current == surface)
+                return false;
+
+            if (current is Hyperlink ||
+                ItemsControl.ItemsControlFromItemContainer(current) is not null)
+                return false;
+
+            // allow ScrollViewer backgrounds, but no other controls
+            if (current is Control && current is not ScrollViewer)
+                return false;
+
+            if (current is FrameworkElement element)
+            {
+                var ownsDropInteraction = element.AllowDrop &&
+                    DependencyPropertyHelper.GetValueSource(element, UIElement.AllowDropProperty).BaseValueSource != BaseValueSource.Inherited;
+                if (element.ContextMenu is not null || ownsDropInteraction)
+                    return false;
+
+                var cursorSource = DependencyPropertyHelper.GetValueSource(element, FrameworkElement.CursorProperty);
+                var ownsCursor = cursorSource.BaseValueSource != BaseValueSource.Inherited &&
+                    cursorSource.BaseValueSource != BaseValueSource.Default;
+                if (ownsCursor && element.Cursor is { } cursor && cursor != Cursors.Arrow && cursor != Cursors.SizeAll)
+                    return false;
+            }
+
+            if (current is FrameworkContentElement { ContextMenu: not null })
+                return false;
+        }
+
+        return false;
     }
 
     private static DependencyObject? GetParent(DependencyObject element)
