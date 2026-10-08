@@ -16,7 +16,7 @@
     <Window.Resources>
         <local:WidthToActionButtonVisibilityConverter x:Key="WidthToActionButtonVisibilityConverter"/>
         <local:WidthToHeaderVisibilityConverter x:Key="WidthToHeaderVisibilityConverter"/>
-        <local:WidthBelowThresholdConverter x:Key="WidthBelow300" Threshold="300"/>
+        <local:WidthBelowThresholdConverter x:Key="WidthBelow320" Threshold="320"/>
         <local:WidthBelowThresholdConverter x:Key="WidthBelow250" Threshold="250"/>
         <local:WidthBelowThresholdConverter x:Key="WidthBelow340" Threshold="340"/>
         <local:WidthBelowThresholdConverter x:Key="WidthBelow400" Threshold="400"/>
@@ -436,7 +436,7 @@
                                 <Style TargetType="ItemsControl">
                                     <Setter Property="Visibility" Value="Visible"/>
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow300}}" Value="True">
+                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
                                             <Setter Property="Visibility" Value="Collapsed"/>
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -466,7 +466,7 @@
                                 <Style TargetType="Button" BasedOn="{StaticResource HeaderChromeButtonStyle}">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow300}}" Value="True">
+                                        <DataTrigger Binding="{Binding ElementName=NotesPanel, Path=ActualWidth, Converter={StaticResource WidthBelow320}}" Value="True">
                                             <Setter Property="Visibility" Value="Visible"/>
                                         </DataTrigger>
                                     </Style.Triggers>

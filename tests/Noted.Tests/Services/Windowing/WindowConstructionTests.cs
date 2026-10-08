@@ -194,15 +194,21 @@ public sealed class WindowConstructionTests
         var panel = (Border)main.FindName("NotesPanel");
         var originalWidth = panel.Width;
         model.NewNoteMode = NewNoteMode.Both;
-        foreach (var width in new[] { 220d, 250d, 300d, 360d })
+        foreach (var width in new[] { 220d, 250d, 299d, 300d, 301d, 319d, 320d, 321d, 340d, 360d, 400d, 250d })
         {
             panel.Width = width;
-            main.UpdateLayout();
-            Assert.AreEqual(width < 300 ? Visibility.Visible : Visibility.Collapsed, compactButton.Visibility);
-            Assert.AreEqual(width < 300 ? Visibility.Collapsed : Visibility.Visible, toolbar.Visibility);
+            // Explicitly lay out the panel: the containing Window has never been shown.
+            panel.Measure(new Size(width, panel.Height));
+            panel.Arrange(new Rect(0, 0, width, panel.Height));
+            panel.UpdateLayout();
+            Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+            panel.UpdateLayout();
+            Assert.AreEqual(width, panel.ActualWidth, "The visibility assertions require the requested panel width.");
+            Assert.AreEqual(width < 320 ? Visibility.Visible : Visibility.Collapsed, compactButton.Visibility);
+            Assert.AreEqual(width < 320 ? Visibility.Collapsed : Visibility.Visible, toolbar.Visibility);
             var actions = (StackPanel)main.FindName("NotesToolbar");
             Assert.IsTrue(actions.ActualWidth <= ((Grid)actions.Parent).ActualWidth,
-                $"Toolbar actions must fit at panel width {width}.");
+                $"Toolbar actions ({actions.ActualWidth}) must fit the available width ({((Grid)actions.Parent).ActualWidth}) at panel width {width}.");
         }
         panel.Width = originalWidth;
         main.UpdateLayout();

@@ -27,7 +27,7 @@ internal sealed class WidthBelowThresholdConverter : IValueConverter
     public double Threshold { get; set; } = 320;
 
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        => value is double d && d <= Threshold;
+        => value is double d && d < Threshold;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => DependencyProperty.UnsetValue;
