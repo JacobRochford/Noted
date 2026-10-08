@@ -57,6 +57,7 @@ internal sealed record AppSettingsDocument
     public ScratchpadWindowState? ScratchpadWindowState { get; init; }
     public NoteEditorWindowState? NoteEditorWindowState { get; init; }
     public MiniPadWindowState? MiniPadWindowState { get; init; }
+    public Dictionary<Guid, MiniPadWindowState>? MiniPadWindows { get; init; }
 
     [JsonPropertyName("RestoreEditorSession")]
     public bool ReopenEditorTabsOnStartup { get; init; } = true;

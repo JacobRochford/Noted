@@ -11,22 +11,72 @@ namespace Noted.Services
             bool Checklist,
             bool Dictionary,
             bool Scratchpad,
-            bool MiniPad,
+            IReadOnlyList<Guid> MiniPads,
             bool Editor);
 
         private static NotedWindowVisibility? s_hiddenNotedWindows;
+        public const int MaximumMiniPads = 5;
+        private static readonly List<MiniPadWindow> s_miniPads = [];
+        public static IReadOnlyList<MiniPadWindow> MiniPads => s_miniPads.ToArray();
 
         public static MainWindow? Main { get; internal set; }
         public static ChecklistWindow? Checklist { get; internal set; }
         public static DictionaryWindow? Dictionary { get; internal set; }
         public static ScratchpadWindow? Scratchpad { get; internal set; }
-        public static MiniPadWindow? MiniPad { get; internal set; }
+        public static MiniPadWindow? MiniPad => s_miniPads.LastOrDefault();
         public static NoteEditorWindow? Editor { get; internal set; }
 
         internal static Func<ChecklistWindow?>? ChecklistProvider { get; set; }
         internal static Func<DictionaryWindow?>? DictionaryProvider { get; set; }
         internal static Func<ScratchpadWindow?>? ScratchpadProvider { get; set; }
         internal static Func<MiniPadWindow?>? MiniPadProvider { get; set; }
+
+        internal static void RegisterMiniPad(MiniPadWindow window)
+        {
+            if (s_miniPads.Contains(window)) return;
+            if (s_miniPads.Count >= MaximumMiniPads || s_miniPads.Any(pad => pad.InstanceId == window.InstanceId))
+                throw new InvalidOperationException("MiniPad limit reached or duplicate instance ID.");
+            s_miniPads.Insert(0, window);
+            window.Activated += MiniPadActivated;
+            window.Closed += MiniPadClosed;
+        }
+
+        private static void MiniPadActivated(object? sender, EventArgs e)
+        {
+            if (sender is MiniPadWindow window && s_miniPads.Remove(window))
+                s_miniPads.Add(window);
+        }
+
+        private static void MiniPadClosed(object? sender, EventArgs e)
+        {
+            if (sender is not MiniPadWindow window) return;
+            window.Activated -= MiniPadActivated;
+            window.Closed -= MiniPadClosed;
+            s_miniPads.Remove(window);
+        }
+
+        internal static IReadOnlyList<MiniPadRecoveryIssue> RestoreMiniPads(
+            IAppSettingsService settings,
+            Func<IMiniPadRecoveryService, MiniPadRecoveryDraft?, MiniPadWindow> createWindow)
+        {
+            var issues = new List<MiniPadRecoveryIssue>();
+            foreach (var (id, state) in settings.LoadMiniPadWindows()
+                         .Where(entry => entry.Key != Guid.Empty && !entry.Value.IsClosed)
+                         .OrderByDescending(entry => entry.Value.ReopenOnStartup))
+            {
+                if (s_miniPads.Count >= MaximumMiniPads) break;
+                var recovery = new MiniPadRecoveryService(settings.AppDataDirectory, id);
+                var result = recovery.LoadDraft();
+                issues.AddRange(result.Issues);
+                if (result.Draft is null && !state.ReopenOnStartup && result.Issues.Count == 0)
+                    continue;
+                var window = createWindow(recovery, result.Draft);
+                RegisterMiniPad(window);
+                if (state.ReopenOnStartup || result.Issues.Count > 0)
+                    window.Show();
+            }
+            return issues;
+        }
 
         internal static void ConfigureEditorActivation(NoteEditorWindow editor)
         {
@@ -66,7 +116,7 @@ namespace Noted.Services
             || (Checklist?.IsWindowVisible == true)
             || (Dictionary?.IsWindowVisible == true)
             || (Scratchpad?.IsWindowVisible == true)
-            || (MiniPad?.IsWindowVisible == true)
+            || s_miniPads.Any(window => window.IsWindowVisible)
             || (Editor?.IsWindowVisible == true);
 
         public static void HideAll()
@@ -79,7 +129,7 @@ namespace Noted.Services
                 Checklist?.IsWindowVisible == true,
                 Dictionary?.IsWindowVisible == true,
                 Scratchpad?.IsWindowVisible == true,
-                MiniPad?.IsWindowVisible == true,
+                s_miniPads.Where(window => window.IsWindowVisible).Select(window => window.InstanceId).ToArray(),
                 Editor?.IsWindowVisible == true);
             s_hiddenNotedWindows = visibleWindows;
 
@@ -91,8 +141,8 @@ namespace Noted.Services
                 Dictionary?.HideTogether();
             if (visibleWindows.Scratchpad)
                 Scratchpad?.HideTogether();
-            if (visibleWindows.MiniPad)
-                MiniPad?.HideTogether();
+            foreach (var window in MiniPads.Where(window => visibleWindows.MiniPads.Contains(window.InstanceId)))
+                window.HideTogether();
             if (visibleWindows.Editor)
                 Editor?.HideTogether();
         }
@@ -114,8 +164,8 @@ namespace Noted.Services
                 Dictionary.ShowWindow();
             if (Scratchpad?.IsVisible == true)
                 Scratchpad.ShowWindow();
-            if (MiniPad?.IsVisible == true)
-                MiniPad.ShowWindow();
+            foreach (var window in MiniPads.Where(window => window.IsVisible))
+                window.ShowWindow();
             if (Editor?.IsVisible == true)
                 Editor.ShowWindow();
             Main?.RestoreNotesPosition();
@@ -163,8 +213,27 @@ namespace Noted.Services
             if (window is null)
                 return;
 
-            MiniPad = window;
+            RegisterMiniPad(window);
             window.ShowWindow();
+        }
+
+        public static void NewMiniPad()
+        {
+            if (s_miniPads.Count >= MaximumMiniPads)
+            {
+                ShowMiniPad();
+                return;
+            }
+            var window = MiniPadProvider?.Invoke();
+            if (window is null) return;
+            RegisterMiniPad(window);
+            window.ShowWindow();
+        }
+
+        public static void ShowAllMiniPads()
+        {
+            foreach (var window in MiniPads)
+                window.ShowWindow();
         }
 
         public static void ToggleNotedWindows()
@@ -194,8 +263,8 @@ namespace Noted.Services
                 Dictionary?.RestoreTogether();
             if (visibilityToRestore.Scratchpad)
                 Scratchpad?.RestoreTogether();
-            if (visibilityToRestore.MiniPad)
-                MiniPad?.RestoreTogether();
+            foreach (var window in MiniPads.Where(window => visibilityToRestore.MiniPads.Contains(window.InstanceId)))
+                window.RestoreTogether();
             if (visibilityToRestore.Editor)
                 Editor?.RestoreTogether();
         }
@@ -226,10 +295,7 @@ namespace Noted.Services
 
         public static void ToggleMiniPad()
         {
-            if (MiniPad?.IsWindowVisible == true)
-                HideMiniPad();
-            else
-                ShowMiniPad();
+            ShowMiniPad();
         }
 
         public static void ToggleEditor()
@@ -263,7 +329,8 @@ namespace Noted.Services
                     error = stateError ?? "Scratchpad window state could not be saved.";
                     return false;
                 }
-                MiniPad?.PrepareForApplicationShutdown();
+                foreach (var window in MiniPads)
+                    window.PrepareForApplicationShutdown();
             }
             catch (SettingsPersistenceException ex)
             {
@@ -283,7 +350,8 @@ namespace Noted.Services
             Checklist?.CancelPreparedClose();
             Dictionary?.CancelPreparedClose();
             Scratchpad?.CancelPreparedClose();
-            MiniPad?.CancelPreparedClose();
+            foreach (var window in MiniPads)
+                window.CancelPreparedClose();
         }
 
         public static void ClearAll()
@@ -292,7 +360,8 @@ namespace Noted.Services
             Checklist = null;
             Dictionary = null;
             Scratchpad = null;
-            MiniPad = null;
+            foreach (var window in MiniPads)
+                MiniPadClosed(window, EventArgs.Empty);
             Editor = null;
             ChecklistProvider = null;
             DictionaryProvider = null;

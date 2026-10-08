@@ -9,6 +9,32 @@ namespace Noted.Tests.Services;
 public sealed class MiniPadRecoveryServiceTests
 {
     [TestMethod]
+    public void RecoveryAndWriteBlockingAreIndependentForEachInstance()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+        var first = new MiniPadRecoveryService(directory.Path, firstId);
+        var second = new MiniPadRecoveryService(directory.Path, secondId);
+        first.SaveDraft("first");
+        first.SaveDraft("first edited");
+        second.SaveDraft("second");
+        var firstPath = directory.File("recovery", "micro-scratchpads", $"{firstId:N}.json");
+        using var primaryLock = new FileStream(firstPath, FileMode.Open, FileAccess.Read, FileShare.None);
+        using var backupLock = new FileStream($"{firstPath}.bak", FileMode.Open, FileAccess.Read, FileShare.None);
+        var blocked = new MiniPadRecoveryService(directory.Path, firstId);
+
+        Assert.IsNull(blocked.LoadDraft().Draft);
+        Assert.ThrowsExactly<IOException>(() => blocked.SaveDraft("blocked"));
+        second.SaveDraft("second edited");
+
+        var restored = new MiniPadRecoveryService(directory.Path, secondId).LoadDraft();
+        Assert.AreEqual(secondId, restored.Draft!.Id);
+        Assert.AreEqual("second edited", restored.Draft.Content);
+        Assert.HasCount(0, restored.Issues);
+    }
+
+    [TestMethod]
     public void DuplicateContentDoesNotRotateRollingBackup()
     {
         using var directory = new TemporaryTestDirectory();

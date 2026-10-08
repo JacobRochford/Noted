@@ -33,7 +33,7 @@ public static class WindowAppearance
         if (sender is not Window window || !ReferenceEquals(e.OriginalSource, window) || s_targets.ContainsKey(window)) return;
         var target = window is MainWindow ? window.FindName("NotesPanel") as FrameworkElement : window;
         if (target is null) return;
-        window.SetCurrentValue(AlwaysVisibleProperty, s_settings?.LoadWindowAlwaysVisible(window.GetType().Name) == true);
+        window.SetCurrentValue(AlwaysVisibleProperty, s_settings?.LoadWindowAlwaysVisible(GetSettingsKey(window)) == true);
         s_targets.Add(window, target);
         if (window.WindowStyle != WindowStyle.None && window.ResizeMode is ResizeMode.CanResize or ResizeMode.CanResizeWithGrip)
             _ = new Noted.Helpers.NativeWindowResizer(window);
@@ -72,8 +72,11 @@ public static class WindowAppearance
     private static void AlwaysVisibleChanged(DependencyObject target, DependencyPropertyChangedEventArgs e)
     {
         if (target is Window window && s_targets.ContainsKey(window))
-            s_settings?.SaveWindowAlwaysVisible(window.GetType().Name, (bool)e.NewValue);
+            s_settings?.SaveWindowAlwaysVisible(GetSettingsKey(window), (bool)e.NewValue);
     }
+
+    private static string GetSettingsKey(Window window) =>
+        window is OverlayWindow overlay ? overlay.AppearanceSettingsKey : window.GetType().Name;
 
     private static void SettingsChanged(object? sender, EventArgs e) => RefreshAll();
     private static void RefreshAll()

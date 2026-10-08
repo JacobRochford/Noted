@@ -8,9 +8,6 @@ namespace Noted.Services;
 
 internal sealed class BackupContentCatalog
 {
-    internal static readonly Guid s_miniPadDraftId =
-        new("A6CB4208-79C0-4C08-9D07-9CDF33F31337");
-
     private readonly string _appDataDirectory;
     private readonly string _backupDirectory;
     private string _notesDirectory;
@@ -132,9 +129,18 @@ internal sealed class BackupContentCatalog
         if (Directory.Exists(miniPadDirectory))
             ThrowIfDirectoryIsLink(miniPadDirectory);
 
-        var miniPadPath = Path.Combine(miniPadDirectory, $"{s_miniPadDraftId:N}.json");
-        if (File.Exists(miniPadPath))
-            AddRecoveryFile(sources, miniPadPath, bytes => ValidateMiniPadDraft(bytes, miniPadPath));
+        var settingsPath = Path.Combine(_appDataDirectory, "settings.json");
+        var settings = File.Exists(settingsPath)
+            ? JsonSerializer.Deserialize<AppSettingsDocument>(File.ReadAllBytes(settingsPath))
+            : null;
+        IEnumerable<Guid> miniPadIds = settings?.MiniPadWindows?.Keys.AsEnumerable()
+            ?? [MiniPadRecoveryService.LegacyDraftId];
+        foreach (var id in miniPadIds.Where(id => id != Guid.Empty))
+        {
+            var miniPadPath = Path.Combine(miniPadDirectory, $"{id:N}.json");
+            if (File.Exists(miniPadPath))
+                AddRecoveryFile(sources, miniPadPath, bytes => ValidateMiniPadDraft(bytes, miniPadPath));
+        }
     }
 
     private void AddRecoveryFile(
@@ -281,7 +287,7 @@ internal sealed class BackupContentCatalog
     {
         var draft = JsonSerializer.Deserialize<MiniPadRecoveryDraft>(bytes)
             ?? throw new JsonException("The MiniPad recovery file contains no value.");
-        if (draft.Id != s_miniPadDraftId ||
+        if (draft.Id == Guid.Empty ||
             !string.Equals(
                 Path.GetFileNameWithoutExtension(path),
                 draft.Id.ToString("N"),

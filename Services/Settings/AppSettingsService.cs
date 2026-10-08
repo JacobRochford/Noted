@@ -331,13 +331,36 @@ public sealed class AppSettingsService : IAppSettingsService {
 
     public MiniPadWindowState LoadMiniPadWindowState()
     {
-        return LoadSetting(s => s.MiniPadWindowState ?? new MiniPadWindowState());
+        return LoadMiniPadWindows().GetValueOrDefault(MiniPadRecoveryService.LegacyDraftId) ?? new MiniPadWindowState();
     }
 
     public void SaveMiniPadWindowState(MiniPadWindowState state)
     {
         ArgumentNullException.ThrowIfNull(state);
-        SaveSetting(s => s with { MiniPadWindowState = state });
+        SaveMiniPadWindowState(MiniPadRecoveryService.LegacyDraftId, state);
+    }
+
+    public IReadOnlyDictionary<Guid, MiniPadWindowState> LoadMiniPadWindows()
+    {
+        return LoadSetting(GetMiniPadWindows);
+    }
+
+    private static Dictionary<Guid, MiniPadWindowState> GetMiniPadWindows(AppSettingsDocument settings) =>
+        new(settings.MiniPadWindows ?? new Dictionary<Guid, MiniPadWindowState>
+        {
+            [MiniPadRecoveryService.LegacyDraftId] = settings.MiniPadWindowState ?? new MiniPadWindowState()
+        });
+
+    public void SaveMiniPadWindowState(Guid id, MiniPadWindowState state)
+    {
+        if (id == Guid.Empty) throw new ArgumentException("A MiniPad ID is required.", nameof(id));
+        ArgumentNullException.ThrowIfNull(state);
+        SaveSetting(s =>
+        {
+            var windows = GetMiniPadWindows(s);
+            windows[id] = state;
+            return s with { MiniPadWindows = windows };
+        });
     }
 
     public bool LoadReopenEditorTabsOnStartup()

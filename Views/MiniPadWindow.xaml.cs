@@ -23,6 +23,12 @@ public partial class MiniPadWindow : OverlayWindow
     private bool _keepDraftOnClose;
     private bool _preserveOpenStateOnClose;
     private bool _reopenOnStartup;
+    private bool _isClosed;
+
+    public Guid InstanceId => _recoveryService.Id;
+    internal override string AppearanceSettingsKey => InstanceId == MiniPadRecoveryService.LegacyDraftId
+        ? nameof(MiniPadWindow)
+        : $"{nameof(MiniPadWindow)}:{InstanceId:N}";
 
     public MiniPadWindow(
         IMiniPadRecoveryService recoveryService,
@@ -31,13 +37,22 @@ public partial class MiniPadWindow : OverlayWindow
     {
         ArgumentNullException.ThrowIfNull(recoveryService);
         ArgumentNullException.ThrowIfNull(settingsService);
+        if (draft is not null && draft.Id != recoveryService.Id)
+            throw new ArgumentException("The draft belongs to a different MiniPad.", nameof(draft));
 
         _recoveryService = recoveryService;
         _settingsService = settingsService;
-        _reopenOnStartup = settingsService.LoadMiniPadWindowState().ReopenOnStartup;
+        var state = settingsService.LoadMiniPadWindows().GetValueOrDefault(InstanceId) ?? new MiniPadWindowState();
+        _reopenOnStartup = state.ReopenOnStartup;
 
-        _indentation = settingsService.LoadMiniPadWindowState().Indentation ?? settingsService.LoadDefaultIndentation();
+        _indentation = state.Indentation ?? settingsService.LoadDefaultIndentation();
         InitializeComponent();
+        if (state.Left is { } left && state.Top is { } top)
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            RestoreWindowBounds(left, top, state.Width, state.Height);
+        }
+        if (state.IsMaximized) WindowState = WindowState.Maximized;
         EditorIndentation.Attach(Editor, () => _indentation);
         EditorLineCommands.Attach(Editor);
         EditorJsonFormatting.Attach(Editor, () => _indentation);
@@ -54,8 +69,8 @@ public partial class MiniPadWindow : OverlayWindow
         _findPresenter = new TextBoxSearchPresenter(Editor);
         _findSession.QueryOrOptionsChanged += _findPresenter.ClearPendingManualNavigationAnchor;
         InitializeOverlay(false, settingsService.LoadGhostModeOpacity(), settingsService.LoadDefaultOpacity());
-        SetWordWrap(settingsService.LoadMiniPadWindowState().WordWrapEnabled);
-        AlwaysVisibleMenuItem.IsChecked = settingsService.LoadWindowAlwaysVisible(nameof(MiniPadWindow));
+        SetWordWrap(state.WordWrapEnabled);
+        AlwaysVisibleMenuItem.IsChecked = settingsService.LoadWindowAlwaysVisible(AppearanceSettingsKey);
         Editor.Text = draft?.Content ?? string.Empty;
         _saveScheduler = new SaveScheduler<string>(
             Dispatcher,
@@ -71,6 +86,7 @@ public partial class MiniPadWindow : OverlayWindow
 
         if (draft is null)
         {
+            SaveWindowState();
             _saveScheduler.Schedule(Editor.Text);
             _saveScheduler.TryFlush(out _);
         }
@@ -101,8 +117,17 @@ public partial class MiniPadWindow : OverlayWindow
 
     protected override void SaveWindowState()
     {
-        _settingsService.SaveMiniPadWindowState(new MiniPadWindowState
+        var bounds = WindowState == WindowState.Normal ? new Rect(0, 0, Width, Height) : RestoreBounds;
+        var left = WindowState == WindowState.Normal ? Left : bounds.Left;
+        var top = WindowState == WindowState.Normal ? Top : bounds.Top;
+        _settingsService.SaveMiniPadWindowState(InstanceId, new MiniPadWindowState
         {
+            Left = double.IsFinite(left) ? left : null,
+            Top = double.IsFinite(top) ? top : null,
+            Width = bounds.IsEmpty ? Width : bounds.Width,
+            Height = bounds.IsEmpty ? Height : bounds.Height,
+            IsMaximized = WindowState == WindowState.Maximized,
+            IsClosed = _isClosed,
             Indentation = _indentation,
             WordWrapEnabled = Editor.TextWrapping == TextWrapping.Wrap,
             ReopenOnStartup = _reopenOnStartup
@@ -132,7 +157,7 @@ public partial class MiniPadWindow : OverlayWindow
         object sender,
         DependencyPropertyChangedEventArgs e)
     {
-        if (_preserveOpenStateOnClose || IsChangingGroupVisibility)
+        if (_isClosed || _preserveOpenStateOnClose || IsChangingGroupVisibility)
             return;
 
         _reopenOnStartup = IsWindowVisible;
@@ -213,14 +238,12 @@ public partial class MiniPadWindow : OverlayWindow
             return;
         }
 
-        e.Cancel = true;
         if (!_preserveOpenStateOnClose)
         {
             _reopenOnStartup = false;
+            _isClosed = true;
             SaveWindowState();
         }
-
-        HideWindow();
     }
 
     private void MiniPadWindow_Closed(object? sender, EventArgs e)
@@ -243,6 +266,12 @@ public partial class MiniPadWindow : OverlayWindow
             menu.IsOpen = true;
         }
     }
+
+    private void NewMiniPadMenuItem_Click(object sender, RoutedEventArgs e) => WindowManager.NewMiniPad();
+
+    private void ShowAllMiniPadsMenuItem_Click(object sender, RoutedEventArgs e) => WindowManager.ShowAllMiniPads();
+
+    private void CloseMiniPadMenuItem_Click(object sender, RoutedEventArgs e) => Close();
 
     private void WordWrapMenuItem_Click(object sender, RoutedEventArgs e)
     {

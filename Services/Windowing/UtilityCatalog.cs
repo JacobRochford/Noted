@@ -10,6 +10,6 @@ internal static class UtilityCatalog
         new UtilityDefinition("Checklist", "Checklist", "✓", 13, "SemiBold", WindowManager.ToggleChecklist),
         new UtilityDefinition("Dictionary", "Dictionary", "Aa", 10, "Bold", WindowManager.ToggleDictionary),
         new UtilityDefinition("Scratchpad", "Scratchpad", "✎", 13, "SemiBold", WindowManager.ToggleScratchpad),
-        new UtilityDefinition("MiniPad", "MiniPad", "▤", 12, "SemiBold", WindowManager.ToggleMiniPad)
+        new UtilityDefinition("MiniPad", "MiniPad", "▤", 12, "SemiBold", WindowManager.ShowMiniPad)
     });
 }

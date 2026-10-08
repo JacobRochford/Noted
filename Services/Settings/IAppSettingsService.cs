@@ -63,6 +63,8 @@ public interface IAppSettingsService {
     void SaveNoteEditorWindowState(NoteEditorWindowState state);
     MiniPadWindowState LoadMiniPadWindowState();
     void SaveMiniPadWindowState(MiniPadWindowState state);
+    IReadOnlyDictionary<Guid, MiniPadWindowState> LoadMiniPadWindows();
+    void SaveMiniPadWindowState(Guid id, MiniPadWindowState state);
     bool LoadReopenEditorTabsOnStartup();
     void SaveReopenEditorTabsOnStartup(bool enabled);
     string? LoadPreferredDisplayDeviceName();

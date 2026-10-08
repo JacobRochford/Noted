@@ -15,6 +15,7 @@ public sealed record MiniPadRecoveryLoadResult(
 
 public interface IMiniPadRecoveryService
 {
+    Guid Id { get; }
     MiniPadRecoveryLoadResult LoadDraft();
     string? SaveDraft(string content);
 }

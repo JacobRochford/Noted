@@ -30,9 +30,8 @@ public partial class App : Application
     private IDisposable? _checklistBackupRegistration;
     private IDisposable? _dictionaryBackupRegistration;
     private IDisposable? _scratchpadBackupRegistration;
-    private IDisposable? _miniPadBackupRegistration;
+    private readonly Dictionary<Guid, IDisposable> _miniPadBackupRegistrations = [];
     private IDisposable? _noteEditorBackupRegistration;
-    private IMiniPadRecoveryService? _miniPadRecoveryService;
     private BackupCoordinator? _backupCoordinator;
     private bool _isShuttingDown;
     private string? _lastShutdownWarning;
@@ -121,7 +120,6 @@ public partial class App : Application
                 settings.LoadAppThemeMode(),
                 settings.LoadAccentColor());
             _themeManager = themeManager;
-            _miniPadRecoveryService = new MiniPadRecoveryService(settings.AppDataDirectory);
             var fileService = new NoteFileService(settings);
             startupFileService = fileService;
             fullBackupService.UpdateNotesDirectory(fileService.NotesDirectory);
@@ -160,7 +158,7 @@ public partial class App : Application
             WindowManager.ChecklistProvider = GetOrCreateChecklistWindow;
             WindowManager.DictionaryProvider = GetOrCreateDictionaryWindow;
             WindowManager.ScratchpadProvider = GetOrCreateScratchpadWindow;
-            WindowManager.MiniPadProvider = GetOrCreateMiniPadWindow;
+            WindowManager.MiniPadProvider = CreateNewMiniPadWindow;
             WindowManager.Editor = noteEditor;
 
             _fileOpenRequestService = new FileOpenRequestService(
@@ -264,8 +262,9 @@ public partial class App : Application
             _dictionaryBackupRegistration = null;
             _scratchpadBackupRegistration?.Dispose();
             _scratchpadBackupRegistration = null;
-            _miniPadBackupRegistration?.Dispose();
-            _miniPadBackupRegistration = null;
+            foreach (var registration in _miniPadBackupRegistrations.Values)
+                registration.Dispose();
+            _miniPadBackupRegistrations.Clear();
             _noteEditorBackupRegistration?.Dispose();
             _noteEditorBackupRegistration = null;
 
@@ -299,7 +298,6 @@ public partial class App : Application
             }
 
             _fileService = null;
-            _miniPadRecoveryService = null;
             if (_backupCoordinator is not null)
                 _backupCoordinator.ShutdownRequested -= BackupCoordinator_ShutdownRequested;
             _backupCoordinator = null;
@@ -461,17 +459,15 @@ public partial class App : Application
         WindowManager.Scratchpad = null;
     }
 
-    private MiniPadWindow? GetOrCreateMiniPadWindow()
+    private MiniPadWindow? CreateNewMiniPadWindow()
     {
         Dispatcher.VerifyAccess();
-        if (_isShuttingDown)
+        if (_isShuttingDown || WindowManager.MiniPads.Count >= WindowManager.MaximumMiniPads)
             return WindowManager.MiniPad;
 
-        if (WindowManager.MiniPad is not null)
-            return WindowManager.MiniPad;
-
-        var recoveryService = _miniPadRecoveryService
-            ?? throw new InvalidOperationException("MiniPad recovery is not initialized.");
+        var settings = _settingsService
+            ?? throw new InvalidOperationException("Application settings are not initialized.");
+        var recoveryService = new MiniPadRecoveryService(settings.AppDataDirectory, Guid.NewGuid());
         return CreateMiniPadWindow(recoveryService, null);
     }
 
@@ -491,19 +487,11 @@ public partial class App : Application
 
     private void RestoreMiniPadWindow()
     {
-        var recoveryService = _miniPadRecoveryService
-            ?? throw new InvalidOperationException("MiniPad recovery is not initialized.");
+        var settings = _settingsService
+            ?? throw new InvalidOperationException("Application settings are not initialized.");
+        var issues = WindowManager.RestoreMiniPads(settings, CreateMiniPadWindow);
 
-        var loadResult = recoveryService.LoadDraft();
-        var shouldReopen = _settingsService?.LoadMiniPadWindowState().ReopenOnStartup == true;
-        if (loadResult.Draft is not null || shouldReopen)
-        {
-            var window = CreateMiniPadWindow(recoveryService, loadResult.Draft);
-            if (shouldReopen || loadResult.Issues.Count > 0)
-                window.Show();
-        }
-
-        if (loadResult.Issues.Count == 0)
+        if (issues.Count == 0)
             return;
 
         _backupCoordinator?.RecordRunRecoveryIssue(
@@ -512,10 +500,10 @@ public partial class App : Application
         const int maximumDisplayedIssues = 5;
         var issueText = string.Join(
             "\n\n",
-            loadResult.Issues
+            issues
                 .Take(maximumDisplayedIssues)
                 .Select(issue => $"{Path.GetFileName(issue.FilePath)}: {issue.Message}"));
-        var remainingCount = loadResult.Issues.Count - maximumDisplayedIssues;
+        var remainingCount = issues.Count - maximumDisplayedIssues;
         var remainingText = remainingCount > 0
             ? $"\n\n{remainingCount} additional recovery issue(s) were not shown."
             : string.Empty;
@@ -535,7 +523,7 @@ public partial class App : Application
         var window = new MiniPadWindow(recoveryService, settings, draft);
         var backupCoordinator = _backupCoordinator
             ?? throw new InvalidOperationException("Backup coordination is not initialized.");
-        _miniPadBackupRegistration = backupCoordinator.RegisterPreparationParticipant(
+        _miniPadBackupRegistrations[window.InstanceId] = backupCoordinator.RegisterPreparationParticipant(
             "MiniPad",
             BackupPreparationPhase.BeforeSharedFlush,
             () => CreatePersistenceSaveResult(
@@ -545,7 +533,7 @@ public partial class App : Application
             () => window.BackupBlockingIssue,
             preparationOrder: 0);
         window.Closed += MiniPadWindow_Closed;
-        WindowManager.MiniPad = window;
+        WindowManager.RegisterMiniPad(window);
         return window;
     }
 
@@ -555,35 +543,26 @@ public partial class App : Application
             return;
 
         window.Closed -= MiniPadWindow_Closed;
-        if (!ReferenceEquals(WindowManager.MiniPad, window))
-            return;
-
-        _miniPadBackupRegistration?.Dispose();
-        _miniPadBackupRegistration = null;
-        WindowManager.MiniPad = null;
+        if (_miniPadBackupRegistrations.Remove(window.InstanceId, out var registration))
+            registration.Dispose();
     }
 
     private void CloseMiniPadWindow()
     {
-        var window = WindowManager.MiniPad;
-        if (window is null)
-            return;
-
-        window.Closed -= MiniPadWindow_Closed;
-        _miniPadBackupRegistration?.Dispose();
-        _miniPadBackupRegistration = null;
-        if (!window.TryFlushPendingContent(out var error))
+        foreach (var window in WindowManager.MiniPads)
         {
-            AppDialog.Show(
-                error ?? "MiniPad recovery data could not be saved before shutdown.",
-                "MiniPad Save Failed",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-        }
+            if (!window.TryFlushPendingContent(out var error))
+            {
+                AppDialog.Show(
+                    error ?? "MiniPad recovery data could not be saved before shutdown.",
+                    "MiniPad Save Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
 
-        window.KeepDraftOnClose();
-        CloseExistingWindow(window, "MiniPad");
-        WindowManager.MiniPad = null;
+            window.KeepDraftOnClose();
+            CloseExistingWindow(window, "MiniPad");
+        }
     }
 
     private static void CloseExistingWindow(Window? window, string name)
@@ -636,7 +615,7 @@ public partial class App : Application
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
         var directFlushes = new List<ShutdownDirectFlush>();
-        if (WindowManager.MiniPad is { } miniPadWindow)
+        foreach (var miniPadWindow in WindowManager.MiniPads)
         {
             directFlushes.Add(new ShutdownDirectFlush(
                 "MiniPad",

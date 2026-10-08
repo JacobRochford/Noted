@@ -227,7 +227,7 @@ public partial class MainWindow : Window {
     }
     private void OnMiniPadHotkeyPressed()
     {
-        WindowManager.ToggleMiniPad();
+        WindowManager.ShowMiniPad();
     }
     private void OnNoteEditorHotkeyPressed()
     {
