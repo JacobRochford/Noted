@@ -246,7 +246,7 @@
         <ContextMenu x:Key="TrayContextMenu" Style="{StaticResource TrayContextMenuStyle}">
             <MenuItem Header="Show/Hide Notes" Click="TrayShowHideNotes_Click" Style="{StaticResource TrayMenuItemStyle}"/>
             <MenuItem Header="Restore Window Positions" Click="TrayRestoreWindows_Click" Style="{StaticResource TrayMenuItemStyle}"/>
-            <MenuItem Header="⚙" Click="TraySettings_Click" Style="{StaticResource TrayMenuItemStyle}"/>
+            <MenuItem Header="Settings" Click="TraySettings_Click" Style="{StaticResource TrayMenuItemStyle}"/>
             <Separator Style="{StaticResource TrayMenuSeparatorStyle}"/>
             <MenuItem Header="Exit" Click="TrayExit_Click" Style="{StaticResource TrayMenuItemStyle}"/>
         </ContextMenu>
@@ -1041,6 +1041,8 @@
 
         <Button x:Name="FloatingNotesButton"
                 Content="Noted"
+                ContextMenu="{StaticResource TrayContextMenu}"
+                ContextMenuOpening="FloatingNotesButton_ContextMenuOpening"
             Width="88" Height="44"
                 Canvas.Right="20" Canvas.Bottom="20"
                 FontSize="16" FontWeight="Regular"

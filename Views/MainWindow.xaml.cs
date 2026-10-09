@@ -1672,6 +1672,12 @@ public partial class MainWindow : Window {
     #endregion
 
     #region System Tray Icon
+    private void FloatingNotesButton_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        e.Handled = true;
+        TrayIcon_RightClicked();
+    }
+
     private void TrayIcon_RightClicked() {
         var hwnd = new WindowInteropHelper(this).Handle;
         // Temporarily remove WS_EX_NOACTIVATE so SetForegroundWindow works, then restore on close
