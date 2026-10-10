@@ -9,6 +9,57 @@ namespace Noted.Tests.Services;
 public sealed class NoteFileServiceTests
 {
     [TestMethod]
+    public void ListingsAreEmptyWhenTheCreatedNotesRootIsDeleted()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var notes = directory.File("notes");
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveNotesDirectory(notes);
+        using var service = new NoteFileService(settings);
+        Assert.IsTrue(Directory.Exists(notes));
+        Directory.Delete(notes);
+
+        Assert.IsEmpty(service.GetFolders());
+        Assert.IsEmpty(service.GetNotes());
+        Assert.IsFalse(Directory.Exists(notes), "A refresh must not recreate a deleted notes root.");
+    }
+
+    [TestMethod]
+    public void ListingsReturnToRootWhenTheCurrentFolderIsDeleted()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var notes = directory.File("notes");
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveNotesDirectory(notes);
+        using var service = new NoteFileService(settings);
+        Directory.CreateDirectory(directory.File("notes", "child"));
+        Directory.CreateDirectory(directory.File("notes", "remaining"));
+        File.WriteAllText(directory.File("notes", "root.txt"), "content");
+        service.NavigateTo("child");
+        Directory.Delete(directory.File("notes", "child"));
+
+        Assert.AreEqual("remaining", service.GetFolders().Single().FileName);
+        Assert.AreEqual("root.txt", service.GetNotes().Single().FileName);
+        Assert.AreEqual(notes, service.CurrentDirectory);
+    }
+
+    [TestMethod]
+    public void ListingsDoNotSuppressAFileReplacingTheNotesRoot()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var notes = directory.File("notes");
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveNotesDirectory(notes);
+        using var service = new NoteFileService(settings);
+        Directory.Delete(notes);
+        File.WriteAllText(notes, "not a directory");
+
+        Assert.ThrowsExactly<IOException>(() => service.GetFolders());
+        Assert.ThrowsExactly<IOException>(() => service.GetNotes());
+        Assert.AreEqual("not a directory", File.ReadAllText(notes));
+    }
+
+    [TestMethod]
     public void LockedNoteRenameReturnsAnErrorAndPreservesTheOriginalFile()
     {
         using var directory = new TemporaryTestDirectory();

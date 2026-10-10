@@ -14,6 +14,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable {
     private readonly IAppSettingsService _settingsService;
     private readonly Action<Action> _uiThreadInvoke;
     private DispatcherTimer? _debounceTimer;
+    private bool _disposed;
     private string _headerTextEdit = "";
     private bool _isHeaderEditing;
     private bool _showNotesDirectory;
@@ -397,17 +398,23 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable {
 
     // Debounce file system events to avoid redundant reloads
     private void DebounceRefresh() {
+        // a file-change callback may still be queued after disposal.
+        if (_disposed) return;
+
         if (_debounceTimer == null) {
             _debounceTimer = new DispatcherTimer {
                 Interval = TimeSpan.FromMilliseconds(200)
             };
-            _debounceTimer.Tick += (_, _) => {
-                _debounceTimer.Stop();
-                LoadNotes();
-            };
+            _debounceTimer.Tick += OnDebounceTimerTick;
         }
         _debounceTimer.Stop();
         _debounceTimer.Start();
+    }
+
+    private void OnDebounceTimerTick(object? sender, EventArgs e) {
+        _debounceTimer?.Stop();
+        if (!_disposed)
+            LoadNotes();
     }
 
     private bool FilterNote(object obj) {
@@ -420,9 +427,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable {
 
     // cleanup resources
     public void Dispose() {
-        _debounceTimer?.Stop();
-        _debounceTimer = null;
+        if (_disposed) return;
+        _disposed = true;
         _fileService.FilesChanged -= OnFilesChanged;
+        if (_debounceTimer is not null) {
+            _debounceTimer.Stop();
+            _debounceTimer.Tick -= OnDebounceTimerTick;
+            _debounceTimer = null;
+        }
     }
 
 }

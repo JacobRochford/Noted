@@ -41,24 +41,27 @@ public sealed class NoteFileService : INoteFileService {
     }
 
     public IReadOnlyList<NoteItem> GetNotes() {
-        // get all supported notes in current dir
-        _navigation.EnsureCurrentDirectoryExists();
-        // Notes are always sorted by last modified (descending)
-        return EnumerateNoteFiles(CurrentDirectory)
-            .Select(path => new FileInfo(path))
-            .OrderByDescending(info => info.LastWriteTime)
-            .Select(info => {
-                var name = info.Name;
-                return new NoteItem {
-                    FileName = name,
-                    NoteKey = GetNoteKey(info.FullName),
-                    DisplayName = FormatNoteName(name),
-                    EditableName = Path.GetFileNameWithoutExtension(name),
-                    Subtitle = BuildSubtitle(name, info.LastWriteTime),
-                    LastModified = info.LastWriteTime
-                };
-            })
-            .ToList();
+        try {
+            _navigation.EnsureCurrentDirectoryExists();
+            return EnumerateNoteFiles(CurrentDirectory)
+                .Select(path => new FileInfo(path))
+                .OrderByDescending(info => info.LastWriteTime)
+                .Select(info => {
+                    var name = info.Name;
+                    return new NoteItem {
+                        FileName = name,
+                        NoteKey = GetNoteKey(info.FullName),
+                        DisplayName = FormatNoteName(name),
+                        EditableName = Path.GetFileNameWithoutExtension(name),
+                        Subtitle = BuildSubtitle(name, info.LastWriteTime),
+                        LastModified = info.LastWriteTime
+                    };
+                })
+                .ToList();
+        } catch (DirectoryNotFoundException) {
+            // the folder may have been deleted during refresh.
+            return Array.Empty<NoteItem>();
+        }
     }
 
     public IReadOnlyList<string> GetAllNoteKeys() {
@@ -430,19 +433,24 @@ public sealed class NoteFileService : INoteFileService {
 
     // get all folders in current dir
     public IReadOnlyList<NoteItem> GetFolders() {
-        _navigation.EnsureCurrentDirectoryExists();
-        return Directory.GetDirectories(CurrentDirectory)
-            .Where(path => !PathsEqual(path, ArchivedNotesDirectory))
-            .Select(path => new DirectoryInfo(path))
-            .OrderBy(info => info.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(info => new NoteItem {
-                FileName = info.Name,
-                DisplayName = info.Name,
-                EditableName = info.Name,
-                Subtitle = "",
-                IsFolder = true
-            })
-            .ToList();
+        try {
+            _navigation.EnsureCurrentDirectoryExists();
+            return Directory.GetDirectories(CurrentDirectory)
+                .Where(path => !PathsEqual(path, ArchivedNotesDirectory))
+                .Select(path => new DirectoryInfo(path))
+                .OrderBy(info => info.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(info => new NoteItem {
+                    FileName = info.Name,
+                    DisplayName = info.Name,
+                    EditableName = info.Name,
+                    Subtitle = "",
+                    IsFolder = true
+                })
+                .ToList();
+        } catch (DirectoryNotFoundException) {
+            // the folder may have been deleted during refresh.
+            return Array.Empty<NoteItem>();
+        }
     }
 
     // get supported notes in a subfolder, don't change nav state (Expand mode)
