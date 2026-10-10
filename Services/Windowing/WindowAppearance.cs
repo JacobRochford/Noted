@@ -75,8 +75,28 @@ public static class WindowAppearance
             s_settings?.SaveWindowAlwaysVisible(GetSettingsKey(window), (bool)e.NewValue);
     }
 
-    private static string GetSettingsKey(Window window) =>
-        window is OverlayWindow overlay ? overlay.AppearanceSettingsKey : window.GetType().Name;
+    internal static string GetSettingsKey(Window window) =>
+        window is OverlayWindow overlay ? overlay.AppearanceSettingsKey : GetTypeSettingsKey(window.GetType());
+
+    private static readonly IReadOnlyDictionary<Type, string> s_settingsKeys = new Dictionary<Type, string>
+    {
+        [typeof(MainWindow)] = PersistenceKeys.MainWindow,
+        [typeof(ChecklistWindow)] = PersistenceKeys.ChecklistWindow,
+        [typeof(DictionaryWindow)] = PersistenceKeys.DictionaryWindow,
+        [typeof(MiniPadWindow)] = PersistenceKeys.MiniPadWindow,
+        [typeof(NoteEditorWindow)] = PersistenceKeys.NoteEditorWindow,
+        [typeof(JotCaptureWindow)] = PersistenceKeys.JotCaptureWindow,
+        [typeof(ScratchpadWindow)] = PersistenceKeys.ScratchpadWindow,
+        [typeof(JotsWindow)] = PersistenceKeys.JotsWindow,
+        [typeof(AccentColorDialog)] = PersistenceKeys.AccentColorDialog,
+        [typeof(AppDialog)] = PersistenceKeys.AppDialog,
+        [typeof(BackupPreviewDialog)] = PersistenceKeys.BackupPreviewDialog,
+        [typeof(ChecklistPriorityColorsDialog)] = PersistenceKeys.ChecklistPriorityColorsDialog,
+        [typeof(NewNoteNameDialog)] = PersistenceKeys.NewNoteNameDialog
+    };
+
+    internal static string GetTypeSettingsKey(Type windowType) =>
+        s_settingsKeys.TryGetValue(windowType, out var key) ? key : windowType.Name;
 
     private static void SettingsChanged(object? sender, EventArgs e) => RefreshAll();
     private static void RefreshAll()

@@ -27,8 +27,8 @@ public partial class MiniPadWindow : OverlayWindow
 
     public Guid InstanceId => _recoveryService.Id;
     internal override string AppearanceSettingsKey => InstanceId == MiniPadRecoveryService.LegacyDraftId
-        ? nameof(MiniPadWindow)
-        : $"{nameof(MiniPadWindow)}:{InstanceId:N}";
+        ? PersistenceKeys.MiniPadWindow
+        : $"{PersistenceKeys.MiniPadWindow}:{InstanceId:N}";
 
     public MiniPadWindow(
         IMiniPadRecoveryService recoveryService,

@@ -22,6 +22,7 @@ internal sealed record AppSettingsDocument
     public bool ShowNotesHeader { get; init; } = false;
     public string? CustomHeader { get; init; }
     public List<string>? PinnedNotes { get; init; }
+    [JsonPropertyName("HiddenUtilities")]
     public List<string>? HiddenUtilities { get; init; }
 
     [JsonPropertyName("HotkeyModifiers")]
@@ -30,13 +31,21 @@ internal sealed record AppSettingsDocument
     [JsonPropertyName("HotkeyKey")]
     public string NotesHotkeyKey { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Notes).Key;
 
+    [JsonPropertyName("ChecklistHotkeyModifiers")]
     public string ChecklistHotkeyModifiers { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Checklist).Modifiers;
+    [JsonPropertyName("ChecklistHotkeyKey")]
     public string ChecklistHotkeyKey { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Checklist).Key;
+    [JsonPropertyName("DictionaryHotkeyModifiers")]
     public string DictionaryHotkeyModifiers { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Dictionary).Modifiers;
+    [JsonPropertyName("DictionaryHotkeyKey")]
     public string DictionaryHotkeyKey { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Dictionary).Key;
+    [JsonPropertyName("MiniPadHotkeyModifiers")]
     public string MiniPadHotkeyModifiers { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.MiniPad).Modifiers;
+    [JsonPropertyName("MiniPadHotkeyKey")]
     public string MiniPadHotkeyKey { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.MiniPad).Key;
+    [JsonPropertyName("NoteEditorHotkeyModifiers")]
     public string NoteEditorHotkeyModifiers { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.NoteEditor).Modifiers;
+    [JsonPropertyName("NoteEditorHotkeyKey")]
     public string NoteEditorHotkeyKey { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.NoteEditor).Key;
     [JsonPropertyName("JotCaptureHotkeyModifiers")]
     public string JotCaptureHotkeyModifiers { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.JotCapture).Modifiers;
@@ -55,6 +64,7 @@ internal sealed record AppSettingsDocument
     public int HotkeyDefaultsVersion { get; init; }
     [JsonPropertyName("JotWindows")]
     public Dictionary<Guid, JotsWindowState>? JotWindows { get; init; }
+    [JsonPropertyName("AlwaysVisibleWindows")]
     public string[]? AlwaysVisibleWindows { get; init; }
     public bool GhostModeEnabled { get; init; }
     public double GhostModeOpacity { get; init; } = 0.25;
@@ -62,7 +72,9 @@ internal sealed record AppSettingsDocument
     public AppThemeMode AppThemeMode { get; init; } = AppTheme.DefaultMode;
     public string AccentColor { get; init; } = AppTheme.DefaultAccentColor;
     public FolderNavigationMode FolderNavigationMode { get; init; } = FolderNavigationMode.DrillDown;
+    [JsonPropertyName("ChecklistWindowState")]
     public ChecklistWindowState? ChecklistWindowState { get; init; }
+    [JsonPropertyName("DictionaryWindowState")]
     public DictionaryWindowState? DictionaryWindowState { get; init; }
     [JsonPropertyName("JotsWindowState")]
     public JotsWindowState? JotsWindowState { get; init; }
@@ -74,9 +86,13 @@ internal sealed record AppSettingsDocument
 
     public bool NormalizePastedText { get; init; } = true;
     public bool ConfirmNoteDeletion { get; init; } = true;
+    [JsonPropertyName("ScratchpadWindowState")]
     public ScratchpadWindowState? ScratchpadWindowState { get; init; }
+    [JsonPropertyName("NoteEditorWindowState")]
     public NoteEditorWindowState? NoteEditorWindowState { get; init; }
+    [JsonPropertyName("MiniPadWindowState")]
     public MiniPadWindowState? MiniPadWindowState { get; init; }
+    [JsonPropertyName("MiniPadWindows")]
     public Dictionary<Guid, MiniPadWindowState>? MiniPadWindows { get; init; }
 
     [JsonPropertyName("RestoreEditorSession")]

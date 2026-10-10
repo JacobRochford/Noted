@@ -7,10 +7,10 @@ internal static class UtilityCatalog
 {
     internal static IReadOnlyList<UtilityDefinition> Utilities { get; } = Array.AsReadOnly(new[]
     {
-        new UtilityDefinition("Checklist", "Checklist", "✓", 13, "SemiBold", WindowManager.ToggleChecklist),
-        new UtilityDefinition("Dictionary", "Dictionary", "Aa", 10, "Bold", WindowManager.ToggleDictionary),
+        new UtilityDefinition(PersistenceKeys.Checklist, "Checklist", "✓", 13, "SemiBold", WindowManager.ToggleChecklist),
+        new UtilityDefinition(PersistenceKeys.Dictionary, "Dictionary", "Aa", 10, "Bold", WindowManager.ToggleDictionary),
          new UtilityDefinition(PersistenceKeys.Jots, "Jots", "✦", 12, "SemiBold", WindowManager.ToggleJots),
-        new UtilityDefinition("Scratchpad", "Scratchpad", "✎", 13, "SemiBold", WindowManager.ToggleScratchpad),
-        new UtilityDefinition("MiniPad", "MiniPad", "▤", 12, "SemiBold", WindowManager.ShowMiniPad)
+        new UtilityDefinition(PersistenceKeys.Scratchpad, "Scratchpad", "✎", 13, "SemiBold", WindowManager.ToggleScratchpad),
+        new UtilityDefinition(PersistenceKeys.MiniPad, "MiniPad", "▤", 12, "SemiBold", WindowManager.ShowMiniPad)
     });
 }

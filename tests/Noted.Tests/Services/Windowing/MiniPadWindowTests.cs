@@ -12,6 +12,30 @@ namespace Noted.Tests.Services;
 public sealed class MiniPadWindowTests
 {
     [TestMethod]
+    public void AppearanceKeysKeepHistoricalSingletonAndInstanceFormatsRegardlessOfTitle()
+    {
+        WithWindows((settings, directory) =>
+        {
+            var singleton = new MiniPadWindow(new MiniPadRecoveryService(directory.Path,
+                Guid.Parse("a6cb4208-79c0-4c08-9d07-9cdf33f31337")), settings);
+            var instance = new MiniPadWindow(new MiniPadRecoveryService(directory.Path,
+                Guid.Parse("12345678-1234-5678-abcd-0123456789ab")), settings);
+            try
+            {
+                singleton.Title = "Renamed singleton";
+                instance.Title = "Renamed instance";
+                Assert.AreEqual("MiniPadWindow", WindowAppearance.GetSettingsKey(singleton));
+                Assert.AreEqual("MiniPadWindow:1234567812345678abcd0123456789ab", WindowAppearance.GetSettingsKey(instance));
+            }
+            finally
+            {
+                singleton.Close();
+                instance.Close();
+            }
+        });
+    }
+
+    [TestMethod]
     public void NewCommandCapsInstancesAndShowingUsesMostRecentlyActivatedWindow()
     {
         WithWindows((settings, directory) =>

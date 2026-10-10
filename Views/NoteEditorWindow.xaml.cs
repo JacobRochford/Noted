@@ -147,7 +147,7 @@ public partial class NoteEditorWindow : Window
         SetWordWrapEnabled(windowState.WordWrapEnabled);
         SetLineNumbers(windowState.ShowLineNumbers);
         SetScrollSpeed(windowState.ScrollSpeed);
-        AlwaysVisibleMenuItem.IsChecked = settingsService.LoadWindowAlwaysVisible(nameof(NoteEditorWindow));
+        AlwaysVisibleMenuItem.IsChecked = settingsService.LoadWindowAlwaysVisible(PersistenceKeys.NoteEditorWindow);
         ReopenTabsOnStartupMenuItem.IsChecked = _settingsService.LoadReopenEditorTabsOnStartup();
         FileExplorerIntegrationMenuItem.IsChecked = FileExplorerIntegrationService.IsEnabled();
         UpdateEditorState();

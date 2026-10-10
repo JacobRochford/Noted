@@ -10,7 +10,7 @@ namespace Noted;
 
 public abstract class OverlayWindow : Window
 {
-    internal virtual string AppearanceSettingsKey => GetType().Name;
+    internal virtual string AppearanceSettingsKey => WindowAppearance.GetTypeSettingsKey(GetType());
     private bool _isChangingGroupVisibility;
     private WindowEdgeResizer? _edgeResizer;
     private WindowState _restoreWindowState = WindowState.Normal;
