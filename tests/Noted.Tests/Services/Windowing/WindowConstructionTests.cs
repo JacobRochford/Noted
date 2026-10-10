@@ -311,6 +311,13 @@ public sealed class WindowConstructionTests
             ((CheckBox)window.FindName("RegexOption")).IsChecked = false;
             ((CheckBox)window.FindName("MatchWholeWordOption")).IsChecked = false;
             Invoke(window, "CloseFind", window is NoteEditorWindow ? [false] : []);
+            if (window is NoteEditorWindow)
+            {
+                // save the edited fixture so shutdown checks don't open an unsaved-changes dialog.
+                var saved = typeof(NoteEditorWindow).GetMethod("TrySaveCurrentNote", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(noteEditor, null);
+                Assert.AreEqual(true, saved, "The search fixture must be saved before checking shutdown.");
+            }
         }
     }
 
