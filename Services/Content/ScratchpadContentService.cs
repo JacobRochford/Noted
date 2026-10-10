@@ -14,7 +14,7 @@ public sealed class ScratchpadContentService : IScratchpadContentService
     public ScratchpadContentService(string storageDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storageDirectory);
-        _contentFilePath = Path.Combine(Path.GetFullPath(storageDirectory), "scratchpad.rtf");
+        _contentFilePath = Path.Combine(Path.GetFullPath(storageDirectory), PersistencePaths.ScratchpadFile);
         _backupFilePath = $"{_contentFilePath}.bak";
     }
 

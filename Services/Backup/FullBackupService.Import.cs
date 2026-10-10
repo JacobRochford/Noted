@@ -66,7 +66,7 @@ internal sealed partial class FullBackupService
             importId = Guid.NewGuid();
 
             Directory.CreateDirectory(_backupDirectory);
-            buildPath = Path.Combine(_backupDirectory, $".importing-{importId.Value:N}");
+            buildPath = Path.Combine(_backupDirectory, $"{ImportingDirectoryPrefix}{importId.Value:N}");
             Directory.CreateDirectory(buildPath);
             var filesDirectory = Path.Combine(buildPath, FilesDirectoryName);
             Directory.CreateDirectory(filesDirectory);
@@ -178,7 +178,7 @@ internal sealed partial class FullBackupService
         byte[] transformed = bytes;
         BackupContentDetails details;
 
-        if (sourcePath.StartsWith("notes/", StringComparison.OrdinalIgnoreCase))
+        if (sourcePath.StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase))
         {
             if (!NoteFileExtensions.IsSupported(sourcePath))
                 throw new InvalidDataException($"The imported note '{sourcePath}' has an unsupported file type.");
@@ -243,7 +243,7 @@ internal sealed partial class FullBackupService
                 throw new InvalidDataException($"The imported backup contains an unsupported MiniPad file: '{sourcePath}'.");
             details = ValidateMiniPadDraft(bytes, sourcePath);
         }
-        else if (sourcePath.StartsWith("app/recovery/", StringComparison.OrdinalIgnoreCase))
+        else if (sourcePath.StartsWith(PersistencePaths.RecoveryBackupPrefix, StringComparison.OrdinalIgnoreCase))
         {
             if (sourcePath.Split('/').Length != 3 ||
                 !Path.GetExtension(sourcePath).Equals(".json", StringComparison.OrdinalIgnoreCase))
@@ -259,21 +259,21 @@ internal sealed partial class FullBackupService
             };
             transformed = JsonSerializer.SerializeToUtf8Bytes(importedDraft, BackupFormat.JsonOptions);
             var fileName = Path.GetFileName(sourcePath).Equals(
-                "editor-draft.json",
+                PersistencePaths.LegacyEditorDraftFile,
                 StringComparison.OrdinalIgnoreCase)
-                ? "editor-draft.json"
-                : $"{GetPathHash(importedDraft.FilePath)}.json";
-            logicalPath = $"app/recovery/{fileName}";
+                ? PersistencePaths.LegacyEditorDraftFile
+                : $"{NotePathIdentity.GetHash(NormalizeBackupDataPath(importedDraft.FilePath))}.json";
+            logicalPath = $"{PersistencePaths.RecoveryBackupPrefix}{fileName}";
             details = ValidateNoteDraft(transformed, logicalPath);
         }
-        else if (sourcePath.StartsWith("app/note-history/", StringComparison.OrdinalIgnoreCase))
+        else if (sourcePath.StartsWith(PersistencePaths.NoteHistoryBackupPrefix, StringComparison.OrdinalIgnoreCase))
         {
             details = ValidateNoteHistoryEntry(bytes);
             var history = JsonSerializer.Deserialize<ImportedNoteHistoryEntry>(bytes)
                 ?? throw new JsonException("The imported note history file contains no value.");
             var sourceParts = sourcePath.Split('/');
             if (sourceParts.Length != 4 ||
-                !sourceParts[2].Equals(GetPathHash(history.NotePath), StringComparison.OrdinalIgnoreCase))
+                !sourceParts[2].Equals(NotePathIdentity.GetHash(NormalizeBackupDataPath(history.NotePath)), StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidDataException("The imported note history path does not match its note.");
             }
@@ -283,10 +283,10 @@ internal sealed partial class FullBackupService
                 NotePath = RebaseNotePath(history.NotePath, manifest.NotesRoot)
             };
             transformed = JsonSerializer.SerializeToUtf8Bytes(importedHistory, BackupFormat.JsonOptions);
-            logicalPath = $"app/note-history/{GetPathHash(importedHistory.NotePath)}/{sourceParts[3]}";
+            logicalPath = $"{PersistencePaths.NoteHistoryBackupPrefix}{NotePathIdentity.GetHash(NormalizeBackupDataPath(importedHistory.NotePath))}/{sourceParts[3]}";
             details = ValidateNoteHistoryEntry(transformed);
         }
-        else if (sourcePath.StartsWith("app/DeletedNotes/", StringComparison.OrdinalIgnoreCase))
+        else if (sourcePath.StartsWith(PersistencePaths.DeletedNotesBackupPrefix, StringComparison.OrdinalIgnoreCase))
         {
             if (!NoteFileExtensions.IsSupported(sourcePath))
                 throw new InvalidDataException($"The imported deleted note '{sourcePath}' has an unsupported file type.");
@@ -356,14 +356,8 @@ internal sealed partial class FullBackupService
         return GetContainedPath(_notesDirectory, relativePath);
     }
 
-    private static string GetPathHash(string path)
-    {
-        var normalizedPath = NormalizeBackupDataPath(path).ToUpperInvariant();
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath)));
-    }
-
     private string GetPendingImportPath(Guid importId) =>
-        Path.Combine(_backupDirectory, $"pending-import-{importId:N}");
+        Path.Combine(_backupDirectory, $"{PendingImportDirectoryPrefix}{importId:N}");
 
     private void TryDeleteImportDirectory(string? path)
     {
@@ -389,7 +383,7 @@ internal sealed partial class FullBackupService
         {
             foreach (var path in Directory.EnumerateDirectories(
                          _backupDirectory,
-                         ".restored-import-*",
+                         RestoredImportDirectoryPrefix + "*",
                          SearchOption.TopDirectoryOnly))
             {
                 TryDeleteImportDirectory(path);
@@ -406,7 +400,7 @@ internal sealed partial class FullBackupService
                 : null;
             foreach (var path in Directory.EnumerateDirectories(
                          _backupDirectory,
-                         "pending-import-*",
+                         PendingImportDirectoryPrefix + "*",
                          SearchOption.TopDirectoryOnly))
             {
                 if (activeImportPath is null || !PathsEqual(path, activeImportPath))
@@ -451,9 +445,9 @@ internal sealed partial class FullBackupService
             : _backupDirectory + Path.DirectorySeparatorChar;
         var name = Path.GetFileName(fullPath);
         if (!fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase) ||
-            (!name.StartsWith(".importing-", StringComparison.OrdinalIgnoreCase) &&
-             !name.StartsWith("pending-import-", StringComparison.OrdinalIgnoreCase) &&
-             !name.StartsWith(".restored-import-", StringComparison.OrdinalIgnoreCase)))
+            (!name.StartsWith(ImportingDirectoryPrefix, StringComparison.OrdinalIgnoreCase) &&
+             !name.StartsWith(PendingImportDirectoryPrefix, StringComparison.OrdinalIgnoreCase) &&
+             !name.StartsWith(RestoredImportDirectoryPrefix, StringComparison.OrdinalIgnoreCase)))
         {
             throw new IOException("The import folder is outside Noted's backup storage.");
         }

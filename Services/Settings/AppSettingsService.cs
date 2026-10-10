@@ -48,13 +48,11 @@ public sealed class AppSettingsService : IAppSettingsService {
             throw new ArgumentOutOfRangeException(nameof(maxSettingsHistoryFiles));
 
         AppDataDirectory = string.IsNullOrWhiteSpace(appDataDirectory)
-            ? Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Noted")
+            ? PersistencePaths.DefaultAppDataDirectory
             : Path.GetFullPath(appDataDirectory);
-        _settingsFilePath = Path.Combine(AppDataDirectory, "settings.json");
+        _settingsFilePath = Path.Combine(AppDataDirectory, PersistencePaths.SettingsFile);
         _backupFilePath = $"{_settingsFilePath}.bak";
-        _settingsHistoryDirectory = Path.Combine(AppDataDirectory, "backups");
+        _settingsHistoryDirectory = Path.Combine(AppDataDirectory, PersistencePaths.SettingsHistoryDirectory);
         _timeProvider = timeProvider;
         _settingsHistoryInterval = settingsHistoryInterval;
         _maxSettingsHistoryFiles = maxSettingsHistoryFiles;

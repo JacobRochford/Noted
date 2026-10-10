@@ -93,9 +93,7 @@ public partial class App : Application
 
         try
         {
-            var appDataDirectory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Noted");
+            var appDataDirectory = PersistencePaths.DefaultAppDataDirectory;
             var fullBackupService = new FullBackupService(
                 appDataDirectory,
                 appDataDirectory);

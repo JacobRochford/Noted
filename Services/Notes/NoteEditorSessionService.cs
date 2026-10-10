@@ -12,8 +12,8 @@ public sealed class NoteEditorSessionService : INoteEditorSessionService
     public NoteEditorSessionService(string storageDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storageDirectory);
-        var sessionDirectory = Path.Combine(Path.GetFullPath(storageDirectory), "session");
-        _sessionFilePath = Path.Combine(sessionDirectory, "editor-workspace.json");
+        var sessionDirectory = Path.Combine(Path.GetFullPath(storageDirectory), PersistencePaths.SessionDirectory);
+        _sessionFilePath = Path.Combine(sessionDirectory, PersistencePaths.EditorSessionFile);
         _backupFilePath = $"{_sessionFilePath}.bak";
     }
 

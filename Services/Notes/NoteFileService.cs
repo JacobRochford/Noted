@@ -26,13 +26,13 @@ public sealed class NoteFileService : INoteFileService {
     public bool CanNavigateBack => _navigation.CanNavigateBack;
     public bool CanNavigateForward => _navigation.CanNavigateForward;
     public string DeletedNotesDirectory { get; }
-    public string ArchivedNotesDirectory => Path.Combine(NotesDirectory, ".archive");
+    public string ArchivedNotesDirectory => Path.Combine(NotesDirectory, PersistencePaths.ArchivedNotesDirectory);
 
     public event EventHandler? FilesChanged;
 
     public NoteFileService(IAppSettingsService settingsService) {
         _settingsService = settingsService;
-        DeletedNotesDirectory = Path.Combine(_settingsService.AppDataDirectory, "DeletedNotes");
+        DeletedNotesDirectory = Path.Combine(_settingsService.AppDataDirectory, PersistencePaths.DeletedNotesDirectory);
         _navigation = new NoteBrowserNavigation(ResolveInitialNotesDirectory());
         _directoryWatcher.Changed += OnFilesChanged;
         Directory.CreateDirectory(NotesDirectory);
@@ -599,7 +599,7 @@ public sealed class NoteFileService : INoteFileService {
         if (!string.IsNullOrWhiteSpace(savedDirectory))
             return Path.GetFullPath(savedDirectory);
 
-        return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Notes");
+        return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, PersistencePaths.DefaultNotesDirectory);
     }
 
     private string? ResolveNoteDirectory(string? containingDirectory) {

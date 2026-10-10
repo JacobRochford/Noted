@@ -6,7 +6,6 @@ namespace Noted.Services;
 
 internal sealed class BackupRestore
 {
-    private const string RestoreRequestFileName = "restore-request.json";
 
     private readonly string _backupDirectory;
     private readonly BackupArchiveReader _archiveReader;
@@ -69,8 +68,8 @@ internal sealed class BackupRestore
             }
 
             var restorePath = request.ImportId.HasValue
-                ? Path.Combine(_backupDirectory, $"pending-import-{request.ImportId.Value:N}")
-                : Path.Combine(_backupDirectory, "protected");
+                ? Path.Combine(_backupDirectory, $"{PendingImportDirectoryPrefix}{request.ImportId.Value:N}")
+                : Path.Combine(_backupDirectory, UserDirectoryName);
             var restoreBackup = _archiveReader.ReadBackup(restorePath, FullBackupType.User);
             if (restoreBackup.Status != BackupReadStatus.Valid)
             {
@@ -106,7 +105,7 @@ internal sealed class BackupRestore
                 {
                     var restoredImportPath = Path.Combine(
                         _backupDirectory,
-                        $".restored-import-{request.ImportId.Value:N}");
+                        $"{RestoredImportDirectoryPrefix}{request.ImportId.Value:N}");
                     Directory.Move(restorePath, restoredImportPath);
                     _deleteImportDirectory(restoredImportPath);
                 }

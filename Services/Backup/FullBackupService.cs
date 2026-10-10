@@ -84,7 +84,6 @@ internal sealed record BackupFileContent(
 
 internal sealed partial class FullBackupService
 {
-    private const string RestoreRequestFileName = "restore-request.json";
     private readonly string _appDataDirectory;
     private string _notesDirectory;
     private readonly string _backupDirectory;
@@ -105,7 +104,7 @@ internal sealed partial class FullBackupService
 
         _appDataDirectory = Path.GetFullPath(appDataDirectory);
         _notesDirectory = Path.GetFullPath(notesDirectory);
-        _backupDirectory = Path.Combine(_appDataDirectory, "full-snapshots");
+        _backupDirectory = Path.Combine(_appDataDirectory, BackupDirectoryName);
         _contentCatalog = new BackupContentCatalog(
             _appDataDirectory,
             _notesDirectory,
@@ -390,11 +389,11 @@ internal sealed partial class FullBackupService
         return Directory
             .EnumerateDirectories(_backupDirectory)
             .Where(path =>
-                Path.GetFileName(path).StartsWith(".building-", StringComparison.OrdinalIgnoreCase) ||
-                Path.GetFileName(path).StartsWith(".replacing-", StringComparison.OrdinalIgnoreCase) ||
-                Path.GetFileName(path).StartsWith(".failed-", StringComparison.OrdinalIgnoreCase) ||
-                Path.GetFileName(path).StartsWith(".importing-", StringComparison.OrdinalIgnoreCase) ||
-                Path.GetFileName(path).StartsWith("pending-import-", StringComparison.OrdinalIgnoreCase))
+                Path.GetFileName(path).StartsWith(BuildingDirectoryPrefix, StringComparison.OrdinalIgnoreCase) ||
+                Path.GetFileName(path).StartsWith(ReplacingDirectoryPrefix, StringComparison.OrdinalIgnoreCase) ||
+                Path.GetFileName(path).StartsWith(FailedDirectoryPrefix, StringComparison.OrdinalIgnoreCase) ||
+                Path.GetFileName(path).StartsWith(ImportingDirectoryPrefix, StringComparison.OrdinalIgnoreCase) ||
+                Path.GetFileName(path).StartsWith(PendingImportDirectoryPrefix, StringComparison.OrdinalIgnoreCase))
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -442,8 +441,8 @@ internal sealed partial class FullBackupService
             }
         }
 
-        var previousNotes = previousByPath.Keys.Count(path => path.StartsWith("notes/", StringComparison.OrdinalIgnoreCase));
-        var currentNotes = currentByPath.Keys.Count(path => path.StartsWith("notes/", StringComparison.OrdinalIgnoreCase));
+        var previousNotes = previousByPath.Keys.Count(path => path.StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase));
+        var currentNotes = currentByPath.Keys.Count(path => path.StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase));
         if (previousNotes >= 4 && currentNotes * 2 < previousNotes)
             return $"the note count dropped from {previousNotes} to {currentNotes}";
 
@@ -489,15 +488,6 @@ internal sealed partial class FullBackupService
             _backupDirectory,
             GetBackupFolderName(backupType));
 
-    // These folder names predate the User/Recent terminology and must remain readable.
-    private static string GetBackupFolderName(FullBackupType backupType) =>
-        backupType switch
-        {
-            FullBackupType.User => "protected",
-            FullBackupType.Recent => "latest",
-            _ => throw new ArgumentOutOfRangeException(nameof(backupType))
-        };
-
     private string GetRestoreRequestPath() =>
         Path.Combine(_backupDirectory, RestoreRequestFileName);
 
@@ -506,8 +496,8 @@ internal sealed partial class FullBackupService
         FullBackupManifest manifest)
     {
         var normalizedPath = NormalizeLogicalPath(logicalPath);
-        const string appPrefix = "app/";
-        const string notesPrefix = "notes/";
+        const string appPrefix = PersistencePaths.AppBackupPrefix;
+        const string notesPrefix = PersistencePaths.NotesBackupPrefix;
         if (normalizedPath.StartsWith(appPrefix, StringComparison.OrdinalIgnoreCase))
         {
             return GetContainedPath(

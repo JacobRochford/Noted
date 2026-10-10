@@ -112,7 +112,7 @@ internal sealed class BackupContentCatalog
 
     private void AddNoteRecoveryFiles(ICollection<BackupSourceEntry> sources)
     {
-        var recoveryDirectory = Path.Combine(_appDataDirectory, "recovery");
+        var recoveryDirectory = Path.Combine(_appDataDirectory, PersistencePaths.RecoveryDirectory);
         if (!Directory.Exists(recoveryDirectory))
             return;
 
@@ -129,7 +129,7 @@ internal sealed class BackupContentCatalog
         if (Directory.Exists(miniPadDirectory))
             ThrowIfDirectoryIsLink(miniPadDirectory);
 
-        var settingsPath = Path.Combine(_appDataDirectory, "settings.json");
+        var settingsPath = Path.Combine(_appDataDirectory, PersistencePaths.SettingsFile);
         var settings = File.Exists(settingsPath)
             ? JsonSerializer.Deserialize<AppSettingsDocument>(File.ReadAllBytes(settingsPath))
             : null;
@@ -153,7 +153,7 @@ internal sealed class BackupContentCatalog
 
         var relativePath = Path.GetRelativePath(_appDataDirectory, path);
         sources.Add(CreateSourceEntry(
-            ToLogicalPath("app", relativePath),
+            ToLogicalPath(PersistencePaths.AppBackupRoot, relativePath),
             path,
             validator));
     }
@@ -166,7 +166,7 @@ internal sealed class BackupContentCatalog
 
     private void AddNoteHistoryFiles(ICollection<BackupSourceEntry> sources)
     {
-        var historyDirectory = Path.Combine(_appDataDirectory, "note-history");
+        var historyDirectory = Path.Combine(_appDataDirectory, PersistencePaths.NoteHistoryDirectory);
         if (!Directory.Exists(historyDirectory))
             return;
 
@@ -177,7 +177,7 @@ internal sealed class BackupContentCatalog
 
             var relativePath = Path.GetRelativePath(_appDataDirectory, path);
             sources.Add(CreateSourceEntry(
-                ToLogicalPath("app", relativePath),
+                ToLogicalPath(PersistencePaths.AppBackupRoot, relativePath),
                 path,
                 ValidateNoteHistoryEntry));
         }
@@ -185,7 +185,7 @@ internal sealed class BackupContentCatalog
 
     private void AddDeletedNotes(ICollection<BackupSourceEntry> sources)
     {
-        var deletedNotesDirectory = Path.Combine(_appDataDirectory, "DeletedNotes");
+        var deletedNotesDirectory = Path.Combine(_appDataDirectory, PersistencePaths.DeletedNotesDirectory);
         if (!Directory.Exists(deletedNotesDirectory))
             return;
 
@@ -196,7 +196,7 @@ internal sealed class BackupContentCatalog
 
             var relativePath = Path.GetRelativePath(_appDataDirectory, path);
             sources.Add(CreateSourceEntry(
-                ToLogicalPath("app", relativePath),
+                ToLogicalPath(PersistencePaths.AppBackupRoot, relativePath),
                 path,
                 bytes => new BackupContentDetails(null, bytes.LongLength)));
         }
@@ -211,7 +211,7 @@ internal sealed class BackupContentCatalog
 
             var relativePath = Path.GetRelativePath(_notesDirectory, path);
             sources.Add(CreateSourceEntry(
-                ToLogicalPath("notes", relativePath),
+                ToLogicalPath(PersistencePaths.NotesBackupRoot, relativePath),
                 path,
                 bytes => new BackupContentDetails(null, bytes.LongLength)));
         }
@@ -309,11 +309,9 @@ internal sealed class BackupContentCatalog
             throw new JsonException("The note recovery file does not contain a supported note path.");
         }
 
-        if (!Path.GetFileName(path).Equals("editor-draft.json", StringComparison.OrdinalIgnoreCase))
+        if (!Path.GetFileName(path).Equals(PersistencePaths.LegacyEditorDraftFile, StringComparison.OrdinalIgnoreCase))
         {
-            var normalizedPath = NormalizeBackupDataPath(draft.FilePath).ToUpperInvariant();
-            var expectedName = Convert.ToHexString(
-                SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(normalizedPath))) + ".json";
+            var expectedName = NotePathIdentity.GetHash(NormalizeBackupDataPath(draft.FilePath)) + ".json";
             if (!Path.GetFileName(path).Equals(expectedName, StringComparison.OrdinalIgnoreCase))
                 throw new JsonException("The note path does not match the recovery file name.");
         }

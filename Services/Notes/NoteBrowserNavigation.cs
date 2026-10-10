@@ -141,7 +141,7 @@ internal sealed class NoteBrowserNavigation
         TryNormalizeContainedPath(RootDirectory, path, out normalizedPath, allowRoot);
 
     private bool IsInArchive(string path) =>
-        TryNormalizeContainedPath(Path.Combine(RootDirectory, ".archive"), path, out _);
+        TryNormalizeContainedPath(Path.Combine(RootDirectory, PersistencePaths.ArchivedNotesDirectory), path, out _);
 
     private static bool TryNormalizeContainedPath(
         string rootDirectory,

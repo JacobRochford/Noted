@@ -32,7 +32,7 @@ public sealed class NoteContentService : INoteContentService
 
         _historyDirectory = Path.Combine(
             Path.GetFullPath(storageDirectory),
-            "note-history");
+            PersistencePaths.NoteHistoryDirectory);
         _clock = clock;
         _historyLimit = historyLimit;
     }
@@ -213,9 +213,7 @@ public sealed class NoteContentService : INoteContentService
 
     private string GetNoteHistoryDirectory(string notePath)
     {
-        var normalizedPath = Path.GetFullPath(notePath).ToUpperInvariant();
-        var hash = Convert.ToHexString(
-            SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath)));
+        var hash = NotePathIdentity.GetHash(notePath);
         return Path.Combine(_historyDirectory, hash);
     }
 

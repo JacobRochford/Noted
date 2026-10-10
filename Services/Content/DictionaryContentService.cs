@@ -11,7 +11,7 @@ public sealed class DictionaryContentService : IDictionaryContentService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storageDirectory);
         _fileStore = new JsonCollectionFileStore<DictionaryItemState>(
-            Path.Combine(Path.GetFullPath(storageDirectory), "dictionary.json"),
+            Path.Combine(Path.GetFullPath(storageDirectory), PersistencePaths.DictionaryFile),
             "Dictionary content");
     }
 

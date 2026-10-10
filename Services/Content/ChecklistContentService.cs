@@ -13,10 +13,10 @@ public sealed class ChecklistContentService : IChecklistContentService
         ArgumentException.ThrowIfNullOrWhiteSpace(storageDirectory);
         var normalizedStorageDirectory = Path.GetFullPath(storageDirectory);
         _itemStore = new JsonCollectionFileStore<ChecklistItemState>(
-            Path.Combine(normalizedStorageDirectory, "checklist.json"),
+            Path.Combine(normalizedStorageDirectory, PersistencePaths.ChecklistFile),
             "Checklist content");
         _tabStore = new JsonCollectionFileStore<ChecklistTabState>(
-            Path.Combine(normalizedStorageDirectory, "checklist-tabs.json"),
+            Path.Combine(normalizedStorageDirectory, PersistencePaths.ChecklistTabsFile),
             "Checklist tabs");
     }
 

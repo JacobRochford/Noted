@@ -44,7 +44,7 @@ internal sealed class BackupArchiveWriter
         IReadOnlyList<BackupSourceEntry> backupFiles)
     {
         Directory.CreateDirectory(_backupDirectory);
-        var buildPath = Path.Combine(_backupDirectory, $".building-{Guid.NewGuid():N}");
+        var buildPath = Path.Combine(_backupDirectory, $"{BuildingDirectoryPrefix}{Guid.NewGuid():N}");
         Directory.CreateDirectory(buildPath);
         var filesDirectory = Path.Combine(buildPath, FilesDirectoryName);
         Directory.CreateDirectory(filesDirectory);
@@ -93,7 +93,7 @@ internal sealed class BackupArchiveWriter
 
         var retiredPath = Path.Combine(
             _backupDirectory,
-            $".replacing-{GetBackupFolderName(backupType)}-{Guid.NewGuid():N}");
+            $"{ReplacingDirectoryPrefix}{GetBackupFolderName(backupType)}-{Guid.NewGuid():N}");
         Directory.Move(backupPath, retiredPath);
         try
         {
@@ -106,7 +106,7 @@ internal sealed class BackupArchiveWriter
             {
                 var failedPath = Path.Combine(
                     _backupDirectory,
-                    $".failed-{GetBackupFolderName(backupType)}-{Guid.NewGuid():N}");
+                    $"{FailedDirectoryPrefix}{GetBackupFolderName(backupType)}-{Guid.NewGuid():N}");
                 Directory.Move(backupPath, failedPath);
             }
             if (Directory.Exists(retiredPath))
@@ -135,7 +135,7 @@ internal sealed class BackupArchiveWriter
         string userBackupPath,
         string retiredUserBackupPath)
     {
-        var previousPath = Path.Combine(_backupDirectory, "previous");
+        var previousPath = Path.Combine(_backupDirectory, PreviousDirectoryName);
         string? olderPreviousPath = null;
         try
         {
@@ -143,7 +143,7 @@ internal sealed class BackupArchiveWriter
             {
                 olderPreviousPath = Path.Combine(
                     _backupDirectory,
-                    $".replacing-previous-{Guid.NewGuid():N}");
+                    $"{ReplacingDirectoryPrefix}{PreviousDirectoryName}-{Guid.NewGuid():N}");
                 Directory.Move(previousPath, olderPreviousPath);
             }
 
@@ -217,14 +217,6 @@ internal sealed class BackupArchiveWriter
     private string GetBackupPath(FullBackupType backupType) =>
         Path.Combine(_backupDirectory, GetBackupFolderName(backupType));
 
-    private static string GetBackupFolderName(FullBackupType backupType) =>
-        backupType switch
-        {
-            FullBackupType.User => "protected",
-            FullBackupType.Recent => "latest",
-            _ => throw new ArgumentOutOfRangeException(nameof(backupType))
-        };
-
     private void DeleteBackupDirectory(string path)
     {
         var fullPath = Path.GetFullPath(path);
@@ -233,8 +225,8 @@ internal sealed class BackupArchiveWriter
             : _backupDirectory + Path.DirectorySeparatorChar;
         var directoryName = Path.GetFileName(fullPath);
         if (!fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase) ||
-            (!directoryName.StartsWith(".replacing-", StringComparison.OrdinalIgnoreCase) &&
-             !directoryName.StartsWith(".failed-", StringComparison.OrdinalIgnoreCase)))
+            (!directoryName.StartsWith(ReplacingDirectoryPrefix, StringComparison.OrdinalIgnoreCase) &&
+             !directoryName.StartsWith(FailedDirectoryPrefix, StringComparison.OrdinalIgnoreCase)))
         {
             throw new IOException("The retired backup path is outside the expected backup directory.");
         }

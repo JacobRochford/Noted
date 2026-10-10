@@ -1,6 +1,4 @@
 using System.IO;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 
 namespace Noted.Services;
@@ -19,8 +17,8 @@ public sealed class NoteRecoveryService : INoteRecoveryService
     public NoteRecoveryService(string storageDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storageDirectory);
-        _recoveryDirectory = Path.Combine(Path.GetFullPath(storageDirectory), "recovery");
-        _legacyDraftFilePath = Path.Combine(_recoveryDirectory, "editor-draft.json");
+        _recoveryDirectory = Path.Combine(Path.GetFullPath(storageDirectory), PersistencePaths.RecoveryDirectory);
+        _legacyDraftFilePath = Path.Combine(_recoveryDirectory, PersistencePaths.LegacyEditorDraftFile);
     }
 
     public NoteRecoveryDraftLoadResult LoadDraft(string filePath)
@@ -332,8 +330,7 @@ public sealed class NoteRecoveryService : INoteRecoveryService
 
     private string GetDraftFilePath(string filePath)
     {
-        var normalizedPath = Path.GetFullPath(filePath).ToUpperInvariant();
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalizedPath)));
+        var hash = NotePathIdentity.GetHash(filePath);
         return Path.Combine(_recoveryDirectory, $"{hash}.json");
     }
 

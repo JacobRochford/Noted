@@ -13,8 +13,7 @@ internal static class ExceptionDiagnostics
     internal static void Record(Exception exception, [CallerMemberName] string context = "")
     {
         Write(exception, Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Noted", "logs", "exceptions.log"), context);
+            PersistencePaths.DefaultAppDataDirectory, "logs", "exceptions.log"), context);
     }
 
     internal static void Write(Exception exception, string logPath, string context)

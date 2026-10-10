@@ -1,4 +1,5 @@
 using System.IO;
+using static Noted.Services.BackupFormat;
 
 namespace Noted.Services;
 
@@ -34,7 +35,7 @@ internal sealed partial class FullBackupService
             var build = _archiveWriter.BuildVerifiedBackup(FullBackupType.BeforeRestore, currentFiles);
             var backupPath = Path.Combine(
                 _backupDirectory,
-                $"before-restore-{_clock.GetUtcNow().UtcDateTime:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}");
+                $"{BeforeRestoreDirectoryPrefix}{_clock.GetUtcNow().UtcDateTime:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}");
             Directory.Move(build.Path, backupPath);
             _archiveReader.VerifyBackupFolder(backupPath, FullBackupType.BeforeRestore);
 
@@ -72,7 +73,7 @@ internal sealed partial class FullBackupService
         var backups = Directory
             .EnumerateDirectories(
                 _backupDirectory,
-                "before-restore-*",
+                BeforeRestoreDirectoryPrefix + "*",
                 SearchOption.TopDirectoryOnly)
             .OrderByDescending(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -87,7 +88,7 @@ internal sealed partial class FullBackupService
             ? _backupDirectory
             : _backupDirectory + Path.DirectorySeparatorChar;
         if (!fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase) ||
-            !Path.GetFileName(fullPath).StartsWith("before-restore-", StringComparison.OrdinalIgnoreCase))
+            !Path.GetFileName(fullPath).StartsWith(BeforeRestoreDirectoryPrefix, StringComparison.OrdinalIgnoreCase))
         {
             throw new IOException("The before-restore backup is outside Noted's backup storage.");
         }
