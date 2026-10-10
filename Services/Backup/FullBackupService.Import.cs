@@ -175,6 +175,7 @@ internal sealed partial class FullBackupService
     {
         var sourcePath = NormalizeLogicalPath(entry.LogicalPath);
         var logicalPath = sourcePath;
+        var fixedFile = BackupContentDefinitions.Find(sourcePath);
         byte[] transformed = bytes;
         BackupContentDetails details;
 
@@ -184,7 +185,7 @@ internal sealed partial class FullBackupService
                 throw new InvalidDataException($"The imported note '{sourcePath}' has an unsupported file type.");
             details = new BackupContentDetails(null, bytes.LongLength);
         }
-        else if (sourcePath.Equals("app/settings.json", StringComparison.OrdinalIgnoreCase))
+        else if (fixedFile?.Content == FixedBackupContent.Settings)
         {
             ValidateSettings(bytes);
             var settings = JsonNode.Parse(bytes) as JsonObject
@@ -193,26 +194,7 @@ internal sealed partial class FullBackupService
             transformed = JsonSerializer.SerializeToUtf8Bytes(settings, BackupFormat.JsonOptions);
             details = ValidateSettings(transformed);
         }
-        else if (sourcePath.Equals("app/checklist.json", StringComparison.OrdinalIgnoreCase))
-        {
-            var items = ValidateCollection<List<ChecklistItemState>>(bytes);
-            details = new BackupContentDetails(items.Count, null);
-        }
-        else if (sourcePath.Equals("app/checklist-tabs.json", StringComparison.OrdinalIgnoreCase))
-        {
-            var tabs = ValidateCollection<List<ChecklistTabState>>(bytes);
-            details = new BackupContentDetails(tabs.Count, null);
-        }
-        else if (sourcePath.Equals("app/dictionary.json", StringComparison.OrdinalIgnoreCase))
-        {
-            var items = ValidateCollection<List<DictionaryItemState>>(bytes);
-            details = new BackupContentDetails(items.Count, null);
-        }
-        else if (sourcePath.Equals("app/scratchpad.rtf", StringComparison.OrdinalIgnoreCase))
-        {
-            details = new BackupContentDetails(null, bytes.LongLength);
-        }
-        else if (sourcePath.Equals("app/session/editor-workspace.json", StringComparison.OrdinalIgnoreCase))
+        else if (fixedFile?.Content == FixedBackupContent.EditorSession)
         {
             var session = ValidateEditorSession(bytes);
             if (session.Tabs.Any(tab => tab is null))
@@ -235,6 +217,10 @@ internal sealed partial class FullBackupService
             transformed = JsonSerializer.SerializeToUtf8Bytes(importedSession, BackupFormat.JsonOptions);
             _ = ValidateEditorSession(transformed);
             details = new BackupContentDetails(null, null);
+        }
+        else if (fixedFile is not null)
+        {
+            details = ValidateFixedFile(fixedFile.Content, bytes);
         }
         else if (sourcePath.StartsWith("app/recovery/micro-scratchpads/", StringComparison.OrdinalIgnoreCase))
         {

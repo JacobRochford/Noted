@@ -34,27 +34,8 @@ internal sealed class BackupContentCatalog
             throw new DirectoryNotFoundException($"The notes folder '{_notesDirectory}' could not be found.");
 
         var sources = new List<BackupSourceEntry>();
-        AddAppFile(sources, "settings.json", ValidateSettings);
-        AddAppFile<List<ChecklistItemState>>(
-            sources,
-            "checklist.json",
-            ValidateCollection<List<ChecklistItemState>>,
-            items => items.Count);
-        AddAppFile<List<ChecklistTabState>>(
-            sources,
-            "checklist-tabs.json",
-            ValidateCollection<List<ChecklistTabState>>,
-            items => items.Count);
-        AddAppFile<List<DictionaryItemState>>(
-            sources,
-            "dictionary.json",
-            ValidateCollection<List<DictionaryItemState>>,
-            items => items.Count);
-        AddAppTextFile(sources, "scratchpad.rtf");
-        AddAppFile<NoteEditorSession>(
-            sources,
-            Path.Combine("session", "editor-workspace.json"),
-            ValidateEditorSession);
+        foreach (var definition in BackupContentDefinitions.FixedFiles)
+            AddAppFile(sources, definition);
         AddNoteRecoveryFiles(sources);
         AddNoteHistoryFiles(sources);
         AddDeletedNotes(sources);
@@ -71,43 +52,40 @@ internal sealed class BackupContentCatalog
             .ToList();
     }
 
-    private void AddAppFile(
-        ICollection<BackupSourceEntry> sources,
-        string relativePath,
-        Func<byte[], BackupContentDetails> validator)
+    private void AddAppFile(ICollection<BackupSourceEntry> sources, FixedBackupFile definition)
     {
-        var sourcePath = Path.Combine(_appDataDirectory, relativePath);
+        var sourcePath = Path.Combine(_appDataDirectory, definition.RelativePath);
         if (!File.Exists(sourcePath))
             return;
 
         sources.Add(CreateSourceEntry(
-            ToLogicalPath("app", relativePath),
+            definition.LogicalPath,
             sourcePath,
-            validator));
+            bytes => ValidateFixedFile(definition.Content, bytes)));
     }
 
-    private void AddAppFile<T>(
-        ICollection<BackupSourceEntry> sources,
-        string relativePath,
-        Func<byte[], T> validator,
-        Func<T, int>? itemCount = null)
+    internal static BackupContentDetails ValidateFixedFile(FixedBackupContent content, byte[] bytes)
     {
-        AddAppFile(
-            sources,
-            relativePath,
-            bytes =>
-            {
-                var value = validator(bytes);
-                return new BackupContentDetails(itemCount?.Invoke(value), null);
-            });
-    }
-
-    private void AddAppTextFile(ICollection<BackupSourceEntry> sources, string relativePath)
-    {
-        AddAppFile(
-            sources,
-            relativePath,
-            bytes => new BackupContentDetails(null, bytes.LongLength));
+        switch (content)
+        {
+            case FixedBackupContent.Settings:
+                return ValidateSettings(bytes);
+            case FixedBackupContent.Checklist:
+                return new BackupContentDetails(ValidateCollection<List<ChecklistItemState>>(bytes).Count, null);
+            case FixedBackupContent.ChecklistTabs:
+                return new BackupContentDetails(ValidateCollection<List<ChecklistTabState>>(bytes).Count, null);
+            case FixedBackupContent.Dictionary:
+                return new BackupContentDetails(ValidateCollection<List<DictionaryItemState>>(bytes).Count, null);
+            case FixedBackupContent.Jots:
+                return new BackupContentDetails(ValidateCollection<List<JotItemState>>(bytes).Count, null);
+            case FixedBackupContent.Scratchpad:
+                return new BackupContentDetails(null, bytes.LongLength);
+            case FixedBackupContent.EditorSession:
+                _ = ValidateEditorSession(bytes);
+                return new BackupContentDetails(null, null);
+            default:
+                throw new ArgumentOutOfRangeException(nameof(content));
+        }
     }
 
     private void AddNoteRecoveryFiles(ICollection<BackupSourceEntry> sources)

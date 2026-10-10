@@ -59,6 +59,7 @@ public sealed class BackupFormatTests
     [TestMethod]
     [DataRow("notes/note.md", "Notes", nameof(BackupContentFormat.Text))]
     [DataRow("app/checklist.json", "Checklist", nameof(BackupContentFormat.Json))]
+    [DataRow("app/jots.json", "Jots", nameof(BackupContentFormat.Json))]
     [DataRow("app/scratchpad.rtf", "Scratchpad", nameof(BackupContentFormat.RichText))]
     [DataRow("app/recovery/draft.json", "Open notes", nameof(BackupContentFormat.Json))]
     public void PreviewClassificationRemainsPartOfTheFormat(

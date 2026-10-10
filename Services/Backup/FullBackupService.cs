@@ -23,6 +23,7 @@ internal enum FullBackupType
     [JsonStringEnumMemberName("Latest")]
     Recent,
 
+    [JsonStringEnumMemberName("BeforeRestore")]
     BeforeRestore
 }
 
@@ -412,25 +413,16 @@ internal sealed partial class FullBackupService
             entry => NormalizeLogicalPath(entry.LogicalPath),
             StringComparer.OrdinalIgnoreCase);
 
-        var missingMainFiles = new[]
-            {
-                "app/settings.json",
-                "app/checklist.json",
-                "app/checklist-tabs.json",
-                "app/dictionary.json",
-                "app/scratchpad.rtf"
-            }
+        var missingMainFiles = BackupContentDefinitions.FixedFiles
+            .Where(file => file.ProtectMissing)
+            .Select(file => file.LogicalPath)
             .Where(path => previousByPath.ContainsKey(path) && !currentByPath.ContainsKey(path))
             .ToList();
         if (missingMainFiles.Count > 0)
             return $"previously backed-up files are missing: {string.Join(", ", missingMainFiles)}";
 
-        foreach (var path in new[]
-                 {
-                     "app/checklist.json",
-                     "app/checklist-tabs.json",
-                     "app/dictionary.json"
-                 })
+        foreach (var path in BackupContentDefinitions.FixedFiles
+                     .Where(file => file.ProtectEmptyCollection).Select(file => file.LogicalPath))
         {
             if (previousByPath.TryGetValue(path, out var oldEntry) &&
                 currentByPath.TryGetValue(path, out var newEntry) &&

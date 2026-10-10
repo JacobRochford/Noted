@@ -53,23 +53,9 @@ internal static class BackupFormat
             return "Note history";
         if (path.StartsWith("app/recovery/micro-scratchpads/", StringComparison.OrdinalIgnoreCase))
             return "MiniPad";
-        if (path.StartsWith("app/recovery/", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("app/session/editor-workspace.json", StringComparison.OrdinalIgnoreCase))
-        {
+        if (path.StartsWith(PersistencePaths.RecoveryBackupPrefix, StringComparison.OrdinalIgnoreCase))
             return "Open notes";
-        }
-        if (path.Equals("app/checklist.json", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("app/checklist-tabs.json", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Checklist";
-        }
-        if (path.Equals("app/dictionary.json", StringComparison.OrdinalIgnoreCase))
-            return "Dictionary";
-        if (path.Equals("app/scratchpad.rtf", StringComparison.OrdinalIgnoreCase))
-            return "Scratchpad";
-        if (path.Equals("app/settings.json", StringComparison.OrdinalIgnoreCase))
-            return "Settings";
-        return "Application data";
+        return BackupContentDefinitions.Find(path)?.Category ?? "Application data";
     }
 
     internal static BackupContentFormat GetContentFormat(string logicalPath)

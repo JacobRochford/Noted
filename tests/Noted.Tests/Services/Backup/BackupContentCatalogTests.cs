@@ -22,6 +22,7 @@ public sealed class BackupContentCatalogTests
         Directory.CreateDirectory(Path.Combine(appData, "DeletedNotes"));
         File.WriteAllText(Path.Combine(appData, "settings.json"), "{}");
         File.WriteAllText(Path.Combine(appData, "checklist.json"), "[{},{}]");
+        File.WriteAllText(Path.Combine(appData, "jots.json"), "[{},{},{}]");
         File.WriteAllText(Path.Combine(appData, "scratchpad.rtf"), "{\\rtf1 note}");
         File.WriteAllText(Path.Combine(appData, "DeletedNotes", "old.txt"), "old");
         var notePath = Path.Combine(notes, "note.md");
@@ -36,12 +37,14 @@ public sealed class BackupContentCatalogTests
             {
                 "app/checklist.json",
                 "app/DeletedNotes/old.txt",
+                "app/jots.json",
                 "app/scratchpad.rtf",
                 "app/settings.json",
                 "notes/note.md"
             },
             entries.Select(entry => entry.LogicalPath).ToArray());
         Assert.AreEqual(2, entries.Single(entry => entry.LogicalPath == "app/checklist.json").ItemCount);
+        Assert.AreEqual(3, entries.Single(entry => entry.LogicalPath == "app/jots.json").ItemCount);
         Assert.AreEqual(
             "note content".Length,
             entries.Single(entry => entry.LogicalPath == "notes/note.md").ContentLength);
