@@ -721,7 +721,7 @@ public sealed partial class FullBackupServiceTests
         var miniPadDirectory = Path.Combine(
             paths.AppData,
             "recovery",
-            "micro-scratchpads");
+            "minipads");
         var archiveDirectory = Path.Combine(miniPadDirectory, "archive");
         Directory.CreateDirectory(archiveDirectory);
         var singletonId = new Guid("A6CB4208-79C0-4C08-9D07-9CDF33F31337");
@@ -750,7 +750,7 @@ public sealed partial class FullBackupServiceTests
             "files",
             "app",
             "recovery",
-            "micro-scratchpads");
+            "minipads");
         Assert.AreEqual(
             "active MiniPad",
             JsonSerializer.Deserialize<MiniPadRecoveryDraft>(

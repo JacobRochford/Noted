@@ -219,7 +219,9 @@ public sealed class MiniPadWindowTests
     }
 
     [TestMethod]
-    public void LegacySingletonMigratesWithoutChangingItsDraftOrAppearanceKey()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void LegacySingletonMigratesWithoutChangingItsDraftOrAppearanceKey(bool legacyRecoveryDirectory)
     {
         WithWindows((settings, directory) =>
         {
@@ -231,8 +233,13 @@ public sealed class MiniPadWindowTests
             }));
             var recovery = new MiniPadRecoveryService(directory.Path);
             recovery.SaveDraft("legacy text");
-            var path = directory.File("recovery", "micro-scratchpads", $"{recovery.Id:N}.json");
+            var path = directory.File("recovery", "minipads", $"{recovery.Id:N}.json");
             var originalBytes = File.ReadAllBytes(path);
+            if (legacyRecoveryDirectory)
+            {
+                Directory.Move(Path.GetDirectoryName(path)!, directory.File("recovery", "micro-scratchpads"));
+                MiniPadRecoveryMigration.Migrate(directory.Path);
+            }
 
             WindowManager.RestoreMiniPads(settings,
                 (service, draft) => new MiniPadWindow(service, settings, draft));

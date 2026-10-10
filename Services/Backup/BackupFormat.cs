@@ -51,7 +51,7 @@ internal static class BackupFormat
             return "Deleted notes";
         if (path.StartsWith(PersistencePaths.NoteHistoryBackupPrefix, StringComparison.OrdinalIgnoreCase))
             return "Note history";
-        if (path.StartsWith("app/recovery/micro-scratchpads/", StringComparison.OrdinalIgnoreCase))
+        if (MiniPadStorage.IsBackupPath(path))
             return "MiniPad";
         if (path.StartsWith(PersistencePaths.RecoveryBackupPrefix, StringComparison.OrdinalIgnoreCase))
             return "Open notes";

@@ -42,4 +42,28 @@ public sealed class PersistencePathTests
         Assert.IsTrue(Directory.EnumerateFiles(directory.File("recovery"), "*.corrupt*").Any());
         Assert.IsTrue(File.ReadAllText(primary + ".bak").Contains("saved draft", StringComparison.Ordinal));
     }
+
+    [TestMethod]
+    public void ServiceWritesKeepHistoricalStorageLayout()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveShowNotesHeader(true);
+        settings.SaveShowNotesHeader(false);
+        new ChecklistContentService(directory.Path).SaveItems([]);
+        new ChecklistContentService(directory.Path).SaveTabs([]);
+        new DictionaryContentService(directory.Path).SaveItems([]);
+        new JotsContentService(directory.Path).SaveItems([]);
+        new JotCaptureDraftService(directory.Path).Save(new JotCaptureDraft());
+        new ScratchpadContentService(directory.Path).SaveContent("{\\rtf1 draft}");
+        new NoteEditorSessionService(directory.Path).Save(new NoteEditorSession());
+        foreach (var file in new[] { "settings.json", "settings.json.bak", "checklist.json", "checklist-tabs.json",
+                     "dictionary.json", "jots.json", "jot-capture-draft.json", "scratchpad.rtf", "session/editor-workspace.json" })
+            Assert.IsTrue(File.Exists(directory.File(file)), file);
+        Assert.IsTrue(Directory.Exists(directory.File("backups")));
+        Assert.AreEqual(directory.File("recovery", "minipads"), MiniPadStorage.GetRecoveryDirectory(directory.Path));
+        Assert.AreEqual(directory.File("recovery", "micro-scratchpads"), MiniPadStorage.GetLegacyRecoveryDirectory(directory.Path));
+        Assert.AreEqual(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Noted"),
+            PersistencePaths.DefaultAppDataDirectory);
+    }
 }

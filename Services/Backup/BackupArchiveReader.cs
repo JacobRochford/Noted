@@ -293,6 +293,7 @@ internal sealed class BackupArchiveReader
             var expectedPaths = new HashSet<string>(
                 manifest.Entries.Select(entry => NormalizeLogicalPath(entry.LogicalPath)),
                 StringComparer.OrdinalIgnoreCase);
+            ValidateMiniPadRestoreDestinations(manifest);
             foreach (var entry in manifest.Entries)
             {
                 if (entry.Length < 0 || string.IsNullOrWhiteSpace(entry.Sha256))
@@ -467,6 +468,7 @@ internal sealed class BackupArchiveReader
         if (duplicate is not null)
             throw new InvalidDataException($"The selected backup manifest repeats '{duplicate.Key}'.");
 
+        ValidateMiniPadRestoreDestinations(manifest);
         foreach (var entry in manifest.Entries)
         {
             if (string.IsNullOrWhiteSpace(entry.LogicalPath))
@@ -475,6 +477,19 @@ internal sealed class BackupArchiveReader
             _ = _getRestoreDestination(entry.LogicalPath, manifest);
             if (entry.ItemCount < 0 || entry.ContentLength < 0)
                 throw new InvalidDataException($"The imported file '{entry.LogicalPath}' has invalid metadata.");
+        }
+    }
+
+    private void ValidateMiniPadRestoreDestinations(FullBackupManifest manifest)
+    {
+        var destinations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in manifest.Entries)
+        {
+            if (!MiniPadStorage.IsBackupPath(NormalizeLogicalPath(entry.LogicalPath)))
+                continue;
+            var destination = _getRestoreDestination(entry.LogicalPath, manifest);
+            if (!destinations.Add(destination))
+                throw new InvalidDataException($"Multiple backup files map to restore destination '{destination}'. Nothing was restored.");
         }
     }
 

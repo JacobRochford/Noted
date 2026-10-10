@@ -37,7 +37,7 @@ public sealed partial class FullBackupServiceTests
         Assert.IsTrue(preview.IsValid, preview.Error);
         for (var index = 0; index < ids.Length; index++)
         {
-            var file = preview.Files.Single(file => file.LogicalPath == $"app/recovery/micro-scratchpads/{ids[index]:N}.json");
+            var file = preview.Files.Single(file => file.LogicalPath == $"app/recovery/minipads/{ids[index]:N}.json");
             var content = importer.ReadBackupImportFile(exportPath, preview.BackupId, preview.VerificationToken!, file);
             Assert.IsTrue(content.Success, content.Error);
             var draft = JsonSerializer.Deserialize<MiniPadRecoveryDraft>(content.Data!)!;
@@ -47,7 +47,15 @@ public sealed partial class FullBackupServiceTests
         var settingsFile = preview.Files.Single(file => file.LogicalPath == "app/settings.json");
         var importedSettings = importer.ReadBackupImportFile(exportPath, preview.BackupId, preview.VerificationToken!, settingsFile);
         var document = JsonSerializer.Deserialize<AppSettingsDocument>(importedSettings.Data!)!;
-        Assert.HasCount(3, document.MiniPadWindows!);
+        Assert.IsNotNull(document.MiniPadWindows);
+        Assert.HasCount(3, document.MiniPadWindows);
         Assert.IsTrue(document.MiniPadWindows[ids[1]].IsClosed);
+
+        Assert.AreEqual(FullBackupStatus.RestoreScheduled,
+            importer.ScheduleBackupImportRestore(exportPath, preview.BackupId, preview.VerificationToken!).Status);
+        Assert.AreEqual(FullBackupStatus.Restored, importer.ApplyPendingUserBackupRestore().Status);
+        for (var index = 0; index < ids.Length; index++)
+            Assert.AreEqual($"content {index}", new MiniPadRecoveryService(target.AppData, ids[index]).LoadDraft().Draft!.Content);
+        Assert.IsTrue(new AppSettingsService(target.AppData).LoadMiniPadWindows()[ids[1]].IsClosed);
     }
 }

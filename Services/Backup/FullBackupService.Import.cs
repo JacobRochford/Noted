@@ -222,12 +222,13 @@ internal sealed partial class FullBackupService
         {
             details = ValidateFixedFile(fixedFile.Content, bytes);
         }
-        else if (sourcePath.StartsWith("app/recovery/micro-scratchpads/", StringComparison.OrdinalIgnoreCase))
+        else if (MiniPadStorage.IsBackupPath(sourcePath))
         {
             if (sourcePath.Split('/').Length != 4 ||
                 !Path.GetExtension(sourcePath).Equals(".json", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"The imported backup contains an unsupported MiniPad file: '{sourcePath}'.");
             details = ValidateMiniPadDraft(bytes, sourcePath);
+            logicalPath = MiniPadStorage.NormalizeBackupPath(sourcePath);
         }
         else if (sourcePath.StartsWith(PersistencePaths.RecoveryBackupPrefix, StringComparison.OrdinalIgnoreCase))
         {

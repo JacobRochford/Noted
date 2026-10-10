@@ -103,7 +103,7 @@ internal sealed class BackupContentCatalog
             AddRecoveryFile(sources, path, bytes => ValidateNoteDraft(bytes, path));
         }
 
-        var miniPadDirectory = Path.Combine(recoveryDirectory, "micro-scratchpads");
+        var miniPadDirectory = MiniPadStorage.GetRecoveryDirectory(_appDataDirectory);
         if (Directory.Exists(miniPadDirectory))
             ThrowIfDirectoryIsLink(miniPadDirectory);
 

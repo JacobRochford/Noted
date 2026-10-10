@@ -487,7 +487,7 @@ internal sealed partial class FullBackupService
         string logicalPath,
         FullBackupManifest manifest)
     {
-        var normalizedPath = NormalizeLogicalPath(logicalPath);
+        var normalizedPath = MiniPadStorage.NormalizeBackupPath(NormalizeLogicalPath(logicalPath));
         const string appPrefix = PersistencePaths.AppBackupPrefix;
         const string notesPrefix = PersistencePaths.NotesBackupPrefix;
         if (normalizedPath.StartsWith(appPrefix, StringComparison.OrdinalIgnoreCase))

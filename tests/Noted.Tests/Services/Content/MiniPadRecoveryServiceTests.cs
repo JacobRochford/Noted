@@ -19,7 +19,7 @@ public sealed class MiniPadRecoveryServiceTests
         first.SaveDraft("first");
         first.SaveDraft("first edited");
         second.SaveDraft("second");
-        var firstPath = directory.File("recovery", "micro-scratchpads", $"{firstId:N}.json");
+        var firstPath = directory.File("recovery", "minipads", $"{firstId:N}.json");
         using var primaryLock = new FileStream(firstPath, FileMode.Open, FileAccess.Read, FileShare.None);
         using var backupLock = new FileStream($"{firstPath}.bak", FileMode.Open, FileAccess.Read, FileShare.None);
         var blocked = new MiniPadRecoveryService(directory.Path, firstId);
@@ -43,7 +43,7 @@ public sealed class MiniPadRecoveryServiceTests
         service.SaveDraft("same content");
         service.SaveDraft("same content");
 
-        var recoveryDirectory = directory.File("recovery", "micro-scratchpads");
+        var recoveryDirectory = directory.File("recovery", "minipads");
         Assert.HasCount(1, Directory.GetFiles(recoveryDirectory, "*.json"));
         Assert.HasCount(0, Directory.GetFiles(recoveryDirectory, "*.bak"));
     }
@@ -55,7 +55,7 @@ public sealed class MiniPadRecoveryServiceTests
         var service = new MiniPadRecoveryService(directory.Path);
         service.SaveDraft("backup content");
         service.SaveDraft("newer content");
-        var recoveryDirectory = directory.File("recovery", "micro-scratchpads");
+        var recoveryDirectory = directory.File("recovery", "minipads");
         var primaryPath = Directory.GetFiles(recoveryDirectory, "*.json").Single();
         var backupPath = $"{primaryPath}.bak";
         var backupBeforeRecovery = File.ReadAllText(backupPath);
@@ -78,7 +78,7 @@ public sealed class MiniPadRecoveryServiceTests
         var service = new MiniPadRecoveryService(directory.Path);
         service.SaveDraft("one");
         service.SaveDraft("two");
-        var recoveryDirectory = directory.File("recovery", "micro-scratchpads");
+        var recoveryDirectory = directory.File("recovery", "minipads");
         var primaryPath = Directory.GetFiles(recoveryDirectory, "*.json").Single();
         var backupPath = $"{primaryPath}.bak";
 

@@ -108,6 +108,8 @@ public partial class App : Application
             if (pendingRestoreResult.Status == FullBackupStatus.Failed)
                 throw new IOException(pendingRestoreResult.Message);
 
+            MiniPadRecoveryMigration.Migrate(appDataDirectory);
+
             base.OnStartup(e);
             TryCreateDesktopShortcut();
 
@@ -936,7 +938,7 @@ public partial class App : Application
         if (Interlocked.Exchange(ref _fatalErrorShown, 1) != 0)
             return;
 
-        var message = exception is SettingsPersistenceException
+        var message = exception is SettingsPersistenceException or MiniPadMigrationException
             ? exception.Message
             : $"{context}\n\nDiagnostic details were sent to the application log.";
 

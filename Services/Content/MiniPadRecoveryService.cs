@@ -19,10 +19,7 @@ public sealed class MiniPadRecoveryService : IMiniPadRecoveryService
         ArgumentException.ThrowIfNullOrWhiteSpace(storageDirectory);
         _draftId = draftId ?? LegacyDraftId;
         if (_draftId == Guid.Empty) throw new ArgumentException("A MiniPad ID is required.", nameof(draftId));
-        _recoveryDirectory = Path.Combine(
-            Path.GetFullPath(storageDirectory),
-            "recovery",
-            "micro-scratchpads");
+        _recoveryDirectory = MiniPadStorage.GetRecoveryDirectory(storageDirectory);
     }
 
     public MiniPadRecoveryLoadResult LoadDraft()
