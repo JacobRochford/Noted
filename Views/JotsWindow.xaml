@@ -1,0 +1,593 @@
+<noted:OverlayWindow x:Class="Noted.JotsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:s="clr-namespace:Noted.Services"
+        xmlns:noted="clr-namespace:Noted"
+        xmlns:h="clr-namespace:Noted.Helpers"
+        Title="Jots"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Width="430"
+        Height="570"
+        Left="240"
+        Top="170"
+        MinWidth="330"
+        MinHeight="400">
+
+    <noted:OverlayWindow.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource NotedScrollBar}"/>
+        <Style x:Key="HeaderIconBtn"
+               TargetType="Button"
+               BasedOn="{StaticResource NotedHeaderIconButton}"/>
+
+        <Style x:Key="FilterTab" TargetType="RadioButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0,0,0,2"/>
+            <Setter Property="Foreground" Value="{DynamicResource NotedSecondaryTextBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="10,6,10,5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="TabBackground"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4,4,0,0"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabBackground" Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource NotedAccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CategoryFilterButton"
+               TargetType="Button"
+               BasedOn="{StaticResource NotedSecondaryButton}">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="8,0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Margin" Value="4,0,0,1"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsCategoryFilter}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource NotedAccentBrush}"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DetailLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource NotedSecondaryTextBrush}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="1,0,0,5"/>
+        </Style>
+    </noted:OverlayWindow.Resources>
+
+    <Grid Background="Transparent">
+        <Border Margin="1"
+                Background="{DynamicResource NotedWindowBackgroundBrush}"
+                BorderBrush="{DynamicResource NotedStrongBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+            <Grid Margin="10,7,8,8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Border x:Name="TitleBar" Grid.Row="0" Background="Transparent" Padding="2,0,0,6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                    VerticalAlignment="Center" IsHitTestVisible="False">
+                            <TextBlock Text="✦" Margin="0,0,8,0"
+                                       Foreground="{DynamicResource NotedAccentBrush}"
+                                       FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="WindowTitleText" Text="Jots"
+                                       Foreground="{DynamicResource NotedTextBrush}"
+                                       FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="⚠" Margin="8,0,0,0"
+                                       Foreground="{DynamicResource NotedWarningBrush}"
+                                       FontSize="12" VerticalAlignment="Center"
+                                       Visibility="{Binding HasPersistenceError, Converter={StaticResource BoolToVisibility}}"
+                                       ToolTip="{Binding PersistenceError}"/>
+                        </StackPanel>
+                        <Button x:Name="HideButton" Grid.Column="1" Content="&#xE711;"
+                                Style="{StaticResource HeaderIconBtn}"
+                                Click="HideButton_Click" ToolTip="Hide"/>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="1">
+                    <Grid x:Name="ListPanel">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsDetailOpen}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Margin="2,0,2,5" Padding="2,0" Height="30" Background="Transparent">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Margin="0,0,7,0"
+                                           VerticalAlignment="Center"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                           Text="&#xE721;"/>
+                                <Grid Grid.Column="1">
+                                    <TextBox x:Name="SearchTextBox"
+                                             Padding="0"
+                                             VerticalContentAlignment="Center"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             Foreground="{DynamicResource NotedTextBrush}"
+                                             CaretBrush="{DynamicResource NotedTextBrush}"
+                                             SelectionBrush="{DynamicResource NotedSelectionBrush}"
+                                             FontSize="12"
+                                             Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Margin="1,0,0,0"
+                                               VerticalAlignment="Center"
+                                               IsHitTestVisible="False"
+                                               Foreground="{DynamicResource NotedMutedTextBrush}"
+                                               FontSize="12"
+                                               FontStyle="Italic"
+                                               Text="Search titles, details, or categories...">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding Text, ElementName=SearchTextBox}" Value=""/>
+                                                            <Condition Binding="{Binding IsKeyboardFocusWithin, ElementName=SearchTextBox}" Value="False"/>
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </MultiDataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="1" Margin="2,0,2,7" BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="0,0,0,1">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton Content="All" GroupName="JotViews" Style="{StaticResource FilterTab}"
+                                             IsChecked="{Binding IsAllFilter, Mode=OneWay}" Click="AllFilter_Click"/>
+                                <RadioButton Content="Inbox" GroupName="JotViews" Style="{StaticResource FilterTab}"
+                                             IsChecked="{Binding IsInboxFilter, Mode=OneWay}" Click="InboxFilter_Click"/>
+                                <RadioButton Content="Pinned" GroupName="JotViews" Style="{StaticResource FilterTab}"
+                                             IsChecked="{Binding IsPinnedFilter, Mode=OneWay}" Click="PinnedFilter_Click"/>
+                                <Button x:Name="CategoriesButton"
+                                        Style="{StaticResource CategoryFilterButton}"
+                                        Click="CategoriesButton_Click">
+                                    <Button.Content>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding CategoryButtonText}" MaxWidth="110" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text=" ▾"/>
+                                        </StackPanel>
+                                    </Button.Content>
+                                    <Button.ContextMenu>
+                                        <ContextMenu Style="{StaticResource NotedContextMenu}"/>
+                                    </Button.ContextMenu>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Row="2" Background="Transparent" ClipToBounds="True">
+                            <Grid>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsControl x:Name="ItemsList"
+                                                  h:WindowDragHitTest.AllowBackgroundDrag="True"
+                                                  ItemsSource="{Binding FilteredItems}"
+                                                  Padding="2,0,3,0"
+                                                  Focusable="True"
+                                                  FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Margin="0,2" Padding="9,8" CornerRadius="7"
+                                                        Cursor="Hand"
+                                                        MouseLeftButtonDown="JotRow_Click">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="Transparent"/>
+                                                            <Style.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
+                                                                </Trigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <Border.ContextMenu>
+                                                        <ContextMenu Style="{StaticResource NotedContextMenu}"
+                                                                     DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                                            <MenuItem Header="Open in separate window" Style="{StaticResource NotedContextMenuItem}" Click="OpenJotMenuItem_Click"/>
+                                                            <MenuItem Header="Toggle pin" Style="{StaticResource NotedContextMenuItem}" Click="TogglePinMenuItem_Click"/>
+                                                            <MenuItem Header="Toggle star" Style="{StaticResource NotedContextMenuItem}" Click="ToggleStarMenuItem_Click"/>
+                                                            <Separator/>
+                                                            <MenuItem Header="Delete jot" Foreground="{DynamicResource NotedDangerBrush}"
+                                                                      Style="{StaticResource NotedContextMenuItem}" Click="DeleteJotMenuItem_Click"/>
+                                                        </ContextMenu>
+                                                    </Border.ContextMenu>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="18"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <TextBlock Grid.Column="0" Text="★" FontSize="12" Margin="0,2,0,0">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource NotedMutedTextBrush}"/>
+                                                                    <Setter Property="Opacity" Value="0.22"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsStarred}" Value="True">
+                                                                            <Setter Property="Opacity" Value="1"/>
+                                                                            <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+
+                                                        <StackPanel Grid.Column="1" Margin="2,0,8,0">
+                                                            <TextBlock Text="{Binding DisplayTitle}"
+                                                                       Foreground="{DynamicResource NotedTextBrush}"
+                                                                       FontSize="12.5" FontWeight="SemiBold"
+                                                                       TextTrimming="CharacterEllipsis"/>
+                                                            <TextBlock Text="{Binding PreviewText}"
+                                                                       Margin="0,3,0,0"
+                                                                       Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                                                       FontSize="11"
+                                                                       TextTrimming="CharacterEllipsis"/>
+                                                            <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                                                <TextBlock Text="{Binding CategoryLabel}"
+                                                                           Foreground="{DynamicResource NotedMutedTextBrush}"
+                                                                           FontSize="10.5"/>
+                                                                <TextBlock Text="  •  " Foreground="{DynamicResource NotedMutedTextBrush}" FontSize="10"/>
+                                                                <TextBlock Text="{Binding ModifiedShortDisplay}"
+                                                                           Foreground="{DynamicResource NotedMutedTextBrush}"
+                                                                           FontSize="10.5"/>
+                                                            </StackPanel>
+                                                        </StackPanel>
+
+                                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Border Margin="0,0,7,0" Padding="5,2" CornerRadius="4"
+                                                                    Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                                                    Visibility="{Binding IsPinned, Converter={StaticResource BoolToVisibility}}">
+                                                                <TextBlock Text="PIN" FontSize="9" FontWeight="SemiBold"
+                                                                           Foreground="{DynamicResource NotedAccentBrush}"/>
+                                                            </Border>
+                                                            <TextBlock Text="›" FontSize="20" Foreground="{DynamicResource NotedMutedTextBrush}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding FilteredItems.IsEmpty}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <TextBlock Text="✦" Foreground="{DynamicResource NotedBorderBrush}" FontSize="24"
+                                               FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="{Binding EmptyMessage}" Margin="0,5,0,0"
+                                               Foreground="{DynamicResource NotedMutedTextBrush}" FontSize="12"
+                                               HorizontalAlignment="Center"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <Grid x:Name="DetailPanel">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsDetailOpen}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Button x:Name="BackButton" Grid.Row="0" HorizontalAlignment="Left" Margin="0,0,0,8"
+                                Content="←  Back" Padding="7,4"
+                                Style="{StaticResource NotedSecondaryButton}"
+                                Click="BackButton_Click"/>
+
+                        <Grid Grid.Row="1">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <ScrollViewer.Style>
+                                    <Style TargetType="ScrollViewer">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedItem.IsEditing}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ScrollViewer.Style>
+                                <StackPanel Margin="6,1,8,8">
+
+                                    <TextBlock Text="{Binding SelectedItem.DisplayTitle}"
+                                               Foreground="{DynamicResource NotedTextBrush}"
+                                               FontSize="19" FontWeight="SemiBold"
+                                               TextWrapping="Wrap"/>
+
+                                    <WrapPanel Margin="0,9,0,12">
+                                        <Border Margin="0,0,6,4" Padding="7,3" CornerRadius="5"
+                                                Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                                                BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="1">
+                                            <TextBlock Text="{Binding SelectedItem.CategoryLabel}"
+                                                       Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="10.5"/>
+                                        </Border>
+                                        <Border Margin="0,0,6,4" Padding="7,3" CornerRadius="5"
+                                                Background="{DynamicResource NotedAccentSoftBrush}"
+                                                Visibility="{Binding SelectedItem.IsPinned, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="Pinned" Foreground="{DynamicResource NotedAccentBrush}" FontSize="10.5" FontWeight="SemiBold"/>
+                                        </Border>
+                                        <Border Margin="0,0,6,4" Padding="7,3" CornerRadius="5"
+                                                Background="{DynamicResource NotedAccentSoftBrush}"
+                                                Visibility="{Binding SelectedItem.IsStarred, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="★ Starred" Foreground="{DynamicResource NotedAccentBrush}" FontSize="10.5" FontWeight="SemiBold"/>
+                                        </Border>
+                                    </WrapPanel>
+
+                                    <Border BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="0,1,0,0" Margin="0,0,0,12"/>
+
+                                    <h:MarkdownView Source="{Binding SelectedItem.Details, Mode=OneWay}"
+                                                    BorderThickness="0" Background="Transparent"
+                                                    VerticalScrollBarVisibility="Disabled"/>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <ScrollViewer.Style>
+                                    <Style TargetType="ScrollViewer">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedItem.IsEditing}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ScrollViewer.Style>
+                                <StackPanel Margin="6,1,8,8">
+
+                                    <TextBlock Text="TITLE" Style="{StaticResource DetailLabel}"/>
+                                    <TextBox x:Name="TitleTextBox"
+                                             Text="{Binding SelectedItem.DraftTitle, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,0,0,12"
+                                             FontSize="14" FontWeight="SemiBold"
+                                             Style="{StaticResource NotedTextInput}"/>
+
+                                    <TextBlock Text="CATEGORY" Style="{StaticResource DetailLabel}"/>
+                                    <ComboBox x:Name="CategoryComboBox"
+                                              IsEditable="True"
+                                              IsTextSearchEnabled="False"
+                                              ItemsSource="{Binding Categories}"
+                                              Text="{Binding SelectedItem.DraftCategory, UpdateSourceTrigger=PropertyChanged}"
+                                              Margin="0,0,0,3"/>
+                                    <TextBlock Text="Leave blank to keep it in Inbox. Type a new name to create a category."
+                                               Margin="2,0,0,12"
+                                               Foreground="{DynamicResource NotedMutedTextBrush}"
+                                               FontSize="10.5" TextWrapping="Wrap"/>
+
+                                    <TextBlock Text="DETAILS (MARKDOWN)" Style="{StaticResource DetailLabel}"/>
+                                    <TextBox x:Name="DetailsTextBox"
+                                             Text="{Binding SelectedItem.DraftDetails, UpdateSourceTrigger=PropertyChanged}"
+                                             MinHeight="180"
+                                             Padding="8,7"
+                                             AcceptsReturn="True"
+                                             TextWrapping="Wrap"
+                                             VerticalScrollBarVisibility="Auto"
+                                             Background="{DynamicResource NotedInputBackgroundBrush}"
+                                             BorderBrush="{DynamicResource NotedBorderBrush}"
+                                             BorderThickness="1"
+                                             Foreground="{DynamicResource NotedTextBrush}"
+                                             CaretBrush="{DynamicResource NotedTextBrush}"
+                                             SelectionBrush="{DynamicResource NotedSelectionBrush}"
+                                             FontSize="12"/>
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                        <CheckBox Content="Pinned" Margin="0,0,14,0"
+                                                  IsChecked="{Binding SelectedItem.DraftIsPinned, Mode=TwoWay}"
+                                                  Style="{StaticResource NotedToggleSwitch}"
+                                                  Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="11"/>
+                                        <CheckBox Content="Starred"
+                                                  IsChecked="{Binding SelectedItem.DraftIsStarred, Mode=TwoWay}"
+                                                  Style="{StaticResource NotedToggleSwitch}"
+                                                  Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="11"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
+                    </Grid>
+                </Grid>
+
+                <Grid Grid.Row="2" Margin="1,8,1,0">
+                    <Grid x:Name="ListFooter">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsDetailOpen}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Style="{StaticResource NotedFooterText}" Text="{Binding StatusText}"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <CheckBox Content="Always visible"
+                                      ToolTip="Use the app visible opacity even when this window is inactive"
+                                      Margin="0,0,8,0"
+                                      IsChecked="{Binding Path=(s:WindowAppearance.AlwaysVisible), RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
+                                      Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                      Style="{StaticResource NotedToggleSwitch}"
+                                      FontSize="11" VerticalAlignment="Center"/>
+                            <Button Content="+ Add" Style="{StaticResource NotedFooterButton}"
+                                    Height="30" Padding="10,0"
+                                    Click="AddButton_Click" ToolTip="Add jot"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid x:Name="DetailFooter">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsDetailOpen}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource NotedMutedTextBrush}"
+                                   FontSize="10.5"
+                                   Text="{Binding SelectedItem.ModifiedDisplay}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedItem.IsEditing}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <TextBlock Grid.Column="0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource NotedMutedTextBrush}"
+                                   FontSize="10.5">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Setter Property="Text" Value="Editing jot"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedItem.IsEditing}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding SelectedItem.IsEditing}" Value="True"/>
+                                                <Condition Binding="{Binding SelectedItem.IsNew}" Value="True"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Text" Value="New jot"/>
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedItem.IsEditing}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <Button Content="Delete" Margin="0,0,6,0"
+                                    Foreground="{DynamicResource NotedDangerBrush}"
+                                    Style="{StaticResource NotedSecondaryButton}"
+                                    Click="DeleteButton_Click"/>
+                            <Button Content="Edit" Style="{StaticResource NotedPrimaryButton}" Click="EditButton_Click"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedItem.IsEditing}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <Button Content="Cancel" Margin="0,0,6,0"
+                                    Style="{StaticResource NotedSecondaryButton}" Click="CancelEditButton_Click"/>
+                            <Button Content="Save"
+                                    Style="{StaticResource NotedPrimaryButton}"
+                                    IsEnabled="{Binding SelectedItem.CanSaveDraft}"
+                                    Click="SaveButton_Click"/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</noted:OverlayWindow>

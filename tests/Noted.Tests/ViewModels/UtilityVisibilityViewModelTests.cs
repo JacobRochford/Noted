@@ -41,11 +41,13 @@ public sealed class UtilityVisibilityViewModelTests
         var settings = new AppSettingsService(directory.Path);
         var checklist = new ChecklistWindowState { Left = 42, SelectedTabId = "saved-tab", ReopenOnStartup = true };
         var dictionary = new DictionaryWindowState { Left = 43, ReopenOnStartup = true };
+        var jots = new JotsWindowState { Left = 43.5, ReopenOnStartup = true };
         var scratchpad = new ScratchpadWindowState { Left = 44, ReopenOnStartup = true };
         var miniPad = new MiniPadWindowState { WordWrapEnabled = false, ReopenOnStartup = true };
         var editor = new NoteEditorWindowState { ReopenOnStartup = true, Width = 950 };
         settings.SaveChecklistWindowState(checklist);
         settings.SaveDictionaryWindowState(dictionary);
+        settings.SaveJotsWindowState(jots);
         settings.SaveScratchpadWindowState(scratchpad);
         settings.SaveMiniPadWindowState(miniPad);
         settings.SaveNoteEditorWindowState(editor);
@@ -75,6 +77,7 @@ public sealed class UtilityVisibilityViewModelTests
         var persisted = new AppSettingsService(directory.Path);
         Assert.AreEqual(checklist, persisted.LoadChecklistWindowState());
         Assert.AreEqual(dictionary, persisted.LoadDictionaryWindowState());
+        Assert.AreEqual(jots, persisted.LoadJotsWindowState());
         Assert.AreEqual(scratchpad, persisted.LoadScratchpadWindowState());
         Assert.AreEqual(miniPad, persisted.LoadMiniPadWindowState());
         Assert.AreEqual(editor, persisted.LoadNoteEditorWindowState());
@@ -103,7 +106,7 @@ public sealed class UtilityVisibilityViewModelTests
 
     private static void AssertAllVisible(UtilityVisibilityViewModel model)
     {
-        CollectionAssert.AreEqual(new[] { "Checklist", "Dictionary", "Scratchpad", "MiniPad" },
+        CollectionAssert.AreEqual(new[] { "Checklist", "Dictionary", "Jots", "Scratchpad", "MiniPad" },
             model.VisibleUtilities.Select(option => option.Id).ToArray());
         Assert.IsTrue(model.HasVisibleUtilities);
         Assert.IsTrue(model.Utilities.All(option => option.IsVisible));

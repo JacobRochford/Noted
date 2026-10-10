@@ -35,6 +35,7 @@ public sealed class WindowConstructionTests
                     new NoteRecoveryService(directory.Path), new NoteEditorSessionService(directory.Path));
                 var miniPad = new MiniPadWindow(new MiniPadRecoveryService(directory.Path), settings);
                 var dictionary = new DictionaryWindow(settings, new DictionaryContentService(directory.Path));
+                var jots = new JotsWindow(settings, new JotsContentService(directory.Path));
                 var checklist = new ChecklistWindow(settings, new ChecklistContentService(directory.Path));
                 var scratchpad = new ScratchpadWindow(new ScratchpadWindowViewModel(settings, new ScratchpadContentService(directory.Path)));
                 settings.SaveNotesDirectory(directory.File("notes"));
@@ -47,7 +48,7 @@ public sealed class WindowConstructionTests
                 var main = new MainWindow(settings, files, editor, noteOperations, new ConstructionStartupService(),
                     backupCoordinator,
                     (_, _) => Assert.Fail("Construction must not change the theme.")) { Width = 1280, Height = 900 };
-                foreach (var window in new Window[] { editor, miniPad, dictionary, checklist, scratchpad, main })
+                foreach (var window in new Window[] { editor, miniPad, dictionary, jots, checklist, scratchpad, main })
                 {
                     // Build templates and bindings without displaying a window or loading user data.
                     window.Measure(new Size(window.Width, window.Height));
@@ -78,6 +79,7 @@ public sealed class WindowConstructionTests
                 editor.Close();
                 miniPad.Close();
                 dictionary.Close();
+                jots.Close();
                 checklist.Close();
                 scratchpad.Close();
             }
@@ -107,6 +109,7 @@ public sealed class WindowConstructionTests
                     new NoteRecoveryService(directory.Path), new NoteEditorSessionService(directory.Path)),
                 new MiniPadWindow(new MiniPadRecoveryService(directory.Path), settings),
                 new DictionaryWindow(settings, new DictionaryContentService(directory.Path)),
+                new JotsWindow(settings, new JotsContentService(directory.Path)),
                 new ChecklistWindow(settings, new ChecklistContentService(directory.Path)),
                 new ScratchpadWindow(new ScratchpadWindowViewModel(settings, new ScratchpadContentService(directory.Path)))
             };
@@ -189,8 +192,8 @@ public sealed class WindowConstructionTests
         Assert.IsNotNull(menu);
         menu.PlacementTarget = compactButton;
         Invoke(main, "SetSettingsViewVisible", [false]);
-        Assert.AreEqual(4, toolbar.Items.Count);
-        Assert.AreEqual(4, menu.Items.Count);
+        Assert.AreEqual(5, toolbar.Items.Count);
+        Assert.AreEqual(5, menu.Items.Count);
         var panel = (Border)main.FindName("NotesPanel");
         var originalWidth = panel.Width;
         model.NewNoteMode = NewNoteMode.Both;
@@ -214,9 +217,9 @@ public sealed class WindowConstructionTests
         main.UpdateLayout();
         model.UtilityVisibility.Utilities[0].IsVisible = false;
         main.UpdateLayout();
-        Assert.AreEqual(3, toolbar.Items.Count);
-        Assert.AreEqual(3, menu.Items.Count);
-        CollectionAssert.AreEqual(new[] { "Dictionary", "Scratchpad", "MiniPad" },
+        Assert.AreEqual(4, toolbar.Items.Count);
+        Assert.AreEqual(4, menu.Items.Count);
+        CollectionAssert.AreEqual(new[] { "Dictionary", "Jots", "Scratchpad", "MiniPad" },
             toolbar.Items.Cast<UtilityOption>().Select(option => option.DisplayName).ToArray());
         foreach (var option in model.UtilityVisibility.Utilities) option.IsVisible = false;
         main.UpdateLayout();
@@ -239,8 +242,8 @@ public sealed class WindowConstructionTests
         foreach (var option in model.UtilityVisibility.Utilities) option.IsVisible = true;
         main.UpdateLayout();
         Assert.AreEqual(Visibility.Visible, utilityMenu.Visibility);
-        Assert.AreEqual(4, toolbar.Items.Count);
-        Assert.AreEqual(4, menu.Items.Count);
+        Assert.AreEqual(5, toolbar.Items.Count);
+        Assert.AreEqual(5, menu.Items.Count);
         foreach (var option in toolbar.Items.Cast<UtilityOption>())
         {
             var menuOption = menu.Items.Cast<UtilityOption>().Single(item => item.Id == option.Id);

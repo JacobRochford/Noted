@@ -198,6 +198,19 @@ public sealed class AppSettingsService : IAppSettingsService {
         SaveSetting(s => s with { NoteEditorHotkeyModifiers = modifiers, NoteEditorHotkeyKey = key });
     }
 
+    public JotsWindowState LoadJotWindowState(Guid id) =>
+        LoadSetting(s => s.JotWindows?.GetValueOrDefault(id) ?? new JotsWindowState());
+
+    public void SaveJotWindowState(Guid id, JotsWindowState state)
+    {
+        SaveSetting(s =>
+        {
+            var windows = new Dictionary<Guid, JotsWindowState>(s.JotWindows ?? []);
+            windows[id] = state;
+            return s with { JotWindows = windows };
+        });
+    }
+
     public event EventHandler? AppearanceChanged;
 
     public bool LoadWindowAlwaysVisible(string windowType) =>
@@ -270,6 +283,17 @@ public sealed class AppSettingsService : IAppSettingsService {
     public void SaveDictionaryWindowState(DictionaryWindowState state)
     {
         SaveSetting(s => s with { DictionaryWindowState = state });
+    }
+
+    public JotsWindowState LoadJotsWindowState()
+    {
+        return LoadSetting(s => s.JotsWindowState ?? new JotsWindowState());
+    }
+
+    public void SaveJotsWindowState(JotsWindowState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        SaveSetting(s => s with { JotsWindowState = state });
     }
 
     public bool LoadMainHideButtonHidesAll()

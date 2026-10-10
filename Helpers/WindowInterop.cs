@@ -50,6 +50,36 @@ internal static class WindowInterop {
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool IsWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    internal static extern uint GetDoubleClickTime();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint flags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr hWnd, out NativeRect rectangle);
+
+    internal static void CenterOnForegroundMonitor(Window window, IntPtr foreground)
+    {
+        var monitor = MonitorFromWindow(foreground, 2);
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        var handle = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+        if (!GetMonitorInfo(monitor, ref info) || !GetWindowRect(handle, out var bounds))
+            return;
+
+        // use pixels here so monitors with different scaling stay aligned.
+        var width = bounds.Right - bounds.Left;
+        var height = bounds.Bottom - bounds.Top;
+        var left = info.Work.Left + Math.Max(0, (info.Work.Right - info.Work.Left - width) / 2);
+        var top = info.Work.Top + Math.Max(0, (info.Work.Bottom - info.Work.Top - height) / 2);
+        SetWindowPos(handle, IntPtr.Zero, left, top, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | 0x0004);
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool IsWindowEnabled(IntPtr hWnd);
 
     [DllImport("user32.dll")]

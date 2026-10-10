@@ -37,6 +37,8 @@ internal sealed record AppSettingsDocument
     public string MiniPadHotkeyKey { get; init; } = "M";
     public string NoteEditorHotkeyModifiers { get; init; } = "Alt";
     public string NoteEditorHotkeyKey { get; init; } = "J";
+    [JsonPropertyName("JotWindows")]
+    public Dictionary<Guid, JotsWindowState>? JotWindows { get; init; }
     public string[]? AlwaysVisibleWindows { get; init; }
     public bool GhostModeEnabled { get; init; }
     public double GhostModeOpacity { get; init; } = 0.25;
@@ -46,6 +48,8 @@ internal sealed record AppSettingsDocument
     public FolderNavigationMode FolderNavigationMode { get; init; } = FolderNavigationMode.DrillDown;
     public ChecklistWindowState? ChecklistWindowState { get; init; }
     public DictionaryWindowState? DictionaryWindowState { get; init; }
+    [JsonPropertyName("JotsWindowState")]
+    public JotsWindowState? JotsWindowState { get; init; }
 
     [JsonPropertyName("HideButtonClosesAll")]
     public bool MainHideButtonHidesAll { get; init; } = true;

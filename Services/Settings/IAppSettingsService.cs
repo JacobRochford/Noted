@@ -49,6 +49,10 @@ public interface IAppSettingsService {
     void SaveChecklistWindowState(ChecklistWindowState state);
     DictionaryWindowState LoadDictionaryWindowState();
     void SaveDictionaryWindowState(DictionaryWindowState state);
+    JotsWindowState LoadJotWindowState(Guid id);
+    void SaveJotWindowState(Guid id, JotsWindowState state);
+    JotsWindowState LoadJotsWindowState();
+    void SaveJotsWindowState(JotsWindowState state);
     bool LoadMainHideButtonHidesAll();
     void SaveMainHideButtonHidesAll(bool hidesAll);
     IndentationSettings LoadDefaultIndentation();

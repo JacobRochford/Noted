@@ -29,6 +29,8 @@ public partial class App : Application
     private readonly ApplicationShutdownSequence _shutdownSequence;
     private IDisposable? _checklistBackupRegistration;
     private IDisposable? _dictionaryBackupRegistration;
+    private IDisposable? _jotsBackupRegistration;
+    private JotsWorkspace? _jotsWorkspace;
     private IDisposable? _scratchpadBackupRegistration;
     private readonly Dictionary<Guid, IDisposable> _miniPadBackupRegistrations = [];
     private IDisposable? _noteEditorBackupRegistration;
@@ -155,6 +157,9 @@ public partial class App : Application
             WindowManager.Main = mainWindow;
             WindowManager.ChecklistProvider = GetOrCreateChecklistWindow;
             WindowManager.DictionaryProvider = GetOrCreateDictionaryWindow;
+            WindowManager.JotsProvider = GetOrCreateJotsWindow;
+            WindowManager.JotCaptureProvider = GetOrCreateJotCaptureWindow;
+            WindowManager.JotProvider = CreateSavedJotWindow;
             WindowManager.ScratchpadProvider = GetOrCreateScratchpadWindow;
             WindowManager.MiniPadProvider = CreateNewMiniPadWindow;
             WindowManager.Editor = noteEditor;
@@ -202,6 +207,8 @@ public partial class App : Application
                 WindowManager.ShowChecklist();
             if (settings.LoadDictionaryWindowState().ReopenOnStartup)
                 WindowManager.ShowDictionary();
+            if (settings.LoadJotsWindowState().ReopenOnStartup)
+                WindowManager.ShowJots();
             if (settings.LoadScratchpadWindowState().ReopenOnStartup)
                 WindowManager.ShowScratchpad();
 
@@ -250,6 +257,14 @@ public partial class App : Application
 
             CloseExistingWindow(WindowManager.Checklist, "Checklist");
             CloseExistingWindow(WindowManager.Dictionary, "Dictionary");
+            foreach (var jotWindow in WindowManager.JotWindows)
+                CloseExistingWindow(jotWindow, "Jot");
+            CloseExistingWindow(WindowManager.Jots, "Jots");
+            if (WindowManager.JotCapture is { } capture)
+            {
+                capture.PrepareForShutdown();
+                CloseExistingWindow(capture, "Jot Capture");
+            }
             CloseExistingWindow(WindowManager.Scratchpad, "Scratchpad");
             CloseExistingWindow(WindowManager.Editor, "note editor");
             CloseMiniPadWindow();
@@ -258,6 +273,10 @@ public partial class App : Application
             _checklistBackupRegistration = null;
             _dictionaryBackupRegistration?.Dispose();
             _dictionaryBackupRegistration = null;
+            _jotsBackupRegistration?.Dispose();
+            _jotsBackupRegistration = null;
+            _jotsWorkspace?.Dispose();
+            _jotsWorkspace = null;
             _scratchpadBackupRegistration?.Dispose();
             _scratchpadBackupRegistration = null;
             foreach (var registration in _miniPadBackupRegistrations.Values)
@@ -383,6 +402,71 @@ public partial class App : Application
         return window;
     }
 
+    private JotsWindow? GetOrCreateJotsWindow()
+    {
+        Dispatcher.VerifyAccess();
+        if (_isShuttingDown)
+            return WindowManager.Jots;
+
+        if (WindowManager.Jots is not null)
+            return WindowManager.Jots;
+
+        var settings = _settingsService
+            ?? throw new InvalidOperationException("Application settings are not initialized.");
+        var window = new JotsWindow(settings, GetOrCreateJotsWorkspace());
+        window.Closed += JotsWindow_Closed;
+        WindowManager.Jots = window;
+        return window;
+    }
+
+    private JotsWorkspace GetOrCreateJotsWorkspace()
+    {
+        Dispatcher.VerifyAccess();
+        if (_jotsWorkspace is not null)
+            return _jotsWorkspace;
+        var settings = _settingsService
+            ?? throw new InvalidOperationException("Application settings are not initialized.");
+        var workspace = new JotsWorkspace(new JotsContentService(settings.AppDataDirectory), Dispatcher);
+        _jotsWorkspace = workspace;
+        var backupCoordinator = _backupCoordinator
+            ?? throw new InvalidOperationException("Backup coordination is not initialized.");
+        _jotsBackupRegistration = backupCoordinator.RegisterPreparationParticipant(
+            "Jots", BackupPreparationPhase.SharedFlush,
+            () =>
+            {
+                foreach (var window in WindowManager.JotWindows.Concat(
+                    WindowManager.Jots is { } collection ? new[] { collection } : []))
+                {
+                    if (!window.TryFlushPendingContent(out var windowError))
+                        return PersistenceSaveResult.Failed(windowError ?? "Save or cancel the jot being edited first.");
+                }
+                return CreatePersistenceSaveResult(workspace.TryFlush(out var error), error, "Jots could not be saved.");
+            },
+            () => workspace.PersistenceError,
+            () => workspace.RecoveryIssuesFoundThisRun,
+            "Jots recovery reported a problem during this application run.");
+        return workspace;
+    }
+
+    private JotCaptureWindow? GetOrCreateJotCaptureWindow()
+    {
+        if (_isShuttingDown)
+            return WindowManager.JotCapture;
+        var settings = _settingsService
+            ?? throw new InvalidOperationException("Application settings are not initialized.");
+        return new JotCaptureWindow(new JotCaptureViewModel(GetOrCreateJotsWorkspace(),
+            new JotCaptureDraftService(settings.AppDataDirectory), Dispatcher));
+    }
+
+    private JotsWindow? CreateSavedJotWindow(Guid id)
+    {
+        if (_isShuttingDown)
+            return null;
+        var workspace = GetOrCreateJotsWorkspace();
+        var item = workspace.Items.FirstOrDefault(item => item.Id == id);
+        return item is null ? null : new JotsWindow(_settingsService!, workspace, item);
+    }
+
     private ScratchpadWindow? GetOrCreateScratchpadWindow()
     {
         Dispatcher.VerifyAccess();
@@ -441,6 +525,18 @@ public partial class App : Application
         _dictionaryBackupRegistration?.Dispose();
         _dictionaryBackupRegistration = null;
         WindowManager.Dictionary = null;
+    }
+
+    private void JotsWindow_Closed(object? sender, EventArgs e)
+    {
+        if (sender is not JotsWindow window)
+            return;
+
+        window.Closed -= JotsWindow_Closed;
+        if (!ReferenceEquals(WindowManager.Jots, window))
+            return;
+
+        WindowManager.Jots = null;
     }
 
     private void ScratchpadWindow_Closed(object? sender, EventArgs e)
@@ -613,6 +709,16 @@ public partial class App : Application
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
         var directFlushes = new List<ShutdownDirectFlush>();
+        foreach (var jotWindow in WindowManager.JotWindows.Concat(
+            WindowManager.Jots is { } collection ? new[] { collection } : []))
+        {
+            directFlushes.Add(new ShutdownDirectFlush("Jot", () => jotWindow.TryPrepareForClose()
+                ? PersistenceSaveResult.Succeeded()
+                : PersistenceSaveResult.Failed("Jot changes must be saved or discarded before shutdown.")));
+        }
+        if (WindowManager.JotCapture is { } capture)
+            directFlushes.Add(new ShutdownDirectFlush("Jot Capture", () => CreatePersistenceSaveResult(
+                capture.TryFlushDraft(out var error), error, "The Jot capture draft could not be saved.")));
         foreach (var miniPadWindow in WindowManager.MiniPads)
         {
             directFlushes.Add(new ShutdownDirectFlush(

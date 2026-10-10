@@ -10,6 +10,8 @@ namespace Noted.Services
             bool Notes,
             bool Checklist,
             bool Dictionary,
+            bool Jots,
+            IReadOnlyList<Guid> JotWindows,
             bool Scratchpad,
             IReadOnlyList<Guid> MiniPads,
             bool Editor);
@@ -22,12 +24,48 @@ namespace Noted.Services
         public static MainWindow? Main { get; internal set; }
         public static ChecklistWindow? Checklist { get; internal set; }
         public static DictionaryWindow? Dictionary { get; internal set; }
+        public static JotsWindow? Jots { get; internal set; }
+        private static readonly Dictionary<Guid, JotsWindow> s_jotWindows = [];
+        internal static IReadOnlyList<JotsWindow> JotWindows => s_jotWindows.Values.ToArray();
+        internal static JotCaptureWindow? JotCapture { get; set; }
+        internal static Func<JotCaptureWindow?>? JotCaptureProvider { get; set; }
+        internal static Func<Guid, JotsWindow?>? JotProvider { get; set; }
+
+        public static void ShowJotCapture()
+        {
+            JotCapture ??= JotCaptureProvider?.Invoke();
+            JotCapture?.ShowCapture();
+        }
+
+        public static void ShowJot(Guid id)
+        {
+            if (!s_jotWindows.TryGetValue(id, out var window))
+            {
+                window = JotProvider?.Invoke(id);
+                if (window is null)
+                    return;
+                s_jotWindows.Add(id, window);
+                window.Closed += SavedJot_Closed;
+            }
+            window.ShowWindow();
+        }
+
+        private static void SavedJot_Closed(object? sender, EventArgs e)
+        {
+            if (sender is JotsWindow { JotId: { } id } window)
+            {
+                window.Closed -= SavedJot_Closed;
+                if (s_jotWindows.GetValueOrDefault(id) == window)
+                    s_jotWindows.Remove(id);
+            }
+        }
         public static ScratchpadWindow? Scratchpad { get; internal set; }
         public static MiniPadWindow? MiniPad => s_miniPads.LastOrDefault();
         public static NoteEditorWindow? Editor { get; internal set; }
 
         internal static Func<ChecklistWindow?>? ChecklistProvider { get; set; }
         internal static Func<DictionaryWindow?>? DictionaryProvider { get; set; }
+        internal static Func<JotsWindow?>? JotsProvider { get; set; }
         internal static Func<ScratchpadWindow?>? ScratchpadProvider { get; set; }
         internal static Func<MiniPadWindow?>? MiniPadProvider { get; set; }
 
@@ -115,6 +153,8 @@ namespace Noted.Services
             => (Main?.IsNotesPanelVisible == true)
             || (Checklist?.IsWindowVisible == true)
             || (Dictionary?.IsWindowVisible == true)
+            || (Jots?.IsWindowVisible == true)
+            || JotWindows.Any(window => window.IsWindowVisible)
             || (Scratchpad?.IsWindowVisible == true)
             || s_miniPads.Any(window => window.IsWindowVisible)
             || (Editor?.IsWindowVisible == true);
@@ -128,6 +168,8 @@ namespace Noted.Services
                 Main?.IsNotesPanelVisible == true,
                 Checklist?.IsWindowVisible == true,
                 Dictionary?.IsWindowVisible == true,
+                Jots?.IsWindowVisible == true,
+                JotWindows.Where(window => window.IsWindowVisible).Select(window => window.JotId!.Value).ToArray(),
                 Scratchpad?.IsWindowVisible == true,
                 s_miniPads.Where(window => window.IsWindowVisible).Select(window => window.InstanceId).ToArray(),
                 Editor?.IsWindowVisible == true);
@@ -139,6 +181,10 @@ namespace Noted.Services
                 Checklist?.HideTogether();
             if (visibleWindows.Dictionary)
                 Dictionary?.HideTogether();
+            if (visibleWindows.Jots)
+                Jots?.HideTogether();
+            foreach (var window in JotWindows.Where(window => visibleWindows.JotWindows.Contains(window.JotId!.Value)))
+                window.HideTogether();
             if (visibleWindows.Scratchpad)
                 Scratchpad?.HideTogether();
             foreach (var window in MiniPads.Where(window => visibleWindows.MiniPads.Contains(window.InstanceId)))
@@ -162,6 +208,10 @@ namespace Noted.Services
                 Checklist.ShowWindow();
             if (Dictionary?.IsVisible == true)
                 Dictionary.ShowWindow();
+            if (Jots?.IsVisible == true)
+                Jots.ShowWindow();
+            foreach (var window in JotWindows.Where(window => window.IsVisible))
+                window.ShowWindow();
             if (Scratchpad?.IsVisible == true)
                 Scratchpad.ShowWindow();
             foreach (var window in MiniPads.Where(window => window.IsVisible))
@@ -173,6 +223,7 @@ namespace Noted.Services
 
         public static void HideChecklist() => Checklist?.HideWindow();
         public static void HideDictionary() => Dictionary?.HideWindow();
+        public static void HideJots() => Jots?.HideWindow();
         public static void HideScratchpad() => Scratchpad?.HideWindow();
         public static void HideMiniPad() => MiniPad?.HideWindow();
         public static void HideEditor() => Editor?.HideWindow();
@@ -194,6 +245,16 @@ namespace Noted.Services
                 return;
 
             Dictionary = window;
+            window.ShowWindow();
+        }
+
+        public static void ShowJots()
+        {
+            var window = Jots ?? JotsProvider?.Invoke();
+            if (window is null)
+                return;
+
+            Jots = window;
             window.ShowWindow();
         }
 
@@ -261,6 +322,10 @@ namespace Noted.Services
                 Checklist?.RestoreTogether();
             if (visibilityToRestore.Dictionary)
                 Dictionary?.RestoreTogether();
+            if (visibilityToRestore.Jots)
+                Jots?.RestoreTogether();
+            foreach (var window in JotWindows.Where(window => visibilityToRestore.JotWindows.Contains(window.JotId!.Value)))
+                window.RestoreTogether();
             if (visibilityToRestore.Scratchpad)
                 Scratchpad?.RestoreTogether();
             foreach (var window in MiniPads.Where(window => visibilityToRestore.MiniPads.Contains(window.InstanceId)))
@@ -283,6 +348,14 @@ namespace Noted.Services
                 HideDictionary();
             else
                 ShowDictionary();
+        }
+
+        public static void ToggleJots()
+        {
+            if (Jots?.IsWindowVisible == true)
+                HideJots();
+            else
+                ShowJots();
         }
 
         public static void ToggleScratchpad()
@@ -322,6 +395,9 @@ namespace Noted.Services
 
                 Checklist?.PrepareForApplicationShutdown();
                 Dictionary?.PrepareForApplicationShutdown();
+                Jots?.PrepareForApplicationShutdown();
+                foreach (var window in JotWindows)
+                    window.PrepareForApplicationShutdown();
                 if (Scratchpad is not null &&
                     !Scratchpad.TryPrepareForApplicationShutdown(out var stateError))
                 {
@@ -349,6 +425,9 @@ namespace Noted.Services
             Editor?.CancelPreparedClose();
             Checklist?.CancelPreparedClose();
             Dictionary?.CancelPreparedClose();
+            Jots?.CancelPreparedClose();
+            foreach (var window in JotWindows)
+                window.CancelPreparedClose();
             Scratchpad?.CancelPreparedClose();
             foreach (var window in MiniPads)
                 window.CancelPreparedClose();
@@ -359,12 +438,20 @@ namespace Noted.Services
             Main = null;
             Checklist = null;
             Dictionary = null;
+            Jots = null;
+            foreach (var window in JotWindows)
+                window.Closed -= SavedJot_Closed;
+            s_jotWindows.Clear();
+            JotCapture = null;
+            JotCaptureProvider = null;
+            JotProvider = null;
             Scratchpad = null;
             foreach (var window in MiniPads)
                 MiniPadClosed(window, EventArgs.Empty);
             Editor = null;
             ChecklistProvider = null;
             DictionaryProvider = null;
+            JotsProvider = null;
             ScratchpadProvider = null;
             MiniPadProvider = null;
             s_hiddenNotedWindows = null;
