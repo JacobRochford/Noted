@@ -1,4 +1,7 @@
 using System.IO;
+using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Noted.Services;
@@ -77,6 +80,68 @@ public sealed class BackupPersistenceContractTests
         File.WriteAllText(directory.File("app", file), "[]");
         Assert.AreEqual(FullBackupStatus.Blocked,
             new FullBackupService(directory.File("app"), directory.File("notes")).CreateRecentBackup().Status);
+    }
+
+    [TestMethod]
+    public void HistoricalArchiveImportsAndRestoresAllFixedFilesWithOriginalMetadata()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var archivePath = directory.File("historical.notedbackup");
+        var id = Guid.Parse("12345678-1234-5678-abcd-0123456789ab");
+        using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+        {
+            foreach (var file in s_files)
+            {
+                using var stream = archive.CreateEntry("files/app/" + file.Path).Open();
+                stream.Write(Encoding.UTF8.GetBytes(file.Content));
+            }
+            // build the old manifest format without relying on production types or serializer options.
+            var manifest = new
+            {
+                SchemaVersion = 1, SnapshotId = id, Role = "Protected",
+                CreatedUtc = "2026-09-01T12:00:00Z", AppDataRoot = @"C:\old-app", NotesRoot = @"C:\old-notes",
+                Entries = s_files.Select(file => new
+                {
+                    LogicalPath = "app/" + file.Path,
+                    OriginalPath = @"C:\old-app\" + file.Path.Replace('/', '\\'),
+                    Length = Encoding.UTF8.GetByteCount(file.Content),
+                    Sha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(file.Content))),
+                    ItemCount = file.Count, file.ContentLength
+                })
+            };
+            using var manifestStream = archive.CreateEntry("manifest.json").Open();
+            JsonSerializer.Serialize(manifestStream, manifest);
+        }
+        Directory.CreateDirectory(directory.File("notes"));
+        var service = new FullBackupService(directory.File("app"), directory.File("notes"));
+        var preview = service.GetBackupImportPreview(archivePath);
+        Assert.IsTrue(preview.IsValid, preview.Error);
+        foreach (var file in s_files)
+        {
+            var entry = preview.Files.Single(x => x.LogicalPath == "app/" + file.Path);
+            Assert.AreEqual(file.Category, entry.Category);
+            Assert.AreEqual(file.Count, entry.ItemCount);
+            Assert.AreEqual(file.ContentLength, entry.ContentLength);
+        }
+        var scheduled = service.ScheduleBackupImportRestore(archivePath, preview.BackupId, preview.VerificationToken!);
+        Assert.AreEqual(FullBackupStatus.RestoreScheduled, scheduled.Status, scheduled.Message);
+        Assert.IsTrue(File.Exists(directory.File("app", "full-snapshots", "restore-request.json")));
+        Assert.AreEqual(FullBackupStatus.Restored, service.ApplyPendingUserBackupRestore().Status);
+        foreach (var file in s_files)
+        {
+            var restored = File.ReadAllText(directory.File("app", file.Path));
+            if (file.Path is "settings.json" or "session/editor-workspace.json")
+            {
+                using var json = JsonDocument.Parse(restored);
+                if (file.Path == "settings.json")
+                {
+                    Assert.AreEqual(directory.File("notes"), json.RootElement.GetProperty("NotesDirectory").GetString());
+                    Assert.AreEqual(7, json.RootElement.GetProperty("Revision").GetInt32());
+                }
+                else Assert.AreEqual(0, json.RootElement.GetProperty("Tabs").GetArrayLength());
+            }
+            else Assert.AreEqual(file.Content, restored);
+        }
     }
 
     [TestMethod]

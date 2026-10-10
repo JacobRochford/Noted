@@ -214,7 +214,7 @@ internal sealed partial class FullBackupService
                     ? null
                     : RebaseNotePath(session.SecondaryFilePath, manifest.NotesRoot)
             };
-            transformed = JsonSerializer.SerializeToUtf8Bytes(importedSession, BackupFormat.JsonOptions);
+            transformed = JsonSerializer.SerializeToUtf8Bytes(importedSession);
             _ = ValidateEditorSession(transformed);
             details = new BackupContentDetails(null, null);
         }
