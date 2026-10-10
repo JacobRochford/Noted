@@ -146,56 +146,67 @@ public sealed class AppSettingsService : IAppSettingsService {
     public (string modifiers, string key) LoadNotesHotkey()
     {
         var setting = LoadSettings();
-        return (setting.NotesHotkeyModifiers ?? "Ctrl+Shift", setting.NotesHotkeyKey ?? "Space");
+        return (setting.NotesHotkeyModifiers, setting.NotesHotkeyKey);
     }
 
     public void SaveNotesHotkey(string modifiers, string key)
     {
-        SaveSetting(s => s with { NotesHotkeyModifiers = modifiers, NotesHotkeyKey = key });
+        SaveGlobalHotkey(PersistenceKeys.Notes, modifiers, key, LoadHotkeyEnabled(PersistenceKeys.Notes));
     }
 
     public (string modifiers, string key) LoadChecklistHotkey()
     {
         var setting = LoadSettings();
-        return (setting.ChecklistHotkeyModifiers ?? "Alt", setting.ChecklistHotkeyKey ?? "C");
+        return (setting.ChecklistHotkeyModifiers, setting.ChecklistHotkeyKey);
     }
 
     public void SaveChecklistHotkey(string modifiers, string key)
     {
-        SaveSetting(s => s with { ChecklistHotkeyModifiers = modifiers, ChecklistHotkeyKey = key });
+        SaveGlobalHotkey(PersistenceKeys.Checklist, modifiers, key, LoadHotkeyEnabled(PersistenceKeys.Checklist));
     }
 
     public (string modifiers, string key) LoadDictionaryHotkey()
     {
         var setting = LoadSettings();
-        return (setting.DictionaryHotkeyModifiers ?? "Alt", setting.DictionaryHotkeyKey ?? "D");
+        return (setting.DictionaryHotkeyModifiers, setting.DictionaryHotkeyKey);
     }
 
     public void SaveDictionaryHotkey(string modifiers, string key)
     {
-        SaveSetting(s => s with { DictionaryHotkeyModifiers = modifiers, DictionaryHotkeyKey = key });
+        SaveGlobalHotkey(PersistenceKeys.Dictionary, modifiers, key, LoadHotkeyEnabled(PersistenceKeys.Dictionary));
     }
 
     public (string modifiers, string key) LoadMiniPadHotkey()
     {
         var setting = LoadSettings();
-        return (setting.MiniPadHotkeyModifiers ?? "Alt", setting.MiniPadHotkeyKey ?? "M");
+        return (setting.MiniPadHotkeyModifiers, setting.MiniPadHotkeyKey);
     }
 
     public void SaveMiniPadHotkey(string modifiers, string key)
     {
-        SaveSetting(s => s with { MiniPadHotkeyModifiers = modifiers, MiniPadHotkeyKey = key });
+        SaveGlobalHotkey(PersistenceKeys.MiniPad, modifiers, key, LoadHotkeyEnabled(PersistenceKeys.MiniPad));
     }
 
     public (string modifiers, string key) LoadNoteEditorHotkey()
     {
         var setting = LoadSettings();
-        return (setting.NoteEditorHotkeyModifiers ?? "Alt", setting.NoteEditorHotkeyKey ?? "J");
+        return (setting.NoteEditorHotkeyModifiers, setting.NoteEditorHotkeyKey);
     }
 
     public void SaveNoteEditorHotkey(string modifiers, string key)
     {
-        SaveSetting(s => s with { NoteEditorHotkeyModifiers = modifiers, NoteEditorHotkeyKey = key });
+        SaveGlobalHotkey(PersistenceKeys.NoteEditor, modifiers, key, LoadHotkeyEnabled(PersistenceKeys.NoteEditor));
+    }
+
+    public (string modifiers, string key) LoadJotCaptureHotkey()
+    {
+        var setting = LoadSettings();
+        return (setting.JotCaptureHotkeyModifiers, setting.JotCaptureHotkeyKey);
+    }
+
+    public void SaveJotCaptureHotkey(string modifiers, string key)
+    {
+        SaveGlobalHotkey(PersistenceKeys.JotCapture, modifiers, key, LoadHotkeyEnabled(PersistenceKeys.JotCapture));
     }
 
     public JotsWindowState LoadJotWindowState(Guid id) =>
@@ -212,6 +223,52 @@ public sealed class AppSettingsService : IAppSettingsService {
     }
 
     public event EventHandler? AppearanceChanged;
+
+    public (string modifiers, string key) LoadScratchpadHotkey()
+    {
+        var setting = LoadSettings();
+        return (setting.ScratchpadHotkeyModifiers, setting.ScratchpadHotkeyKey);
+    }
+
+    public void SaveScratchpadHotkey(string modifiers, string key) =>
+        SaveGlobalHotkey(PersistenceKeys.Scratchpad, modifiers, key, LoadHotkeyEnabled(PersistenceKeys.Scratchpad));
+
+    public (string modifiers, string key) LoadJotsHotkey()
+    {
+        var setting = LoadSettings();
+        return (setting.JotsHotkeyModifiers, setting.JotsHotkeyKey);
+    }
+
+    public void SaveJotsHotkey(string modifiers, string key) =>
+        SaveGlobalHotkey(PersistenceKeys.Jots, modifiers, key, LoadHotkeyEnabled(PersistenceKeys.Jots));
+
+    public bool LoadHotkeyEnabled(string feature) =>
+        LoadSettings().DisabledHotkeys?.Contains(feature, StringComparer.Ordinal) != true;
+
+    public void SaveGlobalHotkey(string feature, string modifiers, string key, bool enabled)
+    {
+        if (!PersistenceKeys.TryParseHotkey(feature, out var hotkeyFeature))
+            throw new ArgumentOutOfRangeException(nameof(feature));
+        SaveSetting(settings =>
+        {
+            var disabled = settings.DisabledHotkeys?.ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(StringComparer.Ordinal);
+            if (enabled) disabled.Remove(feature);
+            else disabled.Add(feature);
+            var updated = settings with { DisabledHotkeys = disabled.Order(StringComparer.Ordinal).ToList() };
+            return hotkeyFeature switch
+            {
+                HotkeyFeature.Notes => updated with { NotesHotkeyModifiers = modifiers, NotesHotkeyKey = key },
+                HotkeyFeature.Checklist => updated with { ChecklistHotkeyModifiers = modifiers, ChecklistHotkeyKey = key },
+                HotkeyFeature.Dictionary => updated with { DictionaryHotkeyModifiers = modifiers, DictionaryHotkeyKey = key },
+                HotkeyFeature.MiniPad => updated with { MiniPadHotkeyModifiers = modifiers, MiniPadHotkeyKey = key },
+                HotkeyFeature.NoteEditor => updated with { NoteEditorHotkeyModifiers = modifiers, NoteEditorHotkeyKey = key },
+                HotkeyFeature.JotCapture => updated with { JotCaptureHotkeyModifiers = modifiers, JotCaptureHotkeyKey = key },
+                HotkeyFeature.Scratchpad => updated with { ScratchpadHotkeyModifiers = modifiers, ScratchpadHotkeyKey = key },
+                HotkeyFeature.Jots => updated with { JotsHotkeyModifiers = modifiers, JotsHotkeyKey = key },
+                _ => throw new ArgumentOutOfRangeException(nameof(feature))
+            };
+        });
+    }
 
     public bool LoadWindowAlwaysVisible(string windowType) =>
         LoadSetting(s => s.AlwaysVisibleWindows?.Contains(windowType) == true);
@@ -740,11 +797,32 @@ public sealed class AppSettingsService : IAppSettingsService {
         }
     }
 
+    private static bool MatchesHotkey(string? modifiers, string? key, string expectedModifiers, string expectedKey) =>
+        string.Equals(key?.Trim(), expectedKey, StringComparison.OrdinalIgnoreCase)
+        && modifiers is not null
+        && modifiers.Split('+', StringSplitOptions.TrimEntries).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            .SetEquals(expectedModifiers.Split('+'));
+
     private static AppSettingsDocument NormalizeSettings(AppSettingsDocument settings) {
+        // old settings don't distinguish a chosen shortcut from a saved default.
+        // migrate matching defaults once so later choices survive.
+        if (settings.HotkeyDefaultsVersion < HotkeyConfiguration.CurrentDefaultsVersion)
+        {
+            if (MatchesHotkey(settings.NotesHotkeyModifiers, settings.NotesHotkeyKey, "Ctrl+Shift", "Space"))
+                settings = settings with { NotesHotkeyModifiers = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Notes).Modifiers,
+                    NotesHotkeyKey = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Notes).Key };
+            if (MatchesHotkey(settings.NoteEditorHotkeyModifiers, settings.NoteEditorHotkeyKey, "Alt", "J"))
+                settings = settings with { NoteEditorHotkeyModifiers = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.NoteEditor).Modifiers,
+                    NoteEditorHotkeyKey = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.NoteEditor).Key };
+            if (MatchesHotkey(settings.JotCaptureHotkeyModifiers, settings.JotCaptureHotkeyKey, "Ctrl+Alt", "J"))
+                settings = settings with { JotCaptureHotkeyModifiers = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.JotCapture).Modifiers,
+                    JotCaptureHotkeyKey = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.JotCapture).Key };
+        }
         var mode = settings.NewNoteMode ?? NewNoteMode.Prompt;
 
         return settings with {
             SchemaVersion = CurrentSettingsSchemaVersion,
+            HotkeyDefaultsVersion = Math.Max(HotkeyConfiguration.CurrentDefaultsVersion, settings.HotkeyDefaultsVersion),
             NotesDirectory = string.IsNullOrWhiteSpace(settings.NotesDirectory)
                 ? null
                 : settings.NotesDirectory,
@@ -756,16 +834,22 @@ public sealed class AppSettingsService : IAppSettingsService {
             PinnedNotes = settings.PinnedNotes?
                 .Where(note => note is not null)
                 .ToList(),
-            NotesHotkeyModifiers = string.IsNullOrWhiteSpace(settings.NotesHotkeyModifiers) ? "Ctrl+Shift" : settings.NotesHotkeyModifiers,
-            NotesHotkeyKey = string.IsNullOrWhiteSpace(settings.NotesHotkeyKey) ? "Space" : settings.NotesHotkeyKey,
-            ChecklistHotkeyModifiers = string.IsNullOrWhiteSpace(settings.ChecklistHotkeyModifiers) ? "Alt" : settings.ChecklistHotkeyModifiers,
-            ChecklistHotkeyKey = string.IsNullOrWhiteSpace(settings.ChecklistHotkeyKey) ? "C" : settings.ChecklistHotkeyKey,
-            DictionaryHotkeyModifiers = string.IsNullOrWhiteSpace(settings.DictionaryHotkeyModifiers) ? "Alt" : settings.DictionaryHotkeyModifiers,
-            DictionaryHotkeyKey = string.IsNullOrWhiteSpace(settings.DictionaryHotkeyKey) ? "D" : settings.DictionaryHotkeyKey,
-            MiniPadHotkeyModifiers = string.IsNullOrWhiteSpace(settings.MiniPadHotkeyModifiers) ? "Alt" : settings.MiniPadHotkeyModifiers,
-            MiniPadHotkeyKey = string.IsNullOrWhiteSpace(settings.MiniPadHotkeyKey) ? "M" : settings.MiniPadHotkeyKey,
-            NoteEditorHotkeyModifiers = string.IsNullOrWhiteSpace(settings.NoteEditorHotkeyModifiers) ? "Alt" : settings.NoteEditorHotkeyModifiers,
-            NoteEditorHotkeyKey = string.IsNullOrWhiteSpace(settings.NoteEditorHotkeyKey) ? "J" : settings.NoteEditorHotkeyKey,
+            NotesHotkeyModifiers = string.IsNullOrWhiteSpace(settings.NotesHotkeyModifiers) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Notes).Modifiers : settings.NotesHotkeyModifiers,
+            NotesHotkeyKey = string.IsNullOrWhiteSpace(settings.NotesHotkeyKey) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Notes).Key : settings.NotesHotkeyKey,
+            ChecklistHotkeyModifiers = string.IsNullOrWhiteSpace(settings.ChecklistHotkeyModifiers) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Checklist).Modifiers : settings.ChecklistHotkeyModifiers,
+            ChecklistHotkeyKey = string.IsNullOrWhiteSpace(settings.ChecklistHotkeyKey) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Checklist).Key : settings.ChecklistHotkeyKey,
+            DictionaryHotkeyModifiers = string.IsNullOrWhiteSpace(settings.DictionaryHotkeyModifiers) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Dictionary).Modifiers : settings.DictionaryHotkeyModifiers,
+            DictionaryHotkeyKey = string.IsNullOrWhiteSpace(settings.DictionaryHotkeyKey) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Dictionary).Key : settings.DictionaryHotkeyKey,
+            MiniPadHotkeyModifiers = string.IsNullOrWhiteSpace(settings.MiniPadHotkeyModifiers) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.MiniPad).Modifiers : settings.MiniPadHotkeyModifiers,
+            MiniPadHotkeyKey = string.IsNullOrWhiteSpace(settings.MiniPadHotkeyKey) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.MiniPad).Key : settings.MiniPadHotkeyKey,
+            NoteEditorHotkeyModifiers = string.IsNullOrWhiteSpace(settings.NoteEditorHotkeyModifiers) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.NoteEditor).Modifiers : settings.NoteEditorHotkeyModifiers,
+            NoteEditorHotkeyKey = string.IsNullOrWhiteSpace(settings.NoteEditorHotkeyKey) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.NoteEditor).Key : settings.NoteEditorHotkeyKey,
+            JotCaptureHotkeyModifiers = string.IsNullOrWhiteSpace(settings.JotCaptureHotkeyModifiers) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.JotCapture).Modifiers : settings.JotCaptureHotkeyModifiers,
+            JotCaptureHotkeyKey = string.IsNullOrWhiteSpace(settings.JotCaptureHotkeyKey) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.JotCapture).Key : settings.JotCaptureHotkeyKey,
+            ScratchpadHotkeyModifiers = string.IsNullOrWhiteSpace(settings.ScratchpadHotkeyModifiers) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Scratchpad).Modifiers : settings.ScratchpadHotkeyModifiers,
+            ScratchpadHotkeyKey = string.IsNullOrWhiteSpace(settings.ScratchpadHotkeyKey) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Scratchpad).Key : settings.ScratchpadHotkeyKey,
+            JotsHotkeyModifiers = string.IsNullOrWhiteSpace(settings.JotsHotkeyModifiers) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Jots).Modifiers : settings.JotsHotkeyModifiers,
+            JotsHotkeyKey = string.IsNullOrWhiteSpace(settings.JotsHotkeyKey) ? HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Jots).Key : settings.JotsHotkeyKey,
             GhostModeOpacity = NormalizeOpacity(settings.GhostModeOpacity, 0, 0.25),
             DefaultOpacity = NormalizeOpacity(settings.DefaultOpacity, 0.05, 0.88),
             AppThemeMode = Enum.IsDefined(settings.AppThemeMode)

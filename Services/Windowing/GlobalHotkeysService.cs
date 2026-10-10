@@ -51,6 +51,9 @@ public sealed class GlobalHotkeysService : IDisposable, IHotkeyRegistrationServi
     private const uint MOD_CONTROL = 0x0002;
     private const uint MOD_SHIFT = 0x0004;
     private const uint MOD_WIN = 0x0008;
+    internal const uint NoRepeatModifier = 0x4000;
+    private readonly Func<int, uint, uint, bool> _registerHotkey;
+    private readonly Func<int, bool> _unregisterHotkey;
 
     private readonly IntPtr _hwnd;
     private readonly HwndSource _hwndSource;
@@ -82,7 +85,10 @@ public sealed class GlobalHotkeysService : IDisposable, IHotkeyRegistrationServi
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
-    public GlobalHotkeysService(Window window)
+    public GlobalHotkeysService(Window window) : this(window, null, null) { }
+
+    internal GlobalHotkeysService(Window window, Func<int, uint, uint, bool>? registerHotkey,
+        Func<int, bool>? unregisterHotkey)
     {
         ArgumentNullException.ThrowIfNull(window);
 
@@ -93,6 +99,8 @@ public sealed class GlobalHotkeysService : IDisposable, IHotkeyRegistrationServi
         _hwndSource = HwndSource.FromHwnd(_hwnd)
             ?? throw new InvalidOperationException("The window message source is not available for hotkey registration.");
 
+        _registerHotkey = registerHotkey ?? ((id, modifiers, key) => RegisterHotKey(_hwnd, id, modifiers, key));
+        _unregisterHotkey = unregisterHotkey ?? (id => UnregisterHotKey(_hwnd, id));
         _hwndSource.AddHook(HwndHook);
         _hookAttached = true;
     }
@@ -100,6 +108,8 @@ public sealed class GlobalHotkeysService : IDisposable, IHotkeyRegistrationServi
     HotkeyValidationResult IHotkeyRegistrationService.Validate(string? modifiers, string? key) => Validate(modifiers, key);
     HotkeyRegistrationResult IHotkeyRegistrationService.Register(string featureName, string modifiers, string key, Action callback) => Register(featureName, modifiers, key, callback);
     HotkeyReplacementResult IHotkeyRegistrationService.Replace(string featureName, HotkeyRegistration? currentRegistration, string modifiers, string key, Action callback) => Replace(featureName, currentRegistration, modifiers, key, callback);
+
+    HotkeyUnregistrationResult IHotkeyRegistrationService.Unregister(int id) => Unregister(id);
 
     internal HotkeyValidationResult Validate(string? modifiers, string? key)
     {
@@ -138,10 +148,9 @@ public sealed class GlobalHotkeysService : IDisposable, IHotkeyRegistrationServi
         }
 
         var id = AllocateRegistrationId();
-        if (!RegisterHotKey(
-                _hwnd,
+        if (!_registerHotkey(
                 id,
-                normalized.Combination.Modifiers,
+                normalized.Combination.Modifiers | NoRepeatModifier,
                 normalized.Combination.VirtualKey))
         {
             var nativeError = Marshal.GetLastWin32Error();
@@ -312,7 +321,7 @@ public sealed class GlobalHotkeysService : IDisposable, IHotkeyRegistrationServi
                 "The global hotkey service has already been disposed.");
         }
 
-        if (!UnregisterHotKey(_hwnd, id))
+        if (!_unregisterHotkey(id))
         {
             var nativeError = Marshal.GetLastWin32Error();
             var description = DescribeNativeFailure(
@@ -384,14 +393,17 @@ public sealed class GlobalHotkeysService : IDisposable, IHotkeyRegistrationServi
         IntPtr lParam,
         ref bool handled)
     {
-        if (message == WM_HOTKEY
-            && _registrationsById.TryGetValue(wParam.ToInt32(), out var registration))
-        {
-            registration.Callback();
+        if (message == WM_HOTKEY && DispatchHotkey(wParam.ToInt32()))
             handled = true;
-        }
-
         return IntPtr.Zero;
+    }
+
+    internal bool DispatchHotkey(int id)
+    {
+        if (_disposed || !_registrationsById.TryGetValue(id, out var registration))
+            return false;
+        registration.Callback();
+        return true;
     }
 
     private int AllocateRegistrationId()

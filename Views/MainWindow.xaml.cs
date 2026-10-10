@@ -407,6 +407,9 @@ public partial class MainWindow : Window {
         HotkeyFeature.Dictionary => OnDictionaryHotkeyPressed,
         HotkeyFeature.MiniPad => OnMiniPadHotkeyPressed,
         HotkeyFeature.NoteEditor => OnNoteEditorHotkeyPressed,
+        HotkeyFeature.JotCapture => WindowManager.ShowJotCapture,
+        HotkeyFeature.Scratchpad => WindowManager.ToggleScratchpad,
+        HotkeyFeature.Jots => WindowManager.ToggleJots,
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
     };
 
@@ -1729,6 +1732,8 @@ public partial class MainWindow : Window {
         Close();
     }
     #endregion
+
+    internal void SuspendHotkeyCallbacks(bool suspended) => _hotkeys.CallbacksSuspended = suspended;
 
     internal void CleanupResources() {
         if (_cleanupCompleted)

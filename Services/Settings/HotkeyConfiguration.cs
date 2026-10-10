@@ -2,7 +2,7 @@ using Noted.Helpers;
 
 namespace Noted.Services;
 
-internal enum HotkeyFeature { Notes, Checklist, Dictionary, MiniPad, NoteEditor }
+internal enum HotkeyFeature { Notes, Checklist, Dictionary, MiniPad, NoteEditor, JotCapture, Scratchpad, Jots }
 internal enum HotkeyChangeStatus { Unavailable, InvalidSelection, Invalid, Ambiguous, Failed, Unchanged, Saved, SaveFailed }
 internal sealed record HotkeyChangeResult(HotkeyChangeStatus Status, string Description);
 
@@ -11,10 +11,12 @@ internal interface IHotkeyRegistrationService : IDisposable
     HotkeyValidationResult Validate(string? modifiers, string? key);
     HotkeyRegistrationResult Register(string featureName, string modifiers, string key, Action callback);
     HotkeyReplacementResult Replace(string featureName, HotkeyRegistration? currentRegistration, string modifiers, string key, Action callback);
+    HotkeyUnregistrationResult Unregister(int id);
 }
 
 internal sealed class HotkeyConfiguration : IDisposable
 {
+    internal const int CurrentDefaultsVersion = 1;
     private readonly IAppSettingsService _settingsService;
     private readonly Func<IHotkeyRegistrationService> _createService;
     private readonly Func<HotkeyFeature, Action> _getAction;
@@ -22,16 +24,21 @@ internal sealed class HotkeyConfiguration : IDisposable
     private bool _hotkeysInitialized;
     private bool _hotkeyInitializationInProgress;
     private IHotkeyRegistrationService? _globalHotkeysService;
-    private HotkeyRegistration? _notesHotkeyRegistration;
-    private HotkeyRegistration? _additionalNotesHotkeyRegistration;
-    private HotkeyRegistration? _checklistHotkeyRegistration;
-    private HotkeyRegistration? _additionalChecklistHotkeyRegistration;
-    private HotkeyRegistration? _dictionaryHotkeyRegistration;
-    private HotkeyRegistration? _additionalDictionaryHotkeyRegistration;
-    private HotkeyRegistration? _miniPadHotkeyRegistration;
-    private HotkeyRegistration? _additionalMiniPadHotkeyRegistration;
-    private HotkeyRegistration? _noteEditorHotkeyRegistration;
-    private HotkeyRegistration? _additionalNoteEditorHotkeyRegistration;
+    private readonly Dictionary<HotkeyFeature, HotkeyRegistration> _registrations = new();
+    private readonly Dictionary<HotkeyFeature, HotkeyRegistration> _additionalRegistrations = new();
+    private readonly Dictionary<HotkeyFeature, (string Modifiers, string Key, bool Enabled)> _pendingPreferences = new();
+    private readonly Dictionary<HotkeyFeature, bool> _enabled = new();
+    internal bool CallbacksSuspended { get; set; }
+
+    internal bool IsEnabled(HotkeyFeature feature) =>
+        _enabled.TryGetValue(feature, out var enabled) ? enabled : _settingsService.LoadHotkeyEnabled(PersistenceKeys.GetHotkey(feature));
+
+    private Action GetCallback(HotkeyFeature feature) => () =>
+    {
+        if (!_cleanupCompleted && !CallbacksSuspended && IsEnabled(feature))
+            _getAction(feature)();
+    };
+
     private static readonly string[] s_fallbackHotkeyModifiers =
         { "Alt+Shift", "Ctrl+Alt", "Win+Alt", "Ctrl+Shift" };
 
@@ -62,82 +69,26 @@ internal sealed class HotkeyConfiguration : IDisposable
         {
             _globalHotkeysService ??= _createService();
 
-            if (_notesHotkeyRegistration is null)
+            var configuredCombinations = new Dictionary<HotkeyFeature, string>();
+            foreach (var feature in Enum.GetValues<HotkeyFeature>())
             {
-                var (modifiers, key) = _settingsService.LoadNotesHotkey();
-                var result = RegisterWithFallback(
-                    "Notes",
-                    modifiers,
-                    key,
-                    "Ctrl+Shift",
-                    "Space",
-                    _getAction(HotkeyFeature.Notes),
-                    _settingsService.SaveNotesHotkey);
-                _notesHotkeyRegistration = result.Registration;
-                if (result.Warning is not null)
-                    warnings.Add(result.Warning);
+                _enabled[feature] = _settingsService.LoadHotkeyEnabled(PersistenceKeys.GetHotkey(feature));
+                var configured = LoadHotkey(feature);
+                if (_enabled[feature] && _globalHotkeysService.Validate(configured.Modifiers, configured.Key).Combination is { } combination)
+                    configuredCombinations[feature] = combination;
             }
-
-            if (_checklistHotkeyRegistration is null)
+            foreach (var feature in Enum.GetValues<HotkeyFeature>())
             {
-                var (modifiers, key) = _settingsService.LoadChecklistHotkey();
-                var result = RegisterWithFallback(
-                    "Checklist",
-                    modifiers,
-                    key,
-                    "Alt",
-                    "C",
-                    _getAction(HotkeyFeature.Checklist),
-                    _settingsService.SaveChecklistHotkey);
-                _checklistHotkeyRegistration = result.Registration;
-                if (result.Warning is not null)
-                    warnings.Add(result.Warning);
-            }
+                var enabled = _enabled[feature];
+                if (!enabled || GetHotkeyRegistration(feature) is not null)
+                    continue;
 
-            if (_dictionaryHotkeyRegistration is null)
-            {
-                var (modifiers, key) = _settingsService.LoadDictionaryHotkey();
-                var result = RegisterWithFallback(
-                    "Dictionary",
-                    modifiers,
-                    key,
-                    "Alt",
-                    "D",
-                    _getAction(HotkeyFeature.Dictionary),
-                    _settingsService.SaveDictionaryHotkey);
-                _dictionaryHotkeyRegistration = result.Registration;
-                if (result.Warning is not null)
-                    warnings.Add(result.Warning);
-            }
-
-            if (_miniPadHotkeyRegistration is null)
-            {
-                var (modifiers, key) = _settingsService.LoadMiniPadHotkey();
-                var result = RegisterWithFallback(
-                    "MiniPad",
-                    modifiers,
-                    key,
-                    "Alt",
-                    "M",
-                    _getAction(HotkeyFeature.MiniPad),
-                    _settingsService.SaveMiniPadHotkey);
-                _miniPadHotkeyRegistration = result.Registration;
-                if (result.Warning is not null)
-                    warnings.Add(result.Warning);
-            }
-
-            if (_noteEditorHotkeyRegistration is null)
-            {
-                var (modifiers, key) = _settingsService.LoadNoteEditorHotkey();
-                var result = RegisterWithFallback(
-                    "NoteEditor",
-                    modifiers,
-                    key,
-                    "Alt",
-                    "J",
-                    _getAction(HotkeyFeature.NoteEditor),
-                    _settingsService.SaveNoteEditorHotkey);
-                _noteEditorHotkeyRegistration = result.Registration;
+                var (modifiers, key) = LoadHotkey(feature);
+                var defaults = GetDefaultHotkey(feature);
+                var result = RegisterWithFallback(GetHotkeyFeatureName(feature), modifiers, key,
+                    defaults.Modifiers, defaults.Key, GetCallback(feature),
+                    configuredCombinations.Where(pair => pair.Key != feature).Select(pair => pair.Value).ToHashSet(StringComparer.OrdinalIgnoreCase));
+                SetHotkeyRegistrations(feature, result.Registration, null);
                 if (result.Warning is not null)
                     warnings.Add(result.Warning);
             }
@@ -166,7 +117,7 @@ internal sealed class HotkeyConfiguration : IDisposable
         string defaultFallbackModifiers,
         string defaultFallbackKey,
         Action callback,
-        Action<string, string> saveHotkey)
+        IReadOnlySet<string> otherConfiguredCombinations)
     {
         if (_globalHotkeysService is null)
         {
@@ -210,6 +161,8 @@ internal sealed class HotkeyConfiguration : IDisposable
                 continue;
             }
 
+            if (index > 0 && otherConfiguredCombinations.Contains(validation.Combination))
+                continue;
             if (!attemptedCombinations.Add(validation.Combination))
                 continue;
 
@@ -228,22 +181,10 @@ internal sealed class HotkeyConfiguration : IDisposable
             if (index == 0)
                 return new InitialHotkeyResult(registration, null);
 
-            string? persistenceWarning = null;
-            try
-            {
-                saveHotkey(registration.Modifiers, registration.Key);
-            }
-            catch (SettingsPersistenceException exception)
-            {
-                ExceptionDiagnostics.Record(exception);
-                persistenceWarning =
-                    $" The fallback is active for this session, but saving it failed: {exception.Message}";
-            }
-
             return new InitialHotkeyResult(
                 registration,
                 $"{featureName} hotkey {requestedDisplay} was unavailable. " +
-                $"Active fallback: {registration.Combination}.{persistenceWarning}");
+                $"Active fallback for this session: {registration.Combination}. Your configured shortcut was retained.");
         }
 
         var failureSummary = string.Join(
@@ -254,145 +195,139 @@ internal sealed class HotkeyConfiguration : IDisposable
             $"{featureName} hotkey {requestedModifiers}+{requestedKey} could not be registered. " +
             $"No fallback is active. {failureSummary}".TrimEnd());
     }
-    internal HotkeyRegistration? GetHotkeyRegistration(HotkeyFeature feature) => feature switch
-    {
-        HotkeyFeature.Notes => _notesHotkeyRegistration,
-        HotkeyFeature.Checklist => _checklistHotkeyRegistration,
-        HotkeyFeature.Dictionary => _dictionaryHotkeyRegistration,
-        HotkeyFeature.MiniPad => _miniPadHotkeyRegistration,
-        HotkeyFeature.NoteEditor => _noteEditorHotkeyRegistration,
-        _ => null
-    };
 
-    internal HotkeyRegistration? GetAdditionalHotkeyRegistration(HotkeyFeature feature) => feature switch
-    {
-        HotkeyFeature.Notes => _additionalNotesHotkeyRegistration,
-        HotkeyFeature.Checklist => _additionalChecklistHotkeyRegistration,
-        HotkeyFeature.Dictionary => _additionalDictionaryHotkeyRegistration,
-        HotkeyFeature.MiniPad => _additionalMiniPadHotkeyRegistration,
-        HotkeyFeature.NoteEditor => _additionalNoteEditorHotkeyRegistration,
-        _ => null
-    };
+    internal HotkeyRegistration? GetHotkeyRegistration(HotkeyFeature feature) => _registrations.GetValueOrDefault(feature);
+    internal HotkeyRegistration? GetAdditionalHotkeyRegistration(HotkeyFeature feature) => _additionalRegistrations.GetValueOrDefault(feature);
 
-    private void SetHotkeyRegistrations(
-        HotkeyFeature feature,
-        HotkeyRegistration? registration,
+    private void SetHotkeyRegistrations(HotkeyFeature feature, HotkeyRegistration? registration,
         HotkeyRegistration? additionalRegistration)
     {
-        switch (feature)
-        {
-            case HotkeyFeature.Notes:
-                _notesHotkeyRegistration = registration;
-                _additionalNotesHotkeyRegistration = additionalRegistration;
-                break;
-            case HotkeyFeature.Checklist:
-                _checklistHotkeyRegistration = registration;
-                _additionalChecklistHotkeyRegistration = additionalRegistration;
-                break;
-            case HotkeyFeature.Dictionary:
-                _dictionaryHotkeyRegistration = registration;
-                _additionalDictionaryHotkeyRegistration = additionalRegistration;
-                break;
-            case HotkeyFeature.MiniPad:
-                _miniPadHotkeyRegistration = registration;
-                _additionalMiniPadHotkeyRegistration = additionalRegistration;
-                break;
-            case HotkeyFeature.NoteEditor:
-                _noteEditorHotkeyRegistration = registration;
-                _additionalNoteEditorHotkeyRegistration = additionalRegistration;
-                break;
-        }
+        if (registration is null) _registrations.Remove(feature);
+        else _registrations[feature] = registration;
+        if (additionalRegistration is null) _additionalRegistrations.Remove(feature);
+        else _additionalRegistrations[feature] = additionalRegistration;
     }
 
-    internal (string Modifiers, string Key) LoadHotkey(HotkeyFeature feature) => feature switch
+    internal (string Modifiers, string Key) LoadHotkey(HotkeyFeature feature) =>
+        _pendingPreferences.TryGetValue(feature, out var pending)
+            ? (pending.Modifiers, pending.Key) : LoadSavedHotkey(feature);
+
+    private (string Modifiers, string Key) LoadSavedHotkey(HotkeyFeature feature) => feature switch
     {
         HotkeyFeature.Notes => _settingsService.LoadNotesHotkey(),
         HotkeyFeature.Checklist => _settingsService.LoadChecklistHotkey(),
         HotkeyFeature.Dictionary => _settingsService.LoadDictionaryHotkey(),
         HotkeyFeature.MiniPad => _settingsService.LoadMiniPadHotkey(),
         HotkeyFeature.NoteEditor => _settingsService.LoadNoteEditorHotkey(),
+        HotkeyFeature.JotCapture => _settingsService.LoadJotCaptureHotkey(),
+        HotkeyFeature.Scratchpad => _settingsService.LoadScratchpadHotkey(),
+        HotkeyFeature.Jots => _settingsService.LoadJotsHotkey(),
         _ => GetDefaultHotkey(feature)
     };
 
-    private void SaveHotkey(HotkeyFeature feature, string modifiers, string key)
-    {
-        switch (feature)
-        {
-            case HotkeyFeature.Notes:
-                _settingsService.SaveNotesHotkey(modifiers, key);
-                break;
-            case HotkeyFeature.Checklist:
-                _settingsService.SaveChecklistHotkey(modifiers, key);
-                break;
-            case HotkeyFeature.Dictionary:
-                _settingsService.SaveDictionaryHotkey(modifiers, key);
-                break;
-            case HotkeyFeature.MiniPad:
-                _settingsService.SaveMiniPadHotkey(modifiers, key);
-                break;
-            case HotkeyFeature.NoteEditor:
-                _settingsService.SaveNoteEditorHotkey(modifiers, key);
-                break;
-        }
-    }
-
     internal static (string Modifiers, string Key) GetDefaultHotkey(HotkeyFeature feature) => feature switch
     {
-        HotkeyFeature.Notes => ("Ctrl+Shift", "Space"),
+        HotkeyFeature.Notes => ("Alt", "N"),
         HotkeyFeature.Checklist => ("Alt", "C"),
         HotkeyFeature.Dictionary => ("Alt", "D"),
         HotkeyFeature.MiniPad => ("Alt", "M"),
-        HotkeyFeature.NoteEditor => ("Alt", "J"),
+        HotkeyFeature.NoteEditor => ("Alt", "E"),
+        HotkeyFeature.JotCapture => ("Alt", "J"),
+        HotkeyFeature.Scratchpad => ("Alt", "S"),
+        HotkeyFeature.Jots => ("Alt+Shift", "J"),
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
     };
 
     internal static string GetHotkeyFeatureName(HotkeyFeature feature) => feature switch
     {
-        HotkeyFeature.Notes => "Notes",
+        HotkeyFeature.Notes => "Noted",
         HotkeyFeature.Checklist => "Checklist",
         HotkeyFeature.Dictionary => "Dictionary",
         HotkeyFeature.MiniPad => "MiniPad",
-        HotkeyFeature.NoteEditor => "NoteEditor",
+        HotkeyFeature.NoteEditor => "Note Editor",
+        HotkeyFeature.JotCapture => "Quick Jot",
+        HotkeyFeature.Scratchpad => "Scratchpad",
+        HotkeyFeature.Jots => "Jots collection",
         _ => throw new ArgumentOutOfRangeException(nameof(feature), feature, null)
     };
 
 
-    internal HotkeyChangeResult Change(HotkeyFeature feature, IReadOnlyList<string> modifiers, string? key)
+    internal HotkeyChangeResult Change(HotkeyFeature feature, IReadOnlyList<string> modifiers, string? key,
+        bool enabled = true)
     {
-        if (modifiers.Count == 0 || string.IsNullOrWhiteSpace(key)
-            || string.IsNullOrEmpty(HotkeyConstants.BuildHotkey(modifiers.ToList(), key)))
+        if (enabled && string.IsNullOrEmpty(HotkeyConstants.BuildHotkey(modifiers.ToList(), key)))
             return new(HotkeyChangeStatus.InvalidSelection, "Please select at least one modifier and a key.");
-        if (_globalHotkeysService is null)
-            return new(HotkeyChangeStatus.Unavailable,
-                "The global hotkey service is unavailable. Restart Noted and try again.");
-        var validation = _globalHotkeysService.Validate(string.Join("+", modifiers), key);
-        if (!validation.Success || validation.Modifiers is null || validation.Key is null)
-            return new(HotkeyChangeStatus.Invalid, validation.Description);
+        if (_globalHotkeysService is null || _cleanupCompleted || CallbacksSuspended)
+            return new(HotkeyChangeStatus.Unavailable, "The global hotkey service is unavailable.");
         var featureName = GetHotkeyFeatureName(feature);
-        if (GetAdditionalHotkeyRegistration(feature) is not null)
+        if (enabled && GetAdditionalHotkeyRegistration(feature) is not null)
             return new(HotkeyChangeStatus.Ambiguous,
                 $"Multiple {featureName} hotkeys may still be active after an earlier rollback failure. " +
                 "Restart Noted before attempting another replacement.");
-        var replacement = _globalHotkeysService.Replace(featureName, GetHotkeyRegistration(feature),
-            validation.Modifiers, validation.Key, _getAction(feature));
-        SetHotkeyRegistrations(feature, replacement.ActiveRegistration, replacement.AdditionalActiveRegistration);
-        if (!replacement.Success)
-            return new(HotkeyChangeStatus.Failed, replacement.Description);
-        if (replacement.NoChange || replacement.ActiveRegistration is null)
+
+        // keep the chosen shortcut when disabling it, even if saving it failed.
+        var configured = LoadHotkey(feature);
+        var desiredModifiers = configured.Modifiers;
+        var desiredKey = configured.Key;
+        var current = GetHotkeyRegistration(feature);
+        if (enabled)
+        {
+            var validation = _globalHotkeysService.Validate(string.Join("+", modifiers), key);
+            if (!validation.Success || validation.Modifiers is null || validation.Key is null)
+                return new(HotkeyChangeStatus.Invalid, validation.Description);
+            desiredModifiers = validation.Modifiers;
+            desiredKey = validation.Key;
+            if (current is null || current.Modifiers != desiredModifiers || current.Key != desiredKey)
+            {
+                var replacement = _globalHotkeysService.Replace(featureName, current,
+                    desiredModifiers, desiredKey, GetCallback(feature));
+                SetHotkeyRegistrations(feature, replacement.ActiveRegistration, replacement.AdditionalActiveRegistration);
+                if (!replacement.Success)
+                    return new(HotkeyChangeStatus.Failed, replacement.Description);
+                if (replacement.ActiveRegistration is null)
+                    return new(HotkeyChangeStatus.Failed, "No active registration was returned.");
+            }
+        }
+        else
+        {
+            var remaining = new List<HotkeyRegistration>();
+            var failures = new List<string>();
+            foreach (var registration in new[] { current, GetAdditionalHotkeyRegistration(feature) })
+            {
+                if (registration is null) continue;
+                var result = _globalHotkeysService.Unregister(registration.Id);
+                if (!result.Success)
+                {
+                    remaining.Add(registration);
+                    failures.Add(result.Description);
+                }
+            }
+            SetHotkeyRegistrations(feature, remaining.FirstOrDefault(), remaining.Skip(1).FirstOrDefault());
+            if (remaining.Count > 0)
+                return new(HotkeyChangeStatus.Failed, string.Join(" ", failures));
+        }
+
+        _enabled[feature] = enabled;
+        if (!_pendingPreferences.ContainsKey(feature)
+            && LoadSavedHotkey(feature) == (desiredModifiers, desiredKey)
+            && _settingsService.LoadHotkeyEnabled(PersistenceKeys.GetHotkey(feature)) == enabled)
             return new(HotkeyChangeStatus.Unchanged, string.Empty);
+
+        _pendingPreferences[feature] = (desiredModifiers, desiredKey, enabled);
         try
         {
-            SaveHotkey(feature, replacement.ActiveRegistration.Modifiers, replacement.ActiveRegistration.Key);
+            _settingsService.SaveGlobalHotkey(PersistenceKeys.GetHotkey(feature), desiredModifiers, desiredKey, enabled);
+            _pendingPreferences.Remove(feature);
         }
         catch (SettingsPersistenceException exception)
         {
             ExceptionDiagnostics.Record(exception);
             return new(HotkeyChangeStatus.SaveFailed,
-                $"The hotkey is active as {replacement.ActiveRegistration.Combination}, " +
-                $"but the setting could not be saved: {exception.Message}");
+                $"The shortcut is {(enabled ? "active" : "disabled")} for this session, " +
+                $"but the preference could not be saved: {exception.Message} Apply again to retry.");
         }
         return new(HotkeyChangeStatus.Saved,
-            $"{featureName} hotkey updated to: {replacement.ActiveRegistration.Combination}");
+            $"{featureName} hotkey {(enabled ? $"updated to: {desiredModifiers}+{desiredKey}" : "disabled")}");
     }
 
     public void Dispose()
@@ -403,6 +338,7 @@ internal sealed class HotkeyConfiguration : IDisposable
         _globalHotkeysService = null;
         foreach (var feature in Enum.GetValues<HotkeyFeature>())
             SetHotkeyRegistrations(feature, null, null);
+        _pendingPreferences.Clear();
         _hotkeysInitialized = false;
     }
 }

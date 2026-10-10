@@ -442,10 +442,16 @@ internal sealed class SettingsViewModel : ObservableObject
     private static double NormalizeOpacity(double value, double minimum, double fallback) =>
         double.IsFinite(value) ? Math.Clamp(value, minimum, 1.0) : fallback;
 
+    public string ScratchpadHotkey => HotkeyText(HotkeyFeature.Scratchpad);
+    public string JotsHotkey => HotkeyText(HotkeyFeature.Jots);
+    public string? ScratchpadHotkeyTooltip => HotkeyTooltip(HotkeyFeature.Scratchpad);
+    public string? JotsHotkeyTooltip => HotkeyTooltip(HotkeyFeature.Jots);
     public string NotesHotkey => HotkeyText(HotkeyFeature.Notes);
     public string ChecklistHotkey => HotkeyText(HotkeyFeature.Checklist);
     public string DictionaryHotkey => HotkeyText(HotkeyFeature.Dictionary);
     public string MiniPadHotkey => HotkeyText(HotkeyFeature.MiniPad);
+    public string JotCaptureHotkey => HotkeyText(HotkeyFeature.JotCapture);
+    public string? JotCaptureHotkeyTooltip => HotkeyTooltip(HotkeyFeature.JotCapture);
     public string NoteEditorHotkey => HotkeyText(HotkeyFeature.NoteEditor);
     public string? NotesHotkeyTooltip => HotkeyTooltip(HotkeyFeature.Notes);
     public string? ChecklistHotkeyTooltip => HotkeyTooltip(HotkeyFeature.Checklist);
@@ -453,10 +459,18 @@ internal sealed class SettingsViewModel : ObservableObject
     public string? MiniPadHotkeyTooltip => HotkeyTooltip(HotkeyFeature.MiniPad);
     public string? NoteEditorHotkeyTooltip => HotkeyTooltip(HotkeyFeature.NoteEditor);
     private string HotkeyText(HotkeyFeature feature) => _hotkeys.GetHotkeyRegistration(feature) is not { } registration
-        ? "Not registered" : _hotkeys.GetAdditionalHotkeyRegistration(feature) is not null ? "Multiple active" : registration.Combination;
-    private string? HotkeyTooltip(HotkeyFeature feature) =>
-        _hotkeys.GetHotkeyRegistration(feature) is { } first && _hotkeys.GetAdditionalHotkeyRegistration(feature) is { } second
-            ? $"{first.Combination} and {second.Combination}" : null;
+        ? (_hotkeys.IsEnabled(feature) ? "Not registered" : "Disabled") : _hotkeys.GetAdditionalHotkeyRegistration(feature) is not null ? "Multiple active" : registration.Combination;
+    private string? HotkeyTooltip(HotkeyFeature feature)
+    {
+        var configured = _hotkeys.LoadHotkey(feature);
+        var active = _hotkeys.GetHotkeyRegistration(feature);
+        var additional = _hotkeys.GetAdditionalHotkeyRegistration(feature);
+        return $"Configured: {configured.Modifiers}+{configured.Key}. " +
+            (active is null ? (_hotkeys.IsEnabled(feature) ? "Not registered." : "Disabled.")
+                : $"Active: {active.Combination}." + (additional is null ? "" : $" Also active: {additional.Combination}."));
+    }
+    private bool _hotkeyEnabled = true;
+    public bool HotkeyEnabled { get => _hotkeyEnabled; set => SetProperty(ref _hotkeyEnabled, value); }
     public string HotkeyEditorTitle => _editingFeature is { } feature ? $"{HotkeyConfiguration.GetHotkeyFeatureName(feature)} hotkey" : "";
     private bool _isHotkeyEditorOpen;
     public bool IsHotkeyEditorOpen
@@ -488,9 +502,8 @@ internal sealed class SettingsViewModel : ObservableObject
     internal void BeginHotkeyEdit(HotkeyFeature feature)
     {
         _editingFeature = feature;
-        var registration = _hotkeys.GetHotkeyRegistration(feature);
-        var (modifiers, key) = registration is not null && _hotkeys.GetAdditionalHotkeyRegistration(feature) is null
-            ? (registration.Modifiers, registration.Key) : _hotkeys.LoadHotkey(feature);
+        var (modifiers, key) = _hotkeys.LoadHotkey(feature);
+        HotkeyEnabled = _hotkeys.IsEnabled(feature);
         SetHotkeyEditor(modifiers, key);
         IsHotkeyEditorOpen = true;
         NotifyAll();
@@ -507,10 +520,12 @@ internal sealed class SettingsViewModel : ObservableObject
     }
     internal void SyncHotkeys(bool restoreEditorToActive)
     {
-        if (restoreEditorToActive && _editingFeature is { } feature
-            && _hotkeys.GetHotkeyRegistration(feature) is { } registration
-            && _hotkeys.GetAdditionalHotkeyRegistration(feature) is null)
-            SetHotkeyEditor(registration.Modifiers, registration.Key);
+        if (restoreEditorToActive && _editingFeature is { } feature)
+        {
+            var (modifiers, key) = _hotkeys.LoadHotkey(feature);
+            SetHotkeyEditor(modifiers, key);
+            HotkeyEnabled = _hotkeys.IsEnabled(feature);
+        }
         NotifyAll();
     }
     private void ResetHotkey()
@@ -522,7 +537,7 @@ internal sealed class SettingsViewModel : ObservableObject
     private void ApplyHotkey()
     {
         if (_editingFeature is not { } feature) return;
-        var result = _hotkeys.Change(feature, SelectedModifiers(), HotkeyKey);
+        var result = _hotkeys.Change(feature, SelectedModifiers(), HotkeyKey, HotkeyEnabled);
         var restoreEditor = result.Status is HotkeyChangeStatus.Invalid or HotkeyChangeStatus.Unchanged
             or HotkeyChangeStatus.Saved or HotkeyChangeStatus.SaveFailed
             || result.Status == HotkeyChangeStatus.Failed
@@ -536,7 +551,7 @@ internal sealed class SettingsViewModel : ObservableObject
         {
             HotkeyChangeStatus.InvalidSelection or HotkeyChangeStatus.Invalid => "Invalid Hotkey Selection",
             HotkeyChangeStatus.Ambiguous => "Hotkey State Is Ambiguous",
-            HotkeyChangeStatus.SaveFailed => "Hotkey Active but Not Saved",
+            HotkeyChangeStatus.SaveFailed => "Hotkey Preference Not Saved",
             HotkeyChangeStatus.Saved => "Hotkey Updated",
             HotkeyChangeStatus.Failed when _hotkeys.GetAdditionalHotkeyRegistration(feature) is not null => "Multiple Hotkeys May Be Active",
             _ => "Hotkey Update Failed"

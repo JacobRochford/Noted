@@ -8,6 +8,37 @@ namespace Noted.Tests.Services;
 public sealed class HotkeyConfigurationTests
 {
     [TestMethod]
+    public void CaptureCollisionUsesSessionFallbackWithoutReplacingNoteEditorShortcut()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        var native = new ControlledHotkeyService();
+        native.Unavailable.Add("Alt+J");
+        using var configuration = new HotkeyConfiguration(settings, () => native, _ => () => { });
+        var warnings = configuration.Initialize();
+        Assert.AreEqual(1, warnings.Count);
+        Assert.AreEqual("Alt+E", configuration.GetHotkeyRegistration(HotkeyFeature.NoteEditor)!.Combination);
+        Assert.AreEqual("Ctrl+Alt+J", configuration.GetHotkeyRegistration(HotkeyFeature.JotCapture)!.Combination);
+        Assert.AreEqual(("Alt", "J"), new AppSettingsService(directory.Path).LoadJotCaptureHotkey());
+        Assert.AreEqual(1, native.Attempts.Count(attempt => attempt == "Alt+J"));
+    }
+
+    [TestMethod]
+    public void CaptureShortcutCanBeChangedAndRestoredOnRestart()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        using var configuration = new HotkeyConfiguration(settings, () => new ControlledHotkeyService(), _ => () => { });
+        configuration.Initialize();
+        Assert.AreEqual(HotkeyChangeStatus.Saved,
+            configuration.Change(HotkeyFeature.JotCapture, ["Win", "Alt"], "Q").Status);
+        using var restarted = new HotkeyConfiguration(new AppSettingsService(directory.Path),
+            () => new ControlledHotkeyService(), _ => () => { });
+        Assert.AreEqual(0, restarted.Initialize().Count);
+        Assert.AreEqual("Win+Alt+Q", restarted.GetHotkeyRegistration(HotkeyFeature.JotCapture)!.Combination);
+    }
+
+    [TestMethod]
     public void InitializationIsLazyReentrantSafeAndIdempotentAndDisposalPreventsRestart()
     {
         using var directory = new TemporaryTestDirectory();
@@ -21,7 +52,7 @@ public sealed class HotkeyConfigurationTests
         Assert.AreEqual(0, configuration.Initialize().Count);
         Assert.AreEqual(0, configuration.Initialize().Count);
         Assert.AreEqual(1, creates);
-        CollectionAssert.AreEqual(new[] { "Ctrl+Shift+Space", "Alt+C", "Alt+D", "Alt+M", "Alt+J" }, native.Attempts);
+        CollectionAssert.AreEqual(new[] { "Alt+N", "Alt+C", "Alt+D", "Alt+M", "Alt+E", "Alt+J", "Alt+S", "Alt+Shift+J" }, native.Attempts);
 
         configuration.Dispose();
         configuration.Dispose();
@@ -34,7 +65,7 @@ public sealed class HotkeyConfigurationTests
     }
 
     [TestMethod]
-    public void MiniPadFallbackPersistsAndIsRestoredOnNextInitialization()
+    public void MiniPadFallbackDoesNotPersistAndConfiguredShortcutIsRetriedOnRestart()
     {
         using var directory = new TemporaryTestDirectory();
         var settings = new AppSettingsService(directory.Path);
@@ -47,28 +78,28 @@ public sealed class HotkeyConfigurationTests
         StringAssert.Contains(warnings.Single(), "MiniPad hotkey Alt+M was unavailable.");
         Assert.AreEqual("Alt+Shift+M", configuration.GetHotkeyRegistration(HotkeyFeature.MiniPad)!.Combination);
         var reloaded = new AppSettingsService(directory.Path);
-        Assert.AreEqual(("Alt+Shift", "M"), reloaded.LoadMiniPadHotkey());
+        Assert.AreEqual(("Alt", "M"), reloaded.LoadMiniPadHotkey());
         using var restarted = new HotkeyConfiguration(reloaded, () => new ControlledHotkeyService(), _ => () => { });
         Assert.AreEqual(0, restarted.Initialize().Count);
-        Assert.AreEqual("Alt+Shift+M", restarted.GetHotkeyRegistration(HotkeyFeature.MiniPad)!.Combination);
+        Assert.AreEqual("Alt+M", restarted.GetHotkeyRegistration(HotkeyFeature.MiniPad)!.Combination);
     }
 
     [TestMethod]
-    public void FallbackSkipsDuplicateCombinationsAndPersistsTheOwnedRegistration()
+    public void FallbackSkipsDuplicateCombinationsAndRetainsConfiguredPreference()
     {
         using var directory = new TemporaryTestDirectory();
         var settings = new AppSettingsService(directory.Path);
         var native = new ControlledHotkeyService();
-        native.Unavailable.Add("Ctrl+Shift+Space");
+        native.Unavailable.Add("Alt+N");
         using var configuration = new HotkeyConfiguration(settings, () => native, _ => () => { });
 
         var warnings = configuration.Initialize();
 
         Assert.AreEqual(1, warnings.Count);
-        StringAssert.Contains(warnings[0], "Active fallback: Alt+Shift+Space");
-        Assert.AreEqual(1, native.Attempts.Count(attempt => attempt == "Ctrl+Shift+Space"));
-        Assert.AreEqual(("Alt+Shift", "Space"), settings.LoadNotesHotkey());
-        Assert.AreEqual("Alt+Shift+Space", configuration.GetHotkeyRegistration(HotkeyFeature.Notes)!.Combination);
+        StringAssert.Contains(warnings[0], "Active fallback for this session: Alt+Shift+N");
+        Assert.AreEqual(1, native.Attempts.Count(attempt => attempt == "Alt+N"));
+        Assert.AreEqual(("Alt", "N"), settings.LoadNotesHotkey());
+        Assert.AreEqual("Alt+Shift+N", configuration.GetHotkeyRegistration(HotkeyFeature.Notes)!.Combination);
     }
 
     [TestMethod]
@@ -77,7 +108,7 @@ public sealed class HotkeyConfigurationTests
         using var directory = new TemporaryTestDirectory();
         var settings = new AppSettingsService(directory.Path);
         var native = new ControlledHotkeyService();
-        native.Unavailable.UnionWith(new[] { "Ctrl+Shift+Space", "Alt+Shift+Space", "Ctrl+Alt+Space", "Win+Alt+Space" });
+        native.Unavailable.UnionWith(new[] { "Alt+N", "Alt+Shift+N", "Ctrl+Alt+N", "Win+Alt+N", "Ctrl+Shift+N" });
         using var configuration = new HotkeyConfiguration(settings, () => native, _ => () => { });
 
         var warnings = configuration.Initialize();
@@ -90,19 +121,20 @@ public sealed class HotkeyConfigurationTests
     }
 
     [TestMethod]
-    public void FallbackRemainsActiveWhenSavingFails()
+    public void FallbackDoesNotWriteEvenWhenSettingsAreLocked()
     {
         using var directory = new TemporaryTestDirectory();
         var settings = new AppSettingsService(directory.Path);
         settings.SaveNotesHotkey("Ctrl+Shift", "Space");
         var native = new ControlledHotkeyService();
+        native.Unavailable.Add("Alt+N");
         native.Unavailable.Add("Ctrl+Shift+Space");
         using var configuration = new HotkeyConfiguration(settings, () => native, _ => () => { });
         using var locked = new FileStream(directory.File("settings.json"), FileMode.Open, FileAccess.Read, FileShare.Read);
 
         var warnings = configuration.Initialize();
 
-        StringAssert.Contains(warnings.Single(), "fallback is active for this session, but saving it failed");
+        StringAssert.Contains(warnings.Single(), "Your configured shortcut was retained.");
         Assert.AreEqual("Alt+Shift+Space", configuration.GetHotkeyRegistration(HotkeyFeature.Notes)!.Combination);
         Assert.AreEqual(("Ctrl+Shift", "Space"), settings.LoadNotesHotkey());
     }
@@ -118,11 +150,11 @@ public sealed class HotkeyConfigurationTests
         var original = configuration.GetHotkeyRegistration(HotkeyFeature.Notes);
         native.Replacement = new(false, false, original, null, "Replacement failed; original is active.");
 
-        var result = configuration.Change(HotkeyFeature.Notes, new[] { "Alt" }, "N");
+        var result = configuration.Change(HotkeyFeature.Notes, new[] { "Alt" }, "Q");
 
         Assert.AreEqual(HotkeyChangeStatus.Failed, result.Status);
         Assert.AreSame(original, configuration.GetHotkeyRegistration(HotkeyFeature.Notes));
-        Assert.AreEqual(("Ctrl+Shift", "Space"), settings.LoadNotesHotkey());
+        Assert.AreEqual(("Alt", "N"), settings.LoadNotesHotkey());
     }
 
     [TestMethod]
@@ -137,14 +169,14 @@ public sealed class HotkeyConfigurationTests
         var additional = new HotkeyRegistration(999, "Notes", "Alt", "N");
         native.Replacement = new(false, false, original, additional, "Rollback failed.");
 
-        var failed = configuration.Change(HotkeyFeature.Notes, new[] { "Alt" }, "N");
+        var failed = configuration.Change(HotkeyFeature.Notes, new[] { "Alt" }, "Q");
         var blocked = configuration.Change(HotkeyFeature.Notes, new[] { "Alt" }, "M");
 
         Assert.AreEqual(HotkeyChangeStatus.Failed, failed.Status);
         Assert.AreEqual(HotkeyChangeStatus.Ambiguous, blocked.Status);
         Assert.AreEqual(1, native.ReplacementCalls);
         Assert.AreSame(additional, configuration.GetAdditionalHotkeyRegistration(HotkeyFeature.Notes));
-        Assert.AreEqual(("Ctrl+Shift", "Space"), settings.LoadNotesHotkey());
+        Assert.AreEqual(("Alt", "N"), settings.LoadNotesHotkey());
     }
 
     [TestMethod]
@@ -160,13 +192,15 @@ public sealed class HotkeyConfigurationTests
         {
             var result = configuration.Change(HotkeyFeature.Notes, new[] { "Alt" }, "N");
             Assert.AreEqual(HotkeyChangeStatus.SaveFailed, result.Status);
-                Assert.AreEqual("Alt+N", configuration.GetHotkeyRegistration(HotkeyFeature.Notes)!.Combination);
+            Assert.AreEqual("Alt+N", configuration.GetHotkeyRegistration(HotkeyFeature.Notes)!.Combination);
             Assert.AreEqual(("Ctrl+Shift", "Space"), settings.LoadNotesHotkey());
         }
 
-        Assert.AreEqual(HotkeyChangeStatus.Unchanged,
+        var replacementCalls = native.ReplacementCalls;
+        Assert.AreEqual(HotkeyChangeStatus.Saved,
             configuration.Change(HotkeyFeature.Notes, new[] { "Alt" }, "N").Status);
-        Assert.AreEqual(("Ctrl+Shift", "Space"), settings.LoadNotesHotkey());
+        Assert.AreEqual(replacementCalls, native.ReplacementCalls);
+        Assert.AreEqual(("Alt", "N"), settings.LoadNotesHotkey());
         Assert.AreEqual(HotkeyChangeStatus.Saved,
             configuration.Change(HotkeyFeature.Notes, new[] { "Alt" }, "M").Status);
         Assert.AreEqual(("Alt", "M"), settings.LoadNotesHotkey());
@@ -181,5 +215,166 @@ public sealed class HotkeyConfigurationTests
         Assert.AreEqual(HotkeyChangeStatus.InvalidSelection, configuration.Change(HotkeyFeature.Notes, Array.Empty<string>(), "N").Status);
         Assert.AreEqual(HotkeyChangeStatus.Unavailable, configuration.Change(HotkeyFeature.Notes, new[] { "Alt" }, "N").Status);
         Assert.AreEqual(0, native.ReplacementCalls);
+    }
+
+    [TestMethod]
+    public void DisableRetainsCombinationAndRestartSkipsRegistrationUntilEnabled()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveNotesHotkey("Ctrl+Alt", "Q");
+        var native = new ControlledHotkeyService();
+        using var configuration = new HotkeyConfiguration(settings, () => native, _ => () => { });
+        configuration.Initialize();
+        var original = configuration.GetHotkeyRegistration(HotkeyFeature.Notes)!;
+        Assert.AreEqual(HotkeyChangeStatus.Saved, configuration.Change(HotkeyFeature.Notes, [], null, false).Status);
+        CollectionAssert.AreEqual(new[] { original.Id }, native.UnregisteredIds);
+        Assert.IsNull(configuration.GetHotkeyRegistration(HotkeyFeature.Notes));
+        Assert.AreEqual(("Ctrl+Alt", "Q"), settings.LoadNotesHotkey());
+        Assert.IsFalse(settings.LoadHotkeyEnabled("Notes"));
+
+        var restartedNative = new ControlledHotkeyService();
+        using var restarted = new HotkeyConfiguration(new AppSettingsService(directory.Path), () => restartedNative, _ => () => { });
+        restarted.Initialize();
+        Assert.IsFalse(restartedNative.Attempts.Contains("Ctrl+Alt+Q"));
+        Assert.AreEqual(HotkeyChangeStatus.Saved, restarted.Change(HotkeyFeature.Notes, ["Ctrl", "Alt"], "Q").Status);
+        Assert.AreEqual("Ctrl+Alt+Q", restarted.GetHotkeyRegistration(HotkeyFeature.Notes)!.Combination);
+        Assert.IsTrue(new AppSettingsService(directory.Path).LoadHotkeyEnabled("Notes"));
+    }
+
+    [TestMethod]
+    public void FailedDisableRetainsRegistrationEnabledPreferenceAndCallback()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        var native = new ControlledHotkeyService { Unregistration = new(false, "Unregister failed") };
+        var calls = 0;
+        using var configuration = new HotkeyConfiguration(settings, () => native, _ => () => calls++);
+        configuration.Initialize();
+        var original = configuration.GetHotkeyRegistration(HotkeyFeature.Notes);
+        Assert.AreEqual(HotkeyChangeStatus.Failed, configuration.Change(HotkeyFeature.Notes, [], null, false).Status);
+        Assert.AreSame(original, configuration.GetHotkeyRegistration(HotkeyFeature.Notes));
+        Assert.IsTrue(configuration.IsEnabled(HotkeyFeature.Notes));
+        Assert.IsTrue(settings.LoadHotkeyEnabled("Notes"));
+        native.Callbacks["Noted"]();
+        Assert.AreEqual(1, calls);
+    }
+
+    [TestMethod]
+    public void DisableSaveFailureRetriesWithoutAnotherUnregister()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveNotesHotkey("Alt", "Q");
+        var native = new ControlledHotkeyService();
+        using var configuration = new HotkeyConfiguration(settings, () => native, _ => () => { });
+        configuration.Initialize();
+        using (var locked = new FileStream(directory.File("settings.json"), FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            Assert.AreEqual(HotkeyChangeStatus.SaveFailed, configuration.Change(HotkeyFeature.Notes, [], null, false).Status);
+            Assert.IsFalse(configuration.IsEnabled(HotkeyFeature.Notes));
+            Assert.IsTrue(settings.LoadHotkeyEnabled("Notes"));
+        }
+        Assert.AreEqual(HotkeyChangeStatus.Saved, configuration.Change(HotkeyFeature.Notes, [], null, false).Status);
+        Assert.AreEqual(1, native.UnregisteredIds.Count);
+        Assert.IsFalse(new AppSettingsService(directory.Path).LoadHotkeyEnabled("Notes"));
+        Assert.AreEqual(("Alt", "Q"), settings.LoadNotesHotkey());
+    }
+
+    [TestMethod]
+    public void CallbacksAreSuspendedDuringShutdownAndResumeAfterCancellation()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var native = new ControlledHotkeyService();
+        var calls = 0;
+        using var configuration = new HotkeyConfiguration(new AppSettingsService(directory.Path), () => native, _ => () => calls++);
+        configuration.Initialize();
+        var callback = native.Callbacks["Noted"];
+        callback();
+        configuration.CallbacksSuspended = true;
+        callback();
+        Assert.AreEqual(1, calls);
+        Assert.AreEqual(HotkeyChangeStatus.Unavailable, configuration.Change(HotkeyFeature.Notes, ["Alt"], "Q").Status);
+        configuration.CallbacksSuspended = false;
+        callback();
+        Assert.AreEqual(2, calls);
+        configuration.Change(HotkeyFeature.Notes, [], null, false);
+        callback();
+        Assert.AreEqual(2, calls);
+        configuration.Dispose();
+        callback();
+        Assert.AreEqual(2, calls);
+    }
+
+    [TestMethod]
+    public void UnchangedActiveFallbackCanBeExplicitlySavedWithoutNativeReplacement()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        var native = new ControlledHotkeyService();
+        native.Unavailable.Add("Alt+N");
+        using var configuration = new HotkeyConfiguration(settings, () => native, _ => () => { });
+        configuration.Initialize();
+        Assert.AreEqual(("Alt", "N"), configuration.LoadHotkey(HotkeyFeature.Notes));
+        Assert.AreEqual(HotkeyChangeStatus.Saved, configuration.Change(HotkeyFeature.Notes, ["Alt", "Shift"], "N").Status);
+        Assert.AreEqual(0, native.ReplacementCalls);
+        Assert.AreEqual(("Alt+Shift", "N"), new AppSettingsService(directory.Path).LoadNotesHotkey());
+    }
+
+    [TestMethod]
+    public void FailedEnableRetainsDisabledPreferenceAndConfiguredCombination()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveGlobalHotkey("Notes", "Alt", "Q", false);
+        var native = new ControlledHotkeyService { Replacement = new(false, false, null, null, "Windows rejected") };
+        var calls = 0;
+        using var configuration = new HotkeyConfiguration(settings, () => native, _ => () => calls++);
+        configuration.Initialize();
+        Assert.AreEqual(HotkeyChangeStatus.Failed, configuration.Change(HotkeyFeature.Notes, ["Alt"], "Q").Status);
+        Assert.IsFalse(configuration.IsEnabled(HotkeyFeature.Notes));
+        Assert.IsFalse(settings.LoadHotkeyEnabled("Notes"));
+        Assert.IsNull(configuration.GetHotkeyRegistration(HotkeyFeature.Notes));
+        Assert.AreEqual(("Alt", "Q"), settings.LoadNotesHotkey());
+        native.Callbacks["Noted"]();
+        Assert.AreEqual(0, calls);
+    }
+
+    [TestMethod]
+    public void StartupFallbackCannotClaimAnotherFeaturesConfiguredBinding()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var native = new ControlledHotkeyService();
+        native.Unavailable.Add("Alt+J");
+        using var configuration = new HotkeyConfiguration(new AppSettingsService(directory.Path), () => native, _ => () => { });
+        configuration.Initialize();
+        Assert.AreEqual("Ctrl+Alt+J", configuration.GetHotkeyRegistration(HotkeyFeature.JotCapture)!.Combination);
+        Assert.AreEqual("Alt+Shift+J", configuration.GetHotkeyRegistration(HotkeyFeature.Jots)!.Combination);
+        Assert.AreEqual(1, native.Attempts.Count(attempt => attempt == "Alt+Shift+J"));
+    }
+
+    [TestMethod]
+    public void DisablingAfterRollbackFailureTracksPartialCleanupAndCanBeRetried()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        var native = new ControlledHotkeyService();
+        using var configuration = new HotkeyConfiguration(settings, () => native, _ => () => { });
+        configuration.Initialize();
+        var original = configuration.GetHotkeyRegistration(HotkeyFeature.Notes)!;
+        var additional = new HotkeyRegistration(999, "Noted", "Alt", "Q");
+        native.Replacement = new(false, false, original, additional, "Rollback failed.");
+        Assert.AreEqual(HotkeyChangeStatus.Failed, configuration.Change(HotkeyFeature.Notes, ["Alt"], "Q").Status);
+        native.UnregistrationResults.Enqueue(new(true, ""));
+        native.UnregistrationResults.Enqueue(new(false, "Still registered"));
+        Assert.AreEqual(HotkeyChangeStatus.Failed, configuration.Change(HotkeyFeature.Notes, [], null, false).Status);
+        Assert.AreSame(additional, configuration.GetHotkeyRegistration(HotkeyFeature.Notes));
+        Assert.IsNull(configuration.GetAdditionalHotkeyRegistration(HotkeyFeature.Notes));
+        Assert.IsTrue(settings.LoadHotkeyEnabled("Notes"));
+        Assert.AreEqual(HotkeyChangeStatus.Saved, configuration.Change(HotkeyFeature.Notes, [], null, false).Status);
+        Assert.IsNull(configuration.GetHotkeyRegistration(HotkeyFeature.Notes));
+        Assert.IsFalse(settings.LoadHotkeyEnabled("Notes"));
+        Assert.AreEqual(("Alt", "N"), settings.LoadNotesHotkey());
+        CollectionAssert.AreEqual(new[] { original.Id, additional.Id, additional.Id }, native.UnregisteredIds);
     }
 }

@@ -263,9 +263,8 @@ public sealed class SettingsViewModelTests
         using var context = new Context();
         context.Hotkeys.Initialize();
         context.Model.BeginHotkeyEdit(HotkeyFeature.Notes);
-        Assert.AreEqual("Ctrl+Shift+Space", context.Model.HotkeyPreview);
-        context.Model.HotkeyCtrl = false;
-        context.Model.HotkeyShift = false;
+        Assert.AreEqual("Alt+N", context.Model.HotkeyPreview);
+        context.Model.HotkeyAlt = false;
         var notices = new List<SettingsNotice>();
         context.Model.NoticeRaised += notices.Add;
         context.Model.ApplyHotkeyCommand.Execute(null);
@@ -273,13 +272,13 @@ public sealed class SettingsViewModelTests
         Assert.AreEqual("Invalid Hotkey Selection", notices.Last().Title);
 
         context.Model.HotkeyAlt = true;
-        context.Model.HotkeyKey = "N";
+        context.Model.HotkeyKey = "Q";
         var original = context.Hotkeys.GetHotkeyRegistration(HotkeyFeature.Notes);
         context.Native.Replacement = new(false, false, original,
-            new HotkeyRegistration(999, "Notes", "Alt", "N"), "Rollback failed.");
+            new HotkeyRegistration(999, "Noted", "Alt", "Q"), "Rollback failed.");
         context.Model.ApplyHotkeyCommand.Execute(null);
         Assert.AreEqual("Multiple active", context.Model.NotesHotkey);
-        Assert.AreEqual("Ctrl+Shift+Space and Alt+N", context.Model.NotesHotkeyTooltip);
+        StringAssert.Contains(context.Model.NotesHotkeyTooltip, "Active: Alt+N. Also active: Alt+Q.");
         Assert.AreEqual("Multiple Hotkeys May Be Active", notices.Last().Title);
         Assert.IsTrue(context.Model.IsHotkeyEditorOpen);
         context.Model.CancelHotkeyCommand.Execute(null);
@@ -309,6 +308,37 @@ public sealed class SettingsViewModelTests
         context.Model.ApplyHotkeyCommand.Execute(null);
         Assert.AreEqual("Alt+M", context.Model.MiniPadHotkey);
         Assert.AreEqual(("Alt", "M"), new AppSettingsService(context.Directory.Path).LoadMiniPadHotkey());
+    }
+
+    [TestMethod]
+    public void HotkeyEditorUsesConfiguredPreferenceWhenSessionFallbackIsActive()
+    {
+        using var context = new Context();
+        context.Native.Unavailable.Add("Alt+N");
+        context.Hotkeys.Initialize();
+        Assert.AreEqual("Alt+Shift+N", context.Model.NotesHotkey);
+        StringAssert.Contains(context.Model.NotesHotkeyTooltip, "Configured: Alt+N. Active: Alt+Shift+N.");
+        context.Model.BeginHotkeyEdit(HotkeyFeature.Notes);
+        Assert.AreEqual("Alt+N", context.Model.HotkeyPreview);
+    }
+
+    [TestMethod]
+    public void DisablingThroughEditorPreservesConfiguredCombinationAndCanBeReenabled()
+    {
+        using var context = new Context();
+        context.Hotkeys.Initialize();
+        context.Model.BeginHotkeyEdit(HotkeyFeature.Scratchpad);
+        context.Model.HotkeyEnabled = false;
+        context.Model.ApplyHotkeyCommand.Execute(null);
+        Assert.AreEqual("Disabled", context.Model.ScratchpadHotkey);
+        Assert.AreEqual(("Alt", "S"), context.Settings.LoadScratchpadHotkey());
+        context.Model.BeginHotkeyEdit(HotkeyFeature.Scratchpad);
+        Assert.IsFalse(context.Model.HotkeyEnabled);
+        Assert.AreEqual("Alt+S", context.Model.HotkeyPreview);
+        context.Model.HotkeyEnabled = true;
+        context.Model.ApplyHotkeyCommand.Execute(null);
+        Assert.AreEqual("Alt+S", context.Model.ScratchpadHotkey);
+        Assert.IsTrue(context.Settings.LoadHotkeyEnabled("Scratchpad"));
     }
 
     private sealed class Context : IDisposable

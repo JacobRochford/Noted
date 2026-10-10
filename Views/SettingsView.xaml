@@ -419,11 +419,11 @@
 
                                     <Grid Height="32">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="78"/>
+                                            <ColumnDefinition Width="105"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="30"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Notes"
+                                        <TextBlock Text="Noted"
                                                    Foreground="{DynamicResource NotedTextBrush}"
                                                    VerticalAlignment="Center"/>
                                         <TextBlock x:Name="CurrentNotesHotkeyDisplay" ToolTip="{Binding NotesHotkeyTooltip}" Text="{Binding NotesHotkey}"
@@ -446,7 +446,7 @@
                                     <Border Height="1" Background="{DynamicResource NotedBorderBrush}"/>
                                     <Grid Height="32">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="78"/>
+                                            <ColumnDefinition Width="105"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="30"/>
                                         </Grid.ColumnDefinitions>
@@ -473,7 +473,7 @@
                                     <Border Height="1" Background="{DynamicResource NotedBorderBrush}"/>
                                     <Grid Height="32">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="78"/>
+                                            <ColumnDefinition Width="105"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="30"/>
                                         </Grid.ColumnDefinitions>
@@ -500,7 +500,7 @@
                                     <Border Height="1" Background="{DynamicResource NotedBorderBrush}"/>
                                     <Grid Height="32">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="78"/>
+                                            <ColumnDefinition Width="105"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="30"/>
                                         </Grid.ColumnDefinitions>
@@ -528,11 +528,11 @@
                                     <Border Height="1" Background="{DynamicResource NotedBorderBrush}"/>
                                     <Grid Height="32">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="78"/>
+                                            <ColumnDefinition Width="105"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="30"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="NoteEditor"
+                                        <TextBlock Text="Note Editor"
                                                    Foreground="{DynamicResource NotedTextBrush}"
                                                    VerticalAlignment="Center"/>
                                         <TextBlock x:Name="CurrentNoteEditorHotkeyDisplay" ToolTip="{Binding NoteEditorHotkeyTooltip}" Text="{Binding NoteEditorHotkey}"
@@ -553,6 +553,88 @@
                                         </Button>
                                     </Grid>
 
+                                    <Border Height="1" Background="{DynamicResource NotedBorderBrush}"/>
+                                    <Grid Height="32">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="105"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="30"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Quick Jot"
+                                                   Foreground="{DynamicResource NotedTextBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="CurrentJotCaptureHotkeyDisplay" ToolTip="{Binding JotCaptureHotkeyTooltip}" Text="{Binding JotCaptureHotkey}"
+                                                   Grid.Column="1"
+                                                   Foreground="{DynamicResource NotedAccentBrush}"
+                                                   FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center"
+                                                   HorizontalAlignment="Right"
+                                                   Margin="4,0,4,0"/>
+                                        <Button Grid.Column="2"
+                                                Tag="JotCapture"
+                                                Click="EditHotkeyButton_Click"
+                                                Style="{DynamicResource HeaderChromeButtonStyle}"
+                                                ToolTip="Change Jot capture hotkey"
+                                                AutomationProperties.Name="Change Jot capture hotkey">
+                                            <TextBlock Text="✎" FontSize="13"/>
+                                        </Button>
+                                    </Grid>
+
+                                    <Border Height="1" Background="{DynamicResource NotedBorderBrush}"/>
+                                    <Grid Height="32">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="105"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="30"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Scratchpad"
+                                                   Foreground="{DynamicResource NotedTextBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="CurrentScratchpadHotkeyDisplay" ToolTip="{Binding ScratchpadHotkeyTooltip}" Text="{Binding ScratchpadHotkey}"
+                                                   Grid.Column="1"
+                                                   Foreground="{DynamicResource NotedAccentBrush}"
+                                                   FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center"
+                                                   HorizontalAlignment="Right"
+                                                   Margin="4,0,4,0"/>
+                                        <Button Grid.Column="2"
+                                                Tag="Scratchpad"
+                                                Click="EditHotkeyButton_Click"
+                                                Style="{DynamicResource HeaderChromeButtonStyle}"
+                                                ToolTip="Change Scratchpad hotkey"
+                                                AutomationProperties.Name="Change Scratchpad hotkey">
+                                            <TextBlock Text="✎" FontSize="13"/>
+                                        </Button>
+                                    </Grid>
+                                    <Border Height="1" Background="{DynamicResource NotedBorderBrush}"/>
+                                    <Grid Height="32">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="105"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="30"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Jots collection"
+                                                   Foreground="{DynamicResource NotedTextBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="CurrentJotsHotkeyDisplay" ToolTip="{Binding JotsHotkeyTooltip}" Text="{Binding JotsHotkey}"
+                                                   Grid.Column="1"
+                                                   Foreground="{DynamicResource NotedAccentBrush}"
+                                                   FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center"
+                                                   HorizontalAlignment="Right"
+                                                   Margin="4,0,4,0"/>
+                                        <Button Grid.Column="2"
+                                                Tag="Jots"
+                                                Click="EditHotkeyButton_Click"
+                                                Style="{DynamicResource HeaderChromeButtonStyle}"
+                                                ToolTip="Change Jots hotkey"
+                                                AutomationProperties.Name="Change Jots hotkey">
+                                            <TextBlock Text="✎" FontSize="13"/>
+                                        </Button>
+                                    </Grid>
                                     <Popup x:Name="HotkeyEditorPopup" IsOpen="{Binding IsHotkeyEditorOpen, Mode=TwoWay}"
                                            Placement="Bottom"
                                            HorizontalOffset="-220"
@@ -578,7 +660,9 @@
                                                            Foreground="{DynamicResource NotedAccentBrush}"
                                                            FontSize="12"
                                                            FontWeight="SemiBold"/>
-                                                <WrapPanel Margin="0,0,0,9">
+                                                <CheckBox Content="Enable this global shortcut" IsChecked="{Binding HotkeyEnabled}"
+                                                          Style="{StaticResource NotedCheckBox}" Margin="0,0,0,9"/>
+                                                <WrapPanel IsEnabled="{Binding HotkeyEnabled}" Margin="0,0,0,9">
                                                     <CheckBox x:Name="HotkeyModifierCtrl" IsChecked="{Binding HotkeyCtrl}" Content="Ctrl" Margin="0,0,12,5"
                                                               Style="{StaticResource NotedCheckBox}"/>
                                                     <CheckBox x:Name="HotkeyModifierAlt" IsChecked="{Binding HotkeyAlt}" Content="Alt" Margin="0,0,12,5"
@@ -588,7 +672,7 @@
                                                     <CheckBox x:Name="HotkeyModifierWin" IsChecked="{Binding HotkeyWin}" Content="Win" Margin="0,0,0,5"
                                                               Style="{StaticResource NotedCheckBox}"/>
                                                 </WrapPanel>
-                                                <ComboBox x:Name="HotkeyKeyCombo" SelectedItem="{Binding HotkeyKey}" ItemsSource="{Binding HotkeyKeys}"
+                                                <ComboBox IsEnabled="{Binding HotkeyEnabled}" x:Name="HotkeyKeyCombo" SelectedItem="{Binding HotkeyKey}" ItemsSource="{Binding HotkeyKeys}"
                                                           Style="{StaticResource NotedComboBox}"
                                                           Padding="8,5"
                                                           FontSize="11"

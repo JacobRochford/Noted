@@ -12,6 +12,57 @@ namespace Noted.Tests.Services;
 public sealed class AppSettingsServiceTests
 {
     [TestMethod]
+    public void LegacyDefaultsMigrateOnceAndLaterOldShortcutSelectionsSurviveReload()
+    {
+        using var directory = new TemporaryTestDirectory();
+        File.WriteAllText(directory.File("settings.json"), """
+            { "HotkeyModifiers": "Ctrl+Shift", "HotkeyKey": "Space",
+              "NoteEditorHotkeyModifiers": "Alt", "NoteEditorHotkeyKey": "J",
+              "JotCaptureHotkeyModifiers": "Ctrl+Alt", "JotCaptureHotkeyKey": "J",
+              "DictionaryHotkeyModifiers": "Win+Alt", "DictionaryHotkeyKey": "Q",
+              "AccentColor": "#7A5CB8", "DisabledHotkeys": ["Dictionary"] }
+            """);
+        var settings = new AppSettingsService(directory.Path);
+        Assert.AreEqual(("Alt", "N"), settings.LoadNotesHotkey());
+        Assert.AreEqual(("Alt", "E"), settings.LoadNoteEditorHotkey());
+        Assert.AreEqual(("Alt", "J"), settings.LoadJotCaptureHotkey());
+        Assert.AreEqual(("Win+Alt", "Q"), settings.LoadDictionaryHotkey());
+        Assert.IsFalse(settings.LoadHotkeyEnabled("Dictionary"));
+        Assert.AreEqual("#7A5CB8", settings.LoadAccentColor());
+        settings.SaveShowNotesHeader(true);
+        using (var json = JsonDocument.Parse(File.ReadAllText(directory.File("settings.json"))))
+        {
+            Assert.AreEqual(1, json.RootElement.GetProperty("HotkeyDefaultsVersion").GetInt32());
+            Assert.AreEqual("N", json.RootElement.GetProperty("HotkeyKey").GetString());
+            Assert.IsFalse(json.RootElement.TryGetProperty("NotesHotkeyKey", out _));
+        }
+        settings.SaveNotesHotkey("Ctrl+Shift", "Space");
+        settings.SaveNoteEditorHotkey("Alt", "J");
+        settings.SaveJotCaptureHotkey("Ctrl+Alt", "J");
+        var restarted = new AppSettingsService(directory.Path);
+        Assert.AreEqual(("Ctrl+Shift", "Space"), restarted.LoadNotesHotkey());
+        Assert.AreEqual(("Alt", "J"), restarted.LoadNoteEditorHotkey());
+        Assert.AreEqual(("Ctrl+Alt", "J"), restarted.LoadJotCaptureHotkey());
+        Assert.AreEqual(("Win+Alt", "Q"), restarted.LoadDictionaryHotkey());
+    }
+
+    [TestMethod]
+    public void NewShortcutDefaultsAndDisabledPreferencesPreserveOtherSettings()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        Assert.AreEqual(("Alt", "S"), settings.LoadScratchpadHotkey());
+        Assert.AreEqual(("Alt+Shift", "J"), settings.LoadJotsHotkey());
+        settings.SaveGlobalHotkey("Scratchpad", "Ctrl+Alt", "Q", false);
+        settings.SaveGlobalHotkey("Jots", "Alt+Shift", "K", true);
+        var restarted = new AppSettingsService(directory.Path);
+        Assert.IsFalse(restarted.LoadHotkeyEnabled("Scratchpad"));
+        Assert.IsTrue(restarted.LoadHotkeyEnabled("Jots"));
+        Assert.AreEqual(("Ctrl+Alt", "Q"), restarted.LoadScratchpadHotkey());
+        Assert.AreEqual(("Alt+Shift", "K"), restarted.LoadJotsHotkey());
+    }
+
+    [TestMethod]
     public void PasteNormalizationDefaultsToEnabledAndPersistsChanges()
     {
         using var directory = new TemporaryTestDirectory();

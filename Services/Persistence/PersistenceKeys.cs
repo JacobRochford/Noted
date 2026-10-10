@@ -25,4 +25,35 @@ internal static class PersistenceKeys
     internal const string BackupPreviewDialog = "BackupPreviewDialog";
     internal const string ChecklistPriorityColorsDialog = "ChecklistPriorityColorsDialog";
     internal const string NewNoteNameDialog = "NewNoteNameDialog";
+
+    private static readonly IReadOnlyDictionary<HotkeyFeature, string> s_hotkeys =
+        new Dictionary<HotkeyFeature, string>
+        {
+            [HotkeyFeature.Notes] = Notes,
+            [HotkeyFeature.Checklist] = Checklist,
+            [HotkeyFeature.Dictionary] = Dictionary,
+            [HotkeyFeature.MiniPad] = MiniPad,
+            [HotkeyFeature.NoteEditor] = NoteEditor,
+            [HotkeyFeature.JotCapture] = JotCapture,
+            [HotkeyFeature.Scratchpad] = Scratchpad,
+            [HotkeyFeature.Jots] = Jots
+        };
+
+    internal static string GetHotkey(HotkeyFeature feature) =>
+        s_hotkeys.TryGetValue(feature, out var key) ? key : feature.ToString();
+
+    internal static bool TryParseHotkey(string value, out HotkeyFeature feature)
+    {
+        foreach (var pair in s_hotkeys)
+        {
+            if (string.Equals(pair.Value, value, StringComparison.Ordinal))
+            {
+                feature = pair.Key;
+                return true;
+            }
+        }
+
+        // keep accepting numeric values and surrounding whitespace as before.
+        return Enum.TryParse(value, out feature) && Enum.IsDefined(feature);
+    }
 }

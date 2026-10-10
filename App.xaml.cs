@@ -233,6 +233,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _isShuttingDown = true;
+        WindowManager.Main?.SuspendHotkeyCallbacks(true);
 
         try
         {
@@ -708,64 +709,83 @@ public partial class App : Application
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
-        var directFlushes = new List<ShutdownDirectFlush>();
-        foreach (var jotWindow in WindowManager.JotWindows.Concat(
-            WindowManager.Jots is { } collection ? new[] { collection } : []))
+        var wasShuttingDown = _isShuttingDown;
+        _isShuttingDown = true;
+        WindowManager.Main?.SuspendHotkeyCallbacks(true);
+        try
         {
-            directFlushes.Add(new ShutdownDirectFlush("Jot", () => jotWindow.TryPrepareForClose()
-                ? PersistenceSaveResult.Succeeded()
-                : PersistenceSaveResult.Failed("Jot changes must be saved or discarded before shutdown.")));
-        }
-        if (WindowManager.JotCapture is { } capture)
-            directFlushes.Add(new ShutdownDirectFlush("Jot Capture", () => CreatePersistenceSaveResult(
-                capture.TryFlushDraft(out var error), error, "The Jot capture draft could not be saved.")));
-        foreach (var miniPadWindow in WindowManager.MiniPads)
-        {
-            directFlushes.Add(new ShutdownDirectFlush(
-                "MiniPad",
-                () => CreatePersistenceSaveResult(
-                    miniPadWindow.TryFlushPendingContent(out var error),
-                    error,
-                    "MiniPad recovery data could not be saved.")));
-        }
-        if (WindowManager.Scratchpad is { } scratchpadWindow)
-        {
-            directFlushes.Add(new ShutdownDirectFlush(
-                "Scratchpad",
-                () => CreatePersistenceSaveResult(
-                    scratchpadWindow.TryFlushPendingContent(out var error),
-                    error,
-                    "Scratchpad content could not be saved before shutdown.")));
-        }
+            var directFlushes = new List<ShutdownDirectFlush>();
+            foreach (var jotWindow in WindowManager.JotWindows.Concat(
+                WindowManager.Jots is { } collection ? new[] { collection } : []))
+            {
+                directFlushes.Add(new ShutdownDirectFlush("Jot", () => jotWindow.TryPrepareForClose()
+                    ? PersistenceSaveResult.Succeeded()
+                    : PersistenceSaveResult.Failed("Jot changes must be saved or discarded before shutdown.")));
+            }
+            if (WindowManager.JotCapture is { } capture)
+                directFlushes.Add(new ShutdownDirectFlush("Jot Capture", () => CreatePersistenceSaveResult(
+                    capture.TryFlushDraft(out var error), error, "The Jot capture draft could not be saved.")));
+            foreach (var miniPadWindow in WindowManager.MiniPads)
+            {
+                directFlushes.Add(new ShutdownDirectFlush(
+                    "MiniPad",
+                    () => CreatePersistenceSaveResult(
+                        miniPadWindow.TryFlushPendingContent(out var error),
+                        error,
+                        "MiniPad recovery data could not be saved.")));
+            }
+            if (WindowManager.Scratchpad is { } scratchpadWindow)
+            {
+                directFlushes.Add(new ShutdownDirectFlush(
+                    "Scratchpad",
+                    () => CreatePersistenceSaveResult(
+                        scratchpadWindow.TryFlushPendingContent(out var error),
+                        error,
+                        "Scratchpad content could not be saved before shutdown.")));
+            }
 
-        var result = _shutdownSequence.Execute(
-            directFlushes,
-            () => WindowManager.TryPrepareForShutdown(out var error)
-                ? WindowPreparationResult.Succeeded()
-                : WindowPreparationResult.Failed(error),
-            () => _backupCoordinator?.HasRequestedRestore == true,
-            () => _backupCoordinator?.PrepareRequestedRestore()
-                ?? throw new InvalidOperationException("Backup coordination is not initialized."),
-            CancelRequestedBackupRestore,
-            TryUpdateRecentBackup);
+            var result = _shutdownSequence.Execute(
+                directFlushes,
+                () => WindowManager.TryPrepareForShutdown(out var error)
+                    ? WindowPreparationResult.Succeeded()
+                    : WindowPreparationResult.Failed(error),
+                () => _backupCoordinator?.HasRequestedRestore == true,
+                () => _backupCoordinator?.PrepareRequestedRestore()
+                    ?? throw new InvalidOperationException("Backup coordination is not initialized."),
+                CancelRequestedBackupRestore,
+                TryUpdateRecentBackup);
 
-        if (!string.IsNullOrWhiteSpace(result.Warning))
-        {
-            AppDialog.Show(
-                result.Warning,
-                "Noted - Backup Warning",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            if (!string.IsNullOrWhiteSpace(result.Warning))
+            {
+                AppDialog.Show(
+                    result.Warning,
+                    "Noted - Backup Warning",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+
+            if (result.CanShutdown)
+            {
+                _lastShutdownWarning = null;
+                return;
+            }
+
+            e.Cancel = true;
+            ShowShutdownBlocked(result);
         }
-
-        if (result.CanShutdown)
+        catch
         {
-            _lastShutdownWarning = null;
-            return;
+            e.Cancel = true;
+            throw;
         }
-
-        e.Cancel = true;
-        ShowShutdownBlocked(result);
+        finally
+        {
+            if (e.Cancel)
+            {
+                _isShuttingDown = wasShuttingDown;
+                WindowManager.Main?.SuspendHotkeyCallbacks(wasShuttingDown);
+            }
+        }
     }
 
     private void ShowShutdownBlocked(ApplicationShutdownResult result)
@@ -896,6 +916,7 @@ public partial class App : Application
     private void HandleFatalStartupFailure(Exception exception)
     {
         _isShuttingDown = true;
+        WindowManager.Main?.SuspendHotkeyCallbacks(true);
         try
         {
             ShowFatalError("Noted could not start.", exception);

@@ -32,6 +32,12 @@ public interface IAppSettingsService {
     void SaveMiniPadHotkey(string modifiers, string key);
     (string modifiers, string key) LoadNoteEditorHotkey();
     void SaveNoteEditorHotkey(string modifiers, string key);
+    (string modifiers, string key) LoadScratchpadHotkey();
+    void SaveScratchpadHotkey(string modifiers, string key);
+    (string modifiers, string key) LoadJotsHotkey();
+    void SaveJotsHotkey(string modifiers, string key);
+    bool LoadHotkeyEnabled(string feature);
+    void SaveGlobalHotkey(string feature, string modifiers, string key, bool enabled);
     bool LoadWindowAlwaysVisible(string windowType);
     void SaveWindowAlwaysVisible(string windowType, bool alwaysVisible);
     bool LoadGhostModeEnabled();
@@ -49,6 +55,8 @@ public interface IAppSettingsService {
     void SaveChecklistWindowState(ChecklistWindowState state);
     DictionaryWindowState LoadDictionaryWindowState();
     void SaveDictionaryWindowState(DictionaryWindowState state);
+    (string modifiers, string key) LoadJotCaptureHotkey();
+    void SaveJotCaptureHotkey(string modifiers, string key);
     JotsWindowState LoadJotWindowState(Guid id);
     void SaveJotWindowState(Guid id, JotsWindowState state);
     JotsWindowState LoadJotsWindowState();

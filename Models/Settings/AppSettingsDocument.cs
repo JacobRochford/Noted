@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Noted.Services;
 
 namespace Noted.Models;
 
@@ -24,19 +25,34 @@ internal sealed record AppSettingsDocument
     public List<string>? HiddenUtilities { get; init; }
 
     [JsonPropertyName("HotkeyModifiers")]
-    public string NotesHotkeyModifiers { get; init; } = "Ctrl+Shift";
+    public string NotesHotkeyModifiers { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Notes).Modifiers;
 
     [JsonPropertyName("HotkeyKey")]
-    public string NotesHotkeyKey { get; init; } = "Space";
+    public string NotesHotkeyKey { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Notes).Key;
 
-    public string ChecklistHotkeyModifiers { get; init; } = "Alt";
-    public string ChecklistHotkeyKey { get; init; } = "C";
-    public string DictionaryHotkeyModifiers { get; init; } = "Alt";
-    public string DictionaryHotkeyKey { get; init; } = "D";
-    public string MiniPadHotkeyModifiers { get; init; } = "Alt";
-    public string MiniPadHotkeyKey { get; init; } = "M";
-    public string NoteEditorHotkeyModifiers { get; init; } = "Alt";
-    public string NoteEditorHotkeyKey { get; init; } = "J";
+    public string ChecklistHotkeyModifiers { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Checklist).Modifiers;
+    public string ChecklistHotkeyKey { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Checklist).Key;
+    public string DictionaryHotkeyModifiers { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Dictionary).Modifiers;
+    public string DictionaryHotkeyKey { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Dictionary).Key;
+    public string MiniPadHotkeyModifiers { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.MiniPad).Modifiers;
+    public string MiniPadHotkeyKey { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.MiniPad).Key;
+    public string NoteEditorHotkeyModifiers { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.NoteEditor).Modifiers;
+    public string NoteEditorHotkeyKey { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.NoteEditor).Key;
+    [JsonPropertyName("JotCaptureHotkeyModifiers")]
+    public string JotCaptureHotkeyModifiers { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.JotCapture).Modifiers;
+    [JsonPropertyName("JotCaptureHotkeyKey")]
+    public string JotCaptureHotkeyKey { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.JotCapture).Key;
+    [JsonPropertyName("ScratchpadHotkeyModifiers")]
+    public string ScratchpadHotkeyModifiers { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Scratchpad).Modifiers;
+    [JsonPropertyName("ScratchpadHotkeyKey")]
+    public string ScratchpadHotkeyKey { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Scratchpad).Key;
+    [JsonPropertyName("JotsHotkeyModifiers")]
+    public string JotsHotkeyModifiers { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Jots).Modifiers;
+    [JsonPropertyName("JotsHotkeyKey")]
+    public string JotsHotkeyKey { get; init; } = HotkeyConfiguration.GetDefaultHotkey(HotkeyFeature.Jots).Key;
+    [JsonPropertyName("DisabledHotkeys")]
+    public List<string>? DisabledHotkeys { get; init; }
+    public int HotkeyDefaultsVersion { get; init; }
     [JsonPropertyName("JotWindows")]
     public Dictionary<Guid, JotsWindowState>? JotWindows { get; init; }
     public string[]? AlwaysVisibleWindows { get; init; }
