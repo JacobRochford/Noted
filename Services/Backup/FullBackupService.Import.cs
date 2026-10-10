@@ -32,6 +32,7 @@ internal sealed partial class FullBackupService
         Guid? importId = null;
         try
         {
+            FileSystemLinkValidator.ValidatePath(GetRestoreRequestPath());
             if (File.Exists(GetRestoreRequestPath()))
             {
                 return new FullBackupResult(
@@ -65,10 +66,17 @@ internal sealed partial class FullBackupService
 
             importId = Guid.NewGuid();
 
+            // check rebased paths and content before creating restore files.
+            _archiveReader.InspectImportedFiles(archive);
+
+            FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
+
             Directory.CreateDirectory(_backupDirectory);
             buildPath = Path.Combine(_backupDirectory, $"{ImportingDirectoryPrefix}{importId.Value:N}");
+            FileSystemLinkValidator.ValidateDirectory(buildPath);
             Directory.CreateDirectory(buildPath);
             var filesDirectory = Path.Combine(buildPath, FilesDirectoryName);
+            FileSystemLinkValidator.ValidateDirectory(filesDirectory);
             Directory.CreateDirectory(filesDirectory);
             var importedFiles = WriteImportedFiles(archive, filesDirectory);
             var manifest = CreateImportedManifest(
@@ -76,6 +84,8 @@ internal sealed partial class FullBackupService
                 importId.Value,
                 importedFiles);
 
+            FileSystemLinkValidator.ValidatePath(GetRestoreRequestPath());
+            FileSystemLinkValidator.ValidatePath(Path.Combine(buildPath, ManifestFileName));
             JsonFileStore.Write(
                 Path.Combine(buildPath, ManifestFileName),
                 manifest,
@@ -83,6 +93,8 @@ internal sealed partial class FullBackupService
             _archiveReader.VerifyBackupFolder(buildPath, FullBackupType.User);
 
             pendingPath = GetPendingImportPath(importId.Value);
+            FileSystemLinkValidator.ValidateTree(buildPath);
+            FileSystemLinkValidator.ValidateDirectory(pendingPath);
             Directory.Move(buildPath, pendingPath);
             buildPath = null;
             _archiveReader.VerifyBackupFolder(pendingPath, FullBackupType.User);
@@ -92,6 +104,7 @@ internal sealed partial class FullBackupService
                 importId.Value,
                 _clock.GetUtcNow().UtcDateTime,
                 importId.Value);
+            FileSystemLinkValidator.ValidatePath(GetRestoreRequestPath());
             JsonFileStore.Write(
                 GetRestoreRequestPath(),
                 request,
@@ -121,6 +134,7 @@ internal sealed partial class FullBackupService
         BackupArchive source,
         string filesDirectory)
     {
+        FileSystemLinkValidator.ValidatePath(source.Path);
         using var fileStream = new FileStream(
             source.Path,
             FileMode.Open,
@@ -138,7 +152,9 @@ internal sealed partial class FullBackupService
                 throw new InvalidDataException($"Multiple imported files map to '{file.LogicalPath}'.");
 
             var destinationPath = GetContainedPath(filesDirectory, file.LogicalPath);
+            FileSystemLinkValidator.ValidateDirectory(Path.GetDirectoryName(destinationPath)!);
             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            FileSystemLinkValidator.ValidatePath(destinationPath);
             FileWriter.WriteAllBytes(destinationPath, file.Data);
             var fileInfo = file.ToInfo();
             VerifyImportedFile(destinationPath, fileInfo);
@@ -152,6 +168,7 @@ internal sealed partial class FullBackupService
         string path,
         ImportedBackupFileInfo file)
     {
+        FileSystemLinkValidator.ValidatePath(path);
         using var stream = new FileStream(
             path,
             FileMode.Open,
@@ -368,6 +385,7 @@ internal sealed partial class FullBackupService
 
         try
         {
+            FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
             foreach (var path in Directory.EnumerateDirectories(
                          _backupDirectory,
                          RestoredImportDirectoryPrefix + "*",
@@ -376,6 +394,7 @@ internal sealed partial class FullBackupService
                 TryDeleteImportDirectory(path);
             }
 
+            FileSystemLinkValidator.ValidatePath(GetRestoreRequestPath());
             var request = JsonFileStore.Read<FullBackupRestoreRequest>(
                 GetRestoreRequestPath(),
                 BackupFormat.JsonOptions);
@@ -408,6 +427,7 @@ internal sealed partial class FullBackupService
         var requestPath = GetRestoreRequestPath();
         try
         {
+            FileSystemLinkValidator.ValidatePath(GetRestoreRequestPath());
             var request = JsonFileStore.Read<FullBackupRestoreRequest>(
                 requestPath,
                 BackupFormat.JsonOptions);
@@ -415,6 +435,7 @@ internal sealed partial class FullBackupService
                 !request.Success ||
                 request.Value?.ImportId == importId)
             {
+                FileSystemLinkValidator.ValidatePath(requestPath);
                 FileWriter.DeleteIfExists(requestPath);
             }
         }
@@ -439,6 +460,7 @@ internal sealed partial class FullBackupService
             throw new IOException("The import folder is outside Noted's backup storage.");
         }
 
+        FileSystemLinkValidator.ValidateTree(fullPath);
         Directory.Delete(fullPath, recursive: true);
     }
 

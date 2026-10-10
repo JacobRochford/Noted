@@ -183,6 +183,7 @@ public sealed class NoteContentService : INoteContentService
     private void SaveHistoryEntry(string notePath, string content)
     {
         var noteHistoryDirectory = GetNoteHistoryDirectory(notePath);
+        FileSystemLinkValidator.ValidateDirectory(noteHistoryDirectory);
         var contentHash = Convert.ToHexString(
             SHA256.HashData(Encoding.UTF8.GetBytes(content)));
         if (Directory.Exists(noteHistoryDirectory) &&
@@ -203,12 +204,16 @@ public sealed class NoteContentService : INoteContentService
 
     private void TrimHistory(string noteHistoryDirectory)
     {
+        FileSystemLinkValidator.ValidateDirectory(noteHistoryDirectory);
         var historyFiles = Directory
             .EnumerateFiles(noteHistoryDirectory, "*.json")
             .OrderByDescending(Path.GetFileName, StringComparer.Ordinal)
             .ToList();
         foreach (var path in historyFiles.Skip(_historyLimit))
+        {
+            FileSystemLinkValidator.ValidatePath(path);
             FileWriter.DeleteIfExists(path);
+        }
     }
 
     private string GetNoteHistoryDirectory(string notePath)

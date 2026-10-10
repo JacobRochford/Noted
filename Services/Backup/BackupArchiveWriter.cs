@@ -43,15 +43,19 @@ internal sealed class BackupArchiveWriter
         FullBackupType backupType,
         IReadOnlyList<BackupSourceEntry> backupFiles)
     {
+        FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
         Directory.CreateDirectory(_backupDirectory);
         var buildPath = Path.Combine(_backupDirectory, $"{BuildingDirectoryPrefix}{Guid.NewGuid():N}");
+        FileSystemLinkValidator.ValidateDirectory(buildPath);
         Directory.CreateDirectory(buildPath);
         var filesDirectory = Path.Combine(buildPath, FilesDirectoryName);
+        FileSystemLinkValidator.ValidateDirectory(filesDirectory);
         Directory.CreateDirectory(filesDirectory);
 
         foreach (var source in backupFiles)
         {
             var destinationPath = GetContainedPath(filesDirectory, source.LogicalPath);
+            FileSystemLinkValidator.ValidateDirectory(Path.GetDirectoryName(destinationPath)!);
             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
             CopyAndVerify(source, destinationPath);
         }
@@ -86,6 +90,8 @@ internal sealed class BackupArchiveWriter
         var backupPath = GetBackupPath(backupType);
         if (!Directory.Exists(backupPath))
         {
+            FileSystemLinkValidator.ValidateTree(buildPath);
+            FileSystemLinkValidator.ValidateDirectory(backupPath);
             Directory.Move(buildPath, backupPath);
             _archiveReader.VerifyBackupFolder(backupPath, backupType);
             return new BackupReplaceResult(backupPath, null);
@@ -94,9 +100,13 @@ internal sealed class BackupArchiveWriter
         var retiredPath = Path.Combine(
             _backupDirectory,
             $"{ReplacingDirectoryPrefix}{GetBackupFolderName(backupType)}-{Guid.NewGuid():N}");
+        FileSystemLinkValidator.ValidateTree(backupPath);
+        FileSystemLinkValidator.ValidateDirectory(retiredPath);
         Directory.Move(backupPath, retiredPath);
         try
         {
+            FileSystemLinkValidator.ValidateTree(buildPath);
+            FileSystemLinkValidator.ValidateDirectory(backupPath);
             Directory.Move(buildPath, backupPath);
             _archiveReader.VerifyBackupFolder(backupPath, backupType);
         }
@@ -107,10 +117,16 @@ internal sealed class BackupArchiveWriter
                 var failedPath = Path.Combine(
                     _backupDirectory,
                     $"{FailedDirectoryPrefix}{GetBackupFolderName(backupType)}-{Guid.NewGuid():N}");
+                FileSystemLinkValidator.ValidateTree(backupPath);
+                FileSystemLinkValidator.ValidateDirectory(failedPath);
                 Directory.Move(backupPath, failedPath);
             }
             if (Directory.Exists(retiredPath))
+            {
+                FileSystemLinkValidator.ValidateTree(retiredPath);
+                FileSystemLinkValidator.ValidateDirectory(backupPath);
                 Directory.Move(retiredPath, backupPath);
+            }
             throw;
         }
 
@@ -144,9 +160,13 @@ internal sealed class BackupArchiveWriter
                 olderPreviousPath = Path.Combine(
                     _backupDirectory,
                     $"{ReplacingDirectoryPrefix}{PreviousDirectoryName}-{Guid.NewGuid():N}");
+                FileSystemLinkValidator.ValidateTree(previousPath);
+                FileSystemLinkValidator.ValidateDirectory(olderPreviousPath);
                 Directory.Move(previousPath, olderPreviousPath);
             }
 
+            FileSystemLinkValidator.ValidateTree(retiredUserBackupPath);
+            FileSystemLinkValidator.ValidateDirectory(previousPath);
             Directory.Move(retiredUserBackupPath, previousPath);
             _archiveReader.VerifyBackupFolder(previousPath, FullBackupType.User);
         }
@@ -157,6 +177,8 @@ internal sealed class BackupArchiveWriter
                 olderPreviousPath is not null &&
                 Directory.Exists(olderPreviousPath))
             {
+                FileSystemLinkValidator.ValidateTree(olderPreviousPath);
+                FileSystemLinkValidator.ValidateDirectory(previousPath);
                 Directory.Move(olderPreviousPath, previousPath);
                 olderPreviousPath = null;
             }
@@ -183,10 +205,15 @@ internal sealed class BackupArchiveWriter
         }
     }
 
-    private static void CopyAndVerify(BackupSourceEntry source, string destinationPath)
+    private void CopyAndVerify(BackupSourceEntry source, string destinationPath)
     {
+        var readPath = source.LogicalPath.StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase)
+            ? FileSystemLinkValidator.ValidateWithinRoot(_notesDirectory, source.SourcePath)
+            : source.SourcePath;
+        FileSystemLinkValidator.ValidatePath(readPath);
+        FileSystemLinkValidator.ValidatePath(destinationPath);
         using (var sourceStream = new FileStream(
-                   source.SourcePath,
+                   readPath,
                    FileMode.Open,
                    FileAccess.Read,
                    FileShare.Read,
@@ -231,6 +258,7 @@ internal sealed class BackupArchiveWriter
             throw new IOException("The retired backup path is outside the expected backup directory.");
         }
 
+        FileSystemLinkValidator.ValidateTree(fullPath);
         Directory.Delete(fullPath, recursive: true);
     }
 

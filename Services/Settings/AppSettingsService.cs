@@ -58,6 +58,7 @@ public sealed class AppSettingsService : IAppSettingsService {
         _maxSettingsHistoryFiles = maxSettingsHistoryFiles;
 
         try {
+            FileSystemLinkValidator.ValidateDirectory(AppDataDirectory);
             Directory.CreateDirectory(AppDataDirectory);
         } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
             throw new SettingsPersistenceException(SettingsPersistenceMessages.StorageDirectoryUnavailable(AppDataDirectory),
@@ -542,6 +543,9 @@ public sealed class AppSettingsService : IAppSettingsService {
 
         FileWriteResult writeResult;
         try {
+            FileSystemLinkValidator.ValidatePath(_settingsFilePath);
+            if (damagedPath is not null)
+                FileSystemLinkValidator.ValidatePath(damagedPath);
             writeResult = FileWriter.WriteAllText(
                 _settingsFilePath,
                 selectedRecoveryFile.SerializedJson!,
@@ -584,6 +588,8 @@ public sealed class AppSettingsService : IAppSettingsService {
 
     private IReadOnlyList<RecoveryFileInfo> FindRecoveryFiles() {
         try {
+            FileSystemLinkValidator.ValidateDirectory(AppDataDirectory);
+            FileSystemLinkValidator.ValidateDirectory(_settingsHistoryDirectory);
             var currentPendingPaths = Directory.GetFiles(
                     AppDataDirectory,
                     $"{Path.GetFileName(_backupFilePath)}.pending-*");
@@ -684,6 +690,8 @@ public sealed class AppSettingsService : IAppSettingsService {
 
         FileWriteResult writeResult;
         try {
+            FileSystemLinkValidator.ValidatePath(_settingsFilePath);
+            FileSystemLinkValidator.ValidatePath(_backupFilePath);
             writeResult = FileWriter.WriteAllText(_settingsFilePath, json, _backupFilePath);
         } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
             throw new SettingsPersistenceException(SettingsPersistenceMessages.SaveFailed(_settingsFilePath),
@@ -692,6 +700,7 @@ public sealed class AppSettingsService : IAppSettingsService {
 
         string persistedJson;
         try {
+            FileSystemLinkValidator.ValidatePath(_settingsFilePath);
             persistedJson = File.ReadAllText(_settingsFilePath, Encoding.UTF8);
         } catch (Exception ex) when (IsExpectedSettingsIoException(ex)) {
             _writesBlocked = true;
@@ -717,6 +726,7 @@ public sealed class AppSettingsService : IAppSettingsService {
 
     private void UpdateSettingsHistory(string settingsJson, ICollection<string> warnings) {
         try {
+            FileSystemLinkValidator.ValidateDirectory(_settingsHistoryDirectory);
             Directory.CreateDirectory(_settingsHistoryDirectory);
             var historyFiles = GetSettingsHistoryFiles();
             var newestValidHistoryFile = historyFiles
@@ -737,6 +747,7 @@ public sealed class AppSettingsService : IAppSettingsService {
             var historyPath = Path.Combine(
                 _settingsHistoryDirectory,
                 $"settings_{now:yyyyMMdd_HHmmss_fff}_{hash}_{Guid.NewGuid():N}.json");
+            FileSystemLinkValidator.ValidatePath(historyPath);
             FileWriter.WriteAllText(historyPath, settingsJson);
             var verification = ReadSettingsFile(historyPath);
             if (verification.Status != JsonFileReadStatus.Success ||
@@ -744,6 +755,7 @@ public sealed class AppSettingsService : IAppSettingsService {
                 throw new FileVerificationException("The new settings history file could not be verified.", verification.Error);
             }
 
+            FileSystemLinkValidator.ValidatePath(historyPath);
             File.SetLastWriteTimeUtc(historyPath, now);
             PruneSettingsHistory();
         } catch (Exception ex) when (ex is JsonException || IsExpectedSettingsIoException(ex)) {
@@ -753,6 +765,7 @@ public sealed class AppSettingsService : IAppSettingsService {
     }
 
     private IReadOnlyList<FileInfo> GetSettingsHistoryFiles() {
+        FileSystemLinkValidator.ValidateDirectory(_settingsHistoryDirectory);
         if (!Directory.Exists(_settingsHistoryDirectory))
             return [];
 
@@ -768,8 +781,10 @@ public sealed class AppSettingsService : IAppSettingsService {
             .Where(info => ReadSettingsFile(info.FullName).Status == JsonFileReadStatus.Success)
             .Skip(_maxSettingsHistoryFiles)
             .ToList();
-        foreach (var historyFile in oldHistoryFiles)
+        foreach (var historyFile in oldHistoryFiles) {
+            FileSystemLinkValidator.ValidatePath(historyFile.FullName);
             FileWriter.DeleteIfExists(historyFile.FullName);
+        }
     }
 
     private void SetPersistenceWarning(IReadOnlyCollection<string> warnings) {
@@ -885,6 +900,7 @@ public sealed class AppSettingsService : IAppSettingsService {
 
     private static SettingsReadResult ReadSettingsFile(string path) {
         try {
+            FileSystemLinkValidator.ValidatePath(path);
             var json = File.ReadAllText(path, Encoding.UTF8);
             var settings = JsonSerializer.Deserialize<AppSettingsDocument>(json, s_settingsJsonOptions)
                 ?? throw new JsonException("The settings document did not contain a JSON object.");

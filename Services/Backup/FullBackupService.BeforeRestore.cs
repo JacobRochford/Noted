@@ -36,6 +36,8 @@ internal sealed partial class FullBackupService
             var backupPath = Path.Combine(
                 _backupDirectory,
                 $"{BeforeRestoreDirectoryPrefix}{_clock.GetUtcNow().UtcDateTime:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}");
+            FileSystemLinkValidator.ValidateTree(build.Path);
+            FileSystemLinkValidator.ValidateDirectory(backupPath);
             Directory.Move(build.Path, backupPath);
             _archiveReader.VerifyBackupFolder(backupPath, FullBackupType.BeforeRestore);
 
@@ -70,6 +72,7 @@ internal sealed partial class FullBackupService
 
     private void TrimBeforeRestoreBackups()
     {
+        FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
         var backups = Directory
             .EnumerateDirectories(
                 _backupDirectory,
@@ -93,6 +96,7 @@ internal sealed partial class FullBackupService
             throw new IOException("The before-restore backup is outside Noted's backup storage.");
         }
 
+        FileSystemLinkValidator.ValidateTree(fullPath);
         Directory.Delete(fullPath, recursive: true);
     }
 }

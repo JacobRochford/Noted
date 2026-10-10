@@ -37,6 +37,14 @@ internal sealed partial class FullBackupService
 
         try
         {
+            FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
+            var resolvedBackupDirectory = FileSystemLinkValidator.ResolveDirectory(_backupDirectory);
+            exportDirectory = FileSystemLinkValidator.ResolveDirectory(exportDirectory);
+            if (PathsEqual(exportDirectory, resolvedBackupDirectory) || IsPathWithin(exportDirectory, resolvedBackupDirectory))
+                return new BackupExportResult(false, null, "Choose an export folder outside Noted's local backup folder.");
+            exportPath = Path.Combine(exportDirectory, Path.GetFileName(exportPath));
+            tempPath = Path.Combine(exportDirectory, Path.GetFileName(tempPath));
+            FileSystemLinkValidator.ValidatePath(exportPath);
             if (!Directory.Exists(exportDirectory))
             {
                 return new BackupExportResult(
@@ -57,14 +65,18 @@ internal sealed partial class FullBackupService
                         : $"The backup could not be exported because it is invalid: {backup.Error}");
             }
 
+            FileSystemLinkValidator.ValidatePath(tempPath);
             WriteBackupExport(tempPath, backup);
             VerifyBackupExport(tempPath, backup);
 
+            FileSystemLinkValidator.ValidatePath(exportPath);
+            FileSystemLinkValidator.ValidatePath(tempPath);
             if (File.Exists(exportPath))
             {
                 rollbackPath = Path.Combine(
                     exportDirectory,
                     $".{Path.GetFileName(exportPath)}.{Guid.NewGuid():N}.rollback");
+                FileSystemLinkValidator.ValidatePath(rollbackPath);
                 File.Replace(tempPath, exportPath, rollbackPath, ignoreMetadataErrors: true);
             }
             else
@@ -88,6 +100,7 @@ internal sealed partial class FullBackupService
             {
                 try
                 {
+                    FileSystemLinkValidator.ValidatePath(rollbackPath);
                     FileWriter.DeleteIfExists(rollbackPath);
                 }
                 catch (Exception ex) when (IsExpectedBackupException(ex))
@@ -159,6 +172,7 @@ internal sealed partial class FullBackupService
         var entry = archive.CreateEntry(
             NormalizeLogicalPath(archivePath),
             CompressionLevel.Fastest);
+        FileSystemLinkValidator.ValidatePath(sourcePath);
         using var source = new FileStream(
             sourcePath,
             FileMode.Open,
@@ -176,6 +190,7 @@ internal sealed partial class FullBackupService
     {
         var manifest = backup.Manifest
             ?? throw new FileVerificationException("The verified backup manifest is unavailable.");
+        FileSystemLinkValidator.ValidatePath(archivePath);
         using var archive = ZipFile.OpenRead(archivePath);
         var entries = archive.Entries
             .Where(entry => !string.IsNullOrEmpty(entry.Name))
@@ -248,6 +263,7 @@ internal sealed partial class FullBackupService
         if (sourceInfo.Length != archiveEntry.Length)
             return false;
 
+        FileSystemLinkValidator.ValidatePath(sourcePath);
         using var source = new FileStream(
             sourcePath,
             FileMode.Open,
@@ -266,6 +282,10 @@ internal sealed partial class FullBackupService
         var failedPath = Path.Combine(
             Path.GetDirectoryName(exportPath)!,
             $".{Path.GetFileName(exportPath)}.{Guid.NewGuid():N}.failed");
+        FileSystemLinkValidator.ValidatePath(exportPath);
+        FileSystemLinkValidator.ValidatePath(failedPath);
+        if (rollbackPath is not null)
+            FileSystemLinkValidator.ValidatePath(rollbackPath);
         if (rollbackPath is not null && File.Exists(rollbackPath))
         {
             File.Replace(
@@ -284,6 +304,7 @@ internal sealed partial class FullBackupService
     {
         try
         {
+            FileSystemLinkValidator.ValidatePath(path);
             FileWriter.DeleteIfExists(path);
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))

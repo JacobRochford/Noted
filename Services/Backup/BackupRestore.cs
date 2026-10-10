@@ -32,20 +32,22 @@ internal sealed class BackupRestore
     internal FullBackupResult ApplyPendingUserBackupRestore()
     {
         var requestPath = Path.Combine(_backupDirectory, RestoreRequestFileName);
-        var requestResult = JsonFileStore.Read<FullBackupRestoreRequest>(
-            requestPath,
-            BackupFormat.JsonOptions);
-        if (requestResult.Status == JsonFileReadStatus.Missing)
-        {
-            return new FullBackupResult(
-                FullBackupStatus.Skipped,
-                null,
-                null,
-                "No backup restore is pending.");
-        }
-
         try
         {
+            FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
+            FileSystemLinkValidator.ValidatePath(requestPath);
+            var requestResult = JsonFileStore.Read<FullBackupRestoreRequest>(
+                requestPath,
+                BackupFormat.JsonOptions);
+            if (requestResult.Status == JsonFileReadStatus.Missing)
+            {
+                return new FullBackupResult(
+                    FullBackupStatus.Skipped,
+                    null,
+                    null,
+                    "No backup restore is pending.");
+            }
+
             if (!requestResult.Success || requestResult.Value is null)
             {
                 throw new FileVerificationException(
@@ -84,19 +86,25 @@ internal sealed class BackupRestore
                     "The backup changed after the restore was requested. Nothing was restored.");
             }
 
+            // check all destinations before writing anything; keep the request if a check fails.
+            foreach (var entry in manifest.Entries)
+                ValidateDestination(entry.LogicalPath, manifest);
+
             var filesDirectory = Path.Combine(restorePath, FilesDirectoryName);
             foreach (var entry in manifest.Entries
                          .OrderBy(entry => entry.LogicalPath, StringComparer.OrdinalIgnoreCase))
             {
                 var sourcePath = GetContainedPath(filesDirectory, entry.LogicalPath);
-                var destinationPath = _getRestoreDestination(entry.LogicalPath, manifest);
+                var destinationPath = ValidateDestination(entry.LogicalPath, manifest);
                 var bytes = BackupArchiveReader.ReadFileBytes(sourcePath);
                 BackupArchiveReader.VerifyFileBytes(bytes, entry.Length, entry.Sha256, entry.LogicalPath);
+                destinationPath = ValidateDestination(entry.LogicalPath, manifest);
                 FileWriter.WriteAllBytes(destinationPath, bytes);
                 var restoredBytes = BackupArchiveReader.ReadFileBytes(destinationPath);
                 BackupArchiveReader.VerifyFileBytes(restoredBytes, entry.Length, entry.Sha256, entry.LogicalPath);
             }
 
+            FileSystemLinkValidator.ValidatePath(requestPath);
             FileWriter.DeleteIfExists(requestPath);
             string? warning = null;
             if (request.ImportId.HasValue)
@@ -106,6 +114,8 @@ internal sealed class BackupRestore
                     var restoredImportPath = Path.Combine(
                         _backupDirectory,
                         $"{RestoredImportDirectoryPrefix}{request.ImportId.Value:N}");
+                    FileSystemLinkValidator.ValidateTree(restorePath);
+                    FileSystemLinkValidator.ValidateDirectory(restoredImportPath);
                     Directory.Move(restorePath, restoredImportPath);
                     _deleteImportDirectory(restoredImportPath);
                 }
@@ -134,6 +144,15 @@ internal sealed class BackupRestore
                 null,
                 "The backup restore did not finish. The backup and restore request were left unchanged so Noted can retry.");
         }
+    }
+
+    private string ValidateDestination(string logicalPath, FullBackupManifest manifest)
+    {
+        var destination = _getRestoreDestination(logicalPath, manifest);
+        if (BackupFormat.NormalizeLogicalPath(logicalPath).StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase))
+            return FileSystemLinkValidator.ValidateWithinRoot(manifest.NotesRoot, destination);
+        FileSystemLinkValidator.ValidatePath(destination);
+        return destination;
     }
 
     private static bool IsExpectedBackupException(Exception exception) =>

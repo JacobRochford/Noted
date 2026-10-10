@@ -64,6 +64,9 @@ public sealed class ScratchpadContentService : IScratchpadContentService
             if (existing.Success && string.Equals(existing.Content, content, StringComparison.Ordinal))
                 return new ScratchpadContentSaveResult(true, null, null);
 
+            FileSystemLinkValidator.ValidatePath(_contentFilePath);
+            if (!_preserveBackupOnNextSave)
+                FileSystemLinkValidator.ValidatePath(_backupFilePath);
             var writeResult = FileWriter.WriteAllText(
                 _contentFilePath,
                 content,
@@ -94,6 +97,7 @@ public sealed class ScratchpadContentService : IScratchpadContentService
     {
         try
         {
+            FileSystemLinkValidator.ValidatePath(path);
             return new TextReadResult(
                 JsonFileReadStatus.Success,
                 File.ReadAllText(path, Encoding.UTF8),

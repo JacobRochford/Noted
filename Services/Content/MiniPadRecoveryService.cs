@@ -24,9 +24,6 @@ public sealed class MiniPadRecoveryService : IMiniPadRecoveryService
 
     public MiniPadRecoveryLoadResult LoadDraft()
     {
-        if (!Directory.Exists(_recoveryDirectory))
-            return new MiniPadRecoveryLoadResult(null, []);
-
         var issues = new List<MiniPadRecoveryIssue>();
         var draft = LoadSavedDraft(issues);
         return new MiniPadRecoveryLoadResult(draft, issues);

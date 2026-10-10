@@ -199,11 +199,13 @@ internal sealed partial class FullBackupService
                     explanation);
             }
 
+            FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
             Directory.CreateDirectory(_backupDirectory);
             var request = new FullBackupRestoreRequest(
                 BackupSchemaVersion,
                 userBackup.Manifest!.BackupId,
                 _clock.GetUtcNow().UtcDateTime);
+            FileSystemLinkValidator.ValidatePath(GetRestoreRequestPath());
             JsonFileStore.Write(
                 GetRestoreRequestPath(),
                 request,
@@ -231,6 +233,7 @@ internal sealed partial class FullBackupService
     internal void CancelPendingUserBackupRestore()
     {
         var requestPath = GetRestoreRequestPath();
+        FileSystemLinkValidator.ValidatePath(requestPath);
         var requestResult = JsonFileStore.Read<FullBackupRestoreRequest>(
             requestPath,
             BackupFormat.JsonOptions);
@@ -384,6 +387,7 @@ internal sealed partial class FullBackupService
 
     private IReadOnlyList<string> FindInterruptedWork()
     {
+        FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
         if (!Directory.Exists(_backupDirectory))
             return [];
 

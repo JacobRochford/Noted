@@ -249,8 +249,7 @@ internal sealed class BackupArchiveReader
 
         try
         {
-            if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-                return InvalidBackup(backupType, path, "The backup directory is a filesystem link.");
+            FileSystemLinkValidator.ValidateDirectory(path);
 
             var rootFiles = Directory.EnumerateFiles(path).Select(Path.GetFileName).ToList();
             var rootDirectories = Directory.EnumerateDirectories(path).Select(Path.GetFileName).ToList();
@@ -262,6 +261,7 @@ internal sealed class BackupArchiveReader
                 return InvalidBackup(backupType, path, "The backup contains unexpected top-level files or directories.");
             }
 
+            FileSystemLinkValidator.ValidatePath(Path.Combine(path, ManifestFileName));
             var manifestResult = JsonFileStore.Read<FullBackupManifest>(
                 Path.Combine(path, ManifestFileName),
                 BackupFormat.JsonOptions);
@@ -287,8 +287,7 @@ internal sealed class BackupArchiveReader
                 return InvalidBackup(backupType, path, $"The manifest repeats '{duplicate.Key}'.");
 
             var filesDirectory = Path.Combine(path, FilesDirectoryName);
-            if ((File.GetAttributes(filesDirectory) & FileAttributes.ReparsePoint) != 0)
-                return InvalidBackup(backupType, path, "The backup files directory is a filesystem link.");
+            FileSystemLinkValidator.ValidateDirectory(filesDirectory);
 
             var expectedPaths = new HashSet<string>(
                 manifest.Entries.Select(entry => NormalizeLogicalPath(entry.LogicalPath)),
@@ -341,6 +340,8 @@ internal sealed class BackupArchiveReader
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
         var fullPath = Path.GetFullPath(archivePath);
+        fullPath = Path.Combine(FileSystemLinkValidator.ResolveDirectory(Path.GetDirectoryName(fullPath)!), Path.GetFileName(fullPath));
+        FileSystemLinkValidator.ValidatePath(fullPath);
         if (!File.Exists(fullPath))
             throw new FileNotFoundException("The selected backup file could not be found.", fullPath);
 
@@ -405,6 +406,7 @@ internal sealed class BackupArchiveReader
 
     internal ImportedBackupFile ReadImportedFile(BackupArchive source, FullBackupEntry entry)
     {
+        FileSystemLinkValidator.ValidatePath(source.Path);
         using var fileStream = new FileStream(source.Path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
         using var archive = new ZipArchive(fileStream, ZipArchiveMode.Read);
         return ReadImportedFile(archive, source.Manifest, entry);
@@ -421,8 +423,9 @@ internal sealed class BackupArchiveReader
         return _transformImportedFile(entry, bytes, manifest);
     }
 
-    private IReadOnlyList<ImportedBackupFileInfo> InspectImportedFiles(BackupArchive source)
+    internal IReadOnlyList<ImportedBackupFileInfo> InspectImportedFiles(BackupArchive source)
     {
+        FileSystemLinkValidator.ValidatePath(source.Path);
         using var fileStream = new FileStream(source.Path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
         using var archive = new ZipArchive(fileStream, ZipArchiveMode.Read);
         var files = source.Manifest.Entries
@@ -497,7 +500,10 @@ internal sealed class BackupArchiveReader
     {
         try
         {
-            var bytes = ReadFileBytes(_getRestoreDestination(entry.LogicalPath, manifest));
+            var destination = _getRestoreDestination(entry.LogicalPath, manifest);
+            if (NormalizeLogicalPath(entry.LogicalPath).StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase))
+                destination = FileSystemLinkValidator.ValidateWithinRoot(manifest.NotesRoot, destination);
+            var bytes = ReadFileBytes(destination);
             var hash = Convert.ToHexString(SHA256.HashData(bytes));
             return bytes.LongLength == entry.Length &&
                    string.Equals(hash, entry.Sha256, StringComparison.OrdinalIgnoreCase)
@@ -515,6 +521,7 @@ internal sealed class BackupArchiveReader
 
     internal static byte[] ReadFileBytes(string path)
     {
+        FileSystemLinkValidator.ValidatePath(path);
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
         if (stream.Length > int.MaxValue)
             throw new IOException($"'{path}' is too large for the current backup implementation.");

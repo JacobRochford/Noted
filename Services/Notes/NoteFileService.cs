@@ -217,8 +217,12 @@ public sealed class NoteFileService : INoteFileService {
             return (false, "A note with the same path is already archived.");
 
         try {
-            Directory.CreateDirectory(Path.GetDirectoryName(archivePath)!);
-            File.Move(sourcePath, archivePath);
+            var physicalSource = FileSystemLinkValidator.ValidateWithinRoot(NotesDirectory, sourcePath);
+            var physicalDestination = FileSystemLinkValidator.ValidateWithinRoot(NotesDirectory, archivePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(physicalDestination)!);
+            FileSystemLinkValidator.ValidatePath(physicalSource);
+            FileSystemLinkValidator.ValidatePath(physicalDestination);
+            File.Move(physicalSource, physicalDestination);
         } catch (Exception ex) when (IsExpectedFileOperationException(ex)) {
             ExceptionDiagnostics.Record(ex);
             return (false, "The note could not be archived. Check folder access and whether the file is in use.");
@@ -251,8 +255,12 @@ public sealed class NoteFileService : INoteFileService {
             return (false, "A note already exists at the original path.");
 
         try {
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-            File.Move(sourcePath, destinationPath);
+            var physicalSource = FileSystemLinkValidator.ValidateWithinRoot(NotesDirectory, sourcePath);
+            var physicalDestination = FileSystemLinkValidator.ValidateWithinRoot(NotesDirectory, destinationPath);
+            Directory.CreateDirectory(Path.GetDirectoryName(physicalDestination)!);
+            FileSystemLinkValidator.ValidatePath(physicalSource);
+            FileSystemLinkValidator.ValidatePath(physicalDestination);
+            File.Move(physicalSource, physicalDestination);
             DeleteEmptyArchiveDirectories(Path.GetDirectoryName(sourcePath));
         } catch (Exception ex) when (IsExpectedFileOperationException(ex)) {
             ExceptionDiagnostics.Record(ex);
@@ -695,7 +703,8 @@ public sealed class NoteFileService : INoteFileService {
                 return;
             }
 
-            Directory.Delete(directory);
+            var physicalDirectory = FileSystemLinkValidator.ValidateWithinRoot(NotesDirectory, directory);
+            Directory.Delete(physicalDirectory);
             directory = Path.GetDirectoryName(directory);
         }
     }

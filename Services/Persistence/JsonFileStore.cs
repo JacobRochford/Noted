@@ -43,6 +43,7 @@ internal static class JsonFileStore
 
         try
         {
+            FileSystemLinkValidator.ValidatePath(path);
             var json = File.ReadAllText(Path.GetFullPath(path), Encoding.UTF8);
             var value = JsonSerializer.Deserialize<T>(json, options);
             if (value is null)
@@ -84,12 +85,16 @@ internal static class JsonFileStore
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(value);
 
+        FileSystemLinkValidator.ValidatePath(path);
+        if (backupPath is not null)
+            FileSystemLinkValidator.ValidatePath(backupPath);
         var json = JsonSerializer.Serialize(value, options);
         var writeResult = FileWriter.WriteAllText(path, json, backupPath);
 
         string persistedJson;
         try
         {
+            FileSystemLinkValidator.ValidatePath(path);
             persistedJson = File.ReadAllText(Path.GetFullPath(path), Encoding.UTF8);
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
@@ -128,6 +133,8 @@ internal static class JsonFileStore
             $"{path}.corrupt-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}";
         try
         {
+            FileSystemLinkValidator.ValidatePath(path);
+            FileSystemLinkValidator.ValidatePath(preservedPath);
             File.Move(path, preservedPath);
             return new CorruptFilePreservationResult(preservedPath, null);
         }

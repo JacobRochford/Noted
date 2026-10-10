@@ -41,13 +41,13 @@ public sealed class NoteRecoveryService : INoteRecoveryService
 
     public NoteRecoveryLoadResult LoadDrafts()
     {
-        if (!Directory.Exists(_recoveryDirectory))
-            return new NoteRecoveryLoadResult([], []);
-
         var drafts = new Dictionary<string, NoteRecoveryDraft>(StringComparer.OrdinalIgnoreCase);
         var issues = new List<NoteRecoveryIssue>();
         try
         {
+            FileSystemLinkValidator.ValidateDirectory(_recoveryDirectory);
+            if (!Directory.Exists(_recoveryDirectory))
+                return new NoteRecoveryLoadResult([], []);
             var primaryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var path in Directory.EnumerateFiles(_recoveryDirectory))
             {
@@ -253,6 +253,7 @@ public sealed class NoteRecoveryService : INoteRecoveryService
 
         try
         {
+            FileSystemLinkValidator.ValidateDirectory(_recoveryDirectory);
             if (!Directory.Exists(_recoveryDirectory))
                 return;
 
@@ -302,6 +303,7 @@ public sealed class NoteRecoveryService : INoteRecoveryService
     {
         try
         {
+            FileSystemLinkValidator.ValidatePath(path);
             FileWriter.DeleteIfExists(path);
         }
         catch (Exception ex) when (IsExpectedRecoveryException(ex))

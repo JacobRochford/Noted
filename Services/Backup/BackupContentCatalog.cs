@@ -30,6 +30,8 @@ internal sealed class BackupContentCatalog
 
     internal IReadOnlyList<BackupSourceEntry> Collect()
     {
+        FileSystemLinkValidator.ValidateDirectory(_appDataDirectory);
+        FileSystemLinkValidator.ValidateWithinRoot(_notesDirectory, _notesDirectory);
         if (!Directory.Exists(_notesDirectory))
             throw new DirectoryNotFoundException($"The notes folder '{_notesDirectory}' could not be found.");
 
@@ -55,6 +57,7 @@ internal sealed class BackupContentCatalog
     private void AddAppFile(ICollection<BackupSourceEntry> sources, FixedBackupFile definition)
     {
         var sourcePath = Path.Combine(_appDataDirectory, definition.RelativePath);
+        FileSystemLinkValidator.ValidatePath(sourcePath);
         if (!File.Exists(sourcePath))
             return;
 
@@ -91,6 +94,7 @@ internal sealed class BackupContentCatalog
     private void AddNoteRecoveryFiles(ICollection<BackupSourceEntry> sources)
     {
         var recoveryDirectory = Path.Combine(_appDataDirectory, PersistencePaths.RecoveryDirectory);
+        FileSystemLinkValidator.ValidateDirectory(recoveryDirectory);
         if (!Directory.Exists(recoveryDirectory))
             return;
 
@@ -104,10 +108,12 @@ internal sealed class BackupContentCatalog
         }
 
         var miniPadDirectory = MiniPadStorage.GetRecoveryDirectory(_appDataDirectory);
+        FileSystemLinkValidator.ValidateDirectory(miniPadDirectory);
         if (Directory.Exists(miniPadDirectory))
             ThrowIfDirectoryIsLink(miniPadDirectory);
 
         var settingsPath = Path.Combine(_appDataDirectory, PersistencePaths.SettingsFile);
+        FileSystemLinkValidator.ValidatePath(settingsPath);
         var settings = File.Exists(settingsPath)
             ? JsonSerializer.Deserialize<AppSettingsDocument>(File.ReadAllBytes(settingsPath))
             : null;
@@ -126,8 +132,7 @@ internal sealed class BackupContentCatalog
         string path,
         Func<byte[], BackupContentDetails> validator)
     {
-        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-            throw new IOException($"The recovery file '{path}' is a filesystem link and cannot be included safely.");
+        FileSystemLinkValidator.ValidatePath(path);
 
         var relativePath = Path.GetRelativePath(_appDataDirectory, path);
         sources.Add(CreateSourceEntry(
@@ -136,15 +141,13 @@ internal sealed class BackupContentCatalog
             validator));
     }
 
-    private static void ThrowIfDirectoryIsLink(string path)
-    {
-        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-            throw new IOException($"The recovery folder '{path}' is a filesystem link and cannot be included safely.");
-    }
+    private static void ThrowIfDirectoryIsLink(string path) =>
+        FileSystemLinkValidator.ValidateDirectory(path);
 
     private void AddNoteHistoryFiles(ICollection<BackupSourceEntry> sources)
     {
         var historyDirectory = Path.Combine(_appDataDirectory, PersistencePaths.NoteHistoryDirectory);
+        FileSystemLinkValidator.ValidateDirectory(historyDirectory);
         if (!Directory.Exists(historyDirectory))
             return;
 
@@ -164,6 +167,7 @@ internal sealed class BackupContentCatalog
     private void AddDeletedNotes(ICollection<BackupSourceEntry> sources)
     {
         var deletedNotesDirectory = Path.Combine(_appDataDirectory, PersistencePaths.DeletedNotesDirectory);
+        FileSystemLinkValidator.ValidateDirectory(deletedNotesDirectory);
         if (!Directory.Exists(deletedNotesDirectory))
             return;
 
@@ -182,7 +186,7 @@ internal sealed class BackupContentCatalog
 
     private void AddNotes(ICollection<BackupSourceEntry> sources)
     {
-        foreach (var path in EnumerateFilesWithoutLinks(_notesDirectory, [_backupDirectory]))
+        foreach (var path in EnumerateFilesWithoutLinks(_notesDirectory, [_backupDirectory], allowRootLinks: true))
         {
             if (!NoteFileExtensions.IsSupported(path))
                 continue;
@@ -195,12 +199,15 @@ internal sealed class BackupContentCatalog
         }
     }
 
-    private static BackupSourceEntry CreateSourceEntry(
+    private BackupSourceEntry CreateSourceEntry(
         string logicalPath,
         string sourcePath,
         Func<byte[], BackupContentDetails> validator)
     {
-        var bytes = ReadFileBytes(sourcePath);
+        var readPath = logicalPath.StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase)
+            ? FileSystemLinkValidator.ValidateWithinRoot(_notesDirectory, sourcePath)
+            : sourcePath;
+        var bytes = ReadFileBytes(readPath);
         var details = validator(bytes);
         return new BackupSourceEntry(
             logicalPath,
@@ -323,13 +330,19 @@ internal sealed class BackupContentCatalog
 
     internal static IEnumerable<string> EnumerateFilesWithoutLinks(
         string rootDirectory,
-        IReadOnlyCollection<string>? excludedDirectories = null)
+        IReadOnlyCollection<string>? excludedDirectories = null,
+        bool allowRootLinks = false)
     {
         var exclusions = (excludedDirectories ?? [])
-            .Select(Path.GetFullPath)
+            .Select(path => allowRootLinks ? FileSystemLinkValidator.ResolveDirectory(path) : Path.GetFullPath(path))
             .ToList();
         var fullRoot = Path.GetFullPath(rootDirectory);
-        if (exclusions.Any(exclusion => PathsEqual(fullRoot, exclusion) || IsPathWithin(fullRoot, exclusion)))
+        if (allowRootLinks)
+            FileSystemLinkValidator.ValidateWithinRoot(fullRoot, fullRoot);
+        else
+            FileSystemLinkValidator.ValidateDirectory(fullRoot);
+        var exclusionRoot = allowRootLinks ? FileSystemLinkValidator.ResolveDirectory(fullRoot) : fullRoot;
+        if (exclusions.Any(exclusion => PathsEqual(exclusionRoot, exclusion) || IsPathWithin(exclusionRoot, exclusion)))
             yield break;
 
         var pending = new Stack<string>();
@@ -337,18 +350,27 @@ internal sealed class BackupContentCatalog
         while (pending.Count > 0)
         {
             var directory = pending.Pop();
+            if (allowRootLinks)
+                FileSystemLinkValidator.ValidateWithinRoot(fullRoot, directory);
+            else
+                FileSystemLinkValidator.ValidateDirectory(directory);
             foreach (var path in Directory.EnumerateFiles(directory))
             {
-                if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-                    throw new IOException($"The source file '{path}' is a filesystem link and cannot be included safely.");
+                if (allowRootLinks)
+                    FileSystemLinkValidator.ValidateWithinRoot(fullRoot, path);
+                else
+                    FileSystemLinkValidator.ValidatePath(path);
                 yield return path;
             }
 
             foreach (var child in Directory.EnumerateDirectories(directory))
             {
-                if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0)
-                    throw new IOException($"The source folder '{child}' is a filesystem link and cannot be included safely.");
-                if (exclusions.Any(exclusion => PathsEqual(child, exclusion) || IsPathWithin(child, exclusion)))
+                if (allowRootLinks)
+                    FileSystemLinkValidator.ValidateWithinRoot(fullRoot, child);
+                else
+                    FileSystemLinkValidator.ValidatePath(child);
+                var exclusionChild = allowRootLinks ? FileSystemLinkValidator.ValidateWithinRoot(fullRoot, child) : child;
+                if (exclusions.Any(exclusion => PathsEqual(exclusionChild, exclusion) || IsPathWithin(exclusionChild, exclusion)))
                     continue;
                 pending.Push(child);
             }
@@ -357,6 +379,7 @@ internal sealed class BackupContentCatalog
 
     private static byte[] ReadFileBytes(string path)
     {
+        FileSystemLinkValidator.ValidatePath(path);
         using var stream = new FileStream(
             path,
             FileMode.Open,
