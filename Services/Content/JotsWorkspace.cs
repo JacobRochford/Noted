@@ -76,10 +76,16 @@ public sealed class JotsWorkspace : ObservableObject, IDisposable
 
         EnsureLoaded();
         // the saved draft ID prevents duplicates if the app crashes before clearing the draft.
-        if (_items.Any(item => item.Id == id))
+        var existing = _items.FirstOrDefault(item => item.Id == id);
+        if (existing is not null)
         {
-            error = null;
-            return true;
+            if (!string.Equals(existing.Details, text, StringComparison.Ordinal))
+            {
+                error = "A saved jot has the same ID with different text. Your Quick Jot draft was kept. Edit the draft before saving to keep both versions.";
+                return false;
+            }
+            ScheduleSave();
+            return TryFlush(out error);
         }
         if (!TryFlush(out error))
             return false;

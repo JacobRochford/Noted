@@ -159,6 +159,74 @@ public sealed class JotCaptureViewModelTests
         finally { draftLock?.Dispose(); }
     });
 
+    [TestMethod]
+    public void MatchingInMemoryJotMustBeSavedBeforeDraftClear() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var draft = new JotCaptureDraft { Text = "pending committed text" };
+        new JotCaptureDraftService(directory.Path).Save(draft);
+        var content = new ControlledJotsContentService();
+        using var workspace = new JotsWorkspace(content, Dispatcher.CurrentDispatcher);
+        workspace.Items.Add(new JotItem { Id = draft.Id, Details = draft.Text });
+        using var capture = CreateCapture(workspace, directory.Path);
+        content.FailSave = true;
+        Assert.IsFalse(capture.TrySave());
+        Assert.AreEqual(draft.Text, capture.Text);
+        Assert.AreEqual(draft, new JotCaptureDraftService(directory.Path).Load(out _));
+        content.FailSave = false;
+        Assert.IsTrue(capture.TrySave());
+        Assert.HasCount(1, content.Saved);
+        Assert.AreEqual("", capture.Text);
+    });
+
+    [TestMethod]
+    public void FailedFallbackClearKeepsSubmittedDraftAndRestartDoesNotDuplicate() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        new JotCaptureDraftService(directory.Path).Save(new JotCaptureDraft());
+        var content = new ControlledJotsContentService();
+        using var workspace = new JotsWorkspace(content, Dispatcher.CurrentDispatcher);
+        using var capture = CreateCapture(workspace, directory.Path);
+        FileStream? backupLock = null;
+        content.AfterSave = () => backupLock = File.Open(directory.File("jot-capture-draft.json.bak"),
+            FileMode.Open, FileAccess.Read, FileShare.None);
+        try
+        {
+            capture.Text = "submitted once";
+            Assert.IsFalse(capture.TrySave());
+            Assert.IsTrue(capture.IsReadOnly);
+            Assert.AreEqual("submitted once", capture.Text);
+        }
+        finally { backupLock?.Dispose(); }
+        content.AfterSave = null;
+        using var restartedWorkspace = new JotsWorkspace(content, Dispatcher.CurrentDispatcher);
+        using var restarted = CreateCapture(restartedWorkspace, directory.Path);
+        Assert.IsTrue(restarted.TrySave());
+        Assert.HasCount(1, content.Saved);
+        File.Delete(directory.File(PersistencePaths.JotCaptureDraftFile));
+        Assert.AreEqual("", new JotCaptureDraftService(directory.Path).Load(out _).Text);
+    });
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void SuccessfulSubmissionCannotReappearFromRollingBackup(bool corruptPrimary) => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var content = new JotsContentService(directory.Path);
+        using var workspace = new JotsWorkspace(content, Dispatcher.CurrentDispatcher);
+        using var capture = CreateCapture(workspace, directory.Path);
+        capture.Text = "durably submitted";
+        Assert.IsTrue(capture.TrySave());
+        var primary = directory.File(PersistencePaths.JotCaptureDraftFile);
+        if (corruptPrimary)
+            File.WriteAllText(primary, "{broken");
+        else
+            File.Delete(primary);
+        Assert.AreEqual("", new JotCaptureDraftService(directory.Path).Load(out _).Text);
+        Assert.AreEqual("durably submitted", content.LoadItems().Items.Single().Details);
+    });
+
     private sealed class ControlledJotsContentService : IJotsContentService
     {
         internal int LoadCalls { get; private set; }

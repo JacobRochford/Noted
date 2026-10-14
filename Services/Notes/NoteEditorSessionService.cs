@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 
 namespace Noted.Services;
 
@@ -65,6 +66,7 @@ public sealed class NoteEditorSessionService : INoteEditorSessionService
     public string? Save(NoteEditorSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
+        ValidateSession(session);
         if (_writesBlocked)
         {
             throw new IOException(
@@ -135,16 +137,28 @@ public sealed class NoteEditorSessionService : INoteEditorSessionService
             return new SessionReadResult(path, result.Status, null, "The note editor session file could not be read or is invalid.");
 
         var session = result.Value!;
-        if (session.Tabs is null)
+        try
+        {
+            ValidateSession(session);
+        }
+        catch (JsonException ex)
         {
             return new SessionReadResult(
                 path,
                 JsonFileReadStatus.Corrupt,
                 null,
-                "The session does not contain a tab list.");
+                ex.Message);
         }
 
         return new SessionReadResult(path, JsonFileReadStatus.Success, session, null);
+    }
+
+    internal static void ValidateSession(NoteEditorSession session)
+    {
+        if (session.Tabs is null)
+            throw new JsonException("The editor session does not contain a tab list.");
+        if (session.Tabs.Any(tab => tab is null))
+            throw new JsonException("The editor session contains an empty tab.");
     }
 
     private static string? PreserveCorruptFile(

@@ -20,6 +20,7 @@ internal sealed class JotCaptureViewModel : ObservableObject, IDisposable
         _workspace = workspace;
         _draftService = draftService;
         _draft = draftService.Load(out _error);
+        RecoveryIssuesFoundThisRun = !string.IsNullOrWhiteSpace(_error);
         _draftScheduler = new SaveScheduler<JotCaptureDraft>(dispatcher,
             TimeSpan.FromMilliseconds(400), TimeSpan.FromSeconds(2), SaveDraft);
     }
@@ -39,6 +40,7 @@ internal sealed class JotCaptureViewModel : ObservableObject, IDisposable
 
     public string? Error { get => _error; private set => SetProperty(ref _error, value); }
     public bool IsReadOnly => _savedAwaitingClear;
+    internal bool RecoveryIssuesFoundThisRun { get; }
 
     internal bool TrySave()
     {

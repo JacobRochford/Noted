@@ -30,6 +30,7 @@ public partial class App : Application
     private IDisposable? _checklistBackupRegistration;
     private IDisposable? _dictionaryBackupRegistration;
     private IDisposable? _jotsBackupRegistration;
+    private IDisposable? _jotCaptureBackupRegistration;
     private JotsWorkspace? _jotsWorkspace;
     private IDisposable? _scratchpadBackupRegistration;
     private readonly Dictionary<Guid, IDisposable> _miniPadBackupRegistrations = [];
@@ -278,6 +279,8 @@ public partial class App : Application
             _dictionaryBackupRegistration = null;
             _jotsBackupRegistration?.Dispose();
             _jotsBackupRegistration = null;
+            _jotCaptureBackupRegistration?.Dispose();
+            _jotCaptureBackupRegistration = null;
             _jotsWorkspace?.Dispose();
             _jotsWorkspace = null;
             _scratchpadBackupRegistration?.Dispose();
@@ -457,8 +460,19 @@ public partial class App : Application
             return WindowManager.JotCapture;
         var settings = _settingsService
             ?? throw new InvalidOperationException("Application settings are not initialized.");
-        return new JotCaptureWindow(new JotCaptureViewModel(GetOrCreateJotsWorkspace(),
-            new JotCaptureDraftService(settings.AppDataDirectory), Dispatcher));
+        var viewModel = new JotCaptureViewModel(GetOrCreateJotsWorkspace(),
+            new JotCaptureDraftService(settings.AppDataDirectory), Dispatcher);
+        var window = new JotCaptureWindow(viewModel);
+        var backupCoordinator = _backupCoordinator
+            ?? throw new InvalidOperationException("Backup coordination is not initialized.");
+        _jotCaptureBackupRegistration = backupCoordinator.RegisterPreparationParticipant(
+            "Quick Jot", BackupPreparationPhase.BeforeSharedFlush,
+            () => CreatePersistenceSaveResult(window.TryFlushDraft(out var error), error,
+                "The Quick Jot draft could not be saved."),
+            () => viewModel.Error,
+            () => viewModel.RecoveryIssuesFoundThisRun,
+            "Quick Jot recovery reported a problem during this application run.");
+        return window;
     }
 
     private JotsWindow? CreateSavedJotWindow(Guid id)

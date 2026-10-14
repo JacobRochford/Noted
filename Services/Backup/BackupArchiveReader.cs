@@ -309,6 +309,9 @@ internal sealed class BackupArchiveReader
                 {
                     return InvalidBackup(backupType, path, $"The backup file '{entry.LogicalPath}' failed hash verification.");
                 }
+                var definition = BackupContentDefinitions.Find(NormalizeLogicalPath(entry.LogicalPath));
+                if (definition?.Content is FixedBackupContent.EditorSession or FixedBackupContent.JotCapture)
+                    ValidateFixedFile(definition.Content, bytes);
             }
 
             var actualPaths = EnumerateFilesWithoutLinks(filesDirectory)

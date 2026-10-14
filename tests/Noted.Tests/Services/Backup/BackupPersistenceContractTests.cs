@@ -30,8 +30,8 @@ public sealed class BackupPersistenceContractTests
         using var directory = new TemporaryTestDirectory();
         WriteSource(directory);
         var entries = new BackupContentCatalog(directory.File("app"), directory.File("notes"), directory.File("app", "full-snapshots")).Collect();
-        Assert.HasCount(7, entries);
-        Assert.HasCount(7, BackupContentDefinitions.FixedFiles);
+        Assert.HasCount(8, entries);
+        Assert.HasCount(8, BackupContentDefinitions.FixedFiles);
         foreach (var historical in s_files)
         {
             var logicalPath = "app/" + historical.Path;
@@ -164,6 +164,7 @@ public sealed class BackupPersistenceContractTests
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, file.Content);
         }
-        File.WriteAllText(directory.File("app", "jot-capture-draft.json"), "[{\"Text\":\"excluded\"}]");
+        File.WriteAllText(directory.File("app", "jot-capture-draft.json"),
+            "[{\"Id\":\"12345678-1234-5678-abcd-0123456789ab\",\"Text\":\"unfinished\"}]");
     }
 }

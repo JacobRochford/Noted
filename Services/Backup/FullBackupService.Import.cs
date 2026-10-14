@@ -214,8 +214,6 @@ internal sealed partial class FullBackupService
         else if (fixedFile?.Content == FixedBackupContent.EditorSession)
         {
             var session = ValidateEditorSession(bytes);
-            if (session.Tabs.Any(tab => tab is null))
-                throw new JsonException("The imported editor session contains an empty tab.");
             var importedSession = session with
             {
                 Tabs = session.Tabs

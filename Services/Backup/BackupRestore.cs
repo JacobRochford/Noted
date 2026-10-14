@@ -1,4 +1,5 @@
 using System.IO;
+using System.Security.Cryptography;
 using System.Text.Json;
 using static Noted.Services.BackupFormat;
 
@@ -91,22 +92,57 @@ internal sealed class BackupRestore
                 ValidateDestination(entry.LogicalPath, manifest);
 
             var filesDirectory = Path.Combine(restorePath, FilesDirectoryName);
+            var retainedDrafts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in manifest.Entries)
+            {
+                if (BackupContentDefinitions.Find(NormalizeLogicalPath(entry.LogicalPath))?.Content != FixedBackupContent.JotCapture)
+                    continue;
+                var bytes = BackupArchiveReader.ReadFileBytes(GetContainedPath(filesDirectory, entry.LogicalPath));
+                BackupArchiveReader.VerifyFileBytes(bytes, entry.Length, entry.Sha256, entry.LogicalPath);
+                if (KeepLocalQuickJotDraft(ValidateDestination(entry.LogicalPath, manifest), bytes))
+                    retainedDrafts.Add(entry.LogicalPath);
+            }
+            var restoredCount = 0;
             foreach (var entry in manifest.Entries
                          .OrderBy(entry => entry.LogicalPath, StringComparer.OrdinalIgnoreCase))
             {
+                if (retainedDrafts.Contains(entry.LogicalPath))
+                    continue;
                 var sourcePath = GetContainedPath(filesDirectory, entry.LogicalPath);
                 var destinationPath = ValidateDestination(entry.LogicalPath, manifest);
                 var bytes = BackupArchiveReader.ReadFileBytes(sourcePath);
                 BackupArchiveReader.VerifyFileBytes(bytes, entry.Length, entry.Sha256, entry.LogicalPath);
                 destinationPath = ValidateDestination(entry.LogicalPath, manifest);
-                FileWriter.WriteAllBytes(destinationPath, bytes);
+                var isQuickJot = BackupContentDefinitions.Find(NormalizeLogicalPath(entry.LogicalPath))?.Content == FixedBackupContent.JotCapture;
+                if (isQuickJot && KeepLocalQuickJotDraft(destinationPath, bytes))
+                {
+                    retainedDrafts.Add(entry.LogicalPath);
+                    continue;
+                }
+                var clearedQuickJot = isQuickJot && string.IsNullOrEmpty(
+                    JotCaptureDraftService.ValidateBackupDraft(bytes)?.Text);
+                if (clearedQuickJot)
+                {
+                    var service = new JotCaptureDraftService(Path.GetDirectoryName(destinationPath)!);
+                    service.Load(out _);
+                    service.Save(JotCaptureDraftService.ValidateBackupDraft(bytes) ?? new());
+                }
+                if (isQuickJot)
+                    FileSystemLinkValidator.ValidatePath($"{destinationPath}.bak");
+                var writeResult = FileWriter.WriteAllBytes(destinationPath, bytes,
+                    isQuickJot && !clearedQuickJot ? $"{destinationPath}.bak" : null);
+                if (writeResult.Warning is not null)
+                    throw new IOException(writeResult.Warning);
                 var restoredBytes = BackupArchiveReader.ReadFileBytes(destinationPath);
                 BackupArchiveReader.VerifyFileBytes(restoredBytes, entry.Length, entry.Sha256, entry.LogicalPath);
+                restoredCount++;
             }
 
             FileSystemLinkValidator.ValidatePath(requestPath);
             FileWriter.DeleteIfExists(requestPath);
-            string? warning = null;
+            string? warning = retainedDrafts.Count > 0
+                ? $"Your unfinished local Quick Jot draft was kept instead of replacing it with the backup's draft. Open Quick Jot to review it. Any different nonempty incoming draft was preserved at '{Path.Combine(_backupDirectory, PersistencePaths.JotCaptureConflictsDirectory)}'."
+                : null;
             if (request.ImportId.HasValue)
             {
                 try
@@ -122,7 +158,8 @@ internal sealed class BackupRestore
                 catch (Exception ex) when (IsExpectedBackupException(ex))
                 {
                     ExceptionDiagnostics.Record(ex);
-                    warning = "The imported backup was restored, but its temporary local copy could not be removed.";
+                    warning = string.Join(" ", new[] { warning,
+                        "The imported backup was restored, but its temporary local copy could not be removed." }.Where(message => message is not null));
                 }
             }
 
@@ -131,8 +168,8 @@ internal sealed class BackupRestore
                 FullBackupType.User,
                 restorePath,
                 request.ImportId.HasValue
-                    ? $"Restored {manifest.Entries.Count} files from the imported backup. Your user backup was not changed."
-                    : $"Restored {manifest.Entries.Count} files from your verified backup. The backup was not changed.",
+                    ? $"Restored {restoredCount} files from the imported backup. Your user backup was not changed."
+                    : $"Restored {restoredCount} files from your verified backup. The backup was not changed.",
                 warning);
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
@@ -144,6 +181,38 @@ internal sealed class BackupRestore
                 null,
                 "The backup restore did not finish. The backup and restore request were left unchanged so Noted can retry.");
         }
+    }
+
+    private bool KeepLocalQuickJotDraft(string destinationPath, byte[] bytes)
+    {
+        var incoming = JotCaptureDraftService.ValidateBackupDraft(bytes);
+        var service = new JotCaptureDraftService(Path.GetDirectoryName(destinationPath)!);
+        var current = service.Load(out var recoveryWarning);
+        if (service.WritesBlocked)
+            throw new IOException("The local Quick Jot draft could not be recovered safely.");
+        if (string.IsNullOrEmpty(current.Text) || current == incoming)
+            return false;
+
+        // keep recovered text at the primary path before other restore writes begin.
+        if (recoveryWarning is not null)
+        {
+            var warning = service.Save(current);
+            if (warning is not null)
+                throw new IOException(warning);
+        }
+        if (incoming is not null && incoming.Text.Length > 0)
+        {
+            var conflictPath = Path.Combine(_backupDirectory, PersistencePaths.JotCaptureConflictsDirectory,
+                $"{incoming.Id:N}-{Convert.ToHexString(SHA256.HashData(bytes))}.json");
+            FileSystemLinkValidator.ValidatePath(conflictPath);
+            if (!File.Exists(conflictPath))
+                FileWriter.WriteAllBytes(conflictPath, bytes);
+            var preserved = BackupArchiveReader.ReadFileBytes(conflictPath);
+            if (!preserved.AsSpan().SequenceEqual(bytes))
+                throw new FileVerificationException("The conflicting Quick Jot draft could not be preserved.");
+            JotCaptureDraftService.ValidateBackupDraft(preserved);
+        }
+        return true;
     }
 
     private string ValidateDestination(string logicalPath, FullBackupManifest manifest)

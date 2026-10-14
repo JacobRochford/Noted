@@ -58,6 +58,11 @@ internal sealed class BackupContentCatalog
     {
         var sourcePath = Path.Combine(_appDataDirectory, definition.RelativePath);
         FileSystemLinkValidator.ValidatePath(sourcePath);
+        if (definition.Content == FixedBackupContent.JotCapture && !File.Exists(sourcePath))
+        {
+            sourcePath += ".bak";
+            FileSystemLinkValidator.ValidatePath(sourcePath);
+        }
         if (!File.Exists(sourcePath))
             return;
 
@@ -81,6 +86,9 @@ internal sealed class BackupContentCatalog
                 return new BackupContentDetails(ValidateCollection<List<DictionaryItemState>>(bytes).Count, null);
             case FixedBackupContent.Jots:
                 return new BackupContentDetails(ValidateCollection<List<JotItemState>>(bytes).Count, null);
+            case FixedBackupContent.JotCapture:
+                var draft = JotCaptureDraftService.ValidateBackupDraft(bytes);
+                return new BackupContentDetails(null, draft?.Text.Length ?? 0);
             case FixedBackupContent.Scratchpad:
                 return new BackupContentDetails(null, bytes.LongLength);
             case FixedBackupContent.EditorSession:
@@ -263,8 +271,7 @@ internal sealed class BackupContentCatalog
     {
         var session = JsonSerializer.Deserialize<NoteEditorSession>(bytes)
             ?? throw new JsonException("The editor session contains no value.");
-        if (session.Tabs is null)
-            throw new JsonException("The editor session does not contain a tab list.");
+        NoteEditorSessionService.ValidateSession(session);
         return session;
     }
 

@@ -13,6 +13,7 @@ internal static class PersistencePaths
     internal const string DictionaryFile = "dictionary.json";
     internal const string JotsFile = "jots.json";
     internal const string JotCaptureDraftFile = "jot-capture-draft.json";
+    internal const string JotCaptureConflictsDirectory = "quick-jot-conflicts";
     internal const string ScratchpadFile = "scratchpad.rtf";
     internal const string SessionDirectory = "session";
     internal const string EditorSessionFile = "editor-workspace.json";

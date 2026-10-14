@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 
 namespace Noted.Services;
 
@@ -16,16 +17,21 @@ internal sealed class JsonCollectionFileStore<TItem>
     private readonly string _primaryFilePath;
     private readonly string _backupFilePath;
     private readonly string _contentName;
+    private readonly Action<IReadOnlyList<TItem>>? _validateItems;
     private bool _preserveBackupOnNextSave;
     private bool _writesBlocked;
 
-    internal JsonCollectionFileStore(string filePath, string contentName)
+    internal bool WritesBlocked => _writesBlocked;
+
+    internal JsonCollectionFileStore(string filePath, string contentName,
+        Action<IReadOnlyList<TItem>>? validateItems = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(contentName);
         _primaryFilePath = Path.GetFullPath(filePath);
         _backupFilePath = $"{_primaryFilePath}.bak";
         _contentName = contentName;
+        _validateItems = validateItems;
     }
 
     internal JsonCollectionFileLoadResult<TItem> Load()
@@ -73,9 +79,10 @@ internal sealed class JsonCollectionFileStore<TItem>
         return new JsonCollectionFileLoadResult<TItem>(null, issues);
     }
 
-    internal string? Write(IReadOnlyList<TItem> items)
+    internal string? Write(IReadOnlyList<TItem> items, bool updateBackup = true)
     {
         ArgumentNullException.ThrowIfNull(items);
+        _validateItems?.Invoke(items);
         if (_writesBlocked)
         {
             throw new IOException(
@@ -88,7 +95,7 @@ internal sealed class JsonCollectionFileStore<TItem>
             writeResult = JsonFileStore.Write(
                 _primaryFilePath,
                 items.ToList(),
-                _preserveBackupOnNextSave ? null : _backupFilePath);
+                _preserveBackupOnNextSave || !updateBackup ? null : _backupFilePath);
         }
         catch (FileVerificationException)
         {
@@ -108,7 +115,7 @@ internal sealed class JsonCollectionFileStore<TItem>
         return writeResult.Warning;
     }
 
-    private static ItemReadResult ReadItems(string path)
+    private ItemReadResult ReadItems(string path)
     {
         var result = JsonFileStore.Read<List<TItem>>(path);
         if (!result.Success)
@@ -120,6 +127,15 @@ internal sealed class JsonCollectionFileStore<TItem>
                 JsonFileReadStatus.Corrupt,
                 null,
                 "The content file contains an empty item.");
+        }
+
+        try
+        {
+            _validateItems?.Invoke(result.Value!);
+        }
+        catch (JsonException ex)
+        {
+            return new ItemReadResult(path, JsonFileReadStatus.Corrupt, null, ex.Message, ex);
         }
 
         return new ItemReadResult(path, JsonFileReadStatus.Success, result.Value, null);
