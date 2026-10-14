@@ -1,6 +1,6 @@
 # Noted.
 
-Noted is a Windows-only .NET 9 WPF utility app. It has a floating Notes button, organizes [supported text-based files](#supported-file-types) in folders, and includes a tabbed editor with recovery and Markdown preview. It also includes Checklist, Dictionary, Scratchpad, and MiniPad.
+Noted is a Windows-only .NET 9 WPF utility app. It has a floating Notes button, organizes [supported text-based files](#supported-file-types) in folders, and includes a tabbed editor with recovery and Markdown preview. It also includes Checklist, Dictionary, Jots, Quick Jot, Scratchpad, and MiniPad.
 
 ## Notes and folders
 
@@ -22,17 +22,20 @@ Choose how new notes are created:
 
 - Notes open in the built-in tabbed editor.
 - Noted saves recovery copies of unsaved changes. Restoring the previous editor session can be turned off in Settings.
-- Use `Ctrl+F` to find text and `Ctrl+H` to find and replace. Search highlights all matches and supports case-sensitive matching.
+- Use `Ctrl+F` to find text and `Ctrl+H` to find and replace. Search highlights all matches and supports case-sensitive matching, whole-word matching, and regular expressions.
 - The View menu controls line numbers, scroll speed, Word Wrap, Markdown preview, tab visibility, and whether tabs reopen on startup.
 - Press `Ctrl+Shift+V` to toggle Markdown preview.
 - Press `Ctrl+S` to save the active note.
+- Use Format JSON or Minify JSON from the Edit menu to format JSON text.
 
 ## Built-in tools
 
 - **Checklist** saves checklist items locally.
 - **Dictionary** saves terms and definitions locally.
+- **Jots** saves short text entries locally, with a collection window and separate windows for individual jots.
+- **Quick Jot** opens a capture window with `Alt+J`. Press `Enter` to save to Jots or `Shift+Enter` to insert a newline. Unfinished text is saved locally for recovery.
 - **Scratchpad** is a lightweight rich-text editor that saves its contents locally before it is hidden or closed.
-- **MiniPad** opens one compact plain-text window with find and Word Wrap controls. It saves its content locally and restores its previous visibility on startup.
+- **MiniPad** supports up to five independent compact plain-text windows with find and Word Wrap controls. Each saves its content locally, and windows marked to reopen are restored on startup.
 
 ## Hotkeys and visibility
 
@@ -40,16 +43,24 @@ Default hotkeys:
 
 | Action | Hotkey |
 | --- | --- |
-| Show or hide Noted | `Ctrl+Shift+Space` |
+| Show or hide Noted | `Alt+N` |
 | Show or hide Checklist | `Alt+C` |
 | Show or hide Dictionary | `Alt+D` |
-| Show or hide MiniPad | `Alt+M` |
+| Show MiniPad | `Alt+M` |
+| Show or hide Note Editor | `Alt+E` |
+| Open Quick Jot | `Alt+J` |
+| Show or hide Scratchpad | `Alt+S` |
+| Show or hide Jots collection | `Alt+Shift+J` |
 
-The Notes hotkey hides Notes, Checklist, Dictionary, Scratchpad, MiniPad, and the editor together. Pressing it again restores the same windows that were visible before they were hidden.
+These shortcuts can be changed or disabled in Settings. If a shortcut is unavailable, Noted may use a fallback for that session and show a warning.
 
-By default, the Notes List's Hide button also hides the editor, Checklist, Dictionary, Scratchpad, and MiniPad. This can be changed in Settings.
-Clicking outside Notes or pressing `Esc` hides Notes and the editor. 
-The notification-area icon provides Show/Hide Notes, Settings, and Exit commands.
+The Notes hotkey hides Notes, Checklist, Dictionary, the Jots collection and individual jot windows, Scratchpad, MiniPads, and the editor together. Pressing it again restores the same windows that were visible before they were hidden.
+
+The MiniPad hotkey shows the most recently active MiniPad or creates one if none is open. Use New MiniPad in a MiniPad window to open another.
+
+By default, the Notes List's Hide button hides the same group of windows. This can be changed in Settings.
+Clicking the overlay outside the Notes panel and floating button, or pressing `Esc` while the Notes panel has keyboard focus, hides Notes and the editor.
+The notification-area icon provides Show/Hide Notes, Restore Window Positions, Settings, and Exit commands.
 
 
 ## Download and run
@@ -68,13 +79,14 @@ Settings include:
 - how new notes are created and whether they include a timestamp
 - modified-time subtitles and deletion confirmation
 - inline or drill-down folders
-- Notes, Checklist, and Dictionary hotkeys
+- global hotkeys for Notes, Checklist, Dictionary, MiniPad, Note Editor, Quick Jot, Scratchpad, and Jots
 - whether Noted starts with Windows
 - whether the Notes Hide button also hides the other windows
 - whether the previous editor session reopens
 - display choice, ghost mode, and opacity
+- local backup creation, preview, restore, export, and import
 
-Noted stores its settings, window layouts, editor session, Scratchpad content, recovery data, and local backups under `%LocalAppData%\Noted`. Notes stay in the folder you choose.
+Noted stores its settings, window layouts, editor session, Checklist, Dictionary, Jots, Scratchpad content, recovery data, and local backups under `%LocalAppData%\Noted`. Notes stay in the folder you choose. Backups can be exported as `.notedbackup` files to an external destination and imported from Settings.
 
 ## Requirements
 
@@ -97,8 +109,8 @@ You can also open `Noted.sln` in Visual Studio 2022 17.12 or later.
 
 Noted uses one WPF application project and one MSTest project. `App.xaml.cs` composes the application and coordinates startup. Runtime responsibilities are separated into focused areas:
 
-- `Views` contains WPF windows, dialogs, and interaction code; `ViewModels` contains presentation state for the Notes list, Settings, Checklist, Dictionary, and Scratchpad.
-- `Models` groups persisted state and domain models for notes, settings, windows, Checklist, and Dictionary.
+- `Views` contains WPF windows, dialogs, and interaction code; `ViewModels` contains presentation state for the Notes list, Settings, Checklist, Dictionary, Jots, Quick Jot, and Scratchpad.
+- `Models` groups persisted state and domain models for notes, settings, windows, Checklist, Dictionary, and Jots.
 - `Services` is organized by responsibility: application lifecycle, backup and restore, built-in tool content, notes and editor persistence, shared persistence primitives, settings, and window integration.
 - `Search` contains the shared text-search session, presenter, viewport rules, and highlight overlay used by searchable editors.
 - `Helpers` contains focused WPF and formatting helpers. `tests/Noted.Tests` mirrors these areas for automated tests.
@@ -113,22 +125,20 @@ Run the automated tests with:
 dotnet test tests/Noted.Tests/Noted.Tests.csproj
 ```
 
-The project currently has 356 automated test cases. UI and window behavior still require manual testing on Windows.
-
 ## Basic use
 
 1. Start Noted.
-2. Click the floating Notes button or press `Ctrl+Shift+Space`.
+2. Click the floating Notes button or press `Alt+N` with the default hotkeys.
 3. Create a note with Prompt, Quick, or Both, depending on your setting.
 4. Select a note, then press `Enter` or choose **Open** to open it in the built-in editor.
 5. Use folders, search, rename, and delete actions to organize notes.
-6. Open Checklist, Dictionary, Scratchpad, or MiniPad from the utility menu when needed.
+6. Open Checklist, Dictionary, Jots, Scratchpad, or MiniPad from the utility menu when needed. Press `Alt+J` to capture a Quick Jot with the default hotkeys.
 
 ## Limitations
 
 - Noted only runs on Windows because it uses WPF and Win32 APIs.
 - Only text-based files with [supported extensions](#supported-file-types) can be used as notes.
-- Settings, recovery data, and backups are local to the same computer. Noted has no cloud sync or off-device backup.
+- Settings, recovery data, and automatic backups are stored locally. Noted has no built-in cloud sync or automatic off-device backup; exported `.notedbackup` files can be stored elsewhere.
 
 ## License
 
@@ -145,4 +155,4 @@ Noted recognizes these file extensions, case-insensitively:
 
 The authoritative list is [NoteFileExtensions.SupportedExtensions](Services/Notes/NoteFileExtensions.cs).
 
-These extensions provide text editing support. Noted does not execute code or provide format-specific tooling for them.
+These extensions provide text editing support. Noted does not execute code. It includes Markdown preview and JSON formatting and minification.
