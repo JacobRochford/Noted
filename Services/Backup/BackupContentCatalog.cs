@@ -32,7 +32,8 @@ internal sealed class BackupContentCatalog
 
     internal IReadOnlyList<BackupSourceEntry> Collect(
         out IReadOnlySet<string> selectedNotePaths,
-        out int externalDocumentCount)
+        out int externalDocumentCount,
+        bool includeNotes = true)
     {
         FileSystemLinkValidator.ValidateDirectory(_appDataDirectory);
         FileSystemLinkValidator.ValidateWithinRoot(_notesDirectory, _notesDirectory);
@@ -50,7 +51,10 @@ internal sealed class BackupContentCatalog
         AddNoteRecoveryFiles(sources);
         AddNoteHistoryFiles(sources);
         AddDeletedNotes(sources);
-        AddNotes(sources, session, out selectedNotePaths, out externalDocumentCount);
+        selectedNotePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        externalDocumentCount = 0;
+        if (includeNotes)
+            AddNotes(sources, session, out selectedNotePaths, out externalDocumentCount);
 
         var duplicate = sources
             .GroupBy(source => source.LogicalPath, StringComparer.OrdinalIgnoreCase)
@@ -273,10 +277,11 @@ internal sealed class BackupContentCatalog
     private BackupSourceEntry CreateSourceEntry(
         string logicalPath,
         string sourcePath,
-        Func<byte[], BackupContentDetails> validator)
+        Func<byte[], BackupContentDetails> validator,
+        string? notesDirectory = null)
     {
         var readPath = logicalPath.StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase)
-            ? FileSystemLinkValidator.ValidateWithinRoot(_notesDirectory, sourcePath)
+            ? FileSystemLinkValidator.ValidateWithinRoot(notesDirectory ?? _notesDirectory, sourcePath)
             : sourcePath;
         var bytes = ReadFileBytes(readPath);
         var details = validator(bytes);
@@ -287,6 +292,23 @@ internal sealed class BackupContentCatalog
             Convert.ToHexString(SHA256.HashData(bytes)),
             details.ItemCount,
             details.ContentLength);
+    }
+
+    internal BackupSourceEntry? CaptureRestoreDestination(string logicalPath, string destination, string notesRoot)
+    {
+        try
+        {
+            if ((File.GetAttributes(destination) & FileAttributes.Directory) != 0)
+                throw new IOException($"The restore destination '{destination}' is a directory.");
+        }
+        catch (FileNotFoundException) { return null; }
+        catch (DirectoryNotFoundException) { return null; }
+
+        var definition = BackupContentDefinitions.Find(logicalPath);
+        return CreateSourceEntry(logicalPath, destination,
+            bytes => definition is null
+                ? new BackupContentDetails(null, bytes.LongLength)
+                : ValidateFixedFile(definition.Content, bytes), notesRoot);
     }
 
     internal static BackupContentDetails ValidateSettings(byte[] bytes)

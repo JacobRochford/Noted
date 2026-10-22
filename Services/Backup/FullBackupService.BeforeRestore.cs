@@ -7,7 +7,47 @@ internal sealed partial class FullBackupService
 {
     private const int BeforeRestoreBackupLimit = 3;
 
-    internal FullBackupResult CreateBeforeRestoreBackup()
+    internal BackupRestorePreparationResult PrepareBackupRestore(
+        string? archivePath, Guid? expectedBackupId, string? verificationToken)
+    {
+        try
+        {
+            FullBackupManifest incoming;
+            if (archivePath is null)
+            {
+                var backup = _archiveReader.ReadBackup(GetBackupPath(FullBackupType.User), FullBackupType.User);
+                if (backup.Status != BackupReadStatus.Valid)
+                    throw new InvalidDataException("The user backup could not be verified before protecting restore destinations.");
+                incoming = backup.Manifest!;
+            }
+            else
+            {
+                var archive = _archiveReader.ReadBackupArchive(archivePath);
+                if (archive.Manifest.BackupId != expectedBackupId ||
+                    !string.Equals(archive.ManifestHash, verificationToken, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("The imported backup changed after it was previewed.");
+                incoming = CreateImportedManifest(archive.Manifest, archive.Manifest.BackupId,
+                    _archiveReader.InspectImportedFiles(archive));
+            }
+
+            var protection = CreateBeforeRestoreBackup(incoming);
+            if (protection.Status is not (FullBackupStatus.Created or FullBackupStatus.Skipped))
+                return new BackupRestorePreparationResult(protection, null);
+            var scheduled = archivePath is null
+                ? ScheduleUserBackupRestore(incoming)
+                : ScheduleBackupImportRestore(archivePath, expectedBackupId!.Value, verificationToken!);
+            return new BackupRestorePreparationResult(protection, scheduled);
+        }
+        catch (Exception ex) when (IsExpectedBackupException(ex))
+        {
+            ExceptionDiagnostics.Record(ex);
+            return new BackupRestorePreparationResult(new FullBackupResult(
+                FullBackupStatus.Failed, FullBackupType.BeforeRestore, null,
+                "Restore destinations could not be verified and protected. Nothing was scheduled."), null);
+        }
+    }
+
+    internal FullBackupResult CreateBeforeRestoreBackup(FullBackupManifest? incoming = null)
     {
         try
         {
@@ -22,7 +62,27 @@ internal sealed partial class FullBackupService
                     string.Join(", ", interruptedWork.Select(Path.GetFileName)));
             }
 
-            var currentFiles = _contentCatalog.Collect();
+            var notesRoot = incoming?.NotesRoot ?? _notesDirectory;
+            // a restore targets one notes root; documents in a different current root are not overwritten.
+            var currentFiles = _contentCatalog.Collect(out _, out _,
+                includeNotes: PathsEqual(notesRoot, _notesDirectory)).ToList();
+            if (incoming is not null)
+            {
+                var capturedPaths = currentFiles.ToDictionary(file => file.LogicalPath, StringComparer.OrdinalIgnoreCase);
+                foreach (var entry in incoming.Entries)
+                {
+                    var logicalPath = MiniPadStorage.NormalizeBackupPath(NormalizeLogicalPath(entry.LogicalPath));
+                    var destination = _backupRestore.ValidateDestination(logicalPath, incoming);
+                    if (capturedPaths.ContainsKey(logicalPath))
+                        continue;
+                    var source = _contentCatalog.CaptureRestoreDestination(logicalPath, destination, notesRoot);
+                    if (source is not null)
+                    {
+                        capturedPaths.Add(logicalPath, source);
+                        currentFiles.Add(source);
+                    }
+                }
+            }
             if (currentFiles.Count == 0)
             {
                 return new FullBackupResult(
@@ -32,7 +92,7 @@ internal sealed partial class FullBackupService
                     "There is no current Noted data to protect before restoration.");
             }
 
-            var build = _archiveWriter.BuildVerifiedBackup(FullBackupType.BeforeRestore, currentFiles);
+            var build = _archiveWriter.BuildVerifiedBackup(FullBackupType.BeforeRestore, currentFiles, notesRoot);
             var backupPath = Path.Combine(
                 _backupDirectory,
                 $"{BeforeRestoreDirectoryPrefix}{_clock.GetUtcNow().UtcDateTime:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}");

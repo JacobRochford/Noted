@@ -41,8 +41,10 @@ internal sealed class BackupArchiveWriter
 
     internal BackupBuildResult BuildVerifiedBackup(
         FullBackupType backupType,
-        IReadOnlyList<BackupSourceEntry> backupFiles)
+        IReadOnlyList<BackupSourceEntry> backupFiles,
+        string? notesDirectory = null)
     {
+        var notesRoot = Path.GetFullPath(notesDirectory ?? _notesDirectory);
         FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
         Directory.CreateDirectory(_backupDirectory);
         var buildPath = Path.Combine(_backupDirectory, $"{BuildingDirectoryPrefix}{Guid.NewGuid():N}");
@@ -57,7 +59,7 @@ internal sealed class BackupArchiveWriter
             var destinationPath = GetContainedPath(filesDirectory, source.LogicalPath);
             FileSystemLinkValidator.ValidateDirectory(Path.GetDirectoryName(destinationPath)!);
             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-            CopyAndVerify(source, destinationPath);
+            CopyAndVerify(source, destinationPath, notesRoot);
         }
 
         var manifest = new FullBackupManifest(
@@ -66,7 +68,7 @@ internal sealed class BackupArchiveWriter
             backupType,
             _clock.GetUtcNow().UtcDateTime,
             _appDataDirectory,
-            _notesDirectory,
+            notesRoot,
             backupFiles.Select(source => source.ToManifestEntry()).ToList());
         JsonFileStore.Write(
             Path.Combine(buildPath, ManifestFileName),
@@ -205,10 +207,10 @@ internal sealed class BackupArchiveWriter
         }
     }
 
-    private void CopyAndVerify(BackupSourceEntry source, string destinationPath)
+    private static void CopyAndVerify(BackupSourceEntry source, string destinationPath, string notesRoot)
     {
         var readPath = source.LogicalPath.StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase)
-            ? FileSystemLinkValidator.ValidateWithinRoot(_notesDirectory, source.SourcePath)
+            ? FileSystemLinkValidator.ValidateWithinRoot(notesRoot, source.SourcePath)
             : source.SourcePath;
         FileSystemLinkValidator.ValidatePath(readPath);
         FileSystemLinkValidator.ValidatePath(destinationPath);

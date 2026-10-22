@@ -228,6 +228,19 @@ public sealed class BackupSelectionTests
         Assert.ThrowsExactly<IOException>(() => catalog.Collect());
     }
 
+    [TestMethod]
+    public void RestoreCaptureDistinguishesMissingFromUnreadableDestinations()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var catalog = CreateCatalog(directory);
+        var note = directory.File("notes", "one.txt");
+        Assert.IsNull(catalog.CaptureRestoreDestination("notes/one.txt", note, directory.File("notes")));
+        Write(note, "current saved contents");
+        Assert.IsNotNull(catalog.CaptureRestoreDestination("notes/one.txt", note, directory.File("notes")));
+        using var locked = new FileStream(note, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        Assert.ThrowsExactly<IOException>(() => catalog.CaptureRestoreDestination("notes/one.txt", note, directory.File("notes")));
+    }
+
     private static BackupContentCatalog CreateCatalog(TemporaryTestDirectory directory)
     {
         Directory.CreateDirectory(directory.File("notes"));

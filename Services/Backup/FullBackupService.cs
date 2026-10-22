@@ -170,7 +170,7 @@ internal sealed partial class FullBackupService
         return CreateBackup(FullBackupType.Recent, minimumAge);
     }
 
-    internal FullBackupResult ScheduleUserBackupRestore()
+    internal FullBackupResult ScheduleUserBackupRestore(FullBackupManifest? expectedManifest = null)
     {
         try
         {
@@ -198,6 +198,11 @@ internal sealed partial class FullBackupService
                     userBackupPath,
                     explanation);
             }
+
+            if (expectedManifest is not null &&
+                JsonSerializer.Serialize(userBackup.Manifest, BackupFormat.JsonOptions) !=
+                JsonSerializer.Serialize(expectedManifest, BackupFormat.JsonOptions))
+                throw new InvalidDataException("The user backup changed after its restore destinations were protected.");
 
             FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
             Directory.CreateDirectory(_backupDirectory);

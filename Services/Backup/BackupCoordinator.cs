@@ -155,19 +155,7 @@ internal sealed class BackupCoordinator
             throw new InvalidOperationException("No backup restore has been requested.");
 
         SynchronizeNotesDirectory();
-        var protectionResult = _service.CreateBeforeRestoreBackup();
-        if (protectionResult.Status is not (FullBackupStatus.Created or FullBackupStatus.Skipped))
-            return new BackupRestorePreparationResult(protectionResult, null);
-
-        var scheduleResult = request.ArchivePath is not null &&
-                             request.BackupId.HasValue &&
-                             request.VerificationToken is not null
-            ? _service.ScheduleBackupImportRestore(
-                request.ArchivePath,
-                request.BackupId.Value,
-                request.VerificationToken)
-            : _service.ScheduleUserBackupRestore();
-        return new BackupRestorePreparationResult(protectionResult, scheduleResult);
+        return _service.PrepareBackupRestore(request.ArchivePath, request.BackupId, request.VerificationToken);
     }
 
     internal void CancelRequestedRestore()

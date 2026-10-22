@@ -12,6 +12,37 @@ namespace Noted.Tests.Services;
 public sealed class MiniPadBackupCompatibilityTests
 {
     [TestMethod]
+    [DataRow("micro-scratchpads")]
+    [DataRow("minipads")]
+    public void RestorePreparationProtectsUnregisteredMiniPadAtTheCanonicalDestination(string folder)
+    {
+        using var directory = new TemporaryTestDirectory();
+        var app = directory.File("app");
+        var notes = directory.File("notes");
+        Directory.CreateDirectory(notes);
+        BackupTestSession.Save(app);
+        File.WriteAllText(Path.Combine(app, "settings.json"), "{\"MiniPadWindows\":{}}");
+        var id = Guid.NewGuid();
+        var service = new FullBackupService(app, notes);
+        WriteSnapshot(Path.Combine(service.BackupDirectory, "protected"), app, notes,
+            new() { [$"app/recovery/{folder}/{id:N}.json"] = DraftBytes(id, "historical text") });
+        new MiniPadRecoveryService(app, id).SaveDraft("current unregistered text");
+        var canonical = Path.Combine("recovery", "minipads", $"{id:N}.json");
+        var currentBytes = File.ReadAllBytes(Path.Combine(app, canonical));
+        Assert.IsFalse(new BackupContentCatalog(app, notes, service.BackupDirectory).Collect()
+            .Any(file => file.SourcePath == Path.Combine(app, canonical)));
+
+        var prepared = service.PrepareBackupRestore(null, null, null);
+
+        Assert.IsTrue(prepared.Success, prepared.ProtectionResult.Message);
+        CollectionAssert.AreEqual(currentBytes,
+            File.ReadAllBytes(Path.Combine(prepared.ProtectionResult.BackupPath!, "files", "app", canonical)));
+        Assert.AreEqual(1, Directory.GetDirectories(service.BackupDirectory, "before-restore-*").Length);
+        Assert.AreEqual(FullBackupStatus.Restored, service.ApplyPendingUserBackupRestore().Status);
+        Assert.AreEqual("historical text", new MiniPadRecoveryService(app, id).LoadDraft().Draft!.Content);
+    }
+
+    [TestMethod]
     [DataRow("micro-scratchpads", false)]
     [DataRow("minipads", false)]
     [DataRow("micro-scratchpads", true)]

@@ -215,7 +215,7 @@ internal sealed class BackupRestore
         return true;
     }
 
-    private string ValidateDestination(string logicalPath, FullBackupManifest manifest)
+    internal string ValidateDestination(string logicalPath, FullBackupManifest manifest)
     {
         var destination = _getRestoreDestination(logicalPath, manifest);
         if (BackupFormat.NormalizeLogicalPath(logicalPath).StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase))
