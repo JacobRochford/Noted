@@ -399,22 +399,16 @@ public sealed partial class FullBackupServiceTests
     {
         using var directory = new TemporaryTestDirectory();
         var paths = CreateSourceData(directory);
-        WriteJson(
-            Path.Combine(paths.AppData, "session", "editor-workspace.json"),
-            new NoteEditorSession
-            {
-                Tabs =
-                [
-                    new NoteEditorTabState
-                    {
-                        FilePath = Path.Combine(paths.Notes, "unsupported.exe")
-                    }
-                ]
-            });
         var service = new FullBackupService(paths.AppData, paths.Notes);
         Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
         var exportPath = directory.File("unsupported-session.notedbackup");
         Assert.IsTrue(service.ExportUserBackup(exportPath).Success);
+
+        ReplaceArchiveFile(exportPath, "app/session/editor-workspace.json",
+            JsonSerializer.SerializeToUtf8Bytes(new NoteEditorSession
+            {
+                Tabs = [new NoteEditorTabState { FilePath = Path.Combine(paths.Notes, "unsupported.exe") }]
+            }));
 
         var preview = service.GetBackupImportPreview(exportPath);
 

@@ -25,6 +25,8 @@ public sealed class FileSystemLinkBackupReadTests
         File.WriteAllText(Path.Combine(outside, "sentinel.txt"), "sentinel");
         var linkPath = relative.StartsWith("notes/") ? directory.File(relative) : Path.Combine(app, relative);
         using var link = new TestFileSystemLink(linkPath, outside);
+        if (relative.StartsWith("notes/"))
+            BackupTestSession.Save(app, Path.Combine(linkPath, "sentinel.txt"));
         var service = new FullBackupService(app, notes);
 
         Assert.AreEqual(FullBackupStatus.Failed, service.CreateOrUpdateUserBackup().Status);
@@ -64,7 +66,8 @@ public sealed class FileSystemLinkBackupReadTests
         using var link = new TestFileSystemLink(source, sentinel, false);
 
         Assert.IsFalse(service.GetUserBackupInfo().IsValid);
-        var content = service.ReadUserBackupFile(preview.BackupId, preview.Files.Single());
+        var content = service.ReadUserBackupFile(preview.BackupId,
+            preview.Files.Single(file => file.LogicalPath == "notes/one.txt"));
         Assert.IsFalse(content.Success);
         Assert.IsTrue(content.NeedsRecheck);
         CollectionAssert.AreEqual(expected, File.ReadAllBytes(sentinel));
@@ -97,14 +100,15 @@ public sealed class FileSystemLinkBackupReadTests
         var app = directory.File("app");
         Directory.CreateDirectory(app);
         File.WriteAllText(Path.Combine(app, "one.txt"), "saved");
+        BackupTestSession.Save(app, directory.File("notes", "one.txt"));
         using var link = new TestFileSystemLink(directory.File("notes"), app);
         var service = new FullBackupService(app, directory.File("notes"));
         Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
 
         var files = new BackupContentCatalog(app, directory.File("notes"), service.BackupDirectory).Collect();
 
-        Assert.AreEqual(1, files.Count);
-        Assert.AreEqual("notes/one.txt", files.Single().LogicalPath);
+        CollectionAssert.AreEqual(new[] { "app/session/editor-workspace.json", "notes/one.txt" },
+            files.Select(file => file.LogicalPath).ToArray());
     }
 
     [TestMethod]
@@ -132,6 +136,7 @@ public sealed class FileSystemLinkBackupReadTests
     {
         Directory.CreateDirectory(directory.File("notes"));
         File.WriteAllText(directory.File("notes", "one.txt"), "saved");
+        BackupTestSession.Save(directory.File("app"), directory.File("notes", "one.txt"));
         var service = new FullBackupService(directory.File("app"), directory.File("notes"));
         Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
         return service;

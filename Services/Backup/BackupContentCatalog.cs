@@ -28,7 +28,11 @@ internal sealed class BackupContentCatalog
         _notesDirectory = Path.GetFullPath(notesDirectory);
     }
 
-    internal IReadOnlyList<BackupSourceEntry> Collect()
+    internal IReadOnlyList<BackupSourceEntry> Collect() => Collect(out _, out _);
+
+    internal IReadOnlyList<BackupSourceEntry> Collect(
+        out IReadOnlySet<string> selectedNotePaths,
+        out int externalDocumentCount)
     {
         FileSystemLinkValidator.ValidateDirectory(_appDataDirectory);
         FileSystemLinkValidator.ValidateWithinRoot(_notesDirectory, _notesDirectory);
@@ -36,12 +40,17 @@ internal sealed class BackupContentCatalog
             throw new DirectoryNotFoundException($"The notes folder '{_notesDirectory}' could not be found.");
 
         var sources = new List<BackupSourceEntry>();
+        NoteEditorSession? session = null;
         foreach (var definition in BackupContentDefinitions.FixedFiles)
-            AddAppFile(sources, definition);
+        {
+            var capturedSession = AddAppFile(sources, definition);
+            if (capturedSession is not null)
+                session = capturedSession;
+        }
         AddNoteRecoveryFiles(sources);
         AddNoteHistoryFiles(sources);
         AddDeletedNotes(sources);
-        AddNotes(sources);
+        AddNotes(sources, session, out selectedNotePaths, out externalDocumentCount);
 
         var duplicate = sources
             .GroupBy(source => source.LogicalPath, StringComparer.OrdinalIgnoreCase)
@@ -54,22 +63,30 @@ internal sealed class BackupContentCatalog
             .ToList();
     }
 
-    private void AddAppFile(ICollection<BackupSourceEntry> sources, FixedBackupFile definition)
+    private NoteEditorSession? AddAppFile(ICollection<BackupSourceEntry> sources, FixedBackupFile definition)
     {
         var sourcePath = Path.Combine(_appDataDirectory, definition.RelativePath);
         FileSystemLinkValidator.ValidatePath(sourcePath);
-        if (definition.Content == FixedBackupContent.JotCapture && !File.Exists(sourcePath))
+        if (definition.Content == FixedBackupContent.JotCapture && FileSystemLinkValidator.GetAttributes(sourcePath) is null)
         {
             sourcePath += ".bak";
             FileSystemLinkValidator.ValidatePath(sourcePath);
         }
-        if (!File.Exists(sourcePath))
-            return;
+        if (FileSystemLinkValidator.GetAttributes(sourcePath) is null)
+            return null;
 
+        NoteEditorSession? session = null;
         sources.Add(CreateSourceEntry(
             definition.LogicalPath,
             sourcePath,
-            bytes => ValidateFixedFile(definition.Content, bytes)));
+            bytes =>
+            {
+                if (definition.Content != FixedBackupContent.EditorSession)
+                    return ValidateFixedFile(definition.Content, bytes);
+                session = ValidateEditorSession(bytes);
+                return new BackupContentDetails(null, null);
+            }));
+        return session;
     }
 
     internal static BackupContentDetails ValidateFixedFile(FixedBackupContent content, byte[] bytes)
@@ -192,19 +209,65 @@ internal sealed class BackupContentCatalog
         }
     }
 
-    private void AddNotes(ICollection<BackupSourceEntry> sources)
+    private void AddNotes(
+        ICollection<BackupSourceEntry> sources,
+        NoteEditorSession? session,
+        out IReadOnlySet<string> selectedNotePaths,
+        out int externalDocumentCount)
     {
-        foreach (var path in EnumerateFilesWithoutLinks(_notesDirectory, [_backupDirectory], allowRootLinks: true))
+        var selected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var externalPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var tab in session?.Tabs ?? [])
         {
-            if (!NoteFileExtensions.IsSupported(path))
+            if (string.IsNullOrWhiteSpace(tab.FilePath) || !Path.IsPathFullyQualified(tab.FilePath) ||
+                !NoteFileExtensions.IsSupported(tab.FilePath))
+                throw new InvalidDataException("The editor session contains an invalid saved-document path.");
+            var path = Path.GetFullPath(tab.FilePath);
+            if (!IsPathWithin(path, _notesDirectory))
+            {
+                externalPaths.Add(path);
                 continue;
+            }
+            selected[ToLogicalPath(PersistencePaths.NotesBackupRoot, Path.GetRelativePath(_notesDirectory, path))] = path;
+        }
 
-            var relativePath = Path.GetRelativePath(_notesDirectory, path);
+        // establish selection before reading files so a missing open document cannot become an exclusion.
+        selectedNotePaths = selected.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        externalDocumentCount = externalPaths.Count;
+        var archiveDirectory = Path.Combine(_notesDirectory, PersistencePaths.ArchivedNotesDirectory);
+        FileSystemLinkValidator.ValidateWithinRoot(_notesDirectory, archiveDirectory);
+        if (DirectoryExistsOrThrow(archiveDirectory))
+        {
+            foreach (var path in EnumerateFilesWithoutLinks(archiveDirectory, [_backupDirectory], allowRootLinks: true))
+            {
+                if (NoteFileExtensions.IsSupported(path))
+                    selected[ToLogicalPath(PersistencePaths.NotesBackupRoot, Path.GetRelativePath(_notesDirectory, path))] = path;
+            }
+        }
+
+        var backupRoot = FileSystemLinkValidator.ResolveDirectory(_backupDirectory);
+        foreach (var (logicalPath, path) in selected)
+        {
+            var readPath = FileSystemLinkValidator.ValidateWithinRoot(_notesDirectory, path);
+            if (PathsEqual(readPath, backupRoot) || IsPathWithin(readPath, backupRoot))
+                throw new IOException("An open document is inside Noted's backup storage.");
             sources.Add(CreateSourceEntry(
-                ToLogicalPath(PersistencePaths.NotesBackupRoot, relativePath),
+                logicalPath,
                 path,
                 bytes => new BackupContentDetails(null, bytes.LongLength)));
         }
+    }
+
+    private static bool DirectoryExistsOrThrow(string path)
+    {
+        try
+        {
+            if ((File.GetAttributes(path) & FileAttributes.Directory) == 0)
+                throw new IOException($"The archive path '{path}' is not a directory.");
+            return true;
+        }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
     }
 
     private BackupSourceEntry CreateSourceEntry(

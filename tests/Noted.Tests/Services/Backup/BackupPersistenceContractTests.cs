@@ -41,7 +41,7 @@ public sealed class BackupPersistenceContractTests
             Assert.AreEqual(historical.ContentLength, entry.ContentLength);
             Assert.AreEqual(historical.Category, BackupFormat.GetFileCategory(logicalPath.ToUpperInvariant()));
             var definition = BackupContentDefinitions.Find(logicalPath)!;
-            Assert.AreEqual(historical.Path != "session/editor-workspace.json", definition.ProtectMissing);
+            Assert.IsTrue(definition.ProtectMissing);
             Assert.AreEqual(historical.Count.HasValue, definition.ProtectEmptyCollection);
         }
         Assert.AreEqual("Application data", BackupFormat.GetFileCategory("app/future-file.json"));
@@ -54,8 +54,8 @@ public sealed class BackupPersistenceContractTests
     [DataRow("dictionary.json", true)]
     [DataRow("jots.json", true)]
     [DataRow("scratchpad.rtf", true)]
-    [DataRow("session/editor-workspace.json", false)]
-    public void MissingFixedFileRetainsHistoricalProtection(string file, bool protectedFile)
+    [DataRow("session/editor-workspace.json", true)]
+    public void MissingFixedFileRetainsProtection(string file, bool protectedFile)
     {
         using var directory = new TemporaryTestDirectory();
         WriteSource(directory);

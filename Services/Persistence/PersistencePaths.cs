@@ -27,6 +27,7 @@ internal static class PersistencePaths
     internal const string NotesBackupRoot = "notes";
     internal const string AppBackupPrefix = AppBackupRoot + "/";
     internal const string NotesBackupPrefix = NotesBackupRoot + "/";
+    internal const string ArchivedNotesBackupPrefix = NotesBackupPrefix + ArchivedNotesDirectory + "/";
     internal const string RecoveryBackupPrefix = AppBackupPrefix + RecoveryDirectory + "/";
     internal const string NoteHistoryBackupPrefix = AppBackupPrefix + NoteHistoryDirectory + "/";
     internal const string DeletedNotesBackupPrefix = AppBackupPrefix + DeletedNotesDirectory + "/";

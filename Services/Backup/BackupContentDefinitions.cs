@@ -26,7 +26,7 @@ internal static class BackupContentDefinitions
         new FixedBackupFile(FixedBackupContent.JotCapture, PersistencePaths.JotCaptureDraftFile, "Quick Jot", true, false),
         new FixedBackupFile(FixedBackupContent.Scratchpad, PersistencePaths.ScratchpadFile, "Scratchpad", true, false),
         new FixedBackupFile(FixedBackupContent.EditorSession,
-            Path.Combine(PersistencePaths.SessionDirectory, PersistencePaths.EditorSessionFile), "Open notes", false, false)
+            Path.Combine(PersistencePaths.SessionDirectory, PersistencePaths.EditorSessionFile), "Open notes", true, false)
     });
 
     internal static FixedBackupFile? Find(string normalizedLogicalPath) => FixedFiles.FirstOrDefault(

@@ -19,6 +19,7 @@ public sealed class FileSystemLinkBackupTests
         File.WriteAllText(Path.Combine(notes, "a.txt"), "saved a");
         Directory.CreateDirectory(Path.Combine(notes, "nested"));
         File.WriteAllText(Path.Combine(notes, "nested", "z.txt"), "saved z");
+        BackupTestSession.Save(app, Path.Combine(notes, "a.txt"), Path.Combine(notes, "nested", "z.txt"));
         var service = new FullBackupService(app, notes);
         Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
         if (imported)
@@ -79,6 +80,7 @@ public sealed class FileSystemLinkBackupTests
         Directory.CreateDirectory(outside);
         File.WriteAllText(Path.Combine(outside, "one.txt"), "saved");
         using var link = new TestFileSystemLink(directory.File("notes"), outside);
+        BackupTestSession.Save(directory.File("app"), directory.File("notes", "one.txt"));
         var service = new FullBackupService(directory.File("app"), directory.File("notes"));
         Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
         Assert.AreEqual(FullBackupStatus.RestoreScheduled, service.ScheduleUserBackupRestore().Status);
@@ -94,6 +96,7 @@ public sealed class FileSystemLinkBackupTests
         Directory.CreateDirectory(directory.File("notes"));
         var note = directory.File("notes", "one.txt");
         File.WriteAllText(note, "saved");
+        BackupTestSession.Save(directory.File("app"), note);
         var service = new FullBackupService(directory.File("app"), directory.File("notes"));
         Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
         Assert.AreEqual(FullBackupStatus.RestoreScheduled, service.ScheduleUserBackupRestore().Status);
@@ -132,6 +135,7 @@ public sealed class FileSystemLinkBackupTests
         using var directory = new TemporaryTestDirectory();
         Directory.CreateDirectory(directory.File("notes"));
         File.WriteAllText(directory.File("notes", "one.txt"), "note");
+        BackupTestSession.Save(directory.File("app"), directory.File("notes", "one.txt"));
         var service = new FullBackupService(directory.File("app"), directory.File("notes"));
         var outside = directory.File("outside");
         Directory.CreateDirectory(outside);
@@ -154,6 +158,7 @@ public sealed class FileSystemLinkBackupTests
         using var directory = new TemporaryTestDirectory();
         Directory.CreateDirectory(directory.File("notes"));
         File.WriteAllText(directory.File("notes", "one.txt"), "saved");
+        BackupTestSession.Save(directory.File("app"), directory.File("notes", "one.txt"));
         var service = new FullBackupService(directory.File("app"), directory.File("notes"));
         Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
         var archivePath = directory.File("backup.zip");

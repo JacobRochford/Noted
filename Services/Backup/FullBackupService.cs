@@ -321,16 +321,10 @@ internal sealed partial class FullBackupService
                 }
             }
 
-            var backupFiles = _contentCatalog.Collect();
-            if (backupFiles.Count == 0)
-            {
-                return new FullBackupResult(
-                    FullBackupStatus.Skipped,
-                    null,
-                    null,
-                    "No user data was available for a full backup.");
-            }
-
+            var backupFiles = _contentCatalog.Collect(out var selectedNotePaths, out var externalDocumentCount);
+            var scopeWarning = externalDocumentCount > 0
+                ? $"Saved contents of {externalDocumentCount} open document(s) outside the notes folder are excluded from this backup."
+                : null;
             var backupType = requestedType;
             var existingBackupManifest = backupType == FullBackupType.User
                 ? userBackup.Manifest
@@ -344,13 +338,14 @@ internal sealed partial class FullBackupService
                     GetBackupPath(backupType),
                     backupType == FullBackupType.User
                         ? "Your backup already matches the current verified data."
-                        : "The recent automatic backup already matches the current verified data.");
+                        : "The recent automatic backup already matches the current verified data.",
+                    scopeWarning);
             }
 
             var comparisonBackup = backupType == FullBackupType.User
                 ? userBackup.Manifest
                 : recentBackup.Manifest ?? userBackup.Manifest;
-            var anomaly = FindSuspiciousDataLoss(comparisonBackup?.Entries, backupFiles);
+            var anomaly = FindSuspiciousDataLoss(comparisonBackup?.Entries, backupFiles, selectedNotePaths);
             if (anomaly is not null)
             {
                 return new FullBackupResult(
@@ -360,9 +355,20 @@ internal sealed partial class FullBackupService
                     $"The backup update was blocked because the current data changed suspiciously: {anomaly}");
             }
 
+            if (backupFiles.Count == 0)
+            {
+                return new FullBackupResult(
+                    FullBackupStatus.Skipped,
+                    null,
+                    null,
+                    "No user data was available for a full backup.");
+            }
+
             var buildResult = _archiveWriter.BuildVerifiedBackup(backupType, backupFiles);
             var replaceResult = _archiveWriter.ReplaceBackupFolder(buildResult.Path, backupType);
             _backupCreatedThisRun = true;
+            var warning = string.Join(" ", new[] { replaceResult.Warning, scopeWarning }
+                .Where(message => !string.IsNullOrWhiteSpace(message)));
             return new FullBackupResult(
                 FullBackupStatus.Created,
                 backupType,
@@ -372,7 +378,7 @@ internal sealed partial class FullBackupService
                         ? "Updated your verified full backup."
                         : "Created your verified full backup."
                     : "Updated the recent automatic backup.",
-                replaceResult.Warning);
+                string.IsNullOrEmpty(warning) ? null : warning);
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
@@ -403,12 +409,21 @@ internal sealed partial class FullBackupService
             .ToList();
     }
 
-    private static string? FindSuspiciousDataLoss(
+    internal static string? FindSuspiciousDataLoss(
         IReadOnlyList<FullBackupEntry>? previous,
-        IReadOnlyList<BackupSourceEntry> current)
+        IReadOnlyList<BackupSourceEntry> current,
+        IReadOnlySet<string> selectedNotePaths)
     {
         if (previous is null || previous.Count == 0)
             return null;
+
+        previous = previous.Where(entry =>
+        {
+            var path = NormalizeLogicalPath(entry.LogicalPath);
+            return !path.StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith(PersistencePaths.ArchivedNotesBackupPrefix, StringComparison.OrdinalIgnoreCase) ||
+                selectedNotePaths.Contains(path);
+        }).ToList();
 
         var previousByPath = previous.ToDictionary(
             entry => NormalizeLogicalPath(entry.LogicalPath),

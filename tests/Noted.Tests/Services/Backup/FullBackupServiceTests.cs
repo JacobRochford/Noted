@@ -530,6 +530,7 @@ public sealed partial class FullBackupServiceTests
         var sharedDirectory = directory.File("shared");
         Directory.CreateDirectory(sharedDirectory);
         File.WriteAllText(Path.Combine(sharedDirectory, "one.txt"), "first");
+        BackupTestSession.Save(sharedDirectory, Path.Combine(sharedDirectory, "one.txt"));
         File.WriteAllText(
             Path.Combine(sharedDirectory, "settings.json"),
             "{\"SchemaVersion\":1,\"Revision\":1}");
@@ -697,6 +698,7 @@ public sealed partial class FullBackupServiceTests
         var newNotes = directory.File("new-notes");
         Directory.CreateDirectory(newNotes);
         File.WriteAllText(Path.Combine(newNotes, "moved.txt"), "new folder note");
+        BackupTestSession.Save(paths.AppData, Path.Combine(newNotes, "moved.txt"));
         var secondRun = new FullBackupService(paths.AppData, paths.Notes);
 
         secondRun.UpdateNotesDirectory(newNotes);
@@ -770,6 +772,7 @@ public sealed partial class FullBackupServiceTests
         Directory.CreateDirectory(appData);
         Directory.CreateDirectory(notes);
         File.WriteAllText(Path.Combine(notes, "one.txt"), "note one");
+        BackupTestSession.Save(appData, Path.Combine(notes, "one.txt"));
         Directory.CreateDirectory(Path.Combine(notes, ".archive"));
         File.WriteAllText(Path.Combine(notes, ".archive", "archived.md"), "archived note");
         File.WriteAllText(

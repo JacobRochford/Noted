@@ -114,6 +114,7 @@ public sealed class JotCaptureBackupTests
         using var directory = new TemporaryTestDirectory();
         Directory.CreateDirectory(directory.File("notes"));
         File.WriteAllText(directory.File("notes", "one.txt"), "note");
+        BackupTestSession.Save(directory.File("app"), directory.File("notes", "one.txt"));
         var service = new FullBackupService(directory.File("app"), directory.File("notes"));
         Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
         var current = new JotCaptureDraft { Text = "new work" };
@@ -420,6 +421,7 @@ public sealed class JotCaptureBackupTests
     {
         Directory.CreateDirectory(directory.File("notes"));
         File.WriteAllText(directory.File("notes", "one.txt"), "note");
+        BackupTestSession.Save(directory.File("app"), directory.File("notes", "one.txt"));
         new JotCaptureDraftService(directory.File("app")).Save(draft);
         return new FullBackupService(directory.File("app"), directory.File("notes"));
     }

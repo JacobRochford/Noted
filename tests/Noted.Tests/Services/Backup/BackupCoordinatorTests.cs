@@ -254,6 +254,7 @@ public sealed class BackupCoordinatorTests
         Directory.CreateDirectory(appData);
         Directory.CreateDirectory(notes);
         File.WriteAllText(Path.Combine(notes, "one.txt"), "note one");
+        BackupTestSession.Save(appData, Path.Combine(notes, "one.txt"));
         File.WriteAllText(
             Path.Combine(appData, "settings.json"),
             "{\"SchemaVersion\":1,\"Revision\":1}");

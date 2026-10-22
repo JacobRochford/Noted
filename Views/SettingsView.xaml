@@ -935,7 +935,7 @@
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource NotedTextBrush}"
                                                Margin="0,0,0,6"/>
-                                    <TextBlock Text="Create a verified backup of your notes, settings, checklist, dictionary, Scratchpad, MiniPad, and open-note recovery. View it before restoring, export a copy, or import one from another Noted installation. Noted changes this backup only when you choose Update Backup."
+                                    <TextBlock Text="Back up Noted settings and content, registered MiniPads, recovery data, saved-note history, deleted notes, archived notes, and saved documents open in the editor within your notes folder. Other files in that folder and saved files outside it are excluded. View the backup before restoring or exporting it. Noted changes this backup only when you choose Update Backup."
                                                FontSize="11"
                                                Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                TextWrapping="Wrap"

@@ -27,6 +27,7 @@ public sealed class BackupContentCatalogTests
         File.WriteAllText(Path.Combine(appData, "DeletedNotes", "old.txt"), "old");
         var notePath = Path.Combine(notes, "note.md");
         File.WriteAllText(notePath, "note content");
+        BackupTestSession.Save(appData, notePath);
         File.WriteAllText(Path.Combine(notes, "ignored.exe"), "ignored");
         var catalog = new BackupContentCatalog(appData, notes, backup);
 
@@ -39,6 +40,7 @@ public sealed class BackupContentCatalogTests
                 "app/DeletedNotes/old.txt",
                 "app/jots.json",
                 "app/scratchpad.rtf",
+                "app/session/editor-workspace.json",
                 "app/settings.json",
                 "notes/note.md"
             },
@@ -70,11 +72,13 @@ public sealed class BackupContentCatalogTests
             firstNotes,
             Path.Combine(appData, "full-snapshots"));
 
-        Assert.AreEqual("notes/first.txt", catalog.Collect().Single().LogicalPath);
+        BackupTestSession.Save(appData, Path.Combine(firstNotes, "first.txt"));
+        Assert.IsTrue(catalog.Collect().Any(file => file.LogicalPath == "notes/first.txt"));
 
         catalog.UpdateNotesDirectory(secondNotes);
+        BackupTestSession.Save(appData, Path.Combine(secondNotes, "second.txt"));
 
-        Assert.AreEqual("notes/second.txt", catalog.Collect().Single().LogicalPath);
+        Assert.IsTrue(catalog.Collect().Any(file => file.LogicalPath == "notes/second.txt"));
     }
 
     [TestMethod]

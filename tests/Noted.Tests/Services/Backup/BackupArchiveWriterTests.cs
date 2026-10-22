@@ -36,6 +36,25 @@ public sealed class BackupArchiveWriterTests
     }
 
     [TestMethod]
+    public void SessionChangesAfterSelectionCannotProduceAVerifiedBackup()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var appData = directory.File("app-data");
+        var notes = directory.File("notes");
+        var backupDirectory = Path.Combine(appData, "full-snapshots");
+        Directory.CreateDirectory(notes);
+        WriteSource(notes, "one.txt", "saved");
+        BackupTestSession.Save(appData, Path.Combine(notes, "one.txt"));
+        var files = new BackupContentCatalog(appData, notes, backupDirectory).Collect();
+        BackupTestSession.Save(appData);
+        var writer = new BackupArchiveWriter(appData, notes, backupDirectory,
+            TimeProvider.System, CreateReader(appData, notes));
+
+        Assert.ThrowsExactly<FileVerificationException>(() => writer.BuildVerifiedBackup(FullBackupType.User, files));
+        Assert.IsFalse(Directory.Exists(Path.Combine(backupDirectory, "protected")));
+    }
+
+    [TestMethod]
     public void ReplacingAUserBackupPreservesThePreviousVerifiedArchive()
     {
         using var directory = new TemporaryTestDirectory();
