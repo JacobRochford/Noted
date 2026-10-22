@@ -9,7 +9,7 @@ using Noted.Services;
 namespace Noted.Tests.Services;
 
 [TestClass]
-public sealed class BackupArchiveReaderTests
+public sealed partial class BackupArchiveReaderTests
 {
     [TestMethod]
     public void ReadBackupVerifiesFilesAndBuildsPreview()

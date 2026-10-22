@@ -67,33 +67,7 @@ internal sealed partial class FullBackupService
 
             FileSystemLinkValidator.ValidatePath(tempPath);
             WriteBackupExport(tempPath, backup);
-            VerifyBackupExport(tempPath, backup);
-
-            FileSystemLinkValidator.ValidatePath(exportPath);
-            FileSystemLinkValidator.ValidatePath(tempPath);
-            if (File.Exists(exportPath))
-            {
-                rollbackPath = Path.Combine(
-                    exportDirectory,
-                    $".{Path.GetFileName(exportPath)}.{Guid.NewGuid():N}.rollback");
-                FileSystemLinkValidator.ValidatePath(rollbackPath);
-                File.Replace(tempPath, exportPath, rollbackPath, ignoreMetadataErrors: true);
-            }
-            else
-            {
-                File.Move(tempPath, exportPath);
-            }
-
-            try
-            {
-                VerifyBackupExport(exportPath, backup);
-            }
-            catch
-            {
-                PreserveFailedExport(exportPath, rollbackPath);
-                rollbackPath = null;
-                throw;
-            }
+            rollbackPath = PublishBackupExport(tempPath, exportPath, path => VerifyBackupExport(path, backup));
 
             string? warning = null;
             if (rollbackPath is not null)
@@ -123,8 +97,43 @@ internal sealed partial class FullBackupService
             return new BackupExportResult(
                 false,
                 null,
-                "The backup could not be exported.");
+                ex is InvalidDataException
+                    ? $"The backup could not be exported: {ex.Message} Your local backup was not changed."
+                    : "The backup could not be exported.");
         }
+    }
+
+    internal static string? PublishBackupExport(string tempPath, string exportPath, Action<string> verify)
+    {
+        verify(tempPath);
+
+        string? rollbackPath = null;
+        FileSystemLinkValidator.ValidatePath(exportPath);
+        FileSystemLinkValidator.ValidatePath(tempPath);
+        if (File.Exists(exportPath))
+        {
+            rollbackPath = Path.Combine(
+                Path.GetDirectoryName(exportPath)!,
+                $".{Path.GetFileName(exportPath)}.{Guid.NewGuid():N}.rollback");
+            FileSystemLinkValidator.ValidatePath(rollbackPath);
+            File.Replace(tempPath, exportPath, rollbackPath, ignoreMetadataErrors: true);
+        }
+        else
+        {
+            File.Move(tempPath, exportPath);
+        }
+
+        try
+        {
+            verify(exportPath);
+        }
+        catch
+        {
+            PreserveFailedExport(exportPath, rollbackPath);
+            throw;
+        }
+
+        return rollbackPath;
     }
 
     private static void WriteBackupExport(
@@ -184,12 +193,13 @@ internal sealed partial class FullBackupService
         source.CopyTo(destination);
     }
 
-    private static void VerifyBackupExport(
+    private void VerifyBackupExport(
         string archivePath,
         BackupReadResult backup)
     {
         var manifest = backup.Manifest
             ?? throw new FileVerificationException("The verified backup manifest is unavailable.");
+        var importedArchive = _archiveReader.ReadBackupArchive(archivePath);
         FileSystemLinkValidator.ValidatePath(archivePath);
         using var archive = ZipFile.OpenRead(archivePath);
         var entries = archive.Entries
@@ -241,6 +251,8 @@ internal sealed partial class FullBackupService
                     $"The exported file '{file.LogicalPath}' failed hash verification.");
             }
         }
+
+        _archiveReader.InspectImportedFiles(importedArchive);
     }
 
     private static ZipArchiveEntry FindArchiveEntry(

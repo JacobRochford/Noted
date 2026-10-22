@@ -163,7 +163,12 @@ public sealed partial class FullBackupServiceTests
         var service = new FullBackupService(paths.AppData, paths.Notes);
         Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
         var exportPath = directory.File("external-session-path.notedbackup");
-        Assert.IsTrue(service.ExportUserBackup(exportPath).Success);
+        ZipFile.CreateFromDirectory(Path.Combine(service.BackupDirectory, "protected"), exportPath);
+        var rejectedExport = service.ExportUserBackup(directory.File("rejected.notedbackup"));
+        Assert.IsFalse(rejectedExport.Success);
+        StringAssert.Contains(rejectedExport.Message, "app/session/editor-workspace.json");
+        StringAssert.Contains(rejectedExport.Message, "outside the backup's notes folder");
+        Assert.IsTrue(service.GetUserBackupInfo().IsValid);
 
         var preview = service.GetBackupImportPreview(exportPath);
 

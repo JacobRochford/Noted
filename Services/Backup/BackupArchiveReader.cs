@@ -353,7 +353,7 @@ internal sealed class BackupArchiveReader
         if (archive.Entries.Count == 0)
             throw new InvalidDataException("The selected backup archive is empty.");
         if (archive.Entries.Count > MaximumImportFileCount + 1)
-            throw new InvalidDataException("The selected backup contains too many files.");
+            throw new InvalidDataException($"The selected backup contains {archive.Entries.Count} ZIP entries. Import allows at most {MaximumImportFileCount} files plus the manifest.");
         if (archive.Entries.Any(entry => string.IsNullOrEmpty(entry.Name)))
             throw new InvalidDataException("The selected backup contains unexpected directory entries.");
 
@@ -369,12 +369,20 @@ internal sealed class BackupArchiveReader
         if (manifestEntry is null)
             throw new InvalidDataException("The selected backup does not contain a manifest.");
         if (manifestEntry.Length > MaximumImportManifestSize)
-            throw new InvalidDataException("The selected backup manifest is too large.");
+            throw new InvalidDataException($"The selected backup manifest exceeds the {MaximumImportManifestSize / (1024 * 1024)} MiB import limit ({MaximumImportManifestSize} bytes).");
 
         var manifestBytes = ReadArchiveEntry(manifestEntry, MaximumImportManifestSize);
         var manifestHash = Convert.ToHexString(SHA256.HashData(manifestBytes));
-        var manifest = JsonSerializer.Deserialize<FullBackupManifest>(manifestBytes, BackupFormat.JsonOptions)
-            ?? throw new InvalidDataException("The selected backup manifest contains no value.");
+        FullBackupManifest manifest;
+        try
+        {
+            manifest = JsonSerializer.Deserialize<FullBackupManifest>(manifestBytes, BackupFormat.JsonOptions)
+                ?? throw new InvalidDataException("The selected backup manifest contains no value.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException("The selected backup manifest contains invalid JSON.", ex);
+        }
         ValidateImportedManifest(manifest);
 
         var expectedPaths = manifest.Entries
@@ -388,16 +396,19 @@ internal sealed class BackupArchiveReader
         long totalSize = 0;
         foreach (var file in manifest.Entries)
         {
-            var maximumFileSize = Path.GetExtension(file.LogicalPath).Equals(".json", StringComparison.OrdinalIgnoreCase)
+            var isJson = Path.GetExtension(file.LogicalPath).Equals(".json", StringComparison.OrdinalIgnoreCase);
+            var maximumFileSize = isJson
                 ? MaximumImportJsonFileSize
                 : MaximumImportFileSize;
-            if (file.Length < 0 || file.Length > maximumFileSize)
-                throw new InvalidDataException($"The imported file '{file.LogicalPath}' is too large.");
+            if (file.Length < 0)
+                throw new InvalidDataException($"The imported file '{file.LogicalPath}' has an invalid size.");
+            if (file.Length > maximumFileSize)
+                throw new InvalidDataException($"The imported file '{file.LogicalPath}' exceeds the {(isJson ? "JSON " : "")}import limit of {maximumFileSize / (1024 * 1024)} MiB ({maximumFileSize} bytes).");
             if (!IsSha256(file.Sha256))
                 throw new InvalidDataException($"The imported file '{file.LogicalPath}' has an invalid hash.");
             totalSize = checked(totalSize + file.Length);
             if (totalSize > MaximumImportTotalSize)
-                throw new InvalidDataException("The selected backup is too large to import safely.");
+                throw new InvalidDataException($"The selected backup exceeds the combined uncompressed payload import limit of {MaximumImportTotalSize / (1024 * 1024)} MiB ({MaximumImportTotalSize} bytes).");
 
             var entry = FindArchiveEntry(archive.Entries, $"{FilesDirectoryName}/{NormalizeLogicalPath(file.LogicalPath)}");
             if (entry.Length != file.Length)
@@ -423,7 +434,18 @@ internal sealed class BackupArchiveReader
         var archiveEntry = FindArchiveEntry(archive.Entries, $"{FilesDirectoryName}/{NormalizeLogicalPath(entry.LogicalPath)}");
         var bytes = ReadArchiveEntry(archiveEntry, MaximumImportFileSize);
         VerifyFileBytes(bytes, entry.Length, entry.Sha256, entry.LogicalPath);
-        return _transformImportedFile(entry, bytes, manifest);
+        try
+        {
+            return _transformImportedFile(entry, bytes, manifest);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidDataException($"The imported file '{entry.LogicalPath}' contains invalid or unsupported feature data.", ex);
+        }
+        catch (InvalidDataException ex)
+        {
+            throw new InvalidDataException($"The imported file '{entry.LogicalPath}' is not eligible for import: {ex.Message}", ex);
+        }
     }
 
     internal IReadOnlyList<ImportedBackupFileInfo> InspectImportedFiles(BackupArchive source)
@@ -462,7 +484,7 @@ internal sealed class BackupArchiveReader
         if (manifest.Entries is null || manifest.Entries.Count == 0)
             throw new InvalidDataException("The selected backup contains no files.");
         if (manifest.Entries.Count > MaximumImportFileCount)
-            throw new InvalidDataException("The selected backup contains too many files.");
+            throw new InvalidDataException($"The selected backup contains {manifest.Entries.Count} files. Import allows at most {MaximumImportFileCount} files.");
         if (manifest.Entries.Any(entry => entry is null))
             throw new InvalidDataException("The selected backup manifest contains an empty file entry.");
 
