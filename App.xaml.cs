@@ -716,8 +716,11 @@ public partial class App : Application
         var warning = string.IsNullOrWhiteSpace(result.Warning)
             ? result.Message
             : $"{result.Message}\n\n{result.Warning}";
+        var message = result.Status == FullBackupStatus.Created
+            ? warning
+            : $"Noted kept the existing backup copies unchanged.\n\n{warning}";
         AppDialog.Show(
-            $"Noted kept the existing backup copies unchanged.\n\n{warning}",
+            message,
             "Backup Warning",
             MessageBoxButton.OK,
             MessageBoxImage.Warning);
