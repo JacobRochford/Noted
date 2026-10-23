@@ -350,9 +350,7 @@ public partial class DictionaryWindow : OverlayWindow
 
     private void SaveEntry(DictionaryItem item)
     {
-        item.SaveEdit();
-        if (!_viewModel.TryFlushPendingItems(out _))
-            item.BeginEdit();
+        _viewModel.TrySaveEntry(item, out _);
     }
 
     private void CancelEntry_Click(object sender, RoutedEventArgs e)

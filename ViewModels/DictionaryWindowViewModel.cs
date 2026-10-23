@@ -16,8 +16,9 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
     private static readonly TimeSpan s_saveMaximumDelay = TimeSpan.FromSeconds(2);
 
     private readonly IDictionaryContentService _contentService;
-    private readonly SaveScheduler<IReadOnlyList<DictionaryItemState>> _saveScheduler;
+    private readonly SaveScheduler<SaveRequest> _saveScheduler;
     private readonly Action<Action> _uiThreadInvoke;
+    private IReadOnlyList<DictionaryItemState>? _publishingSavedItems;
     private bool _ghostModeEnabled;
     private string _searchText = "";
     private string? _persistenceError;
@@ -80,7 +81,7 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(dispatcher);
         ArgumentNullException.ThrowIfNull(uiThreadInvoke);
         _contentService = contentService;
-        _saveScheduler = new SaveScheduler<IReadOnlyList<DictionaryItemState>>(
+        _saveScheduler = new SaveScheduler<SaveRequest>(
             dispatcher,
             s_saveQuietPeriod,
             s_saveMaximumDelay,
@@ -174,6 +175,20 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
         return _saveScheduler.TryFlush(out error);
     }
 
+    public bool TrySaveEntry(DictionaryItem item, out string? error)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (!Items.Contains(item))
+            throw new ArgumentException("The entry does not belong to this dictionary.", nameof(item));
+
+        _saveScheduler.Schedule(new SaveRequest(item, new DictionaryItemState
+        {
+            Word = item.DraftWord,
+            Description = item.DraftDefinition
+        }));
+        return _saveScheduler.TryFlush(out error);
+    }
+
     public void Dispose()
     {
         Items.CollectionChanged -= Items_CollectionChanged;
@@ -184,32 +199,69 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
 
     private void SaveItems()
     {
-        _saveScheduler.Schedule(Items
-            .Where(item => !item.IsNew && (!item.IsAutoSaving ||
-                !string.IsNullOrWhiteSpace(item.Word) || !string.IsNullOrWhiteSpace(item.Definition)))
-            .Select(item => new DictionaryItemState
+        // publishing a verified save does not need another identical write.
+        if (_publishingSavedItems is not null &&
+            _publishingSavedItems.SequenceEqual(CreateItemsSnapshot(new SaveRequest())))
+            return;
+
+        _saveScheduler.Schedule(new SaveRequest());
+    }
+
+    private List<DictionaryItemState> CreateItemsSnapshot(SaveRequest request) => Items
+        .Where(item => ReferenceEquals(item, request.EditedItem) ||
+            (!item.IsNew && (!item.IsAutoSaving ||
+                !string.IsNullOrWhiteSpace(item.Word) || !string.IsNullOrWhiteSpace(item.Definition))))
+        .Select(item => ReferenceEquals(item, request.EditedItem)
+            ? request.Edit!
+            : new DictionaryItemState
             {
                 Word = item.Word,
                 Description = item.Definition
             })
-            .ToList());
-    }
+        .ToList();
 
-    private PersistenceSaveResult SaveItemsSnapshot(IReadOnlyList<DictionaryItemState> items)
+    private PersistenceSaveResult SaveItemsSnapshot(SaveRequest request)
     {
+        // build authorized values at execution time so reentrant changes cannot leave a stale retry.
+        var items = CreateItemsSnapshot(request);
+        DictionaryContentSaveResult saveResult;
         try
         {
-            var saveResult = _contentService.SaveItems(items);
-            PersistenceError = saveResult.Warning;
-            return PersistenceSaveResult.Succeeded();
+            saveResult = _contentService.SaveItems(items);
         }
         catch (Exception ex) when (IsExpectedPersistenceException(ex))
         {
+            // withdraw the explicit candidate before an error notification can trigger another flush.
+            if (request.EditedItem is not null)
+                _saveScheduler.Schedule(new SaveRequest());
             ExceptionDiagnostics.Record(ex);
-            PersistenceError = "Dictionary content could not be saved.";
-            return PersistenceSaveResult.Failed(PersistenceError);
+            var error = ex is FileVerificationException
+                ? "Dictionary content was written but could not be verified. Disk contents are uncertain. " +
+                  "Cancel only discards the draft; it does not undo the disk write. " +
+                  "Resolve the file error and restart Noted before retrying."
+                : $"Dictionary content could not be saved. {ex.Message}";
+            PersistenceError = error;
+            return PersistenceSaveResult.Failed(error);
         }
+
+        if (request.EditedItem is not null)
+        {
+            var previousItems = _publishingSavedItems;
+            _publishingSavedItems = items;
+            try
+            {
+                request.EditedItem.SaveEdit(request.Edit!.Word ?? "", request.Edit.Description ?? "");
+            }
+            finally
+            {
+                _publishingSavedItems = previousItems;
+            }
+        }
+        PersistenceError = saveResult.Warning;
+        return PersistenceSaveResult.Succeeded(saveResult.Warning);
     }
+
+    private sealed record SaveRequest(DictionaryItem? EditedItem = null, DictionaryItemState? Edit = null);
 
     private void SetLoadIssues(IReadOnlyList<DictionaryContentIssue> issues)
     {

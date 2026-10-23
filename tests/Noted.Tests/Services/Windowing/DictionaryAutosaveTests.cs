@@ -145,7 +145,11 @@ public sealed class DictionaryAutosaveTests
             Invoke(window, "SaveEntry", item);
             Assert.IsTrue(item.IsEditing && item.IsExpanded);
             Assert.AreEqual("retain edit", item.DraftDefinition);
+            Assert.AreEqual("saved definition", item.Definition);
+            Assert.IsTrue(item.HasPendingEdit);
             Assert.IsTrue(model.HasPersistenceError);
+            Assert.IsFalse(window.TryFlushPendingContent(out var pendingError));
+            StringAssert.Contains(pendingError!, "Save or cancel");
             service.FailSave = false;
             Invoke(window, "SaveEntry", item);
             Assert.IsFalse(item.IsEditing);
@@ -153,6 +157,57 @@ public sealed class DictionaryAutosaveTests
             Assert.AreEqual("retain edit", service.Saved.Single().Description);
         }
         finally { service.FailSave = false; window.Close(); }
+    });
+
+    [TestMethod]
+    [DataRow("deactivate")]
+    [DataRow("hide")]
+    [DataRow("close")]
+    [DataRow("shutdown")]
+    public void LifecycleAfterFailedSaveAndCancelFlushesOnlyAcceptedContent(string action) => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var service = new RecordingContentService { FailSave = true };
+        var window = new DictionaryWindow(new AppSettingsService(directory.Path), service);
+        var model = (DictionaryWindowViewModel)window.DataContext;
+        try
+        {
+            var item = model.Items.Single();
+            item.BeginEdit();
+            item.DraftWord = "canceled word";
+            item.DraftDefinition = "canceled definition";
+            Invoke(window, "SaveEntry", item);
+            Assert.IsTrue(item.HasPendingEdit);
+            Invoke(window, "CancelEntry_Click", new Button { DataContext = item }, new RoutedEventArgs());
+            Assert.IsFalse(item.IsEditing);
+            Assert.IsTrue(model.HasPersistenceError);
+            service.FailSave = false;
+            var added = model.AddItem(beginEdit: true, autoSave: true);
+            added.DraftWord = "authorized new entry";
+
+            if (action == "deactivate")
+                Invoke(window, "OnDeactivated", EventArgs.Empty);
+            else if (action == "hide")
+                Invoke(window, "RequestHide");
+            else if (action == "close")
+                window.Close();
+            else
+            {
+                Assert.IsTrue(window.TryFlushPendingContent(out var error), error);
+                window.PrepareForApplicationShutdown();
+            }
+
+            Assert.HasCount(2, service.Saved);
+            Assert.AreEqual("existing", service.Saved[0].Word);
+            Assert.AreEqual("saved definition", service.Saved[0].Description);
+            Assert.AreEqual("authorized new entry", service.Saved[1].Word);
+        }
+        finally
+        {
+            service.FailSave = false;
+            foreach (var item in model.Items.Where(item => item.HasPendingEdit)) item.CancelEdit();
+            window.Close();
+        }
     });
 
     [TestMethod]

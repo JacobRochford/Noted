@@ -96,15 +96,18 @@ public sealed class DictionaryItem : ObservableObject
         IsEditing = false;
     }
 
-    public void SaveEdit()
+    public void SaveEdit() => SaveEdit(DraftWord, DraftDefinition);
+
+    internal void SaveEdit(string word, string definition)
     {
         // Publish both values together so filtering and persistence see a complete entry.
-        _word = DraftWord;
-        _definition = DraftDefinition;
+        _word = word;
+        _definition = definition;
         IsNew = false;
-        IsEditing = false;
+        IsEditing = DraftWord != word || DraftDefinition != definition;
         OnPropertyChanged(nameof(Word));
         OnPropertyChanged(nameof(Definition));
+        OnPropertyChanged(nameof(HasPendingEdit));
     }
 
     public void CancelEdit()

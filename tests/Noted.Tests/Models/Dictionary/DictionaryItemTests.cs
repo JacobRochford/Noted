@@ -122,4 +122,29 @@ public sealed class DictionaryItemTests
         item.SaveEdit();
         Assert.IsFalse(item.IsEditing);
     }
+
+    [TestMethod]
+    public void PublishingSavedValuesKeepsLaterDraftChangesEditable()
+    {
+        var item = new DictionaryItem { Word = "original", Definition = "original definition" };
+        item.BeginEdit();
+        item.DraftWord = "later word";
+        item.DraftDefinition = "later draft";
+        var pendingNotified = false;
+        item.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(item.HasPendingEdit)) pendingNotified = true;
+        };
+
+        item.SaveEdit("saved word", "saved definition");
+
+        Assert.AreEqual("saved word", item.Word);
+        Assert.AreEqual("saved definition", item.Definition);
+        Assert.AreEqual("later word", item.DraftWord);
+        Assert.AreEqual("later draft", item.DraftDefinition);
+        Assert.IsTrue(item.IsEditing && item.HasPendingEdit && pendingNotified);
+        item.CancelEdit();
+        Assert.AreEqual("saved word", item.DraftWord);
+        Assert.AreEqual("saved definition", item.DraftDefinition);
+    }
 }
