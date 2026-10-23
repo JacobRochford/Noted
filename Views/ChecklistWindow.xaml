@@ -478,10 +478,11 @@
                                                       IsChecked="{Binding IsChecked, UpdateSourceTrigger=PropertyChanged}"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             <TextBox x:Name="ItemTitleTextBox" Grid.Column="2"
-                                                     Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=Explicit}"
+                                                     Text="{Binding Text, Mode=OneWay}"
                                                      Padding="4,3" Background="Transparent" BorderThickness="0"
                                                      FontSize="13" TextWrapping="NoWrap" VerticalAlignment="Center"
                                                      VerticalContentAlignment="Center" KeyDown="ItemTextBox_KeyDown"
+                                                     TextChanged="ItemTextBox_TextChanged"
                                                      GotFocus="ItemTextBox_GotFocus" LostFocus="ItemTextBox_LostFocus">
                                                 <TextBox.Style>
                                                     <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">

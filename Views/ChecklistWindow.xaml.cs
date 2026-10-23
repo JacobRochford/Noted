@@ -116,7 +116,6 @@ public partial class ChecklistWindow : OverlayWindow
                 VisualTreeHelpers.FindAncestor<TextBox>(e.OriginalSource as DependencyObject),
                 textBox))
         {
-            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
             ItemsList.Focus();
         }
 
@@ -540,23 +539,21 @@ public partial class ChecklistWindow : OverlayWindow
 
     // Keyboard navigation
 
+    private void ItemTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (sender is TextBox textBox && textBox.DataContext is ChecklistItem item)
+            _viewModel.UpdateItemText(item, textBox.Text);
+    }
+
     private void ItemTextBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (sender is not TextBox tb || tb.DataContext is not ChecklistItem item) return;
 
         if (e.Key == Key.Enter)
         {
-            tb.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            _viewModel.RefreshFilteredItems();
             var newItem = _viewModel.InsertItemAfter(item);
             Dispatcher.BeginInvoke(() => FocusItem(newItem),
-                System.Windows.Threading.DispatcherPriority.Input);
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Back && string.IsNullOrEmpty(tb.Text))
-        {
-            var idx = _viewModel.FilteredItems.IndexOf(item);
-            _viewModel.RemoveItem(item);
-            Dispatcher.BeginInvoke(() => FocusItemAt(Math.Max(0, idx - 1)),
                 System.Windows.Threading.DispatcherPriority.Input);
             e.Handled = true;
         }
@@ -576,9 +573,9 @@ public partial class ChecklistWindow : OverlayWindow
     {
         if (sender is TextBox textBox)
         {
-            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
             textBox.Select(0, 0);
             textBox.ScrollToHorizontalOffset(0);
+            _viewModel.RefreshFilteredItems();
         }
     }
 
@@ -754,12 +751,6 @@ public partial class ChecklistWindow : OverlayWindow
 
         DragPreviewPopup.IsOpen = false;
         DragPreviewPopup.DataContext = null;
-    }
-
-    private void FocusItemAt(int index)
-    {
-        if (index < 0 || index >= _viewModel.FilteredItems.Count) return;
-        FocusItem(_viewModel.FilteredItems[index]);
     }
 
     private void FocusItem(ChecklistItem? item)

@@ -26,6 +26,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
     private bool _isSearchVisible;
     private bool _isRefreshing;
     private bool _isBulkUpdating;
+    private bool _isUpdatingItemText;
     private string? _persistenceError;
     private string? _itemSaveError;
     private string? _tabSaveError;
@@ -256,7 +257,24 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
         NotifyProgress();
         SaveItems();
-        RefreshFilteredItems();
+        if (!_isUpdatingItemText)
+            RefreshFilteredItems();
+    }
+
+    internal void UpdateItemText(ChecklistItem item, string text)
+    {
+        if (item.Text == text) return;
+
+        // schedule typing without moving or filtering out the row before editing ends.
+        _isUpdatingItemText = true;
+        try
+        {
+            item.Text = text;
+        }
+        finally
+        {
+            _isUpdatingItemText = false;
+        }
     }
 
     private void NotifyProgress()
