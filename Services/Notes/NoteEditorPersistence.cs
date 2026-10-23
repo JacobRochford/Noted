@@ -235,6 +235,11 @@ internal sealed class NoteEditorPersistence
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
             ExceptionDiagnostics.Record(ex);
+            issues.Add(new NoteRecoveryIssue(
+                draft.FilePath,
+                $"The original document '{draft.FilePath}' could not be read. " +
+                "Its recovery draft remains preserved in Noted's recovery folder. " +
+                "Resolve the file access or encoding problem and restart Noted to retry recovery."));
             return false;
         }
     }

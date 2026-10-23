@@ -241,6 +241,155 @@ public sealed class NoteEditorPersistenceTests
         Assert.IsNull(typeof(NoteEditorTabState).GetProperty("DocumentId"));
     }
 
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void UnreadableOriginalReportsOnePreservedDraftAfterAllAttempts(bool loadSavedSession)
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = CreateNote(directory, "locked.txt", "original content");
+        var originalBytes = File.ReadAllBytes(path);
+        var recovery = new NoteRecoveryService(directory.Path);
+        recovery.SaveDraft(path, "recoverable edits");
+        var draftPath = Directory.GetFiles(directory.File("recovery"), "*.json").Single();
+        var draftBytes = File.ReadAllBytes(draftPath);
+        var session = new NoteEditorSession
+        {
+            Tabs =
+            [
+                new NoteEditorTabState { FilePath = path },
+                new NoteEditorTabState { FilePath = Path.Combine(directory.Path, ".", "locked.txt") }
+            ]
+        };
+        var persistence = new NoteEditorPersistence(new NoteContentService(directory.Path),
+            recovery, new StubSessionService(session));
+
+        NoteEditorWorkspaceLoadResult result;
+        using (File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            result = persistence.LoadWorkspace(loadSavedSession);
+
+        Assert.HasCount(0, result.Documents);
+        var issue = result.RecoveryIssues.Single();
+        Assert.AreEqual(path, issue.FilePath);
+        StringAssert.Contains(issue.Message, path);
+        StringAssert.Contains(issue.Message, "remains preserved");
+        StringAssert.Contains(issue.Message, "recovery folder");
+        CollectionAssert.AreEqual(originalBytes, File.ReadAllBytes(path));
+        CollectionAssert.AreEqual(draftBytes, File.ReadAllBytes(draftPath));
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void TransientOriginalReadFailureDoesNotReportAResolvedDraft(bool redundantDraft)
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = CreateNote(directory, "note.txt", "saved");
+        var content = new StubContentService(new Dictionary<string, string> { [path] = "saved" })
+        {
+            FailedLoadsRemaining = 1
+        };
+        var persistence = new NoteEditorPersistence(content,
+            new StubRecoveryService
+            {
+                Drafts = [new NoteRecoveryDraft(path, redundantDraft ? "saved" : "recovered", DateTime.UtcNow)]
+            },
+            new StubSessionService(new NoteEditorSession
+            {
+                Tabs = [new NoteEditorTabState { FilePath = path }]
+            }));
+
+        var result = persistence.LoadWorkspace(loadSavedSession: true);
+
+        Assert.HasCount(0, result.RecoveryIssues);
+        Assert.HasCount(redundantDraft ? 0 : 1, result.Documents);
+        if (!redundantDraft)
+        {
+            Assert.AreEqual("recovered", result.Documents[0].Content);
+            Assert.IsTrue(result.Documents[0].IsDirty);
+        }
+        Assert.AreEqual("saved", File.ReadAllText(path));
+    }
+
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void MissingOriginalStillOpensItsPreservedDraft(bool loadSavedSession)
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("missing.txt");
+        var recovery = new NoteRecoveryService(directory.Path);
+        recovery.SaveDraft(path, "recoverable edits");
+        var draftPath = Directory.GetFiles(directory.File("recovery"), "*.json").Single();
+        var before = File.ReadAllBytes(draftPath);
+        var persistence = new NoteEditorPersistence(new NoteContentService(directory.Path), recovery,
+            new StubSessionService(new NoteEditorSession
+            {
+                Tabs = [new NoteEditorTabState { FilePath = path }]
+            }));
+
+        var result = persistence.LoadWorkspace(loadSavedSession);
+
+        var document = result.Documents.Single();
+        Assert.IsTrue(document.IsMissing);
+        Assert.IsTrue(document.IsDirty);
+        Assert.AreEqual("recoverable edits", document.Content);
+        Assert.HasCount(0, result.RecoveryIssues);
+        Assert.IsFalse(File.Exists(path));
+        CollectionAssert.AreEqual(before, File.ReadAllBytes(draftPath));
+    }
+
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void InvalidOriginalEncodingReportsRecoveryWithoutChangingEitherFile(bool loadSavedSession)
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("invalid.txt");
+        var invalidBytes = Convert.FromHexString("FFFE00");
+        File.WriteAllBytes(path, invalidBytes);
+        var recovery = new NoteRecoveryService(directory.Path);
+        recovery.SaveDraft(path, "valid recovered text");
+        var draftPath = Directory.GetFiles(directory.File("recovery"), "*.json").Single();
+        var before = File.ReadAllBytes(draftPath);
+        var persistence = new NoteEditorPersistence(new NoteContentService(directory.Path), recovery,
+            new StubSessionService(new NoteEditorSession
+            {
+                Tabs = [new NoteEditorTabState { FilePath = path }]
+            }));
+
+        var result = persistence.LoadWorkspace(loadSavedSession);
+
+        Assert.HasCount(0, result.Documents);
+        Assert.HasCount(1, result.RecoveryIssues);
+        CollectionAssert.AreEqual(invalidBytes, File.ReadAllBytes(path));
+        CollectionAssert.AreEqual(before, File.ReadAllBytes(draftPath));
+    }
+
+    [TestMethod]
+    public void InvalidRecoveryPrimaryStillFallsBackAndReportsItsExistingIssues()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = CreateNote(directory, "note.txt", "saved");
+        var recovery = new NoteRecoveryService(directory.Path);
+        recovery.SaveDraft(path, "previous draft");
+        recovery.SaveDraft(path, "latest draft");
+        var draftPath = Directory.GetFiles(directory.File("recovery"), "*.json").Single();
+        File.WriteAllText(draftPath, "{broken");
+        var backupBytes = File.ReadAllBytes(draftPath + ".bak");
+        var persistence = new NoteEditorPersistence(new NoteContentService(directory.Path),
+            new NoteRecoveryService(directory.Path), new StubSessionService(new NoteEditorSession()));
+
+        var result = persistence.LoadWorkspace(loadSavedSession: false);
+
+        Assert.AreEqual("previous draft", result.Documents.Single().Content);
+        Assert.IsTrue(result.Documents[0].IsDirty);
+        Assert.IsTrue(result.RecoveryIssues.Count > 0);
+        Assert.IsFalse(result.RecoveryIssues.Any(issue => issue.Message.Contains("original document")));
+        CollectionAssert.AreEqual(backupBytes, File.ReadAllBytes(draftPath + ".bak"));
+        Assert.AreEqual("saved", File.ReadAllText(path));
+    }
+
     private static string CreateNote(
         TemporaryTestDirectory directory,
         string fileName,
