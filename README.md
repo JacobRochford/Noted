@@ -9,7 +9,7 @@ Noted is a Windows-only .NET 9 WPF utility app. It has a floating Notes button, 
 - Folders can expand in place or open in a drill-down view.
 - The drill-down view keeps back and forward folder history.
 - Notes can be renamed inline, and the list refreshes when files change on disk.
-- Deleted notes go to `%LocalAppData%\Noted\DeletedNotes`. Noted permanently removes any that are more than 14 days old when it starts.
+- Deleted notes go to `%LocalAppData%\Noted\DeletedNotes`. At startup, Noted attempts to permanently remove notes deleted more than 14 days ago.
 - Folder deletion is permanent and includes the folder's contents.
 
 Choose how new notes are created:
@@ -21,7 +21,7 @@ Choose how new notes are created:
 ## Editor
 
 - Notes open in the built-in tabbed editor.
-- Noted saves recovery copies of unsaved changes. Restoring the previous editor session can be turned off in Settings.
+- Noted saves recovery copies of unsaved changes after a short delay. Session reopening can be turned off in Settings without disabling unsaved-text recovery.
 - Use `Ctrl+F` to find text and `Ctrl+H` to find and replace. Search highlights all matches and supports case-sensitive matching, whole-word matching, and regular expressions.
 - The View menu controls line numbers, scroll speed, Word Wrap, Markdown preview, tab visibility, and whether tabs reopen on startup.
 - Press `Ctrl+Shift+V` to toggle Markdown preview.
@@ -86,7 +86,9 @@ Settings include:
 - display choice, ghost mode, and opacity
 - local backup creation, preview, restore, export, and import
 
-Noted stores its settings, window layouts, editor session, Checklist, Dictionary, Jots, Scratchpad content, recovery data, and local backups under `%LocalAppData%\Noted`. Notes stay in the folder you choose. Backups can be exported as `.notedbackup` files to an external destination and imported from Settings.
+Noted stores its settings, window layouts, editor session, Checklist, Dictionary, Jots, Scratchpad content, recovery data, and local backups under `%LocalAppData%\Noted`. Notes stay in the folder you choose. Eligible user backups can be exported as `.notedbackup` files to an external destination and imported from Settings.
+
+Full backups include application-managed content, registered MiniPads (including closed instances), retained recovery drafts, saved-note history, deleted notes, supported files in `.archive`, and saved documents open in the freshly prepared editor session within the configured notes folder. Other files in that folder are not collected automatically. Saved files and unsaved recovery drafts are separate backup entries. Open documents outside the notes folder retain their session and recovery data, but their saved files are excluded. See [backup and recovery](docs/backup-and-recovery-information.md) for restore behavior and portability limits.
 
 ## Requirements
 
