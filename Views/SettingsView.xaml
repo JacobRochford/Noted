@@ -995,6 +995,11 @@
                                                FontSize="10"
                                                Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                TextWrapping="Wrap"/>
+                                    <Button Content="Before-restore backups…"
+                                            Command="{Binding ViewBeforeRestoreBackupsCommand}"
+                                            HorizontalAlignment="Left" FontSize="11"
+                                            Padding="8,3" Margin="0,8,0,0"
+                                            Style="{StaticResource NotedSecondaryButton}"/>
                                 </StackPanel>
                             </Border>
 

@@ -334,6 +334,7 @@ public partial class MainWindow : Window {
             case SettingsAction.ChangeFolder: ChangeFolderButton_Click(this, args); break;
             case SettingsAction.CreateBackup: CreateOrUpdateBackupButton_Click(this, args); break;
             case SettingsAction.ViewBackup: ViewBackupButton_Click(this, args); break;
+            case SettingsAction.ViewBeforeRestoreBackups: ViewBeforeRestoreBackups(); break;
             case SettingsAction.ExportBackup: ExportBackupButton_Click(this, args); break;
             case SettingsAction.ImportBackup: ImportBackupButton_Click(this, args); break;
             case SettingsAction.RestoreBackup: RestoreBackupButton_Click(this, args); break;
@@ -601,6 +602,17 @@ public partial class MainWindow : Window {
 
         if (dialog.ShowDialog() == true)
             ConfirmAndRequestBackupRestore();
+    }
+
+    private void ViewBeforeRestoreBackups()
+    {
+        var dialog = new BackupPreviewDialog(_backupCoordinator)
+        {
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.Manual
+        };
+        PositionBackupPreviewDialog(dialog);
+        dialog.ShowDialog();
     }
 
     private async void ExportBackupButton_Click(object sender, RoutedEventArgs e)

@@ -3,9 +3,80 @@ using static Noted.Services.BackupFormat;
 
 namespace Noted.Services;
 
+internal sealed record BeforeRestoreBackup(string DirectoryName, FullBackupPreview Preview);
+
+internal sealed record BeforeRestoreBackupList(IReadOnlyList<BeforeRestoreBackup> Backups, string? Error = null);
+
 internal sealed partial class FullBackupService
 {
     private const int BeforeRestoreBackupLimit = 3;
+
+    internal BeforeRestoreBackupList GetBeforeRestoreBackups()
+    {
+        var backups = new List<BeforeRestoreBackup>();
+        try
+        {
+            FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
+            if (!Directory.Exists(_backupDirectory))
+                return new BeforeRestoreBackupList(backups);
+
+            foreach (var path in Directory.EnumerateDirectories(
+                         _backupDirectory, BeforeRestoreDirectoryPrefix + "*", SearchOption.TopDirectoryOnly)
+                         .OrderByDescending(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+            {
+                var name = Path.GetFileName(path);
+                FullBackupPreview preview;
+                try
+                {
+                    preview = _archiveReader.GetBackupPreview(path, FullBackupType.BeforeRestore, includeVerificationToken: true);
+                }
+                catch (Exception ex) when (IsExpectedBackupException(ex) || ex is ArgumentException or NotSupportedException)
+                {
+                    ExceptionDiagnostics.Record(ex);
+                    preview = new FullBackupPreview(true, false, Guid.Empty, null, [], "The snapshot could not be read or verified.");
+                }
+                backups.Add(new BeforeRestoreBackup(name, preview));
+            }
+            return new BeforeRestoreBackupList(backups);
+        }
+        catch (Exception ex) when (IsExpectedBackupException(ex))
+        {
+            ExceptionDiagnostics.Record(ex);
+            return new BeforeRestoreBackupList(backups, "Before-restore backups could not all be listed. Close this window and try again.");
+        }
+    }
+
+    internal BackupFileContent ReadBeforeRestoreBackupFile(BeforeRestoreBackup backup, BackupFileSummary file)
+    {
+        try
+        {
+            var path = GetBeforeRestoreBackupPath(backup);
+            return _archiveReader.ReadBackupFile(path, FullBackupType.BeforeRestore,
+                backup.Preview.BackupId, file, backup.Preview.VerificationToken);
+        }
+        catch (Exception ex) when (IsExpectedBackupException(ex))
+        {
+            ExceptionDiagnostics.Record(ex);
+            return new BackupFileContent(false, true, BackupContentFormat.Text, null,
+                "The snapshot is no longer available or could not be verified. Close this window and check it again.");
+        }
+    }
+
+    private string GetBeforeRestoreBackupPath(BeforeRestoreBackup backup)
+    {
+        if (!backup.Preview.IsValid || string.IsNullOrWhiteSpace(backup.Preview.VerificationToken) ||
+            string.IsNullOrWhiteSpace(backup.DirectoryName) ||
+            backup.DirectoryName != Path.GetFileName(backup.DirectoryName) ||
+            !backup.DirectoryName.StartsWith(BeforeRestoreDirectoryPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("Select a verified before-restore snapshot.");
+
+        FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
+        var path = GetContainedPath(_backupDirectory, backup.DirectoryName);
+        if (!PathsEqual(Path.GetDirectoryName(path)!, _backupDirectory))
+            throw new InvalidDataException("The snapshot is outside Noted's backup storage.");
+        FileSystemLinkValidator.ValidateDirectory(path);
+        return path;
+    }
 
     internal BackupRestorePreparationResult PrepareBackupRestore(
         string? archivePath, Guid? expectedBackupId, string? verificationToken)

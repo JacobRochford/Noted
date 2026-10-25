@@ -239,6 +239,22 @@ public sealed class SettingsViewModelTests
     }
 
     [TestMethod]
+    public void BeforeRestoreBrowsingDoesNotRequireAValidUserBackup()
+    {
+        using var context = new Context();
+        foreach (var info in new[] { new FullBackupInfo(false, false, null, 0, null), new FullBackupInfo(true, false, null, 0, "invalid") })
+        {
+            context.Model.UpdateBackupInfo(info);
+            Assert.IsFalse(context.Model.ViewBackupCommand.CanExecute(null));
+            Assert.IsTrue(context.Model.ViewBeforeRestoreBackupsCommand.CanExecute(null));
+            context.Model.ViewBeforeRestoreBackupsCommand.Execute(null);
+        }
+        CollectionAssert.AreEqual(new[] { SettingsAction.ViewBeforeRestoreBackups, SettingsAction.ViewBeforeRestoreBackups }, context.Actions);
+        context.Model.CanCreateBackup = false;
+        Assert.IsFalse(context.Model.ViewBeforeRestoreBackupsCommand.CanExecute(null));
+    }
+
+    [TestMethod]
     public void PersistenceErrorsAreDisplayedWithoutApplyingUnsavedAppearance()
     {
         using var context = new Context();

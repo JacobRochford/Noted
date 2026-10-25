@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using Microsoft.Win32;
 using Noted.Helpers;
 using Noted.Services;
 
@@ -86,25 +87,30 @@ public partial class BackupPreviewDialog : Window
         WriteIndented = true
     };
 
-    private readonly FullBackupPreview _preview;
-    private readonly Func<Guid, BackupFileSummary, BackupFileContent> _readFile;
+    private FullBackupPreview _preview = new(false, false, Guid.Empty, null, [], null);
+    private Func<Guid, BackupFileSummary, BackupFileContent>? _readFile;
+    private readonly BackupCoordinator? _browserCoordinator;
     private readonly WindowEdgeResizer _edgeResizer;
     private int _selectionVersion;
     private bool _needsRecheck;
+    private bool _isExporting;
+
+    private BackupPreviewDialog()
+    {
+        InitializeComponent();
+        _edgeResizer = new WindowEdgeResizer(this, () => { });
+        Closed += (_, _) => _selectionVersion++;
+    }
 
     internal BackupPreviewDialog(
         FullBackupPreview preview,
         Func<Guid, BackupFileSummary, BackupFileContent> readFile,
-        bool isImport = false)
+        bool isImport = false) : this()
     {
         ArgumentNullException.ThrowIfNull(preview);
         ArgumentNullException.ThrowIfNull(readFile);
 
-        InitializeComponent();
-        _preview = preview;
         _readFile = readFile;
-        _edgeResizer = new WindowEdgeResizer(this, () => { });
-        Closed += (_, _) => _selectionVersion++;
 
         if (isImport)
         {
@@ -113,6 +119,60 @@ public partial class BackupPreviewDialog : Window
             FooterText.Text = "Preview is read-only. Import verifies every file again before restoring.";
         }
 
+        ShowPreview(preview);
+    }
+
+    internal BackupPreviewDialog(BackupCoordinator coordinator) : this()
+    {
+        _browserCoordinator = coordinator;
+        Title = DialogTitleText.Text = "Before-restore backups";
+        RestoreBackupButton.Visibility = Visibility.Collapsed;
+        ExportFileButton.Visibility = Visibility.Visible;
+        SnapshotPanel.Visibility = Visibility.Visible;
+        FooterText.Text = "Export saves a separate copy. Current Noted data stays unchanged.";
+        BackupDateText.Text = "Checking before-restore backups...";
+        VerificationBadge.Visibility = Visibility.Collapsed;
+        Loaded += LoadBeforeRestoreBackups;
+    }
+
+    private async void LoadBeforeRestoreBackups(object sender, RoutedEventArgs e)
+    {
+        Loaded -= LoadBeforeRestoreBackups;
+        var result = await Task.Run(_browserCoordinator!.GetBeforeRestoreBackups);
+        if (!IsVisible)
+            return;
+        SnapshotStatusText.Text = result.Error ?? "";
+        SnapshotStatusText.Visibility = result.Error is null ? Visibility.Collapsed : Visibility.Visible;
+        SnapshotSelector.ItemsSource = result.Backups.Select(backup => new BeforeRestoreBackupRow(backup)).ToList();
+        if (result.Backups.Count > 0)
+            SnapshotSelector.SelectedIndex = 0;
+        else
+        {
+            BackupDateText.Text = result.Error is null ? "No before-restore backups exist yet." : "Backups are unavailable.";
+            ShowMessage("Noted creates these snapshots to protect current data before restoration.");
+        }
+    }
+
+    private void SnapshotSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SnapshotSelector.SelectedItem is not BeforeRestoreBackupRow row)
+            return;
+        var backup = row.Backup;
+        _readFile = (_, file) => _browserCoordinator!.ReadBeforeRestoreBackupFile(backup, file);
+        ShowPreview(backup.Preview);
+        if (!backup.Preview.IsValid)
+            BackupDateText.Text = backup.DirectoryName;
+    }
+
+    private void ShowPreview(FullBackupPreview preview)
+    {
+        ++_selectionVersion;
+        _preview = preview;
+        _needsRecheck = false;
+        VerificationBadge.Visibility = Visibility.Visible;
+        VerificationText.Text = preview.IsValid ? "Verified" : "Unavailable";
+        VerificationText.SetResourceReference(TextBlock.ForegroundProperty,
+            preview.IsValid ? "NotedSuccessBrush" : "NotedDangerBrush");
         var date = preview.CreatedUtc?.ToLocalTime().ToString("MMM d, yyyy 'at' h:mm tt")
             ?? "unknown date";
         BackupDateText.Text = $"Backup from {date}";
@@ -124,12 +184,20 @@ public partial class BackupPreviewDialog : Window
             .ToList();
         if (BackupFileList.Items.Count > 0)
             BackupFileList.SelectedIndex = 0;
+        if (!preview.IsValid)
+        {
+            BackupSummaryText.Text = preview.Error ?? "The snapshot is no longer available.";
+            ShowMessage("This snapshot cannot be verified. Select another snapshot or reopen the browser to check again.");
+        }
+        UpdateExportButton();
     }
 
     private async void BackupFileList_SelectionChanged(
         object sender,
         SelectionChangedEventArgs e)
     {
+        var selectionVersion = ++_selectionVersion;
+        UpdateExportButton();
         if (BackupFileList.SelectedItem is not BackupPreviewRow row)
         {
             SelectedFileText.Text = "Select a file";
@@ -139,8 +207,11 @@ public partial class BackupPreviewDialog : Window
 
         SelectedFileText.Text = $"{row.Category}  •  {row.DisplayPath}";
         ShowMessage("Checking the selected file...");
-        var selectionVersion = ++_selectionVersion;
-        var content = await Task.Run(() => _readFile(_preview.BackupId, row.File));
+        var readFile = _readFile;
+        var backupId = _preview.BackupId;
+        if (readFile is null)
+            return;
+        var content = await Task.Run(() => readFile(backupId, row.File));
         if (selectionVersion != _selectionVersion ||
             !IsVisible ||
             !ReferenceEquals(BackupFileList.SelectedItem, row))
@@ -234,11 +305,56 @@ public partial class BackupPreviewDialog : Window
         VerificationText.Foreground = (Brush)FindResource("NotedDangerBrush");
         VerificationText.Text = "Recheck needed";
         BackupSummaryText.Text = "The backup changed or became unavailable. Close this window and view it again.";
+        UpdateExportButton();
+    }
+
+    private void UpdateExportButton() =>
+        ExportFileButton.IsEnabled = _preview.IsValid && !_needsRecheck && !_isExporting &&
+            BackupFileList.SelectedItem is BackupPreviewRow;
+
+    private async void ExportFileButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_browserCoordinator is null || _needsRecheck || _isExporting ||
+            SnapshotSelector.SelectedItem is not BeforeRestoreBackupRow snapshot ||
+            BackupFileList.SelectedItem is not BackupPreviewRow row)
+            return;
+        var dialog = new SaveFileDialog
+        {
+            Title = "Export Backup File",
+            Filter = "All files (*.*)|*.*",
+            FileName = Path.GetFileName(row.File.LogicalPath.Replace('/', Path.DirectorySeparatorChar)),
+            AddExtension = false,
+            CheckPathExists = true,
+            OverwritePrompt = false
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+
+        _isExporting = true;
+        SnapshotSelector.IsEnabled = BackupFileList.IsEnabled = false;
+        UpdateExportButton();
+        BackupExportResult result;
+        try
+        {
+            result = await Task.Run(() => _browserCoordinator.ExportBeforeRestoreBackupFile(
+                snapshot.Backup, row.File, dialog.FileName));
+        }
+        finally
+        {
+            _isExporting = false;
+            SnapshotSelector.IsEnabled = BackupFileList.IsEnabled = true;
+            UpdateExportButton();
+        }
+        if (!IsVisible)
+            return;
+        var message = result.Warning is null ? result.Message : $"{result.Message}\n\n{result.Warning}";
+        AppDialog.Show(this, message, result.Success ? "File Exported" : "File Export Failed",
+            MessageBoxButton.OK, result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
     }
 
     private void RestoreButton_Click(object sender, RoutedEventArgs e)
     {
-        if (!_needsRecheck)
+        if (_browserCoordinator is null && !_needsRecheck)
             DialogResult = true;
     }
 
@@ -252,4 +368,12 @@ public partial class BackupPreviewDialog : Window
         if (e.LeftButton == MouseButtonState.Pressed)
             DragMove();
     }
+}
+
+internal sealed class BeforeRestoreBackupRow(BeforeRestoreBackup backup)
+{
+    internal BeforeRestoreBackup Backup { get; } = backup;
+    public string Label => Backup.Preview.IsValid
+        ? $"{Backup.Preview.CreatedUtc?.ToLocalTime():MMM d, yyyy h:mm:ss tt}  •  {Backup.Preview.Files.Count} files  •  {Backup.Preview.BackupId.ToString("N")[..8]}"
+        : $"{Backup.DirectoryName}  •  unavailable";
 }

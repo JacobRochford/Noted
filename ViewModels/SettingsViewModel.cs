@@ -6,7 +6,7 @@ using Noted.Services;
 
 namespace Noted.ViewModels;
 
-internal enum SettingsAction { ChangeFolder, CreateBackup, ViewBackup, ExportBackup, ImportBackup, RestoreBackup }
+internal enum SettingsAction { ChangeFolder, CreateBackup, ViewBackup, ExportBackup, ImportBackup, RestoreBackup, ViewBeforeRestoreBackups }
 internal sealed record SettingsNotice(string Message, string Title, bool IsWarning = true);
 internal sealed record AppearanceOption(AppThemeMode Mode, string Label);
 internal sealed record DisplayOption(string? DeviceName, string Label);
@@ -49,6 +49,7 @@ internal sealed class SettingsViewModel : ObservableObject
     public ICommand ChangeFolderCommand { get; }
     public ICommand CreateBackupCommand { get; }
     public ICommand ViewBackupCommand { get; }
+    public ICommand ViewBeforeRestoreBackupsCommand { get; }
     public ICommand ExportBackupCommand { get; }
     public ICommand ImportBackupCommand { get; }
     public ICommand RestoreBackupCommand { get; }
@@ -72,6 +73,7 @@ internal sealed class SettingsViewModel : ObservableObject
         ChangeFolderCommand = new SettingsCommand(() => requestAction(SettingsAction.ChangeFolder));
         CreateBackupCommand = new SettingsCommand(() => requestAction(SettingsAction.CreateBackup), () => CanCreateBackup);
         ViewBackupCommand = new SettingsCommand(() => requestAction(SettingsAction.ViewBackup), () => CanViewBackup);
+        ViewBeforeRestoreBackupsCommand = new SettingsCommand(() => requestAction(SettingsAction.ViewBeforeRestoreBackups), () => CanCreateBackup);
         ExportBackupCommand = new SettingsCommand(() => requestAction(SettingsAction.ExportBackup), () => CanExportBackup);
         ImportBackupCommand = new SettingsCommand(() => requestAction(SettingsAction.ImportBackup), () => CanImportBackup);
         RestoreBackupCommand = new SettingsCommand(() => requestAction(SettingsAction.RestoreBackup), () => CanRestoreBackup);
@@ -108,7 +110,7 @@ internal sealed class SettingsViewModel : ObservableObject
     private void NotifyAll()
     {
         OnPropertyChanged(string.Empty);
-        foreach (var command in new[] { CreateBackupCommand, ViewBackupCommand, ExportBackupCommand,
+        foreach (var command in new[] { CreateBackupCommand, ViewBackupCommand, ViewBeforeRestoreBackupsCommand, ExportBackupCommand,
             ImportBackupCommand, RestoreBackupCommand, ApplyHotkeyCommand, ResetHotkeyCommand })
             ((SettingsCommand)command).Refresh();
     }

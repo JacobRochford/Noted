@@ -106,6 +106,18 @@ internal sealed class BackupCoordinator
     internal BackupExportResult ExportUserBackup(string destinationPath) =>
         _service.ExportUserBackup(destinationPath);
 
+    internal BeforeRestoreBackupList GetBeforeRestoreBackups() => _service.GetBeforeRestoreBackups();
+
+    internal BackupFileContent ReadBeforeRestoreBackupFile(BeforeRestoreBackup backup, BackupFileSummary file) =>
+        _service.ReadBeforeRestoreBackupFile(backup, file);
+
+    internal BackupExportResult ExportBeforeRestoreBackupFile(
+        BeforeRestoreBackup backup, BackupFileSummary file, string destinationPath)
+    {
+        SynchronizeNotesDirectory();
+        return _service.ExportBeforeRestoreBackupFile(backup, file, destinationPath);
+    }
+
     internal FullBackupResult CreateOrUpdateUserBackup()
     {
         var preparationIssues = PrepareData(includeRunRecoveryHistory: false);

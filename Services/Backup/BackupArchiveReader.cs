@@ -49,7 +49,7 @@ internal sealed class BackupArchiveReader
         };
     }
 
-    internal FullBackupPreview GetBackupPreview(string path, FullBackupType backupType)
+    internal FullBackupPreview GetBackupPreview(string path, FullBackupType backupType, bool includeVerificationToken = false)
     {
         var backup = ReadBackup(path, backupType);
         if (backup.Status == BackupReadStatus.Missing)
@@ -78,46 +78,23 @@ internal sealed class BackupArchiveReader
             manifest.BackupId,
             manifest.CreatedUtc,
             files,
-            null);
+            null,
+            includeVerificationToken ? GetManifestVerificationToken(manifest) : null);
     }
 
     internal BackupFileContent ReadBackupFile(
         string path,
         FullBackupType backupType,
         Guid backupId,
-        BackupFileSummary file)
+        BackupFileSummary file,
+        string? verificationToken = null)
     {
         if (backupId == Guid.Empty || string.IsNullOrWhiteSpace(file.LogicalPath))
             return PreviewSelectionRequired("Select a backup file to preview.");
 
-        var manifestResult = JsonFileStore.Read<FullBackupManifest>(
-            Path.Combine(path, ManifestFileName),
-            BackupFormat.JsonOptions);
-        var manifest = manifestResult.Value;
-        if (!manifestResult.Success ||
-            manifest is null ||
-            manifest.SchemaVersion != BackupSchemaVersion ||
-            manifest.Type != backupType ||
-            manifest.BackupId != backupId ||
-            manifest.Entries is null)
-        {
-            return BackupChanged("The backup changed after this preview was opened. Close this window and check it again.");
-        }
-
-        var entry = manifest.Entries.FirstOrDefault(item =>
-            string.Equals(
-                NormalizeLogicalPath(item.LogicalPath),
-                NormalizeLogicalPath(file.LogicalPath),
-                StringComparison.OrdinalIgnoreCase));
-        if (entry is null ||
-            entry.Length != file.Length ||
-            !string.Equals(entry.Sha256, file.Sha256, StringComparison.OrdinalIgnoreCase))
-        {
-            return BackupChanged("The selected file changed after this preview was opened. Close this window and check it again.");
-        }
-
         try
         {
+            var (_, entry) = ReadBackupSelection(path, backupType, backupId, file, verificationToken);
             if (entry.Length > MaximumPreviewFileSize)
             {
                 return PreviewSelectionRequired(
@@ -139,9 +116,53 @@ internal sealed class BackupArchiveReader
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
             ExceptionDiagnostics.Record(ex);
-            return BackupChanged("The selected file could not be verified.");
+            return BackupChanged(ex is InvalidDataException ? ex.Message : "The selected file could not be verified.");
         }
     }
+
+    internal (FullBackupManifest Manifest, FullBackupEntry Entry) ReadBackupSelection(
+        string path,
+        FullBackupType backupType,
+        Guid backupId,
+        BackupFileSummary file,
+        string? verificationToken)
+    {
+        FileSystemLinkValidator.ValidateDirectory(path);
+        FileSystemLinkValidator.ValidatePath(Path.Combine(path, ManifestFileName));
+        var manifestResult = JsonFileStore.Read<FullBackupManifest>(
+            Path.Combine(path, ManifestFileName),
+            BackupFormat.JsonOptions);
+        var manifest = manifestResult.Value;
+        if (!manifestResult.Success ||
+            manifest is null ||
+            manifest.SchemaVersion != BackupSchemaVersion ||
+            manifest.Type != backupType ||
+            backupId == Guid.Empty || manifest.BackupId != backupId ||
+            manifest.Entries is null ||
+            manifest.Entries.Any(item => item is null || string.IsNullOrWhiteSpace(item.LogicalPath)) ||
+            (verificationToken is not null &&
+             !string.Equals(GetManifestVerificationToken(manifest), verificationToken, StringComparison.Ordinal)))
+        {
+            throw new InvalidDataException("The backup changed after this preview was opened. Close this window and check it again.");
+        }
+
+        var entry = manifest.Entries.FirstOrDefault(item =>
+            string.Equals(
+                NormalizeLogicalPath(item.LogicalPath),
+                NormalizeLogicalPath(file.LogicalPath),
+                StringComparison.OrdinalIgnoreCase));
+        if (entry is null ||
+            entry.Length != file.Length ||
+            !string.Equals(entry.Sha256, file.Sha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("The selected file changed after this preview was opened. Close this window and check it again.");
+        }
+
+        return (manifest, entry);
+    }
+
+    private static string GetManifestVerificationToken(FullBackupManifest manifest) =>
+        Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(manifest, BackupFormat.JsonOptions)));
 
     internal FullBackupPreview GetImportPreview(string archivePath)
     {

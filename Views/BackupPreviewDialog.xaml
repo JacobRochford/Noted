@@ -161,12 +161,24 @@
                 </Border>
 
                 <Grid Grid.Row="1" Margin="0,0,0,12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Border BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="0,1,0,0"/>
-                    <StackPanel Margin="0,9,0,0">
+                    <StackPanel x:Name="SnapshotPanel" Grid.ColumnSpan="2" Visibility="Collapsed" Margin="0,0,0,8">
+                        <ComboBox x:Name="SnapshotSelector" DisplayMemberPath="Label"
+                                  Style="{StaticResource NotedComboBox}"
+                                  AutomationProperties.Name="Before-restore snapshot"
+                                  SelectionChanged="SnapshotSelector_SelectionChanged"/>
+                        <TextBlock x:Name="SnapshotStatusText" Visibility="Collapsed" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource NotedDangerBrush}" Margin="0,4,0,0"/>
+                    </StackPanel>
+                    <Border Grid.Row="1" BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="0,1,0,0"/>
+                    <StackPanel Grid.Row="1" Margin="0,9,0,0">
                         <TextBlock x:Name="BackupDateText"
                                    Foreground="{DynamicResource NotedTextBrush}"
                                    FontSize="12"
@@ -174,9 +186,11 @@
                         <TextBlock x:Name="BackupSummaryText"
                                    Margin="0,2,0,0"
                                    Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                   TextWrapping="Wrap"
                                    FontSize="11"/>
                     </StackPanel>
                     <Border x:Name="VerificationBadge"
+                            Grid.Row="1"
                             Grid.Column="1" Margin="12,9,0,0"
                             Padding="8,3" Background="{DynamicResource NotedSubtleSurfaceBrush}"
                             CornerRadius="9" VerticalAlignment="Center">
@@ -248,10 +262,15 @@
                 </Grid>
 
                 <Grid Grid.Row="3" Margin="0,13,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
                     <TextBlock Style="{StaticResource NotedFooterText}" x:Name="FooterText"
                                Text="Preview is read-only. Restore verifies every file again."
+                               TextWrapping="Wrap" Margin="0,0,12,0" VerticalAlignment="Center"
                                FontSize="10"/>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Content="Close" IsCancel="True"
                                 Click="CloseButton_Click"
                                 Style="{StaticResource DialogButton}"
@@ -260,6 +279,9 @@
                                 Content="Restore Full Backup"
                                 Click="RestoreButton_Click"
                                 Style="{StaticResource PrimaryDialogButton}"/>
+                        <Button x:Name="ExportFileButton" Content="Export Selected File…"
+                                Visibility="Collapsed" IsEnabled="False"
+                                Click="ExportFileButton_Click" Style="{StaticResource PrimaryDialogButton}"/>
                     </StackPanel>
                 </Grid>
             </Grid>
