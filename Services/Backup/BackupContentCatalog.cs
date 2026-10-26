@@ -101,6 +101,12 @@ internal sealed class BackupContentCatalog
         if (FileSystemLinkValidator.GetAttributes(sourcePath) is null)
             return null;
 
+        if (definition.Content == FixedBackupContent.Scratchpad)
+        {
+            sources.Add(CreateSourceEntry(definition.LogicalPath, sourcePath, null));
+            return null;
+        }
+
         NoteEditorSession? session = null;
         sources.Add(CreateSourceEntry(
             definition.LogicalPath,
@@ -231,7 +237,7 @@ internal sealed class BackupContentCatalog
             sources.Add(CreateSourceEntry(
                 ToLogicalPath(PersistencePaths.AppBackupRoot, relativePath),
                 path,
-                bytes => new BackupContentDetails(null, bytes.LongLength)));
+                null));
         }
     }
 
@@ -300,7 +306,7 @@ internal sealed class BackupContentCatalog
             sources.Add(CreateSourceEntry(
                 logicalPath,
                 path,
-                bytes => new BackupContentDetails(null, bytes.LongLength)));
+                null));
         }
     }
 
@@ -319,12 +325,17 @@ internal sealed class BackupContentCatalog
     private BackupSourceEntry CreateSourceEntry(
         string logicalPath,
         string sourcePath,
-        Func<byte[], BackupContentDetails> validator,
+        Func<byte[], BackupContentDetails>? validator,
         string? notesDirectory = null)
     {
         var readPath = logicalPath.StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase)
             ? FileSystemLinkValidator.ValidateWithinRoot(notesDirectory ?? _notesDirectory, sourcePath)
             : sourcePath;
+        if (validator is null)
+        {
+            var (length, hash) = BackupArchiveReader.HashFile(readPath);
+            return new BackupSourceEntry(logicalPath, Path.GetFullPath(sourcePath), length, hash, null, length);
+        }
         var bytes = ReadFileBytes(readPath);
         var details = validator(bytes);
         return new BackupSourceEntry(
@@ -348,9 +359,8 @@ internal sealed class BackupContentCatalog
 
         var definition = BackupContentDefinitions.Find(logicalPath);
         return CreateSourceEntry(logicalPath, destination,
-            bytes => definition is null
-                ? new BackupContentDetails(null, bytes.LongLength)
-                : ValidateFixedFile(definition.Content, bytes), notesRoot);
+            definition is null || definition.Content == FixedBackupContent.Scratchpad
+                ? null : bytes => ValidateFixedFile(definition.Content, bytes), notesRoot);
     }
 
     internal static BackupContentDetails ValidateSettings(byte[] bytes)

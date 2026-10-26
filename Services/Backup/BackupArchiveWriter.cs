@@ -1,5 +1,4 @@
 using System.IO;
-using System.Security.Cryptography;
 using System.Text.Json;
 using static Noted.Services.BackupFormat;
 
@@ -243,9 +242,8 @@ internal sealed class BackupArchiveWriter
             destinationStream.Flush(flushToDisk: true);
         }
 
-        var copiedBytes = BackupArchiveReader.ReadFileBytes(destinationPath);
-        var copiedHash = Convert.ToHexString(SHA256.HashData(copiedBytes));
-        if (copiedBytes.LongLength != source.Length ||
+        var (copiedLength, copiedHash) = BackupArchiveReader.HashFile(destinationPath);
+        if (copiedLength != source.Length ||
             !string.Equals(copiedHash, source.Sha256, StringComparison.OrdinalIgnoreCase))
         {
             throw new FileVerificationException(

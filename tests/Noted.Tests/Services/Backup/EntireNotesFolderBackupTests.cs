@@ -104,6 +104,7 @@ public sealed class EntireNotesFolderBackupTests
         fixture.Create(false);
         var before = File.ReadAllBytes(fixture.ManifestPath);
         fixture.Write("image.png", "binary");
+        BackupTestSession.Save(fixture.App, Path.Combine(fixture.Notes, "one.txt"), fixture.Directory.File("outside.txt"));
         var service = fixture.Service;
         var confirmations = 0;
         var result = service.CreateOrUpdateUserBackup(true, reason =>
@@ -133,6 +134,7 @@ public sealed class EntireNotesFolderBackupTests
         fixture.Create(false);
         var before = File.ReadAllBytes(fixture.ManifestPath);
         fixture.Write("closed.bin", "binary");
+        BackupTestSession.Save(fixture.App, Path.Combine(fixture.Notes, "one.txt"), fixture.Directory.File("outside.txt"));
         var result = fixture.Service.CreateOrUpdateUserBackup(true, _ =>
         {
             if (change == "add") fixture.Write("late.txt", "late");
@@ -220,7 +222,7 @@ public sealed class EntireNotesFolderBackupTests
     }
 
     [TestMethod]
-    public void RecentBackupsUsePreferenceAndExposeLocalOnlyWithoutWarning()
+    public void RecentBackupsWithArbitraryFilesRemainPortableWithoutWarning()
     {
         using var fixture = new Fixture();
         fixture.Create(false);
@@ -230,8 +232,8 @@ public sealed class EntireNotesFolderBackupTests
         Assert.IsNotNull(result);
         Assert.AreEqual(FullBackupStatus.Created, result.Status);
         Assert.IsNull(result.Warning);
-        Assert.IsNotNull(result.ExportIneligibility);
-        Assert.IsNotNull(coordinator.GetUserBackupInfo().RecentBackupNotice);
+        Assert.IsNull(result.ExportIneligibility);
+        Assert.IsNull(coordinator.GetUserBackupInfo().RecentBackupNotice);
     }
 
     [TestMethod]

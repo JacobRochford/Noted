@@ -7,7 +7,7 @@ using static Noted.Services.BackupFormat;
 
 namespace Noted.Services;
 
-internal sealed class BackupArchiveReader
+internal sealed partial class BackupArchiveReader
 {
     private const int MaximumImportFileCount = 10_000;
     private const long MaximumImportFileSize = 256L * 1024 * 1024;
@@ -170,9 +170,10 @@ internal sealed class BackupArchiveReader
         if (string.IsNullOrWhiteSpace(archivePath) || !File.Exists(archivePath))
             return new FullBackupPreview(false, false, Guid.Empty, null, [], "The selected backup file could not be found.");
 
+        var multipart = false;
         try
         {
-            var archive = ReadBackupArchive(archivePath);
+            var archive = ReadBackupArchive(archivePath, out multipart);
             var importedFiles = InspectImportedFiles(archive);
             var previewManifest = _createImportedManifest(
                 archive.Manifest,
@@ -206,7 +207,10 @@ internal sealed class BackupArchiveReader
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
             ExceptionDiagnostics.Record(ex);
-            return new FullBackupPreview(true, false, Guid.Empty, null, [], "The selected backup could not be read or verified.");
+            var error = multipart && ex is InvalidDataException ? ex.Message
+                : multipart && ex is EndOfStreamException ? "The multipart backup is incomplete. No data was imported."
+                : "The selected backup could not be read or verified.";
+            return new FullBackupPreview(true, false, Guid.Empty, null, [], error);
         }
     }
 
@@ -235,6 +239,9 @@ internal sealed class BackupArchiveReader
                     StringComparison.OrdinalIgnoreCase));
             if (sourceEntry is null)
                 return BackupChanged("The selected file is no longer present in the imported backup.");
+
+            if (archive.IsMultipart && sourceEntry.Length > MaximumPreviewFileSize)
+                return PreviewSelectionRequired("This file is verified but too large to display in the preview window.");
 
             var importedFile = ReadImportedFile(archive, sourceEntry);
             if (!string.Equals(importedFile.LogicalPath, file.LogicalPath, StringComparison.OrdinalIgnoreCase) ||
@@ -325,15 +332,14 @@ internal sealed class BackupArchiveReader
                 if (!File.Exists(filePath))
                     return InvalidBackup(backupType, path, $"The backup file '{entry.LogicalPath}' is missing.");
 
-                var bytes = ReadFileBytes(filePath);
-                if (bytes.LongLength != entry.Length ||
-                    !string.Equals(Convert.ToHexString(SHA256.HashData(bytes)), entry.Sha256, StringComparison.OrdinalIgnoreCase))
+                try { VerifyFile(filePath, entry); }
+                catch (FileVerificationException)
                 {
                     return InvalidBackup(backupType, path, $"The backup file '{entry.LogicalPath}' failed hash verification.");
                 }
                 var definition = BackupContentDefinitions.Find(NormalizeLogicalPath(entry.LogicalPath));
                 if (definition?.Content is FixedBackupContent.EditorSession or FixedBackupContent.JotCapture)
-                    ValidateFixedFile(definition.Content, bytes);
+                    ValidateFixedFile(definition.Content, ReadFileBytes(filePath));
             }
 
             var actualPaths = EnumerateFilesWithoutLinks(filesDirectory)
@@ -361,8 +367,13 @@ internal sealed class BackupArchiveReader
         }
     }
 
-    internal BackupArchive ReadBackupArchive(string archivePath)
+    internal BackupArchive ReadBackupArchive(string archivePath, CancellationToken cancellationToken = default) =>
+        ReadBackupArchive(archivePath, out _, cancellationToken);
+
+    private BackupArchive ReadBackupArchive(string archivePath, out bool isMultipart, CancellationToken cancellationToken = default)
     {
+        isMultipart = false;
+        cancellationToken.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
         var fullPath = Path.GetFullPath(archivePath);
         fullPath = Path.Combine(FileSystemLinkValidator.ResolveDirectory(Path.GetDirectoryName(fullPath)!), Path.GetFileName(fullPath));
@@ -370,6 +381,16 @@ internal sealed class BackupArchiveReader
         if (!File.Exists(fullPath))
             throw new FileNotFoundException("The selected backup file could not be found.", fullPath);
 
+        using (var detection = File.OpenRead(fullPath))
+        {
+            isMultipart = MultipartBackupContainer.IsMultipart(detection);
+            if (isMultipart)
+            {
+                var multipart = MultipartBackupContainer.Read(fullPath, cancellationToken: cancellationToken);
+                ValidateImportedManifest(multipart.Manifest, multipart: true);
+                return multipart;
+            }
+        }
         using var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
         using var archive = new ZipArchive(fileStream, ZipArchiveMode.Read);
         if (archive.Entries.Count == 0)
@@ -427,6 +448,8 @@ internal sealed class BackupArchiveReader
 
     internal ImportedBackupFile ReadImportedFile(BackupArchive source, FullBackupEntry entry)
     {
+        if (source.IsMultipart)
+            return ReadMultipartPreviewFile(source, entry);
         FileSystemLinkValidator.ValidatePath(source.Path);
         using var fileStream = new FileStream(source.Path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
         using var archive = new ZipArchive(fileStream, ZipArchiveMode.Read);
@@ -460,13 +483,19 @@ internal sealed class BackupArchiveReader
         }
     }
 
-    internal IReadOnlyList<ImportedBackupFileInfo> InspectImportedFiles(BackupArchive source)
+    internal IReadOnlyList<ImportedBackupFileInfo> InspectImportedFiles(BackupArchive source, CancellationToken cancellationToken = default)
     {
+        if (source.IsMultipart)
+            return ProcessMultipartFiles(source, cancellationToken: cancellationToken);
         FileSystemLinkValidator.ValidatePath(source.Path);
         using var fileStream = new FileStream(source.Path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
         using var archive = new ZipArchive(fileStream, ZipArchiveMode.Read);
         var files = source.Manifest.Entries
-            .Select(entry => ReadImportedFile(archive, source.Manifest, entry).ToInfo())
+            .Select(entry =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return ReadImportedFile(archive, source.Manifest, entry).ToInfo();
+            })
             .ToList();
         ValidateImportedFileDestinations(files);
         return files;
@@ -507,7 +536,7 @@ internal sealed class BackupArchiveReader
         }
     }
 
-    internal string? GetExportIneligibility(string path, FullBackupManifest manifest)
+    internal string? GetLegacyExportIneligibility(string path, FullBackupManifest manifest)
     {
         try
         {
@@ -530,7 +559,7 @@ internal sealed class BackupArchiveReader
         }
     }
 
-    private void ValidateImportedManifest(FullBackupManifest manifest)
+    private void ValidateImportedManifest(FullBackupManifest manifest, bool multipart = false)
     {
         if (manifest.SchemaVersion != BackupSchemaVersion)
             throw new InvalidDataException("The selected backup schema is not supported.");
@@ -550,7 +579,7 @@ internal sealed class BackupArchiveReader
         }
         if (manifest.Entries is null || manifest.Entries.Count == 0)
             throw new InvalidDataException("The selected backup contains no files.");
-        if (manifest.Entries.Count > MaximumImportFileCount)
+        if (!multipart && manifest.Entries.Count > MaximumImportFileCount)
             throw new InvalidDataException($"The selected backup contains {manifest.Entries.Count} files. Import allows at most {MaximumImportFileCount} files.");
         if (manifest.Entries.Any(entry => entry is null))
             throw new InvalidDataException("The selected backup manifest contains an empty file entry.");
@@ -595,9 +624,8 @@ internal sealed class BackupArchiveReader
             var destination = _getRestoreDestination(entry.LogicalPath, manifest);
             if (NormalizeLogicalPath(entry.LogicalPath).StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase))
                 destination = FileSystemLinkValidator.ValidateWithinRoot(manifest.NotesRoot, destination);
-            var bytes = ReadFileBytes(destination);
-            var hash = Convert.ToHexString(SHA256.HashData(bytes));
-            return bytes.LongLength == entry.Length &&
+            var (length, hash) = HashFile(destination);
+            return length == entry.Length &&
                    string.Equals(hash, entry.Sha256, StringComparison.OrdinalIgnoreCase)
                 ? BackupFileComparison.Unchanged
                 : BackupFileComparison.Changed;
@@ -620,6 +648,20 @@ internal sealed class BackupArchiveReader
         var bytes = new byte[stream.Length];
         stream.ReadExactly(bytes);
         return bytes;
+    }
+
+    internal static (long Length, string Hash) HashFile(string path)
+    {
+        FileSystemLinkValidator.ValidatePath(path);
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
+        return (stream.Length, Convert.ToHexString(SHA256.HashData(stream)));
+    }
+
+    internal static void VerifyFile(string path, FullBackupEntry entry)
+    {
+        var (length, hash) = HashFile(path);
+        if (length != entry.Length || !hash.Equals(entry.Sha256, StringComparison.OrdinalIgnoreCase))
+            throw new FileVerificationException($"The file '{entry.LogicalPath}' did not match the verified backup.");
     }
 
     internal static void VerifyFileBytes(byte[] bytes, long expectedLength, string expectedHash, string logicalPath)
@@ -713,7 +755,7 @@ internal sealed record BackupReadResult(
     FullBackupManifest? Manifest,
     string? Error);
 
-internal sealed record BackupArchive(string Path, FullBackupManifest Manifest, string ManifestHash);
+internal sealed record BackupArchive(string Path, FullBackupManifest Manifest, string ManifestHash, bool IsMultipart = false);
 
 internal sealed record ImportedBackupFile(
     string SourceLogicalPath,

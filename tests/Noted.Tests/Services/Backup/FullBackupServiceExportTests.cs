@@ -14,7 +14,7 @@ public sealed partial class FullBackupServiceTests
     [DataRow(".json", 16 * 1024 * 1024, true)]
     [DataRow(".JSON", 16 * 1024 * 1024 + 1, false)]
     [DataRow(".txt", 16 * 1024 * 1024 + 1, true)]
-    public void ExportUsesImportPayloadLimitsWithoutChangingLocalEligibility(string extension, int size, bool eligible)
+    public void ExportAutomaticallyUsesMultipartBeyondLegacyPayloadLimits(string extension, int size, bool eligible)
     {
         using var directory = new TemporaryTestDirectory();
         var paths = CreateSourceData(directory);
@@ -27,7 +27,7 @@ public sealed partial class FullBackupServiceTests
         BackupTestSession.Save(paths.AppData, note);
         var service = new FullBackupService(paths.AppData, paths.Notes);
         Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
-        Assert.AreEqual(eligible, service.GetUserBackupInfo().ExportIneligibility is null);
+        Assert.IsNull(service.GetUserBackupInfo().ExportIneligibility);
         var backupPath = Path.Combine(service.BackupDirectory, "protected");
         var before = FingerprintExportFixture(backupPath);
         var destination = directory.File("portable.notedbackup");
@@ -35,7 +35,8 @@ public sealed partial class FullBackupServiceTests
 
         var result = service.ExportUserBackup(destination);
 
-        Assert.AreEqual(eligible, result.Success, result.Message);
+        Assert.IsTrue(result.Success, result.Message);
+        Assert.IsTrue(service.GetBackupImportPreview(destination).IsValid);
         if (eligible)
         {
             Assert.IsTrue(service.GetBackupImportPreview(destination).IsValid);
@@ -46,9 +47,11 @@ public sealed partial class FullBackupServiceTests
         }
         else
         {
-            StringAssert.Contains(result.Message, "notes/large.JSON");
-            StringAssert.Contains(result.Message, "JSON import limit of 16 MiB");
-            Assert.AreEqual("existing export", File.ReadAllText(destination));
+            using var stream = File.OpenRead(destination);
+            Assert.IsTrue(MultipartBackupContainer.IsMultipart(stream));
+            var legacy = directory.File("legacy.notedbackup");
+            ZipFile.CreateFromDirectory(backupPath, legacy);
+            Assert.IsFalse(service.GetBackupImportPreview(legacy).IsValid);
         }
         Assert.IsTrue(service.GetUserBackupInfo().IsValid);
         CollectionAssert.AreEqual(before, FingerprintExportFixture(backupPath));
@@ -145,7 +148,7 @@ public sealed partial class FullBackupServiceTests
     [TestMethod]
     [DataRow(0, true)]
     [DataRow(1, false)]
-    public void ExportChecksUncompressedManifestSizeWithoutInvalidatingLocalBackup(int extraBytes, bool eligible)
+    public void ExportUsesMultipartBeyondLegacyManifestSize(int extraBytes, bool eligible)
     {
         using var directory = new TemporaryTestDirectory();
         var app = directory.File("app");
@@ -159,21 +162,20 @@ public sealed partial class FullBackupServiceTests
         manifest.CopyTo(padded, 0);
         File.WriteAllBytes(manifestPath, padded);
         Assert.IsTrue(service.GetUserBackupInfo().IsValid);
-        Assert.AreEqual(eligible, service.GetUserBackupInfo().ExportIneligibility is null);
+        Assert.IsNull(service.GetUserBackupInfo().ExportIneligibility);
         var before = FingerprintExportFixture(backupPath);
         var destination = directory.File("portable.notedbackup");
         File.WriteAllText(destination, "existing export");
 
         var result = service.ExportUserBackup(destination);
 
-        Assert.AreEqual(eligible, result.Success, result.Message);
-        if (eligible)
-            Assert.IsTrue(service.GetBackupImportPreview(destination).IsValid);
-        else
-        {
-            StringAssert.Contains(result.Message, "manifest exceeds the 4 MiB import limit");
-            Assert.AreEqual("existing export", File.ReadAllText(destination));
-        }
+        Assert.IsTrue(result.Success, result.Message);
+        Assert.IsTrue(service.GetBackupImportPreview(destination).IsValid);
+        using (var input = File.OpenRead(destination))
+            Assert.AreEqual(!eligible, MultipartBackupContainer.IsMultipart(input));
+        var legacy = directory.File("legacy.notedbackup");
+        ZipFile.CreateFromDirectory(backupPath, legacy);
+        Assert.AreEqual(eligible, service.GetBackupImportPreview(legacy).IsValid);
         Assert.IsTrue(service.GetUserBackupInfo().IsValid);
         CollectionAssert.AreEqual(before, FingerprintExportFixture(backupPath));
         Assert.HasCount(0, Directory.GetFiles(directory.Path, ".portable.notedbackup.*"));

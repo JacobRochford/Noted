@@ -42,7 +42,7 @@ internal static class FileWriter
             temporaryPath => WriteTemporaryByteFile(temporaryPath, content));
     }
 
-    private static FileWriteResult WriteFile(
+    internal static FileWriteResult WriteFile(
         string destinationPath,
         string? backupPath,
         Action<string> writeTemporaryFile)

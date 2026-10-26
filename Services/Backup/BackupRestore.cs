@@ -110,6 +110,26 @@ internal sealed class BackupRestore
                     continue;
                 var sourcePath = GetContainedPath(filesDirectory, entry.LogicalPath);
                 var destinationPath = ValidateDestination(entry.LogicalPath, manifest);
+                if (BackupContentDefinitions.Find(NormalizeLogicalPath(entry.LogicalPath))?.Content != FixedBackupContent.JotCapture)
+                {
+                    FileWriter.WriteFile(destinationPath, null, temporaryPath =>
+                    {
+                        FileSystemLinkValidator.ValidatePath(sourcePath);
+                        FileSystemLinkValidator.ValidatePath(temporaryPath);
+                        using (var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        using (var output = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                        {
+                            source.CopyTo(output);
+                            output.Flush(flushToDisk: true);
+                        }
+                        BackupArchiveReader.VerifyFile(temporaryPath, entry);
+                        if (!string.Equals(destinationPath, ValidateDestination(entry.LogicalPath, manifest), StringComparison.OrdinalIgnoreCase))
+                            throw new IOException("The restore destination changed during preparation.");
+                    });
+                    BackupArchiveReader.VerifyFile(destinationPath, entry);
+                    restoredCount++;
+                    continue;
+                }
                 var bytes = BackupArchiveReader.ReadFileBytes(sourcePath);
                 BackupArchiveReader.VerifyFileBytes(bytes, entry.Length, entry.Sha256, entry.LogicalPath);
                 destinationPath = ValidateDestination(entry.LogicalPath, manifest);

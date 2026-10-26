@@ -25,13 +25,15 @@ internal sealed partial class FullBackupService
     internal FullBackupResult ScheduleBackupImportRestore(
         string archivePath,
         Guid expectedBackupId,
-        string expectedVerificationToken)
+        string expectedVerificationToken,
+        CancellationToken cancellationToken = default)
     {
         string? buildPath = null;
         string? pendingPath = null;
         Guid? importId = null;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             FileSystemLinkValidator.ValidatePath(GetRestoreRequestPath());
             if (File.Exists(GetRestoreRequestPath()))
             {
@@ -53,7 +55,7 @@ internal sealed partial class FullBackupService
                     string.Join(", ", interruptedWork.Select(Path.GetFileName)));
             }
 
-            var archive = _archiveReader.ReadBackupArchive(archivePath);
+            var archive = _archiveReader.ReadBackupArchive(archivePath, cancellationToken);
             if (archive.Manifest.BackupId != expectedBackupId ||
                 !archive.ManifestHash.Equals(expectedVerificationToken, StringComparison.OrdinalIgnoreCase))
             {
@@ -67,7 +69,7 @@ internal sealed partial class FullBackupService
             importId = Guid.NewGuid();
 
             // check rebased paths and content before creating restore files.
-            _archiveReader.InspectImportedFiles(archive);
+            _archiveReader.InspectImportedFiles(archive, cancellationToken);
 
             FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
 
@@ -78,7 +80,7 @@ internal sealed partial class FullBackupService
             var filesDirectory = Path.Combine(buildPath, FilesDirectoryName);
             FileSystemLinkValidator.ValidateDirectory(filesDirectory);
             Directory.CreateDirectory(filesDirectory);
-            var importedFiles = WriteImportedFiles(archive, filesDirectory);
+            var importedFiles = WriteImportedFiles(archive, filesDirectory, cancellationToken);
             var manifest = CreateImportedManifest(
                 archive.Manifest,
                 importId.Value,
@@ -99,6 +101,8 @@ internal sealed partial class FullBackupService
             buildPath = null;
             _archiveReader.VerifyBackupFolder(pendingPath, FullBackupType.User);
 
+            cancellationToken.ThrowIfCancellationRequested();
+
             var request = new FullBackupRestoreRequest(
                 BackupSchemaVersion,
                 importId.Value,
@@ -116,24 +120,30 @@ internal sealed partial class FullBackupService
                 pendingPath,
                 "The imported backup is verified and ready to restore when Noted closes. Your user backup was not changed.");
         }
-        catch (Exception ex) when (IsExpectedBackupException(ex))
+        catch (Exception ex) when (IsExpectedBackupException(ex) || ex is OperationCanceledException)
         {
             ExceptionDiagnostics.Record(ex);
             TryDeleteImportRestoreRequest(importId);
-            TryDeleteImportDirectory(buildPath);
-            TryDeleteImportDirectory(pendingPath);
+            var cleanupWarning = string.Join(" ", new[] { TryDeleteImportDirectory(buildPath), TryDeleteImportDirectory(pendingPath) }
+                .Where(message => message is not null));
             return new FullBackupResult(
                 FullBackupStatus.Failed,
                 FullBackupType.User,
                 null,
-                "The backup import could not be prepared.");
+                ex is OperationCanceledException ? "Backup import was cancelled."
+                    : ex is InvalidDataException ? $"The backup import could not be prepared: {ex.Message}"
+                    : "The backup import could not be prepared.",
+                string.IsNullOrEmpty(cleanupWarning) ? null : cleanupWarning);
         }
     }
 
     private IReadOnlyList<ImportedBackupFileInfo> WriteImportedFiles(
         BackupArchive source,
-        string filesDirectory)
+        string filesDirectory,
+        CancellationToken cancellationToken)
     {
+        if (source.IsMultipart)
+            return _archiveReader.ProcessMultipartFiles(source, filesDirectory, cancellationToken);
         FileSystemLinkValidator.ValidatePath(source.Path);
         using var fileStream = new FileStream(
             source.Path,
@@ -147,6 +157,7 @@ internal sealed partial class FullBackupService
         var files = new List<ImportedBackupFileInfo>(source.Manifest.Entries.Count);
         foreach (var entry in source.Manifest.Entries)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var file = _archiveReader.ReadImportedFile(archive, source.Manifest, entry);
             if (!importedPaths.Add(file.LogicalPath))
                 throw new InvalidDataException($"Multiple imported files map to '{file.LogicalPath}'.");
@@ -361,18 +372,20 @@ internal sealed partial class FullBackupService
     private string GetPendingImportPath(Guid importId) =>
         Path.Combine(_backupDirectory, $"{PendingImportDirectoryPrefix}{importId:N}");
 
-    private void TryDeleteImportDirectory(string? path)
+    private string? TryDeleteImportDirectory(string? path)
     {
         if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
-            return;
+            return null;
 
         try
         {
             DeleteImportDirectory(path);
+            return null;
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
             ExceptionDiagnostics.Record(ex);
+            return $"Temporary import storage could not be removed: '{path}'.";
         }
     }
 

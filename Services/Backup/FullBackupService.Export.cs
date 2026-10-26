@@ -13,7 +13,7 @@ internal sealed record BackupExportResult(
 
 internal sealed partial class FullBackupService
 {
-    internal BackupExportResult ExportUserBackup(string destinationPath)
+    internal BackupExportResult ExportUserBackup(string destinationPath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
         var exportPath = Path.GetFullPath(destinationPath);
@@ -37,6 +37,7 @@ internal sealed partial class FullBackupService
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
             var resolvedBackupDirectory = FileSystemLinkValidator.ResolveDirectory(_backupDirectory);
             exportDirectory = FileSystemLinkValidator.ResolveDirectory(exportDirectory);
@@ -66,8 +67,34 @@ internal sealed partial class FullBackupService
             }
 
             FileSystemLinkValidator.ValidatePath(tempPath);
-            WriteBackupExport(tempPath, backup);
-            rollbackPath = PublishBackupExport(tempPath, exportPath, path => VerifyBackupExport(path, backup));
+            var ineligibility = _archiveReader.GetExportIneligibility(backupPath, backup.Manifest!);
+            if (ineligibility is not null)
+                throw new InvalidDataException(ineligibility);
+            var multipart = _archiveReader.GetLegacyExportIneligibility(backupPath, backup.Manifest!) is not null;
+            if (multipart)
+            {
+                using var output = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                    64 * 1024, FileOptions.WriteThrough);
+                MultipartBackupContainer.Write(output, backup.Manifest!, entry =>
+                {
+                    var source = GetContainedPath(Path.Combine(backupPath, FilesDirectoryName), entry.LogicalPath);
+                    FileSystemLinkValidator.ValidatePath(source);
+                    return new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
+                }, cancellationToken);
+                output.Flush(flushToDisk: true);
+            }
+            else
+            {
+                WriteBackupExport(tempPath, backup, cancellationToken);
+            }
+            // cancellation is honored before publication; rollback verification must finish once publication starts.
+            cancellationToken.ThrowIfCancellationRequested();
+            var current = _archiveReader.ReadBackup(backupPath, FullBackupType.User);
+            if (current.Status != BackupReadStatus.Valid ||
+                System.Text.Json.JsonSerializer.Serialize(current.Manifest, BackupFormat.JsonOptions) !=
+                System.Text.Json.JsonSerializer.Serialize(backup.Manifest, BackupFormat.JsonOptions))
+                throw new InvalidDataException("The local backup changed during export. Nothing was published.");
+            rollbackPath = PublishBackupExport(tempPath, exportPath, path => VerifyBackupExport(path, backup), cancellationToken);
 
             string? warning = null;
             if (rollbackPath is not null)
@@ -80,7 +107,7 @@ internal sealed partial class FullBackupService
                 catch (Exception ex) when (IsExpectedBackupException(ex))
                 {
                     ExceptionDiagnostics.Record(ex);
-                    warning = "The export is verified, but its temporary rollback file could not be removed.";
+                    warning = $"The export is verified, but its rollback file could not be removed: '{rollbackPath}'.";
                 }
             }
 
@@ -90,22 +117,26 @@ internal sealed partial class FullBackupService
                 $"Exported the verified backup to '{exportPath}'.",
                 warning);
         }
-        catch (Exception ex) when (IsExpectedBackupException(ex))
+        catch (Exception ex) when (IsExpectedBackupException(ex) || ex is OperationCanceledException)
         {
             ExceptionDiagnostics.Record(ex);
-            TryDeleteTemporaryExport(tempPath);
+            var cleanupWarning = CleanupFileExport(tempPath);
             return new BackupExportResult(
                 false,
                 null,
-                ex is InvalidDataException
-                    ? $"The backup could not be exported: {ex.Message} Your local backup was not changed."
-                    : "The backup could not be exported.");
+                ex is OperationCanceledException ? "Backup export was cancelled."
+                    : ex is InvalidDataException
+                        ? $"The backup could not be exported: {ex.Message} Your local backup was not changed."
+                        : "The backup could not be exported.",
+                cleanupWarning);
         }
     }
 
-    internal static string? PublishBackupExport(string tempPath, string exportPath, Action<string> verify)
+    internal static string? PublishBackupExport(string tempPath, string exportPath, Action<string> verify,
+        CancellationToken cancellationToken = default)
     {
         verify(tempPath);
+        cancellationToken.ThrowIfCancellationRequested();
 
         string? rollbackPath = null;
         FileSystemLinkValidator.ValidatePath(exportPath);
@@ -127,10 +158,16 @@ internal sealed partial class FullBackupService
         {
             verify(exportPath);
         }
-        catch
+        catch (Exception ex)
         {
-            PreserveFailedExport(exportPath, rollbackPath);
-            throw;
+            string failedPath;
+            try { failedPath = PreserveFailedExport(exportPath, rollbackPath); }
+            catch (Exception recoveryError) when (IsExpectedBackupException(recoveryError))
+            {
+                throw new InvalidDataException($"Export verification and rollback failed. Review '{exportPath}'" +
+                    (rollbackPath is null ? "." : $" and the preserved rollback file '{rollbackPath}'."), recoveryError);
+            }
+            throw new InvalidDataException($"{ex.Message} The failed export was preserved at '{failedPath}'.", ex);
         }
 
         return rollbackPath;
@@ -138,7 +175,8 @@ internal sealed partial class FullBackupService
 
     private static void WriteBackupExport(
         string archivePath,
-        BackupReadResult backup)
+        BackupReadResult backup,
+        CancellationToken cancellationToken)
     {
         var manifest = backup.Manifest
             ?? throw new FileVerificationException("The verified backup manifest is unavailable.");
@@ -163,6 +201,7 @@ internal sealed partial class FullBackupService
             foreach (var entry in manifest.Entries
                          .OrderBy(item => item.LogicalPath, StringComparer.OrdinalIgnoreCase))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 AddArchiveFile(
                     archive,
                     $"{FilesDirectoryName}/{NormalizeLogicalPath(entry.LogicalPath)}",
@@ -200,6 +239,14 @@ internal sealed partial class FullBackupService
         var manifest = backup.Manifest
             ?? throw new FileVerificationException("The verified backup manifest is unavailable.");
         var importedArchive = _archiveReader.ReadBackupArchive(archivePath);
+        if (importedArchive.IsMultipart)
+        {
+            if (System.Text.Json.JsonSerializer.Serialize(importedArchive.Manifest, BackupFormat.JsonOptions) !=
+                System.Text.Json.JsonSerializer.Serialize(manifest, BackupFormat.JsonOptions))
+                throw new InvalidDataException("The exported multipart manifest does not match the verified backup.");
+            _archiveReader.InspectImportedFiles(importedArchive);
+            return;
+        }
         FileSystemLinkValidator.ValidatePath(archivePath);
         using var archive = ZipFile.OpenRead(archivePath);
         var entries = archive.Entries
@@ -287,7 +334,7 @@ internal sealed partial class FullBackupService
         return SHA256.HashData(source).AsSpan().SequenceEqual(SHA256.HashData(archived));
     }
 
-    private static void PreserveFailedExport(
+    private static string PreserveFailedExport(
         string exportPath,
         string? rollbackPath)
     {
@@ -305,23 +352,12 @@ internal sealed partial class FullBackupService
                 exportPath,
                 failedPath,
                 ignoreMetadataErrors: true);
-            return;
+            return failedPath;
         }
 
         if (File.Exists(exportPath))
             File.Move(exportPath, failedPath);
+        return failedPath;
     }
 
-    private static void TryDeleteTemporaryExport(string path)
-    {
-        try
-        {
-            FileSystemLinkValidator.ValidatePath(path);
-            FileWriter.DeleteIfExists(path);
-        }
-        catch (Exception ex) when (IsExpectedBackupException(ex))
-        {
-            ExceptionDiagnostics.Record(ex);
-        }
-    }
 }
