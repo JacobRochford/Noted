@@ -44,7 +44,8 @@ internal sealed class BackupArchiveReader
                 true,
                 backup.Manifest!.CreatedUtc,
                 backup.Manifest.Entries.Count,
-                null),
+                null,
+                GetExportIneligibility(path, backup.Manifest)),
             _ => new FullBackupInfo(true, false, null, 0, backup.Error)
         };
     }
@@ -389,8 +390,7 @@ internal sealed class BackupArchiveReader
             entry.FullName.Equals(ManifestFileName, StringComparison.OrdinalIgnoreCase));
         if (manifestEntry is null)
             throw new InvalidDataException("The selected backup does not contain a manifest.");
-        if (manifestEntry.Length > MaximumImportManifestSize)
-            throw new InvalidDataException($"The selected backup manifest exceeds the {MaximumImportManifestSize / (1024 * 1024)} MiB import limit ({MaximumImportManifestSize} bytes).");
+        ValidateArchiveManifestSize(manifestEntry.Length);
 
         var manifestBytes = ReadArchiveEntry(manifestEntry, MaximumImportManifestSize);
         var manifestHash = Convert.ToHexString(SHA256.HashData(manifestBytes));
@@ -414,23 +414,9 @@ internal sealed class BackupArchiveReader
         if (!expectedPaths.SetEquals(actualPaths))
             throw new InvalidDataException("The selected backup file list does not match its manifest.");
 
-        long totalSize = 0;
+        ValidateArchivePayload(manifest);
         foreach (var file in manifest.Entries)
         {
-            var isJson = Path.GetExtension(file.LogicalPath).Equals(".json", StringComparison.OrdinalIgnoreCase);
-            var maximumFileSize = isJson
-                ? MaximumImportJsonFileSize
-                : MaximumImportFileSize;
-            if (file.Length < 0)
-                throw new InvalidDataException($"The imported file '{file.LogicalPath}' has an invalid size.");
-            if (file.Length > maximumFileSize)
-                throw new InvalidDataException($"The imported file '{file.LogicalPath}' exceeds the {(isJson ? "JSON " : "")}import limit of {maximumFileSize / (1024 * 1024)} MiB ({maximumFileSize} bytes).");
-            if (!IsSha256(file.Sha256))
-                throw new InvalidDataException($"The imported file '{file.LogicalPath}' has an invalid hash.");
-            totalSize = checked(totalSize + file.Length);
-            if (totalSize > MaximumImportTotalSize)
-                throw new InvalidDataException($"The selected backup exceeds the combined uncompressed payload import limit of {MaximumImportTotalSize / (1024 * 1024)} MiB ({MaximumImportTotalSize} bytes).");
-
             var entry = FindArchiveEntry(archive.Entries, $"{FilesDirectoryName}/{NormalizeLogicalPath(file.LogicalPath)}");
             if (entry.Length != file.Length)
                 throw new InvalidDataException($"The imported file '{file.LogicalPath}' has the wrong size.");
@@ -454,6 +440,11 @@ internal sealed class BackupArchiveReader
     {
         var archiveEntry = FindArchiveEntry(archive.Entries, $"{FilesDirectoryName}/{NormalizeLogicalPath(entry.LogicalPath)}");
         var bytes = ReadArchiveEntry(archiveEntry, MaximumImportFileSize);
+        return ValidateImportedFile(manifest, entry, bytes);
+    }
+
+    private ImportedBackupFile ValidateImportedFile(FullBackupManifest manifest, FullBackupEntry entry, byte[] bytes)
+    {
         VerifyFileBytes(bytes, entry.Length, entry.Sha256, entry.LogicalPath);
         try
         {
@@ -477,11 +468,66 @@ internal sealed class BackupArchiveReader
         var files = source.Manifest.Entries
             .Select(entry => ReadImportedFile(archive, source.Manifest, entry).ToInfo())
             .ToList();
+        ValidateImportedFileDestinations(files);
+        return files;
+    }
+
+    private static void ValidateImportedFileDestinations(IReadOnlyList<ImportedBackupFileInfo> files)
+    {
         var duplicate = files.GroupBy(file => file.LogicalPath, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault(group => group.Count() > 1);
         if (duplicate is not null)
             throw new InvalidDataException($"Multiple imported files map to '{duplicate.Key}'.");
-        return files;
+    }
+
+    private static void ValidateArchiveManifestSize(long length)
+    {
+        if (length > MaximumImportManifestSize)
+            throw new InvalidDataException($"The selected backup manifest exceeds the {MaximumImportManifestSize / (1024 * 1024)} MiB import limit ({MaximumImportManifestSize} bytes).");
+    }
+
+    private static void ValidateArchivePayload(FullBackupManifest manifest)
+    {
+        long totalSize = 0;
+        foreach (var file in manifest.Entries)
+        {
+            var isJson = Path.GetExtension(file.LogicalPath).Equals(".json", StringComparison.OrdinalIgnoreCase);
+            var maximumFileSize = isJson
+                ? MaximumImportJsonFileSize
+                : MaximumImportFileSize;
+            if (file.Length < 0)
+                throw new InvalidDataException($"The imported file '{file.LogicalPath}' has an invalid size.");
+            if (file.Length > maximumFileSize)
+                throw new InvalidDataException($"The imported file '{file.LogicalPath}' exceeds the {(isJson ? "JSON " : "")}import limit of {maximumFileSize / (1024 * 1024)} MiB ({maximumFileSize} bytes).");
+            if (!IsSha256(file.Sha256))
+                throw new InvalidDataException($"The imported file '{file.LogicalPath}' has an invalid hash.");
+            totalSize = checked(totalSize + file.Length);
+            if (totalSize > MaximumImportTotalSize)
+                throw new InvalidDataException($"The selected backup exceeds the combined uncompressed payload import limit of {MaximumImportTotalSize / (1024 * 1024)} MiB ({MaximumImportTotalSize} bytes).");
+        }
+    }
+
+    internal string? GetExportIneligibility(string path, FullBackupManifest manifest)
+    {
+        try
+        {
+            // recent backups use the same payload rules, although only user backups can be exported.
+            ValidateImportedManifest(manifest with { Type = FullBackupType.User });
+            ValidateArchiveManifestSize(new FileInfo(Path.Combine(path, ManifestFileName)).Length);
+            ValidateArchivePayload(manifest);
+            var files = new List<ImportedBackupFileInfo>();
+            foreach (var entry in manifest.Entries)
+            {
+                var bytes = ReadFileBytes(GetContainedPath(Path.Combine(path, FilesDirectoryName), entry.LogicalPath));
+                files.Add(ValidateImportedFile(manifest, entry, bytes).ToInfo());
+            }
+            ValidateImportedFileDestinations(files);
+            return null;
+        }
+        catch (Exception ex) when (IsExpectedBackupException(ex))
+        {
+            return ex.Message;
+        }
     }
 
     private void ValidateImportedManifest(FullBackupManifest manifest)

@@ -82,6 +82,18 @@ internal static class FileSystemLinkValidator
         using var handle = OpenDirectory(resolved, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
         if (handle.IsInvalid)
             throw new IOException($"Folder '{resolved}' could not be resolved safely.", new Win32Exception(Marshal.GetLastWin32Error()));
+        return GetFinalPath(handle, resolved);
+    }
+
+    internal static string ResolveFile(string path)
+    {
+        ValidatePath(path);
+        using var handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return GetFinalPath(handle, path);
+    }
+
+    private static string GetFinalPath(SafeFileHandle handle, string path)
+    {
         var buffer = new StringBuilder(512);
         var length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, 0);
         if (length >= buffer.Capacity)
@@ -90,7 +102,7 @@ internal static class FileSystemLinkValidator
             length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, 0);
         }
         if (length == 0 || length >= buffer.Capacity)
-            throw new IOException($"Folder '{resolved}' has no verifiable filesystem location.", new Win32Exception(Marshal.GetLastWin32Error()));
+            throw new IOException($"Entry '{path}' has no verifiable filesystem location.", new Win32Exception(Marshal.GetLastWin32Error()));
         var finalPath = buffer.ToString();
         if (finalPath.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
             return @"\\" + finalPath[8..];
@@ -100,7 +112,7 @@ internal static class FileSystemLinkValidator
             if (Path.IsPathFullyQualified(dosPath))
                 return dosPath;
         }
-        throw new IOException($"Folder '{resolved}' has an unsupported resolved filesystem location.");
+        throw new IOException($"Entry '{path}' has an unsupported resolved filesystem location.");
     }
 
     [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]

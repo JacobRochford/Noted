@@ -377,6 +377,11 @@ public sealed class AppSettingsService : IAppSettingsService {
     public void SaveNormalizePastedText(bool enabled) =>
         SaveSetting(s => s with { NormalizePastedText = enabled });
 
+    public bool LoadIncludeEntireNotesFolderInBackups() => LoadSetting(s => s.IncludeEntireNotesFolderInBackups);
+
+    public void SaveIncludeEntireNotesFolderInBackups(bool include) =>
+        SaveSetting(s => s with { IncludeEntireNotesFolderInBackups = include });
+
     public bool LoadConfirmNoteDeletion()
     {
         return LoadSetting(s => s.ConfirmNoteDeletion);

@@ -86,6 +86,7 @@ internal sealed record AppSettingsDocument
 
     public bool NormalizePastedText { get; init; } = true;
     public bool ConfirmNoteDeletion { get; init; } = true;
+    public bool IncludeEntireNotesFolderInBackups { get; init; }
     [JsonPropertyName("ScratchpadWindowState")]
     public ScratchpadWindowState? ScratchpadWindowState { get; init; }
     [JsonPropertyName("NoteEditorWindowState")]

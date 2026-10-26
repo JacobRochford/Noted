@@ -11,6 +11,35 @@ namespace Noted.Tests.ViewModels;
 public sealed class SettingsViewModelTests
 {
     [TestMethod]
+    public void EntireFolderPreferenceReloadsAndKeepsSavedValueWhenPersistenceFails()
+    {
+        using var context = new Context();
+        Assert.IsFalse(context.Model.IncludeEntireNotesFolderInBackups);
+        context.Model.IncludeEntireNotesFolderInBackups = true;
+        Assert.IsTrue(context.Settings.LoadIncludeEntireNotesFolderInBackups());
+        var bytes = File.ReadAllBytes(context.Directory.File("settings.json"));
+        context.Model.Reload();
+        CollectionAssert.AreEqual(bytes, File.ReadAllBytes(context.Directory.File("settings.json")));
+        using (var locked = new FileStream(context.Directory.File("settings.json"), FileMode.Open, FileAccess.Read, FileShare.Read))
+            context.Model.IncludeEntireNotesFolderInBackups = false;
+        Assert.IsTrue(context.Model.IncludeEntireNotesFolderInBackups);
+        Assert.IsTrue(context.Settings.LoadIncludeEntireNotesFolderInBackups());
+    }
+
+    [TestMethod]
+    public void LocalOnlyBackupCanBeViewedAndRestoredButNotExported()
+    {
+        using var context = new Context();
+        context.Model.UpdateBackupInfo(new FullBackupInfo(true, true, DateTime.UtcNow, 3, null,
+            "unsupported file type", "Recent automatic backup is local-only"));
+        Assert.IsTrue(context.Model.CanViewBackup);
+        Assert.IsTrue(context.Model.CanRestoreBackup);
+        Assert.IsFalse(context.Model.CanExportBackup);
+        StringAssert.Contains(context.Model.BackupStatus, "Local-only: unsupported file type");
+        StringAssert.Contains(context.Model.BackupStatus, "Recent automatic backup is local-only");
+    }
+
+    [TestMethod]
     public void EveryAppearanceOptionPreservesAccentAndReloadsSavedSelection()
     {
         using var context = new Context();

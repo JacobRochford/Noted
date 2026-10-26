@@ -103,7 +103,8 @@ public partial class App : Application
             var backupCoordinator = new BackupCoordinator(
                 fullBackupService,
                 _shutdownFlushCoordinator,
-                () => _fileService?.NotesDirectory);
+                () => _fileService?.NotesDirectory,
+                () => _settingsService?.LoadIncludeEntireNotesFolderInBackups() ?? false);
             _backupCoordinator = backupCoordinator;
             var pendingRestoreResult = backupCoordinator.ApplyPendingRestore();
             if (pendingRestoreResult.Status == FullBackupStatus.Failed)

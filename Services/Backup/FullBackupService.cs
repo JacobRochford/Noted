@@ -32,14 +32,17 @@ internal sealed record FullBackupResult(
     FullBackupType? Type,
     string? BackupPath,
     string Message,
-    string? Warning = null);
+    string? Warning = null,
+    string? ExportIneligibility = null);
 
 internal sealed record FullBackupInfo(
     bool Exists,
     bool IsValid,
     DateTime? LastUpdatedUtc,
     int FileCount,
-    string? Error);
+    string? Error,
+    string? ExportIneligibility = null,
+    string? RecentBackupNotice = null);
 
 internal enum BackupFileComparison
 {
@@ -134,8 +137,13 @@ internal sealed partial class FullBackupService
     internal bool UserBackupExists =>
         Directory.Exists(GetBackupPath(FullBackupType.User));
 
-    internal FullBackupInfo GetUserBackupInfo() =>
-        _archiveReader.GetBackupInfo(GetBackupPath(FullBackupType.User), FullBackupType.User);
+    internal FullBackupInfo GetUserBackupInfo()
+    {
+        var info = _archiveReader.GetBackupInfo(GetBackupPath(FullBackupType.User), FullBackupType.User);
+        var recent = _archiveReader.GetBackupInfo(GetBackupPath(FullBackupType.Recent), FullBackupType.Recent);
+        return info with { RecentBackupNotice = recent.IsValid && recent.ExportIneligibility is not null
+            ? $"Recent automatic backup is local-only: {recent.ExportIneligibility}" : null };
+    }
 
     internal FullBackupPreview GetUserBackupPreview() =>
         _archiveReader.GetBackupPreview(GetBackupPath(FullBackupType.User), FullBackupType.User);
@@ -156,18 +164,18 @@ internal sealed partial class FullBackupService
         _archiveWriter.UpdateNotesDirectory(_notesDirectory);
     }
 
-    internal FullBackupResult CreateOrUpdateUserBackup() =>
-        CreateBackup(FullBackupType.User, minimumAge: null);
+    internal FullBackupResult CreateOrUpdateUserBackup(bool includeEntireNotesFolder = false, Func<string, bool>? confirmLocalOnly = null) =>
+        CreateBackup(FullBackupType.User, minimumAge: null, includeEntireNotesFolder, confirmLocalOnly);
 
-    internal FullBackupResult CreateRecentBackup() =>
-        CreateBackup(FullBackupType.Recent, minimumAge: null);
+    internal FullBackupResult CreateRecentBackup(bool includeEntireNotesFolder = false) =>
+        CreateBackup(FullBackupType.Recent, minimumAge: null, includeEntireNotesFolder);
 
-    internal FullBackupResult CreateRecentBackupIfDue(TimeSpan minimumAge)
+    internal FullBackupResult CreateRecentBackupIfDue(TimeSpan minimumAge, bool includeEntireNotesFolder = false)
     {
         if (minimumAge <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(minimumAge));
 
-        return CreateBackup(FullBackupType.Recent, minimumAge);
+        return CreateBackup(FullBackupType.Recent, minimumAge, includeEntireNotesFolder);
     }
 
     internal FullBackupResult ScheduleUserBackupRestore(FullBackupManifest? expectedManifest = null)
@@ -249,7 +257,9 @@ internal sealed partial class FullBackupService
 
     private FullBackupResult CreateBackup(
         FullBackupType requestedType,
-        TimeSpan? minimumAge)
+        TimeSpan? minimumAge,
+        bool includeEntireNotesFolder,
+        Func<string, bool>? confirmLocalOnly = null)
     {
         if (_backupCreatedThisRun)
         {
@@ -326,7 +336,8 @@ internal sealed partial class FullBackupService
                 }
             }
 
-            var backupFiles = _contentCatalog.Collect(out var selectedNotePaths, out var externalDocumentCount);
+            var backupFiles = _contentCatalog.Collect(out var selectedNotePaths, out var externalDocumentCount,
+                includeEntireNotesFolder: includeEntireNotesFolder);
             var scopeWarning = externalDocumentCount > 0
                 ? $"Saved contents of {externalDocumentCount} open document(s) outside the notes folder are excluded from this backup."
                 : null;
@@ -350,7 +361,7 @@ internal sealed partial class FullBackupService
             var comparisonBackup = backupType == FullBackupType.User
                 ? userBackup.Manifest
                 : recentBackup.Manifest ?? userBackup.Manifest;
-            var anomaly = FindSuspiciousDataLoss(comparisonBackup?.Entries, backupFiles, selectedNotePaths);
+            var anomaly = FindSuspiciousDataLoss(comparisonBackup?.Entries, backupFiles, selectedNotePaths, includeEntireNotesFolder);
             if (anomaly is not null)
             {
                 return new FullBackupResult(
@@ -370,6 +381,19 @@ internal sealed partial class FullBackupService
             }
 
             var buildResult = _archiveWriter.BuildVerifiedBackup(backupType, backupFiles);
+            var exportIneligibility = _archiveReader.GetExportIneligibility(buildResult.Path, buildResult.Manifest);
+            if (backupType == FullBackupType.User && exportIneligibility is not null &&
+                confirmLocalOnly is not null && !confirmLocalOnly(exportIneligibility))
+            {
+                _archiveWriter.DiscardBuild(buildResult.Path);
+                return new FullBackupResult(FullBackupStatus.Skipped, backupType, GetBackupPath(backupType),
+                    "Local-only backup creation was cancelled. The existing backup was left unchanged.",
+                    ExportIneligibility: exportIneligibility);
+            }
+            if (includeEntireNotesFolder && !BackupFilesMatch(
+                backupFiles.Select(source => source.ToManifestEntry()).ToList(),
+                _contentCatalog.Collect(out _, out _, includeEntireNotesFolder: true)))
+                throw new IOException("The backup sources changed during creation. The existing backup was left unchanged.");
             var replaceResult = _archiveWriter.ReplaceBackupFolder(buildResult.Path, backupType);
             _backupCreatedThisRun = true;
             var warning = string.Join(" ", new[] { replaceResult.Warning, scopeWarning }
@@ -383,7 +407,8 @@ internal sealed partial class FullBackupService
                         ? "Updated your verified full backup."
                         : "Created your verified full backup."
                     : "Updated the recent automatic backup.",
-                string.IsNullOrEmpty(warning) ? null : warning);
+                string.IsNullOrEmpty(warning) ? null : warning,
+                exportIneligibility);
         }
         catch (Exception ex) when (IsExpectedBackupException(ex))
         {
@@ -392,7 +417,7 @@ internal sealed partial class FullBackupService
                 FullBackupStatus.Failed,
                 null,
                 null,
-                "The full backup could not be created.");
+                $"The full backup could not be created: {ex.Message}");
         }
     }
 
@@ -417,7 +442,8 @@ internal sealed partial class FullBackupService
     internal static string? FindSuspiciousDataLoss(
         IReadOnlyList<FullBackupEntry>? previous,
         IReadOnlyList<BackupSourceEntry> current,
-        IReadOnlySet<string> selectedNotePaths)
+        IReadOnlySet<string> selectedNotePaths,
+        bool includeEntireNotesFolder = false)
     {
         if (previous is null || previous.Count == 0)
             return null;
@@ -426,8 +452,9 @@ internal sealed partial class FullBackupService
         {
             var path = NormalizeLogicalPath(entry.LogicalPath);
             return !path.StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith(PersistencePaths.ArchivedNotesBackupPrefix, StringComparison.OrdinalIgnoreCase) ||
-                selectedNotePaths.Contains(path);
+                (path.StartsWith(PersistencePaths.ArchivedNotesBackupPrefix, StringComparison.OrdinalIgnoreCase) &&
+                 NoteFileExtensions.IsSupported(path)) ||
+                includeEntireNotesFolder || selectedNotePaths.Contains(path);
         }).ToList();
 
         var previousByPath = previous.ToDictionary(
@@ -436,6 +463,15 @@ internal sealed partial class FullBackupService
         var currentByPath = current.ToDictionary(
             entry => NormalizeLogicalPath(entry.LogicalPath),
             StringComparer.OrdinalIgnoreCase);
+
+        if (includeEntireNotesFolder)
+        {
+            var missingNotes = previousByPath.Keys.Where(path =>
+                path.StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase) &&
+                !currentByPath.ContainsKey(path)).ToList();
+            if (missingNotes.Count > 0)
+                return $"previously backed-up files are missing: {string.Join(", ", missingNotes.Take(5))}";
+        }
 
         var missingMainFiles = BackupContentDefinitions.FixedFiles
             .Where(file => file.ProtectMissing)
@@ -474,14 +510,28 @@ internal sealed partial class FullBackupService
             return $"multiple previously non-empty files became empty: {string.Join(", ", emptiedFiles)}";
 
         var previousContentLength = previous.Sum(entry => Math.Max(0, entry.ContentLength ?? 0));
-        var currentContentLength = current.Sum(entry => Math.Max(0, entry.ContentLength ?? 0));
+        var currentContentLength = current.Where(entry => !includeEntireNotesFolder || previousByPath.ContainsKey(entry.LogicalPath))
+            .Sum(entry => Math.Max(0, entry.ContentLength ?? 0));
         if (previousContentLength >= 4096 && currentContentLength * 4 < previousContentLength)
         {
             return $"total backed-up content dropped from {previousContentLength} bytes or characters to {currentContentLength}";
         }
 
+        if (includeEntireNotesFolder)
+        {
+            // arbitrary folder contents must not mask losses in managed data and supported notes.
+            return FindSuspiciousDataLoss(
+                previous.Where(entry => IsManagedContent(entry.LogicalPath)).ToList(),
+                current.Where(entry => IsManagedContent(entry.LogicalPath) && previousByPath.ContainsKey(entry.LogicalPath)).ToList(),
+                previousByPath.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase));
+        }
+
         return null;
     }
+
+    private static bool IsManagedContent(string logicalPath) =>
+        logicalPath.StartsWith(PersistencePaths.AppBackupPrefix, StringComparison.OrdinalIgnoreCase) ||
+        NoteFileExtensions.IsSupported(logicalPath);
 
     private static bool BackupFilesMatch(
         IReadOnlyList<FullBackupEntry> previous,

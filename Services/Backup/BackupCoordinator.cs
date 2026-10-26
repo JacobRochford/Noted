@@ -24,6 +24,7 @@ internal sealed class BackupCoordinator
     private readonly FullBackupService _service;
     private readonly ShutdownFlushCoordinator _shutdownFlushCoordinator;
     private readonly Func<string?> _getNotesDirectory;
+    private readonly Func<bool> _includeEntireNotesFolder;
     private readonly List<PreparationRegistration> _preparationRegistrations = [];
     private readonly HashSet<string> _runRecoveryIssues = new(StringComparer.Ordinal);
     private RestoreRequest? _restoreRequest;
@@ -31,7 +32,8 @@ internal sealed class BackupCoordinator
     internal BackupCoordinator(
         FullBackupService service,
         ShutdownFlushCoordinator shutdownFlushCoordinator,
-        Func<string?> getNotesDirectory)
+        Func<string?> getNotesDirectory,
+        Func<bool>? includeEntireNotesFolder = null)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(shutdownFlushCoordinator);
@@ -39,6 +41,7 @@ internal sealed class BackupCoordinator
         _service = service;
         _shutdownFlushCoordinator = shutdownFlushCoordinator;
         _getNotesDirectory = getNotesDirectory;
+        _includeEntireNotesFolder = includeEntireNotesFolder ?? (() => false);
     }
 
     internal event EventHandler? ShutdownRequested;
@@ -118,14 +121,14 @@ internal sealed class BackupCoordinator
         return _service.ExportBeforeRestoreBackupFile(backup, file, destinationPath);
     }
 
-    internal FullBackupResult CreateOrUpdateUserBackup()
+    internal FullBackupResult CreateOrUpdateUserBackup(Func<string, bool>? confirmLocalOnly = null)
     {
         var preparationIssues = PrepareData(includeRunRecoveryHistory: false);
         if (preparationIssues.Count > 0)
             return CreateBlockedBackupResult(FullBackupType.User, preparationIssues);
 
         SynchronizeNotesDirectory();
-        return _service.CreateOrUpdateUserBackup();
+        return _service.CreateOrUpdateUserBackup(_includeEntireNotesFolder(), confirmLocalOnly);
     }
 
     internal FullBackupResult? TryUpdateRecentBackup(TimeSpan minimumAge)
@@ -138,7 +141,7 @@ internal sealed class BackupCoordinator
             return null;
 
         SynchronizeNotesDirectory();
-        return _service.CreateRecentBackupIfDue(minimumAge);
+        return _service.CreateRecentBackupIfDue(minimumAge, _includeEntireNotesFolder());
     }
 
     internal void RequestUserBackupRestore()

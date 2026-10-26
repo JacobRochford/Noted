@@ -3,6 +3,8 @@ using Noted.Models;
 namespace Noted.Services;
 
 public interface IAppSettingsService {
+    bool LoadIncludeEntireNotesFolderInBackups();
+    void SaveIncludeEntireNotesFolderInBackups(bool include);
     string AppDataDirectory { get; }
     IReadOnlyList<string> LoadHiddenUtilities();
     void SaveHiddenUtilities(IReadOnlyList<string> hiddenUtilities);

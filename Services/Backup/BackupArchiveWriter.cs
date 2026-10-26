@@ -82,7 +82,17 @@ internal sealed class BackupArchiveWriter
                 $"The new full backup was built but could not be verified: {verification.Error}");
         }
 
-        return new BackupBuildResult(buildPath);
+        return new BackupBuildResult(buildPath, manifest);
+    }
+
+    internal void DiscardBuild(string buildPath)
+    {
+        var fullPath = Path.GetFullPath(buildPath);
+        if (!string.Equals(Path.GetDirectoryName(fullPath), _backupDirectory, StringComparison.OrdinalIgnoreCase) ||
+            !Path.GetFileName(fullPath).StartsWith(BuildingDirectoryPrefix, StringComparison.OrdinalIgnoreCase))
+            throw new IOException("The build path is outside the expected backup directory.");
+        FileSystemLinkValidator.ValidateTree(fullPath);
+        Directory.Delete(fullPath, recursive: true);
     }
 
     internal BackupReplaceResult ReplaceBackupFolder(
@@ -268,6 +278,6 @@ internal sealed class BackupArchiveWriter
         FileSystemErrors.IsExpected(exception) || exception is JsonException or InvalidDataException;
 }
 
-internal sealed record BackupBuildResult(string Path);
+internal sealed record BackupBuildResult(string Path, FullBackupManifest Manifest);
 
 internal sealed record BackupReplaceResult(string Path, string? Warning);

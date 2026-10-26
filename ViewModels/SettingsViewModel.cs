@@ -127,6 +127,7 @@ internal sealed class SettingsViewModel : ObservableObject
             ShowModifiedSubtitle = _settings.LoadShowModifiedSubtitle();
             ShowNotesHeader = _settings.LoadShowNotesHeader();
             ConfirmNoteDeletion = _settings.LoadConfirmNoteDeletion();
+            IncludeEntireNotesFolderInBackups = _settings.LoadIncludeEntireNotesFolderInBackups();
             _defaultIndentation = _settings.LoadDefaultIndentation();
             NormalizePastedText = _settings.LoadNormalizePastedText();
             ThemeMode = _settings.LoadAppThemeMode();
@@ -299,6 +300,22 @@ internal sealed class SettingsViewModel : ObservableObject
     public bool TimestampPlacementLine { get => TimestampPlacement == NoteTimestampPlacement.Line; set { if (value) TimestampPlacement = NoteTimestampPlacement.Line; } }
     public bool FolderNavigationModeDrillDown { get => FolderNavigationMode == FolderNavigationMode.DrillDown; set { if (value) FolderNavigationMode = FolderNavigationMode.DrillDown; } }
     public bool FolderNavigationModeExpand { get => FolderNavigationMode == FolderNavigationMode.Expand; set { if (value) FolderNavigationMode = FolderNavigationMode.Expand; } }
+    private bool _includeEntireNotesFolderInBackups;
+    public bool IncludeEntireNotesFolderInBackups
+    {
+        get => _includeEntireNotesFolderInBackups;
+        set
+        {
+            if (_includeEntireNotesFolderInBackups == value) return;
+            if (!_loading && !TrySave(() => _settings.SaveIncludeEntireNotesFolderInBackups(value)))
+            {
+                OnPropertyChanged();
+                return;
+            }
+            SetProperty(ref _includeEntireNotesFolderInBackups, value);
+        }
+    }
+
     private bool _canCreateBackup = true;
     public bool CanCreateBackup { get => _canCreateBackup; internal set { if (SetProperty(ref _canCreateBackup, value)) NotifyAll(); } }
     private bool _canViewBackup = true;
@@ -582,7 +599,8 @@ internal sealed class SettingsViewModel : ObservableObject
     internal void UpdateBackupInfo(FullBackupInfo info, bool updateStatusText = true)
     {
         CreateBackupText = info.Exists ? "Update Backup" : "Create Backup";
-        CanRestoreBackup = CanViewBackup = CanExportBackup = info.IsValid;
+        CanRestoreBackup = CanViewBackup = info.IsValid;
+        CanExportBackup = info.IsValid && info.ExportIneligibility is null;
         CanImportBackup = true;
         if (!updateStatusText) return;
         BackupStatus = !info.Exists ? "No full backup has been created yet."
@@ -603,7 +621,9 @@ internal sealed class SettingsViewModel : ObservableObject
         var backupDate = backupInfo.LastUpdatedUtc?.ToLocalTime().ToString("MMM d, yyyy 'at' h:mm tt")
             ?? "unknown date";
         var fileLabel = backupInfo.FileCount == 1 ? "file" : "files";
-        return $"Last backup: {backupDate} • {backupInfo.FileCount} {fileLabel}";
+        return $"Last backup: {backupDate} • {backupInfo.FileCount} {fileLabel}" +
+            (backupInfo.ExportIneligibility is null ? "" : $". Local-only: {backupInfo.ExportIneligibility}") +
+            (backupInfo.RecentBackupNotice is null ? "" : $". {backupInfo.RecentBackupNotice}");
     }
 
 

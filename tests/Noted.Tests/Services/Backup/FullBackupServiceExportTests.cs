@@ -27,6 +27,7 @@ public sealed partial class FullBackupServiceTests
         BackupTestSession.Save(paths.AppData, note);
         var service = new FullBackupService(paths.AppData, paths.Notes);
         Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
+        Assert.AreEqual(eligible, service.GetUserBackupInfo().ExportIneligibility is null);
         var backupPath = Path.Combine(service.BackupDirectory, "protected");
         var before = FingerprintExportFixture(backupPath);
         var destination = directory.File("portable.notedbackup");
@@ -158,6 +159,7 @@ public sealed partial class FullBackupServiceTests
         manifest.CopyTo(padded, 0);
         File.WriteAllBytes(manifestPath, padded);
         Assert.IsTrue(service.GetUserBackupInfo().IsValid);
+        Assert.AreEqual(eligible, service.GetUserBackupInfo().ExportIneligibility is null);
         var before = FingerprintExportFixture(backupPath);
         var destination = directory.File("portable.notedbackup");
         File.WriteAllText(destination, "existing export");

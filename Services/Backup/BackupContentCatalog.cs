@@ -33,12 +33,23 @@ internal sealed class BackupContentCatalog
     internal IReadOnlyList<BackupSourceEntry> Collect(
         out IReadOnlySet<string> selectedNotePaths,
         out int externalDocumentCount,
-        bool includeNotes = true)
+        bool includeNotes = true,
+        bool includeEntireNotesFolder = false)
     {
         FileSystemLinkValidator.ValidateDirectory(_appDataDirectory);
         FileSystemLinkValidator.ValidateWithinRoot(_notesDirectory, _notesDirectory);
         if (!Directory.Exists(_notesDirectory))
             throw new DirectoryNotFoundException($"The notes folder '{_notesDirectory}' could not be found.");
+        if (includeEntireNotesFolder)
+        {
+            var notesRoot = FileSystemLinkValidator.ResolveDirectory(_notesDirectory);
+            var appRoot = FileSystemLinkValidator.ResolveDirectory(_appDataDirectory);
+            var backupRoot = FileSystemLinkValidator.ResolveDirectory(_backupDirectory);
+            if (PathsEqual(notesRoot, appRoot) || IsPathWithin(appRoot, notesRoot))
+                throw new IOException("Entire-folder backups require a notes folder that does not contain Noted's application-data folder.");
+            if (PathsEqual(notesRoot, backupRoot) || IsPathWithin(notesRoot, backupRoot))
+                throw new IOException("The notes folder cannot be inside Noted's backup storage.");
+        }
 
         var sources = new List<BackupSourceEntry>();
         NoteEditorSession? session = null;
@@ -54,13 +65,24 @@ internal sealed class BackupContentCatalog
         selectedNotePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         externalDocumentCount = 0;
         if (includeNotes)
-            AddNotes(sources, session, out selectedNotePaths, out externalDocumentCount);
+            AddNotes(sources, session, out selectedNotePaths, out externalDocumentCount, includeEntireNotesFolder);
 
         var duplicate = sources
             .GroupBy(source => source.LogicalPath, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault(group => group.Count() > 1);
         if (duplicate is not null)
             throw new IOException($"Multiple source files map to '{duplicate.Key}'.");
+
+        if (includeEntireNotesFolder)
+        {
+            var duplicateSource = sources.GroupBy(source => FileSystemLinkValidator.ResolveFile(
+                source.LogicalPath.StartsWith(PersistencePaths.NotesBackupPrefix, StringComparison.OrdinalIgnoreCase)
+                    ? FileSystemLinkValidator.ValidateWithinRoot(_notesDirectory, source.SourcePath)
+                    : source.SourcePath),
+                StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1);
+            if (duplicateSource is not null)
+                throw new IOException($"Multiple backup entries refer to '{duplicateSource.Key}'.");
+        }
 
         return sources
             .OrderBy(source => source.LogicalPath, StringComparer.OrdinalIgnoreCase)
@@ -217,16 +239,24 @@ internal sealed class BackupContentCatalog
         ICollection<BackupSourceEntry> sources,
         NoteEditorSession? session,
         out IReadOnlySet<string> selectedNotePaths,
-        out int externalDocumentCount)
+        out int externalDocumentCount,
+        bool includeEntireNotesFolder)
     {
         var selected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var externalPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var resolvedNotesRoot = includeEntireNotesFolder ? FileSystemLinkValidator.ResolveDirectory(_notesDirectory) : null;
         foreach (var tab in session?.Tabs ?? [])
         {
             if (string.IsNullOrWhiteSpace(tab.FilePath) || !Path.IsPathFullyQualified(tab.FilePath) ||
                 !NoteFileExtensions.IsSupported(tab.FilePath))
                 throw new InvalidDataException("The editor session contains an invalid saved-document path.");
             var path = Path.GetFullPath(tab.FilePath);
+            if (resolvedNotesRoot is not null && !IsPathWithin(path, _notesDirectory))
+            {
+                var resolvedPath = Path.Combine(FileSystemLinkValidator.ResolveDirectory(Path.GetDirectoryName(path)!), Path.GetFileName(path));
+                if (IsPathWithin(resolvedPath, resolvedNotesRoot))
+                    path = Path.Combine(_notesDirectory, Path.GetRelativePath(resolvedNotesRoot, resolvedPath));
+            }
             if (!IsPathWithin(path, _notesDirectory))
             {
                 externalPaths.Add(path);
@@ -240,12 +270,24 @@ internal sealed class BackupContentCatalog
         externalDocumentCount = externalPaths.Count;
         var archiveDirectory = Path.Combine(_notesDirectory, PersistencePaths.ArchivedNotesDirectory);
         FileSystemLinkValidator.ValidateWithinRoot(_notesDirectory, archiveDirectory);
-        if (DirectoryExistsOrThrow(archiveDirectory))
+        if (!includeEntireNotesFolder && DirectoryExistsOrThrow(archiveDirectory))
         {
             foreach (var path in EnumerateFilesWithoutLinks(archiveDirectory, [_backupDirectory], allowRootLinks: true))
             {
                 if (NoteFileExtensions.IsSupported(path))
                     selected[ToLogicalPath(PersistencePaths.NotesBackupRoot, Path.GetRelativePath(_notesDirectory, path))] = path;
+            }
+        }
+
+        if (includeEntireNotesFolder)
+        {
+            var folderPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in EnumerateFilesWithoutLinks(_notesDirectory, allowRootLinks: true))
+            {
+                var logicalPath = ToLogicalPath(PersistencePaths.NotesBackupRoot, Path.GetRelativePath(_notesDirectory, path));
+                if (!folderPaths.Add(logicalPath))
+                    throw new IOException($"Multiple source files map to '{logicalPath}'.");
+                selected[logicalPath] = path;
             }
         }
 

@@ -523,7 +523,11 @@ public partial class MainWindow : Window {
         if (confirmation != MessageBoxResult.Yes)
             return;
 
-        RunBackupCommand(_backupCoordinator.CreateOrUpdateUserBackup);
+        RunBackupCommand(() => _backupCoordinator.CreateOrUpdateUserBackup(reason =>
+            AppDialog.Show(this,
+                "This backup is valid for local restoration but cannot be exported in the current archive format.\n\n" +
+                reason + "\n\nContinue and replace the current backup with this local-only backup?",
+                "Local-only Backup", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes));
     }
 
     private void UtilityMenuButton_Click(object sender, RoutedEventArgs e)

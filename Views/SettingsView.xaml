@@ -935,7 +935,7 @@
                                                FontWeight="SemiBold"
                                                Foreground="{DynamicResource NotedTextBrush}"
                                                Margin="0,0,0,6"/>
-                                    <TextBlock Text="Back up Noted settings and content, registered MiniPads, recovery data, saved-note history, deleted notes, archived notes, and saved documents open in the editor within your notes folder. Other files in that folder and saved files outside it are excluded. View the backup before restoring or exporting it. Noted changes this backup only when you choose Update Backup."
+                                    <TextBlock Text="Back up Noted settings and content, registered MiniPads, recovery data, saved-note history, deleted notes, archived notes, and saved documents open in the editor within your notes folder. Enable entire-folder backups below to also include closed documents and other file types. Saved files outside the notes folder are excluded. View the backup before restoring or exporting it. Noted changes this backup only when you choose Update Backup."
                                                FontSize="11"
                                                Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                                TextWrapping="Wrap"
@@ -991,6 +991,12 @@
                                                 Margin="0,0,0,6"
                                                 Style="{StaticResource NotedSecondaryButton}"/>
                                     </WrapPanel>
+                                    <CheckBox Content="Include entire notes folder in backups"
+                                              IsChecked="{Binding IncludeEntireNotesFolderInBackups}"
+                                              Margin="0,10,0,4"/>
+                                    <TextBlock Text="Applies to future user and automatic recent backups. Some files or sizes may make a backup local-only and unavailable for archive export."
+                                               FontSize="11" Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                               TextWrapping="Wrap" Margin="0,0,0,8"/>
                                     <TextBlock x:Name="BackupStatusText" Text="{Binding BackupStatus}"
                                                FontSize="10"
                                                Foreground="{DynamicResource NotedSecondaryTextBrush}"
