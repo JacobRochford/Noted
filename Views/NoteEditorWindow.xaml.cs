@@ -30,6 +30,7 @@ public partial class NoteEditorWindow : Window
 
     private readonly INoteContentService _contentService;
     private readonly IAppSettingsService _settingsService;
+    private readonly INoteFileService? _noteFiles;
     private readonly INoteRecoveryService _recoveryService;
     private readonly NoteEditorPersistence _persistence;
     private readonly SaveScheduler<IReadOnlyList<RecoveryDraftSnapshot>> _recoverySaveScheduler;
@@ -44,6 +45,7 @@ public partial class NoteEditorWindow : Window
     private Point _tabDragStart;
     private bool _isLoading;
     private bool _isLoadingSecondary;
+    private Guid? _lastSecondaryDocumentId;
     private bool _hasLoaded;
     private readonly MarkdownPreviewPresenter _primaryPreview;
     private readonly MarkdownPreviewPresenter _secondaryPreview;
@@ -78,7 +80,8 @@ public partial class NoteEditorWindow : Window
         INoteContentService contentService,
         IAppSettingsService settingsService,
         INoteRecoveryService recoveryService,
-        INoteEditorSessionService sessionService)
+        INoteEditorSessionService sessionService,
+        INoteFileService? noteFiles = null)
     {
         ArgumentNullException.ThrowIfNull(contentService);
         ArgumentNullException.ThrowIfNull(settingsService);
@@ -87,6 +90,7 @@ public partial class NoteEditorWindow : Window
 
         _contentService = contentService;
         _settingsService = settingsService;
+        _noteFiles = noteFiles;
         _recoveryService = recoveryService;
         _persistence = new NoteEditorPersistence(contentService, recoveryService, sessionService, settingsService.LoadDefaultIndentation);
         _workspace.DocumentPathsChanged += Workspace_DocumentPathsChanged;
@@ -120,6 +124,15 @@ public partial class NoteEditorWindow : Window
         EditorTextTransformations.Attach(EditorTextBox);
         EditorTextTransformations.Attach(SecondaryEditorTextBox);
         EditorTextTransformations.AddMenuItems(EditMenu, () => CurrentEditorTextBox);
+        EditorNavigation.Attach(EditorTextBox, () => SetWordWrapEnabled(EditorTextBox.TextWrapping != TextWrapping.Wrap));
+        EditorNavigation.Attach(SecondaryEditorTextBox, () => SetWordWrapEnabled(SecondaryEditorTextBox.TextWrapping != TextWrapping.Wrap));
+        EditorNavigation.AddMenuItem(EditMenu, () => CurrentEditorTextBox);
+        EditMenu.SubmenuOpened += (_, _) =>
+        {
+            foreach (var item in EditMenu.Items.OfType<MenuItem>())
+                if (item.Command is RoutedCommand command && command.OwnerType == typeof(ApplicationCommands))
+                    item.CommandTarget = CurrentEditorTextBox;
+        };
         EditorIndentation.AttachIndicator(IndentationButton, () => CurrentDocument?.Indentation, value =>
         {
             if (CurrentDocument is not { } document) return;
@@ -203,6 +216,53 @@ public partial class NoteEditorWindow : Window
     public bool OpenNote(string filePath)
     {
         return OpenNoteCore(filePath, usesGeneratedName: false);
+    }
+
+    private void OpenNoteMenuItem_Click(object sender, RoutedEventArgs e) => OpenNoteFromDialog();
+
+    internal bool OpenNoteFromDialog(Func<OpenFileDialog, bool?>? showDialog = null)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Open Note",
+            Filter = NoteFileExtensions.FileDialogFilter,
+            InitialDirectory = _noteFiles?.CurrentDirectory ?? _settingsService.LoadNotesDirectory(),
+            CheckFileExists = true,
+            CheckPathExists = true,
+            Multiselect = false
+        };
+        var accepted = showDialog is null ? dialog.ShowDialog(this) : showDialog(dialog);
+        return accepted == true && OpenNote(dialog.FileName);
+    }
+
+    private void QuickOpenMenuItem_Click(object sender, RoutedEventArgs e) => OpenQuickNote();
+
+    internal IReadOnlyList<QuickOpenNote> GetQuickOpenNotes()
+    {
+        if (_noteFiles is null) return [];
+        return _noteFiles.GetAllNoteKeys().Select(key =>
+        {
+            var path = Path.GetFullPath(Path.Combine(_noteFiles.NotesDirectory, key));
+            return new QuickOpenNote(path, Path.GetRelativePath(_noteFiles.NotesDirectory, path));
+        }).ToList();
+    }
+
+    internal bool OpenQuickNote(Func<QuickOpenDialog, bool?>? showDialog = null)
+    {
+        try
+        {
+            var dialog = new QuickOpenDialog(GetQuickOpenNotes()) { Owner = this };
+            var accepted = showDialog is null ? dialog.ShowDialog() : showDialog(dialog);
+            if (accepted == true && dialog.SelectedFilePath is { } path) return OpenNote(path);
+            FocusActiveSurface();
+            return false;
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            ExceptionDiagnostics.Record(ex);
+            ShowError("Unable to list notes", "The note list could not be read. Check the notes folder and access permissions.");
+            return false;
+        }
     }
 
     internal void AttachReopenShortcut(Window window, Func<bool>? isContextEnabled = null)
@@ -1781,7 +1841,7 @@ public partial class NoteEditorWindow : Window
         ShowActiveNoteInFileExplorer();
     }
 
-    private void ShowActiveNoteInFileExplorer()
+    private void ShowActiveNoteInFileExplorer(Action<ProcessStartInfo>? startProcess = null)
     {
         if (CurrentDocument is not { } document)
             return;
@@ -1792,10 +1852,12 @@ public partial class NoteEditorWindow : Window
             var arguments = File.Exists(path)
                 ? $"/select,\"{path}\""
                 : $"\"{Path.GetDirectoryName(path)}\"";
-            Process.Start(new ProcessStartInfo("explorer.exe", arguments)
+            var startInfo = new ProcessStartInfo("explorer.exe", arguments)
             {
                 UseShellExecute = true
-            });
+            };
+            if (startProcess is not null) startProcess(startInfo);
+            else Process.Start(startInfo);
         }
         catch (Exception ex) when (ex is Win32Exception || FileSystemErrors.IsExpected(ex))
         {
@@ -2006,6 +2068,7 @@ public partial class NoteEditorWindow : Window
         }
 
         _workspace.ShowSecondary(document, focusPane);
+        _lastSecondaryDocumentId = document.DocumentId;
         _isLoadingSecondary = true;
         SecondaryEditorTextBox.Text = document.Content;
         SecondaryEditorTextBox.CaretIndex = Math.Clamp(document.CaretIndex, 0, document.Content.Length);
@@ -2396,6 +2459,11 @@ public partial class NoteEditorWindow : Window
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         var modifiers = e.KeyboardDevice.Modifiers;
+        if (HandleNavigationShortcut(e.Key, modifiers))
+        {
+            e.Handled = true;
+            return;
+        }
         if (e.Key == Key.F && modifiers == ModifierKeys.Control)
         {
             OpenFind(showReplace: false);
@@ -2449,13 +2517,6 @@ public partial class NoteEditorWindow : Window
             return;
         }
 
-        if (e.Key == Key.O && modifiers == ModifierKeys.Control)
-        {
-            ShowActiveNoteInFileExplorer();
-            e.Handled = true;
-            return;
-        }
-
         if (e.Key == Key.N && modifiers == ModifierKeys.Control)
         {
             RequestNewNote();
@@ -2485,6 +2546,55 @@ public partial class NoteEditorWindow : Window
         }
     }
 
+    internal bool HandleNavigationShortcut(Key key, ModifierKeys modifiers,
+        Func<OpenFileDialog, bool?>? chooseFile = null, Func<QuickOpenDialog, bool?>? chooseNote = null,
+        Action<ProcessStartInfo>? reveal = null)
+    {
+        if (key == Key.O && modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+        {
+            ShowActiveNoteInFileExplorer(reveal);
+            return true;
+        }
+        if (modifiers != ModifierKeys.Control) return false;
+        switch (key)
+        {
+            case Key.O: OpenNoteFromDialog(chooseFile); return true;
+            case Key.P: OpenQuickNote(chooseNote); return true;
+            case Key.Oem5: ToggleSplitEditor(); return true;
+            case Key.D1: FocusEditorPane(secondary: false); return true;
+            case Key.D2: FocusEditorPane(secondary: true); return true;
+            default: return false;
+        }
+    }
+
+    private void ToggleSplitMenuItem_Click(object sender, RoutedEventArgs e) => ToggleSplitEditor();
+
+    private void FocusPrimaryMenuItem_Click(object sender, RoutedEventArgs e) => FocusEditorPane(secondary: false);
+
+    private void FocusSecondaryMenuItem_Click(object sender, RoutedEventArgs e) => FocusEditorPane(secondary: true);
+
+    private void FocusEditorPane(bool secondary)
+    {
+        var document = secondary ? _secondaryDocument : _activeDocument;
+        if (document is null) return;
+        _workspace.Focus(document);
+        FocusActiveSurface();
+    }
+
+    private void ToggleSplitEditor()
+    {
+        if (_secondaryDocument is not null)
+        {
+            CloseSecondaryPane(saveSession: true);
+            FocusActiveSurface();
+            return;
+        }
+        var document = _lastSecondaryDocumentId.HasValue ? _workspace.FindById(_lastSecondaryDocumentId.Value) : null;
+        if (document is null || ReferenceEquals(document, _activeDocument))
+            document = _documents.FirstOrDefault(item => !ReferenceEquals(item, _activeDocument));
+        if (document is not null) ShowSecondaryDocument(document, focusPane: true, focusEditor: true, saveSession: true);
+    }
+
     internal bool HandleTabsPanelShortcut(Key key, ModifierKeys modifiers)
     {
         if (key != Key.B || modifiers != (ModifierKeys.Control | ModifierKeys.Shift))
@@ -2496,14 +2606,14 @@ public partial class NoteEditorWindow : Window
 
     private void CycleActiveDocument(bool backward)
     {
-        if (_activeDocument is null || _documents.Count < 2)
+        if (CurrentDocument is null || _documents.Count < 2)
             return;
 
-        var currentIndex = _documents.IndexOf(_activeDocument);
+        var currentIndex = _documents.IndexOf(CurrentDocument);
         var nextIndex = backward
             ? (currentIndex - 1 + _documents.Count) % _documents.Count
             : (currentIndex + 1) % _documents.Count;
-        ActivateDocument(_documents[nextIndex]);
+        OpenDocumentInFocusedPane(_documents[nextIndex], focusEditor: true, saveSession: true);
     }
 
     private void Window_Closing(object? sender, CancelEventArgs e)

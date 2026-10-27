@@ -1,0 +1,45 @@
+<Window x:Class="Noted.QuickOpenDialog"
+        x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Quick Open" Width="580" Height="440" MinWidth="380" MinHeight="280"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource NotedWindowBackgroundBrush}"
+        Foreground="{DynamicResource NotedTextBrush}" FontFamily="Segoe UI"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBox x:Name="QueryTextBox" Style="{StaticResource NotedTextInput}"
+                 AutomationProperties.Name="Find a note by filename" TextChanged="QueryTextBox_TextChanged"/>
+        <TextBlock Grid.Row="1" Margin="0,8" Text="Type a filename. Use Up/Down and Enter to open, or Escape to cancel."
+                   TextWrapping="Wrap" Foreground="{DynamicResource NotedSecondaryTextBrush}"/>
+        <ListBox x:Name="ResultsList" Grid.Row="2" MouseDoubleClick="ResultsList_MouseDoubleClick"
+                 Background="{DynamicResource NotedSubtleSurfaceBrush}"
+                 Foreground="{DynamicResource NotedTextBrush}"
+                 BorderBrush="{DynamicResource NotedBorderBrush}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Margin="4">
+                        <TextBlock Text="{Binding FileName}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding DisplayPath}" TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"/>
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock x:Name="EmptyText" Grid.Row="2" Text="No matching notes" IsHitTestVisible="False"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Foreground="{DynamicResource NotedSecondaryTextBrush}"/>
+        <DockPanel Grid.Row="3" Margin="0,10,0,0">
+            <Button Content="Cancel" DockPanel.Dock="Right" IsCancel="True"
+                    Style="{StaticResource NotedSecondaryButton}"/>
+            <TextBlock x:Name="ErrorText" Foreground="{DynamicResource NotedDangerBrush}" TextWrapping="Wrap"/>
+        </DockPanel>
+    </Grid>
+</Window>

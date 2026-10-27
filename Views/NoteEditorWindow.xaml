@@ -157,6 +157,8 @@
                                    BasedOn="{StaticResource NotedMenuSeparator}"/>
                         </Menu.Resources>
                         <MenuItem Header="File">
+                            <MenuItem Header="Open Note..." InputGestureText="Ctrl+O" Click="OpenNoteMenuItem_Click"/>
+                            <MenuItem Header="Quick Open..." InputGestureText="Ctrl+P" Click="QuickOpenMenuItem_Click"/>
                             <MenuItem Header="New Note"
                                       InputGestureText="Ctrl+N"
                                       Click="NewNoteButton_Click"/>
@@ -175,7 +177,7 @@
                                 <MenuItem Header="Windows-1252" Tag="Windows1252" IsCheckable="True" Click="EncodingMenuItem_Click"/>
                             </MenuItem>
                             <MenuItem Header="Show in File Explorer"
-                                      InputGestureText="Ctrl+O"
+                                      InputGestureText="Ctrl+Shift+O"
                                       Click="ShowInFileExplorerMenuItem_Click"/>
                             <MenuItem x:Name="FileExplorerIntegrationMenuItem"
                                       Header="Add 'Open with Noted' to File Explorer"
@@ -215,6 +217,10 @@
                                       Click="ReplaceMenuItem_Click"/>
                         </MenuItem>
                         <MenuItem Header="View">
+                            <MenuItem Header="Toggle Split Editor" InputGestureText="Ctrl+\" Click="ToggleSplitMenuItem_Click"/>
+                            <MenuItem Header="Focus Primary Pane" InputGestureText="Ctrl+1" Click="FocusPrimaryMenuItem_Click"/>
+                            <MenuItem Header="Focus Secondary Pane" InputGestureText="Ctrl+2" Click="FocusSecondaryMenuItem_Click"/>
+                            <Separator/>
                             <MenuItem x:Name="LineNumbersMenuItem" Header="Show Line Numbers" IsCheckable="True" IsChecked="True" Click="LineNumbersMenuItem_Click"/>
                             <MenuItem Header="Scroll Speed">
                                 <MenuItem x:Name="NormalScrollMenuItem" Header="Normal" IsCheckable="True" Tag="1" Click="ScrollSpeedMenuItem_Click"/>
@@ -225,6 +231,7 @@
                             <Separator/>
                             <MenuItem x:Name="HeaderWordWrapMenuItem"
                                       Header="Word Wrap"
+                                      InputGestureText="Alt+Z"
                                       IsChecked="True"
                                       IsCheckable="True"
                                       Click="WordWrapMenuItem_Click"/>
@@ -556,6 +563,7 @@
                                 <Separator/>
                                 <MenuItem x:Name="ContextWordWrapMenuItem"
                                           Header="Word Wrap"
+                                          InputGestureText="Alt+Z"
                                           IsChecked="True"
                                           IsCheckable="True"
                                           Click="WordWrapMenuItem_Click"/>

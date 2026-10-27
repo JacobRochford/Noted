@@ -131,7 +131,8 @@ public partial class App : Application
                 new NoteContentService(settings.AppDataDirectory),
                 settings,
                 new NoteRecoveryService(settings.AppDataDirectory),
-                new NoteEditorSessionService(settings.AppDataDirectory));
+                new NoteEditorSessionService(settings.AppDataDirectory),
+                fileService);
             _noteEditorBackupRegistration = backupCoordinator.RegisterPreparationParticipant(
                 "Note editor",
                 BackupPreparationPhase.AfterSharedFlush,

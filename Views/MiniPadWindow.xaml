@@ -72,7 +72,7 @@
                                         <MenuItem Header="Close MiniPad" Click="CloseMiniPadMenuItem_Click"/>
                                         <Separator/>
                                         <MenuItem Header="Find..." InputGestureText="Ctrl+F" Click="FindMenuItem_Click"/>
-                                        <MenuItem x:Name="WordWrapMenuItem" Header="Word Wrap" IsCheckable="True" IsChecked="True" Click="WordWrapMenuItem_Click"/>
+                                        <MenuItem x:Name="WordWrapMenuItem" Header="Word Wrap" InputGestureText="Alt+Z" IsCheckable="True" IsChecked="True" Click="WordWrapMenuItem_Click"/>
                                         <MenuItem x:Name="AlwaysVisibleMenuItem" Header="Always Visible" ToolTip="Use the app visible opacity even when this window is inactive" IsCheckable="True" Click="AlwaysVisibleMenuItem_Click"/>
                                     </ContextMenu>
                                 </Button.ContextMenu>

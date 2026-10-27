@@ -165,6 +165,7 @@ internal sealed class HotkeyConfiguration : IDisposable
             if (index > 0 && (otherConfiguredCombinations.Contains(validation.Combination) ||
                 validation.Combination is "Ctrl+Shift+B" or "Ctrl+Shift+E" or "Ctrl+Shift+K" or
                     "Ctrl+Shift+Q" or "Ctrl+Shift+9" or "Ctrl+Shift+M" or
+                    "Ctrl+Shift+O" or
                     "Alt+Shift+Up" or "Alt+Shift+Down"))
                 continue;
             if (!attemptedCombinations.Add(validation.Combination))

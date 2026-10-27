@@ -261,7 +261,7 @@
 
                         <ToggleButton x:Name="WordWrapButton" Style="{StaticResource ToggleBtn}"
                                       IsChecked="{Binding WordWrapEnabled, Mode=TwoWay}"
-                                      ToolTip="Toggle word wrap" Content="↵"/>
+                                      ToolTip="Toggle word wrap (Alt+Z)" Content="↵"/>
                         <Button Style="{StaticResource ToolbarBtn}" Content="⧉"
                                 Click="CopyAllButton_Click" ToolTip="Copy all text" FontSize="14"/>
                         <Button Style="{StaticResource ToolbarBtn}" Content="⌫"

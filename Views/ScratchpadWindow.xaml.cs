@@ -67,6 +67,7 @@ public partial class ScratchpadWindow : OverlayWindow
         EditorLineCommands.Attach(Editor);
         EditorTextWrapping.Attach(Editor);
         EditorJsonFormatting.Attach(Editor, () => _viewModel.Indentation);
+        EditorNavigation.Attach(Editor, () => _viewModel.WordWrapEnabled = !_viewModel.WordWrapEnabled);
         IndentationButton.Content = EditorIndentation.GetLabel(_viewModel.Indentation);
         EditorIndentation.AttachIndicator(IndentationButton, () => _viewModel.Indentation, _viewModel.SetIndentation, () => Editor);
 
