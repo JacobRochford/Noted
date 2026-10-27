@@ -33,6 +33,15 @@ public sealed class EditorShortcutTests
             plain.CaretIndex = 1;
             Assert.IsTrue(KeyboardTestInput.Press(plain, Key.Down, ModifierKeys.Alt).Handled);
             Assert.AreEqual("two\r\none", plain.Text);
+            plain.Text = "mixed";
+            plain.SelectAll();
+            var menu = (ContextMenu)miniPad.FindName("EditorMenu");
+            var transformations = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Transform Text"));
+            var uppercase = transformations.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Uppercase"));
+            Assert.AreSame(plain, uppercase.CommandTarget);
+            ((RoutedCommand)uppercase.Command).Execute(null, plain);
+            Assert.AreEqual("MIXED", plain.Text);
+
             scratchpad.Show();
             var rich = (RichTextBox)scratchpad.FindName("Editor");
             rich.Document.Blocks.Clear();
@@ -157,6 +166,56 @@ public sealed class EditorShortcutTests
     });
 
     [TestMethod]
+    public void TransformationMenusFollowTheFocusedNotePaneAndContextMenusKeepTheirOwnTargets() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var editor = CreateNoteEditor(directory, new AppSettingsService(directory.Path));
+        try
+        {
+            var firstPath = directory.File("first.md");
+            var secondPath = directory.File("second.md");
+            File.WriteAllText(firstPath, "first");
+            File.WriteAllText(secondPath, "second");
+            editor.OpenNote(firstPath);
+            editor.OpenNote(secondPath);
+            typeof(NoteEditorWindow).GetMethod("ShowSecondaryDocument", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(editor, [editor.Workspace.FindByPath(secondPath)!, true, true, true]);
+            var primary = (TextBox)editor.FindName("EditorTextBox");
+            var secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
+            var edit = (MenuItem)editor.FindName("EditMenu");
+            foreach (var box in new[] { primary, secondary })
+            {
+                box.Focus();
+                AssertWrapping(box, true);
+                box.Text = "case";
+                box.SelectAll();
+                var other = ReferenceEquals(box, primary) ? secondary : primary;
+                var otherText = other.Text;
+                edit.RaiseEvent(new RoutedEventArgs(MenuItem.SubmenuOpenedEvent, edit));
+                var group = edit.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Transform Text"));
+                foreach (var item in group.Items.OfType<MenuItem>()) Assert.AreSame(box, item.CommandTarget);
+                var uppercase = group.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Uppercase"));
+                ((RoutedCommand)uppercase.Command).Execute(null, uppercase.CommandTarget);
+                Assert.AreEqual("CASE", box.Text);
+                Assert.AreEqual(otherText, other.Text);
+                var strike = edit.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Strikethrough"));
+                Assert.AreSame(box, strike.CommandTarget);
+                ((RoutedCommand)strike.Command).Execute(null, strike.CommandTarget);
+                Assert.AreEqual("~~CASE~~", box.Text);
+                var contextGroup = box.ContextMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Transform Text"));
+                foreach (var item in contextGroup.Items.OfType<MenuItem>()) Assert.AreSame(box, item.CommandTarget);
+            }
+            foreach (var field in new[] { (TextBox)editor.FindName("FindTextBox"), (TextBox)editor.FindName("ReplaceTextBox") })
+            {
+                AssertWrapping(field, false);
+                Assert.IsFalse(EditorTextTransformations.Commands[TextTransformation.Uppercase].CanExecute(null, field));
+                Assert.IsFalse(EditorTextWrapping.Strikethrough.CanExecute(null, field));
+            }
+        }
+        finally { CloseNoteEditor(editor); }
+    });
+
+    [TestMethod]
     public void QuickJotJotsAndDictionaryKeepFormattingOutOfNamingFields() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
@@ -257,7 +316,10 @@ public sealed class EditorShortcutTests
         foreach (var (key, modifiers, expected) in new[]
         {
             (Key.B, ModifierKeys.Control, "**test**"), (Key.I, ModifierKeys.Control, "*test*"),
-            (Key.K, ModifierKeys.Control, "[test](url)"), (Key.E, ModifierKeys.Control | ModifierKeys.Shift, "`test`")
+            (Key.K, ModifierKeys.Control, "[test](url)"), (Key.E, ModifierKeys.Control | ModifierKeys.Shift, "`test`"),
+            (Key.Q, ModifierKeys.Control | ModifierKeys.Shift, "\"test\""),
+            (Key.D9, ModifierKeys.Control | ModifierKeys.Shift, "(test)"),
+            (Key.M, ModifierKeys.Control | ModifierKeys.Shift, "```\r\ntest\r\n```")
         })
         {
             editor.Text = "test";

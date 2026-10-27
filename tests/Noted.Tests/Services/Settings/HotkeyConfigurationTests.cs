@@ -11,6 +11,9 @@ public sealed class HotkeyConfigurationTests
     [DataRow("B", "Ctrl+Shift+B")]
     [DataRow("E", "Ctrl+Shift+E")]
     [DataRow("K", "Ctrl+Shift+K")]
+    [DataRow("Q", "Ctrl+Shift+Q")]
+    [DataRow("9", "Ctrl+Shift+9")]
+    [DataRow("M", "Ctrl+Shift+M")]
     [DataRow("Up", "Alt+Shift+Up")]
     [DataRow("Down", "Alt+Shift+Down")]
     public void AutomaticFallbacksSkipEditorShortcutsWithoutChangingSavedPreferences(string key, string reserved)

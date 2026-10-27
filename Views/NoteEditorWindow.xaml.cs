@@ -117,6 +117,9 @@ public partial class NoteEditorWindow : Window
         EditorJsonFormatting.Attach(EditorTextBox, () => EditorTextBox.IsVisible ? _activeDocument?.Indentation : null);
         EditorJsonFormatting.Attach(SecondaryEditorTextBox, () => SecondaryEditorTextBox.IsVisible ? _secondaryDocument?.Indentation : null);
         EditorJsonFormatting.AddMenuItems(EditMenu, () => CurrentEditorTextBox);
+        EditorTextTransformations.Attach(EditorTextBox);
+        EditorTextTransformations.Attach(SecondaryEditorTextBox);
+        EditorTextTransformations.AddMenuItems(EditMenu, () => CurrentEditorTextBox);
         EditorIndentation.AttachIndicator(IndentationButton, () => CurrentDocument?.Indentation, value =>
         {
             if (CurrentDocument is not { } document) return;
