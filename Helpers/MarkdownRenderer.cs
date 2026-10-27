@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -45,6 +46,12 @@ internal static partial class MarkdownRenderer
             if (TryGetListItem(line, out var isOrdered, out _))
             {
                 index = AddList(document, lines, index, isOrdered);
+                continue;
+            }
+
+            if (TryGetTableHeader(lines, index, out var header, out var alignments))
+            {
+                index = AddTable(document, lines, index, header, alignments);
                 continue;
             }
 
@@ -200,7 +207,8 @@ internal static partial class MarkdownRenderer
         var paragraph = new Paragraph { Margin = new Thickness(0, 2, 0, 9) };
         while (index < lines.Length &&
                !string.IsNullOrWhiteSpace(lines[index]) &&
-               !StartsBlock(lines[index]))
+               !StartsBlock(lines[index]) &&
+               !TryGetTableHeader(lines, index, out _, out _))
         {
             if (paragraph.Inlines.Count > 0)
                 paragraph.Inlines.Add(new LineBreak());
@@ -209,6 +217,104 @@ internal static partial class MarkdownRenderer
         }
 
         document.Blocks.Add(paragraph);
+        return index;
+    }
+
+    private static bool TryGetTableHeader(string[] lines, int index, out List<string> header, out TextAlignment[] alignments)
+    {
+        header = [];
+        alignments = [];
+        if (index + 1 >= lines.Length || string.IsNullOrWhiteSpace(lines[index]) || StartsBlock(lines[index]))
+            return false;
+        var delimiters = SplitTableRow(lines[index + 1], out var delimiterHasPipe);
+        if (delimiters.Count == 0 || delimiters.Any(cell => !TableDelimiterPattern().IsMatch(cell)))
+            return false;
+        header = SplitTableRow(lines[index], out var headerHasPipe);
+        if ((!headerHasPipe && !delimiterHasPipe) || header.Count != delimiters.Count)
+            return false;
+        alignments = delimiters.Select(cell => cell.EndsWith(':')
+            ? cell.StartsWith(':') ? TextAlignment.Center : TextAlignment.Right
+            : TextAlignment.Left).ToArray();
+        return true;
+    }
+
+    private static List<string> SplitTableRow(string line, out bool hasPipe)
+    {
+        line = line.Trim();
+        var cells = new List<string>();
+        var cell = new StringBuilder();
+        hasPipe = false;
+        var leadingPipe = false;
+        var lastPipe = -1;
+        for (var index = 0; index < line.Length; index++)
+        {
+            if (line[index] != '|')
+            {
+                cell.Append(line[index]);
+                continue;
+            }
+            var backslashes = 0;
+            for (var previous = index - 1; previous >= 0 && line[previous] == '\\'; previous--) backslashes++;
+            if (backslashes % 2 != 0)
+            {
+                cell.Length--;
+                cell.Append('|');
+                continue;
+            }
+            hasPipe = true;
+            leadingPipe |= index == 0;
+            lastPipe = index;
+            cells.Add(cell.ToString().Trim());
+            cell.Clear();
+        }
+        cells.Add(cell.ToString().Trim());
+        if (lastPipe == line.Length - 1 && lastPipe >= 0) cells.RemoveAt(cells.Count - 1);
+        if (leadingPipe) cells.RemoveAt(0);
+        return cells;
+    }
+
+    private static int AddTable(FlowDocument document, string[] lines, int index, List<string> header, TextAlignment[] alignments)
+    {
+        var rows = new List<List<string>> { header };
+        index += 2;
+        while (index < lines.Length && !string.IsNullOrWhiteSpace(lines[index]) && !StartsBlock(lines[index]))
+            rows.Add(SplitTableRow(lines[index++], out _));
+
+        var table = new Table
+        {
+            CellSpacing = 0,
+            BorderThickness = new Thickness(1),
+            Margin = new Thickness(0, 6, 0, 12)
+        };
+        table.SetResourceReference(Block.BorderBrushProperty, "NotedBorderBrush");
+        for (var column = 0; column < header.Count; column++) table.Columns.Add(new TableColumn());
+        var group = new TableRowGroup();
+        table.RowGroups.Add(group);
+        for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+        {
+            var row = new TableRow();
+            if (rowIndex == 0)
+            {
+                row.FontWeight = FontWeights.SemiBold;
+                row.SetResourceReference(TextElement.BackgroundProperty, "NotedSubtleSurfaceBrush");
+            }
+            else if (rowIndex % 2 == 0)
+                row.SetResourceReference(TextElement.BackgroundProperty, "NotedInputBackgroundBrush");
+            group.Rows.Add(row);
+            for (var column = 0; column < header.Count; column++)
+            {
+                var paragraph = new Paragraph { Margin = new Thickness(0), TextAlignment = alignments[column] };
+                AddInlineContent(paragraph.Inlines, column < rows[rowIndex].Count ? rows[rowIndex][column] : "");
+                var cell = new TableCell(paragraph)
+                {
+                    Padding = new Thickness(10, 6, 10, 6),
+                    BorderThickness = new Thickness(0, 0, column + 1 < header.Count ? 1 : 0, rowIndex + 1 < rows.Count ? 1 : 0)
+                };
+                cell.SetResourceReference(TableCell.BorderBrushProperty, "NotedBorderBrush");
+                row.Cells.Add(cell);
+            }
+        }
+        document.Blocks.Add(table);
         return index;
     }
 
@@ -278,6 +384,9 @@ internal static partial class MarkdownRenderer
 
     [GeneratedRegex(@"^\s*\d+[.)]\s+(.+)$")]
     private static partial Regex OrderedListPattern();
+
+    [GeneratedRegex(@"^:?-+:?$")]
+    private static partial Regex TableDelimiterPattern();
 
     [GeneratedRegex(@"(\[[^\]\r\n]+\]\([^()\r\n]*\))|(`[^`\r\n]+`)|(\*\*[^*\r\n]+\*\*)|(__[^_\r\n]+__)|(\*[^*\r\n]+\*)|(_[^_\r\n]+_)")]
     private static partial Regex InlinePattern();
