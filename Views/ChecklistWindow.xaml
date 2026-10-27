@@ -526,7 +526,8 @@
                                             <StackPanel>
                                                 <TextBlock Text="NOTES" Margin="1,0,0,5"
                                                            Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="10" FontWeight="SemiBold"/>
-                                                <TextBox Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}"
+                                                <TextBox x:Name="NotesTextBox" Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}"
+                                                         PreviewKeyDown="NotesTextBox_PreviewKeyDown"
                                                          MinHeight="52" MaxHeight="120" Padding="8,6"
                                                          AcceptsReturn="True" TextWrapping="Wrap"
                                                          Background="{DynamicResource NotedInputBackgroundBrush}"

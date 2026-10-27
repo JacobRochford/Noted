@@ -8,6 +8,52 @@ namespace Noted.Tests.Services;
 public sealed class HotkeyConfigurationTests
 {
     [TestMethod]
+    [DataRow("B", "Ctrl+Shift+B")]
+    [DataRow("E", "Ctrl+Shift+E")]
+    [DataRow("K", "Ctrl+Shift+K")]
+    [DataRow("Up", "Alt+Shift+Up")]
+    [DataRow("Down", "Alt+Shift+Down")]
+    public void AutomaticFallbacksSkipEditorShortcutsWithoutChangingSavedPreferences(string key, string reserved)
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveNotesHotkey("Alt", key);
+        var original = File.ReadAllBytes(directory.File("settings.json"));
+        var native = new ControlledHotkeyService();
+        foreach (var candidateKey in new[] { key, "N" })
+        foreach (var modifiers in new[] { "Alt", "Alt+Shift", "Ctrl+Alt", "Win+Alt", "Ctrl+Shift" })
+            native.Unavailable.Add($"{modifiers}+{candidateKey}");
+        native.Unavailable.Remove(reserved);
+        using var configuration = new HotkeyConfiguration(settings, () => native, _ => () => { });
+
+        configuration.Initialize();
+
+        Assert.IsFalse(native.Attempts.Contains(reserved));
+        Assert.IsNull(configuration.GetHotkeyRegistration(HotkeyFeature.Notes));
+        CollectionAssert.AreEqual(original, File.ReadAllBytes(directory.File("settings.json")));
+    }
+
+    [TestMethod]
+    public void ExplicitEditorConflictsAndDisabledHotkeysKeepTheirSavedSettings()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveGlobalHotkey("NoteEditor", "Ctrl+Shift", "E", true);
+        settings.SaveGlobalHotkey("MiniPad", "Ctrl", "B", false);
+        var original = File.ReadAllBytes(directory.File("settings.json"));
+        var native = new ControlledHotkeyService();
+        using var configuration = new HotkeyConfiguration(settings, () => native, _ => () => { });
+
+        configuration.Initialize();
+
+        Assert.AreEqual("Ctrl+Shift+E", configuration.GetHotkeyRegistration(HotkeyFeature.NoteEditor)!.Combination);
+        Assert.IsFalse(configuration.IsEnabled(HotkeyFeature.MiniPad));
+        Assert.IsNull(configuration.GetHotkeyRegistration(HotkeyFeature.MiniPad));
+        Assert.IsFalse(native.Attempts.Contains("Ctrl+B"));
+        CollectionAssert.AreEqual(original, File.ReadAllBytes(directory.File("settings.json")));
+    }
+
+    [TestMethod]
     public void CaptureCollisionUsesSessionFallbackWithoutReplacingNoteEditorShortcut()
     {
         using var directory = new TemporaryTestDirectory();

@@ -238,7 +238,7 @@
                                       Click="ReopenTabsOnStartupMenuItem_Click"/>
                             <MenuItem x:Name="TabsPanelMenuItem"
                                       Header="Show Tabs"
-                                      InputGestureText="Ctrl+B"
+                                      InputGestureText="Ctrl+Shift+B"
                                       IsCheckable="True"
                                       Click="TabsPanelMenuItem_Click"/>
                         </MenuItem>

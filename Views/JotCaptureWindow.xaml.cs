@@ -21,6 +21,7 @@ public partial class JotCaptureWindow : Window
         InitializeComponent();
         _viewModel = viewModel;
         DataContext = viewModel;
+        EditorTextWrapping.Attach(CaptureTextBox);
         TextCompositionManager.AddPreviewTextInputStartHandler(CaptureTextBox, (_, _) => _isComposing = true);
         TextCompositionManager.AddPreviewTextInputHandler(CaptureTextBox, (_, _) =>
         {

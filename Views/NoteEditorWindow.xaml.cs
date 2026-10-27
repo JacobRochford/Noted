@@ -110,8 +110,10 @@ public partial class NoteEditorWindow : Window
         WindowManager.ConfigureEditorActivation(this);
         EditorIndentation.Attach(EditorTextBox, () => _activeDocument?.Indentation);
         EditorLineCommands.Attach(EditorTextBox);
+        EditorTextWrapping.Attach(EditorTextBox);
         EditorIndentation.Attach(SecondaryEditorTextBox, () => _secondaryDocument?.Indentation);
         EditorLineCommands.Attach(SecondaryEditorTextBox);
+        EditorTextWrapping.Attach(SecondaryEditorTextBox);
         EditorJsonFormatting.Attach(EditorTextBox, () => EditorTextBox.IsVisible ? _activeDocument?.Indentation : null);
         EditorJsonFormatting.Attach(SecondaryEditorTextBox, () => SecondaryEditorTextBox.IsVisible ? _secondaryDocument?.Indentation : null);
         EditorJsonFormatting.AddMenuItems(EditMenu, () => CurrentEditorTextBox);
@@ -2263,8 +2265,8 @@ public partial class NoteEditorWindow : Window
         TabsPanelMenuItem.IsChecked = !_isTabsPanelCollapsed;
         TabsPanelIconSidebar.Opacity = _isTabsPanelCollapsed ? 0.25 : 1;
         ToggleTabsButton.ToolTip = _isTabsPanelCollapsed
-            ? "Show tabs (Ctrl+B)"
-            : "Hide tabs (Ctrl+B)";
+            ? "Show tabs (Ctrl+Shift+B)"
+            : "Hide tabs (Ctrl+Shift+B)";
     }
 
     private void CaptureTabsPanelWidth()
@@ -2390,7 +2392,7 @@ public partial class NoteEditorWindow : Window
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        var modifiers = Keyboard.Modifiers;
+        var modifiers = e.KeyboardDevice.Modifiers;
         if (e.Key == Key.F && modifiers == ModifierKeys.Control)
         {
             OpenFind(showReplace: false);
@@ -2458,9 +2460,8 @@ public partial class NoteEditorWindow : Window
             return;
         }
 
-        if (e.Key == Key.B && modifiers == ModifierKeys.Control)
+        if (HandleTabsPanelShortcut(e.Key, modifiers))
         {
-            ToggleTabsPanel();
             e.Handled = true;
             return;
         }
@@ -2479,6 +2480,15 @@ public partial class NoteEditorWindow : Window
             CycleActiveDocument(backward: modifiers.HasFlag(ModifierKeys.Shift));
             e.Handled = true;
         }
+    }
+
+    internal bool HandleTabsPanelShortcut(Key key, ModifierKeys modifiers)
+    {
+        if (key != Key.B || modifiers != (ModifierKeys.Control | ModifierKeys.Shift))
+            return false;
+
+        ToggleTabsPanel();
+        return true;
     }
 
     private void CycleActiveDocument(bool backward)

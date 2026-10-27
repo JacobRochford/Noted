@@ -44,6 +44,7 @@ public partial class JotsWindow : OverlayWindow
         RestoreWindowBounds(windowState.Left, windowState.Top, windowState.Width, windowState.Height);
         _viewModel = new JotsWindowViewModel(workspace, windowState.GhostModeEnabled);
         DataContext = _viewModel;
+        EditorTextWrapping.Attach(DetailsTextBox);
         InitializeOverlay(windowState.GhostModeEnabled, windowState.GhostModeOpacity, windowState.Opacity);
         if (item is not null)
         {
@@ -137,48 +138,53 @@ public partial class JotsWindow : OverlayWindow
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.N)
+        if (!e.Handled)
+            e.Handled = HandleShortcut(e.Key, e.KeyboardDevice.Modifiers);
+        base.OnPreviewKeyDown(e);
+    }
+
+    internal bool HandleShortcut(Key key, ModifierKeys modifiers)
+    {
+        if (modifiers == ModifierKeys.Control && key == Key.N)
         {
             if (_jotId is null && _viewModel.SelectedItem?.IsEditing != true)
                 BeginNewJot();
-            e.Handled = true;
+            return true;
         }
-        else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key == Key.F && !_viewModel.IsDetailOpen)
+        if (modifiers == ModifierKeys.Control && key == Key.F && !_viewModel.IsDetailOpen)
         {
             SearchTextBox.Focus();
             SearchTextBox.SelectAll();
-            e.Handled = true;
+            return true;
         }
-        else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) &&
-                 (e.Key == Key.S || e.Key == Key.Enter) &&
-                 _viewModel.SelectedItem?.IsEditing == true)
+        if (modifiers == ModifierKeys.Control && (key == Key.S || key == Key.Enter) &&
+            _viewModel.SelectedItem?.IsEditing == true)
         {
             SaveCurrentJot();
-            e.Handled = true;
+            return true;
         }
-        else if (e.Key == Key.Escape)
+        if (key == Key.Escape)
         {
             if (_jotId is not null)
             {
                 Close();
-                e.Handled = true;
+                return true;
             }
-            else if (_viewModel.IsDetailOpen)
+            if (_viewModel.IsDetailOpen)
             {
                 TryReturnToList();
-                e.Handled = true;
+                return true;
             }
-            else if (SearchTextBox.IsKeyboardFocusWithin)
+            if (SearchTextBox.IsKeyboardFocusWithin)
             {
                 if (SearchTextBox.Text.Length > 0)
                     SearchTextBox.Clear();
                 else
                     ItemsList.Focus();
-                e.Handled = true;
+                return true;
             }
         }
-
-        base.OnPreviewKeyDown(e);
+        return false;
     }
 
     protected override void SaveWindowState()

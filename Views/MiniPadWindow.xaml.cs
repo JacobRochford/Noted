@@ -55,6 +55,7 @@ public partial class MiniPadWindow : OverlayWindow
         if (state.IsMaximized) WindowState = WindowState.Maximized;
         EditorIndentation.Attach(Editor, () => _indentation);
         EditorLineCommands.Attach(Editor);
+        EditorTextWrapping.Attach(Editor);
         EditorJsonFormatting.Attach(Editor, () => _indentation);
         EditorJsonFormatting.AddMenuItems(EditorMenu, () => Editor);
         IndentationButton.Content = EditorIndentation.GetLabel(_indentation);

@@ -118,6 +118,12 @@ public partial class DictionaryWindow : OverlayWindow
         base.OnPreviewKeyDown(e);
     }
 
+    private void DefinitionBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!e.Handled && sender is TextBox editor)
+            e.Handled = EditorTextWrapping.HandleKey(editor, e.Key, e.KeyboardDevice.Modifiers);
+    }
+
     internal bool TryFlushPendingContent(out string? error)
     {
         FinishNewEntries();

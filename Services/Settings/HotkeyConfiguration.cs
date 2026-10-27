@@ -161,7 +161,10 @@ internal sealed class HotkeyConfiguration : IDisposable
                 continue;
             }
 
-            if (index > 0 && otherConfiguredCombinations.Contains(validation.Combination))
+            // automatic fallbacks must not take editor shortcuts; explicit choices still apply.
+            if (index > 0 && (otherConfiguredCombinations.Contains(validation.Combination) ||
+                validation.Combination is "Ctrl+Shift+B" or "Ctrl+Shift+E" or "Ctrl+Shift+K" or
+                    "Alt+Shift+Up" or "Alt+Shift+Down"))
                 continue;
             if (!attemptedCombinations.Add(validation.Combination))
                 continue;

@@ -15,13 +15,53 @@ internal static class EditorIndentation
     {
         editor.PreviewKeyDown += (_, e) =>
         {
-            if (e.Key != Key.Tab || Keyboard.Modifiers != ModifierKeys.None ||
-                editor.IsReadOnly || !editor.IsEnabled || getSettings() is not { } settings)
-                return;
-
-            Insert(editor, settings);
-            e.Handled = true;
+            if (!e.Handled && e.Key == Key.Tab)
+                e.Handled = HandleKey(editor, e.Key, e.KeyboardDevice.Modifiers, getSettings());
         };
+    }
+
+    internal static bool HandleKey(TextBoxBase editor, Key key, ModifierKeys modifiers, IndentationSettings? settings)
+    {
+        if (key != Key.Tab || (modifiers != ModifierKeys.None && modifiers != ModifierKeys.Shift) ||
+            editor.IsReadOnly || !editor.IsEnabled || settings is null)
+            return false;
+
+        if (modifiers == ModifierKeys.Shift) Outdent(editor, settings);
+        else Insert(editor, settings);
+        return true;
+    }
+
+    internal static void Outdent(TextBoxBase editor, IndentationSettings settings)
+    {
+        if (editor.IsReadOnly || !editor.IsEnabled)
+            return;
+        var snapshot = editor is RichTextBox rich
+            ? new RichTextSearchSnapshot(rich.Document, markStructuralWhitespace: true) : null;
+        var text = editor is TextBox plain ? plain.Text : snapshot!.Text;
+        var start = editor is TextBox box ? box.SelectionStart
+            : snapshot!.GetOffset(((RichTextBox)editor).Selection.Start);
+        var end = editor is TextBox textBox ? start + textBox.SelectionLength
+            : snapshot!.GetOffset(((RichTextBox)editor).Selection.End);
+        var lines = new TextLineMap(text);
+        var first = lines.LineAt(start);
+        var last = lines.LineAt(end);
+        if (end > start && end == lines.Starts[last])
+            last--;
+
+        var edits = new List<IndentationEdit>();
+        for (var line = first; line <= last; line++)
+        {
+            var lineStart = lines.Starts[line];
+            var count = 0;
+            while (lineStart + count < text.Length && count < settings.TabSize && text[lineStart + count] == ' ')
+                count++;
+            if (count == 0 && lineStart < text.Length && text[lineStart] == '\t')
+                count = 1;
+            if (count > 0)
+                edits.Add(new(lineStart, count, ""));
+        }
+        if (edits.Count > 0)
+            ApplyIndentationEdits(editor, settings, text, snapshot, edits);
     }
 
     internal static void Insert(TextBoxBase editor, IndentationSettings settings)
@@ -139,6 +179,13 @@ internal static class EditorIndentation
         if (edits.Count == 0)
             return true;
 
+        ApplyIndentationEdits(editor, settings, text, snapshot, edits);
+        return true;
+    }
+
+    private static void ApplyIndentationEdits(TextBoxBase editor, IndentationSettings settings, string text,
+        RichTextSearchSnapshot? snapshot, IReadOnlyList<IndentationEdit> edits)
+    {
         var verticalOffset = editor.VerticalOffset;
         var horizontalOffset = editor.HorizontalOffset;
         editor.BeginChange();
@@ -179,7 +226,6 @@ internal static class EditorIndentation
         }
         editor.ScrollToVerticalOffset(verticalOffset);
         editor.ScrollToHorizontalOffset(horizontalOffset);
-        return true;
     }
 
     internal static void AttachIndicator(

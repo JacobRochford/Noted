@@ -865,10 +865,16 @@ public partial class MainWindow : Window {
         {
             note = FileList.SelectedItem as NoteItem;
         }
-        if (note is null) return;
+        if (note is not null)
+            CopyNoteName(note);
+    }
+
+    private static void CopyNoteName(NoteItem note, Action<string>? writeClipboard = null)
+    {
         try
         {
-            Clipboard.SetText(note.DisplayName);
+            if (writeClipboard is not null) writeClipboard(note.DisplayName);
+            else Clipboard.SetText(note.DisplayName);
         }
         catch (System.Runtime.InteropServices.COMException ex)
         {
@@ -1246,6 +1252,10 @@ public partial class MainWindow : Window {
     }
 
     private void FileList_KeyDown(object sender, KeyEventArgs e) {
+        if (HandleCopyNameShortcut(e.Key, e.KeyboardDevice.Modifiers, e.OriginalSource as DependencyObject)) {
+            e.Handled = true;
+            return;
+        }
         if (e.Key == Key.Enter && FileList.SelectedItem is NoteItem enterNote) {
             if (enterNote.IsFolder) {
                 if (_viewModel.IsExpandMode)
@@ -1263,6 +1273,19 @@ public partial class MainWindow : Window {
             DeleteNoteButton_Click(sender, e);
             e.Handled = true;
         }
+    }
+
+    internal bool HandleCopyNameShortcut(Key key, ModifierKeys modifiers, DependencyObject? source,
+        Action<string>? writeClipboard = null)
+    {
+        if (key != Key.C || modifiers != ModifierKeys.Control || FileList.SelectedItem is not NoteItem note)
+            return false;
+        if (!ReferenceEquals(source, FileList) &&
+            !(source is ListBoxItem item && ReferenceEquals(ItemsControl.ItemsControlFromItemContainer(item), FileList)))
+            return false;
+
+        CopyNoteName(note, writeClipboard);
+        return true;
     }
 
     private void StartRenaming(NoteItem note) {

@@ -206,6 +206,27 @@ public partial class ChecklistWindow : OverlayWindow
             _viewModel.SearchQuery = "";
     }
 
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        if (!e.Handled)
+            e.Handled = HandleSearchShortcut(e.Key, e.KeyboardDevice.Modifiers);
+        base.OnPreviewKeyDown(e);
+    }
+
+    internal bool HandleSearchShortcut(Key key, ModifierKeys modifiers)
+    {
+        if (key != Key.F || modifiers != ModifierKeys.Control)
+            return false;
+
+        _viewModel.IsSearchVisible = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            SearchBox.Focus();
+            SearchBox.SelectAll();
+        }, System.Windows.Threading.DispatcherPriority.Input);
+        return true;
+    }
+
     private void SearchBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
@@ -562,6 +583,12 @@ public partial class ChecklistWindow : OverlayWindow
             Keyboard.ClearFocus();
             e.Handled = true;
         }
+    }
+
+    private void NotesTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!e.Handled && sender is TextBox editor)
+            e.Handled = EditorTextWrapping.HandleKey(editor, e.Key, e.KeyboardDevice.Modifiers);
     }
 
     private void ItemTextBox_GotFocus(object sender, RoutedEventArgs e)

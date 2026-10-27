@@ -236,6 +236,7 @@
                                                             </TextBlock.Style>
                                                         </TextBlock>
                                                         <TextBox x:Name="DefinitionBox" PreviewMouseWheel="Definition_PreviewMouseWheel"
+                                                                 PreviewKeyDown="DefinitionBox_PreviewKeyDown"
                                                                  Text="{Binding DraftDefinition, UpdateSourceTrigger=PropertyChanged}"
                                                                  MinHeight="48" MaxHeight="130"
                                                                  Padding="7,5"

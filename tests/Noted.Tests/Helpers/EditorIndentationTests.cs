@@ -2,10 +2,12 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using Noted.Helpers;
 using Noted.Models;
+using Noted.Search;
 using Noted.Tests.Services;
 
 namespace Noted.Tests.Helpers;
@@ -166,6 +168,94 @@ public sealed class EditorIndentationTests
             Assert.IsTrue(editor.CanRedo);
             Assert.IsTrue(editor.Redo());
             Assert.AreEqual(before, editor.Text);
+        });
+    }
+
+    [TestMethod]
+    [DataRow("    one\r\n\ttwo\r\nthree", 0, 15, "one\r\ntwo\r\nthree", 0, 10)]
+    [DataRow("  one\r\n    two", 1, 12, "one\r\ntwo", 0, 7)]
+    [DataRow("\tone", 3, 0, "one", 2, 0)]
+    [DataRow("  ", 2, 0, "", 0, 0)]
+    [DataRow("", 0, 0, "", 0, 0)]
+    public void OutdentRemovesOnlyLeadingIndentationAndMapsSelection(string original, int start, int length,
+        string expected, int newStart, int newLength)
+    {
+        WpfTestHost.Invoke(() =>
+        {
+            foreach (var mode in new[] { IndentationMode.Spaces, IndentationMode.Tabs })
+            foreach (var rich in new[] { false, true })
+            {
+                TextBoxBase editor;
+                if (rich)
+                {
+                    var document = new FlowDocument();
+                    foreach (var line in original.Split("\r\n", StringSplitOptions.None))
+                        document.Blocks.Add(new Paragraph(new Run(line)));
+                    editor = new RichTextBox(document);
+                }
+                else editor = new TextBox { Text = original, AcceptsReturn = true };
+                using var surface = new WpfEditorTestSurface(editor);
+                if (editor is TextBox plain) plain.Select(start, length);
+                else
+                {
+                    var box = (RichTextBox)editor;
+                    var snapshot = new RichTextSearchSnapshot(box.Document);
+                    TextPointer Position(int offset) => offset < snapshot.Text.Length ? snapshot.GetStart(offset)
+                        : box.Document.ContentEnd.GetInsertionPosition(LogicalDirection.Backward);
+                    box.Selection.Select(Position(start), Position(start + length));
+                }
+                EditorIndentation.Attach(editor, () => new() { Mode = mode, TabSize = 4 });
+                Assert.IsTrue(KeyboardTestInput.Press(editor, Key.Tab, ModifierKeys.Shift).Handled);
+                var text = editor is TextBox textBox ? textBox.Text
+                    : new RichTextSearchSnapshot(((RichTextBox)editor).Document).Text;
+                Assert.AreEqual(expected, text);
+                if (editor is TextBox plainBox)
+                {
+                    Assert.AreEqual(newStart, plainBox.SelectionStart);
+                    Assert.AreEqual(newLength, plainBox.SelectionLength);
+                }
+                else
+                {
+                    var box = (RichTextBox)editor;
+                    var snapshot = new RichTextSearchSnapshot(box.Document);
+                    Assert.AreEqual(newStart, snapshot.GetOffset(box.Selection.Start));
+                    Assert.AreEqual(newLength, snapshot.GetOffset(box.Selection.End) - newStart);
+                }
+                if (original != expected)
+                {
+                    Assert.IsTrue(editor.Undo());
+                    Assert.AreEqual(original, editor is TextBox originalBox ? originalBox.Text
+                        : new RichTextSearchSnapshot(((RichTextBox)editor).Document).Text);
+                    Assert.IsFalse(editor.CanUndo);
+                    Assert.IsTrue(editor.Redo());
+                    Assert.AreEqual(expected, editor is TextBox changedBox ? changedBox.Text
+                        : new RichTextSearchSnapshot(((RichTextBox)editor).Document).Text);
+                }
+            }
+        });
+    }
+
+    [TestMethod]
+    public void OutdentKeepsRichFormattingAndLeavesOtherInputsAlone()
+    {
+        WpfTestHost.Invoke(() =>
+        {
+            var run = new Run("    text") { FontWeight = FontWeights.Bold };
+            var editor = new RichTextBox(new FlowDocument(new Paragraph(run)));
+            var search = new TextBox { Text = "    query" };
+            using var surface = new WpfEditorTestSurface(editor, search);
+            editor.CaretPosition = run.ContentEnd;
+            EditorIndentation.Attach(editor, () => new());
+            Assert.IsTrue(KeyboardTestInput.Press(editor, Key.Tab, ModifierKeys.Shift).Handled);
+            Assert.AreEqual("text\r\n", new TextRange(editor.Document.ContentStart, editor.Document.ContentEnd).Text);
+            Assert.AreEqual(FontWeights.Bold, new TextRange(editor.Document.ContentStart, editor.Document.ContentEnd)
+                .GetPropertyValue(TextElement.FontWeightProperty));
+            KeyboardTestInput.Press(search, Key.Tab, ModifierKeys.Shift);
+            Assert.AreEqual("    query", search.Text);
+            editor.IsReadOnly = true;
+            Assert.IsFalse(EditorIndentation.HandleKey(editor, Key.Tab, ModifierKeys.Shift, new()));
+            Assert.IsFalse(EditorIndentation.HandleKey(editor, Key.Tab, ModifierKeys.Control, new()));
+            Assert.IsFalse(EditorIndentation.HandleKey(editor, Key.Tab, ModifierKeys.Shift, null));
         });
     }
 
