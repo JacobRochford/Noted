@@ -113,10 +113,8 @@ public partial class NoteEditorWindow : Window
         SecondaryMarkdownPreview.GotKeyboardFocus += (_, _) => { _workspace.Focus(_secondaryDocument); UpdateEditorState(); };
         WindowManager.ConfigureEditorActivation(this);
         EditorIndentation.Attach(EditorTextBox, () => _activeDocument?.Indentation);
-        EditorLineCommands.Attach(EditorTextBox);
         EditorTextWrapping.Attach(EditorTextBox);
         EditorIndentation.Attach(SecondaryEditorTextBox, () => _secondaryDocument?.Indentation);
-        EditorLineCommands.Attach(SecondaryEditorTextBox);
         EditorTextWrapping.Attach(SecondaryEditorTextBox);
         EditorJsonFormatting.Attach(EditorTextBox, () => EditorTextBox.IsVisible ? _activeDocument?.Indentation : null);
         EditorJsonFormatting.Attach(SecondaryEditorTextBox, () => SecondaryEditorTextBox.IsVisible ? _secondaryDocument?.Indentation : null);
@@ -142,6 +140,8 @@ public partial class NoteEditorWindow : Window
         }, () => CurrentEditorTextBox);
         PlainTextPaste.Attach(EditorTextBox, _settingsService.LoadNormalizePastedText);
         PlainTextPaste.Attach(SecondaryEditorTextBox, _settingsService.LoadNormalizePastedText);
+        EditorLineCommands.Attach(EditorTextBox);
+        EditorLineCommands.Attach(SecondaryEditorTextBox);
         _primaryFindPresenter = new TextBoxSearchPresenter(EditorTextBox);
         _secondaryFindPresenter = new TextBoxSearchPresenter(SecondaryEditorTextBox);
         _findSession.QueryOrOptionsChanged += _primaryFindPresenter.ClearPendingManualNavigationAnchor;

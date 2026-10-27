@@ -54,7 +54,6 @@ public partial class MiniPadWindow : OverlayWindow
         }
         if (state.IsMaximized) WindowState = WindowState.Maximized;
         EditorIndentation.Attach(Editor, () => _indentation);
-        EditorLineCommands.Attach(Editor);
         EditorTextWrapping.Attach(Editor);
         EditorJsonFormatting.Attach(Editor, () => _indentation);
         EditorJsonFormatting.AddMenuItems(EditorMenu, () => Editor);
@@ -75,6 +74,7 @@ public partial class MiniPadWindow : OverlayWindow
             catch (SettingsPersistenceException) { _indentation = previous; throw; }
         }, () => Editor);
         PlainTextPaste.Attach(Editor, _settingsService.LoadNormalizePastedText);
+        EditorLineCommands.Attach(Editor);
         _findPresenter = new TextBoxSearchPresenter(Editor);
         _findSession.QueryOrOptionsChanged += _findPresenter.ClearPendingManualNavigationAnchor;
         InitializeOverlay(false, settingsService.LoadGhostModeOpacity(), settingsService.LoadDefaultOpacity());

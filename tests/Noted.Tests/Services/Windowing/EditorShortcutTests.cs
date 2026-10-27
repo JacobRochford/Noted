@@ -41,6 +41,7 @@ public sealed class EditorShortcutTests
             Assert.AreSame(plain, uppercase.CommandTarget);
             ((RoutedCommand)uppercase.Command).Execute(null, plain);
             Assert.AreEqual("MIXED", plain.Text);
+            AssertLinePaste(plain);
 
             scratchpad.Show();
             var rich = (RichTextBox)scratchpad.FindName("Editor");
@@ -106,6 +107,7 @@ public sealed class EditorShortcutTests
                 Assert.AreEqual(original, box.Text);
                 KeyboardTestInput.Press(box, Key.B, ModifierKeys.Control | ModifierKeys.Shift);
                 Assert.AreEqual(initialTabs, tabs.IsChecked);
+                AssertLinePaste(box);
             }
 
             KeyboardTestInput.Press(secondary, Key.F, ModifierKeys.Control);
@@ -328,6 +330,20 @@ public sealed class EditorShortcutTests
             Assert.AreEqual(enabled ? expected : "test", editor.Text, $"{editor.Name}: {key}");
         }
         editor.Text = "test";
+    }
+
+    private static void AssertLinePaste(TextBox editor)
+    {
+        var original = editor.Text;
+        editor.CaretIndex = Math.Min(1, original.Length);
+        IDataObject? data = null;
+        Assert.IsTrue(EditorLineCommands.HandleKey(editor, Key.C, ModifierKeys.Control, copied => data = copied));
+        var args = new DataObjectPastingEventArgs(data!, false, DataFormats.UnicodeText);
+        editor.RaiseEvent(args);
+        Assert.IsTrue(args.CommandCancelled);
+        Assert.AreEqual(original + Environment.NewLine + original, editor.Text);
+        Assert.IsTrue(editor.Undo());
+        Assert.AreEqual(original, editor.Text);
     }
 
     private static NoteEditorWindow CreateNoteEditor(TemporaryTestDirectory directory, AppSettingsService settings) =>

@@ -13,6 +13,8 @@ namespace Noted.Helpers;
 
 internal static class EditorLineCommands
 {
+    internal const string LineCopyFormat = "Noted.LineCopy";
+
     internal static void Attach(TextBoxBase editor)
     {
         editor.PreviewKeyDown += (_, e) =>
@@ -20,6 +22,84 @@ internal static class EditorLineCommands
             if (!e.Handled)
                 e.Handled = HandleKey(editor, e.Key == Key.System ? e.SystemKey : e.Key, e.KeyboardDevice.Modifiers);
         };
+        DataObject.AddPastingHandler(editor, (_, e) =>
+        {
+            if (!e.IsDragDrop && TryPasteLine(editor, e.SourceDataObject, e.DataObject))
+                e.CancelCommand();
+        });
+    }
+
+    internal static bool TryPasteLine(TextBoxBase editor, IDataObject source, IDataObject? pasteData = null)
+    {
+        if (!editor.IsEnabled || editor.IsReadOnly || !source.GetDataPresent(LineCopyFormat, autoConvert: false) ||
+            editor is TextBox { SelectionLength: > 0 } || editor is RichTextBox { Selection.IsEmpty: false })
+            return false;
+        var data = pasteData ?? source;
+        if (data.GetData(DataFormats.UnicodeText) is not string clipboardText) return false;
+        var contentEnd = ContentEnd(clipboardText, 0, clipboardText.Length);
+        var content = clipboardText[..contentEnd];
+        var plain = editor as TextBox;
+        var rich = editor as RichTextBox;
+        var snapshot = rich is null ? null : new RichTextSearchSnapshot(rich.Document, markStructuralWhitespace: true);
+        var text = plain?.Text ?? snapshot!.Text;
+        var caret = plain?.CaretIndex ?? snapshot!.GetOffset(rich!.CaretPosition);
+        var lines = new TextLineMap(text);
+        var line = lines.LineAt(caret);
+        var column = caret - lines.Starts[line];
+        if (rich is not null)
+        {
+            var position = caret < snapshot!.Text.Length ? snapshot.GetStart(caret)
+                : rich.Document.ContentEnd.GetInsertionPosition(LogicalDirection.Backward);
+            var current = position.Paragraph;
+            if (current is null || !IsLogicalParagraph(current, rich.Document)) return false;
+            var paragraph = new Paragraph(new Run(content));
+            if (data.GetData(DataFormats.Rtf) is string rtf)
+            {
+                using var stream = new MemoryStream(Encoding.UTF8.GetBytes(rtf));
+                var fragment = new FlowDocument();
+                new TextRange(fragment.ContentStart, fragment.ContentEnd).Load(stream, DataFormats.Rtf);
+                while (fragment.Blocks.LastBlock is Paragraph last && last.PreviousBlock is not null &&
+                    new TextRange(last.ContentStart, last.ContentEnd).IsEmpty)
+                    fragment.Blocks.Remove(last);
+                if (fragment.Blocks.Count != 1 || fragment.Blocks.FirstBlock is not Paragraph copied ||
+                    !IsLogicalParagraph(copied, fragment) || !CanDuplicate(copied.Inlines))
+                    return false;
+                fragment.Blocks.Remove(copied);
+                paragraph = copied;
+            }
+            rich.BeginChange();
+            try
+            {
+                rich.Document.Blocks.InsertAfter(current, paragraph);
+                var updated = new RichTextSearchSnapshot(rich.Document, markStructuralWhitespace: true);
+                var updatedLines = new TextLineMap(updated.Text);
+                var offset = updatedLines.Starts[line + 1] + Math.Min(column, content.Length);
+                var newCaret = offset < updated.Text.Length ? updated.GetStart(offset)
+                    : rich.Document.ContentEnd.GetInsertionPosition(LogicalDirection.Backward);
+                rich.Selection.Select(newCaret, newCaret);
+            }
+            finally { rich.EndChange(); }
+            return true;
+        }
+
+        var end = lines.ContentEnd(line);
+        var next = lines.End(line);
+        var newline = next > end ? text[end..next]
+            : line > 0 ? text[lines.ContentEnd(line - 1)..lines.Starts[line]]
+            : clipboardText[contentEnd..];
+        if (newline.Length == 0) newline = Environment.NewLine;
+        var insertion = next > end ? content + newline : newline + content;
+        var insertionStart = next > end ? next : end;
+        var newStart = next > end ? next : end + newline.Length;
+        plain!.BeginChange();
+        try
+        {
+            plain.Select(insertionStart, 0);
+            plain.SelectedText = insertion;
+            plain.Select(newStart + Math.Min(column, content.Length), 0);
+        }
+        finally { plain.EndChange(); }
+        return true;
     }
 
     internal static bool HandleKey(TextBoxBase editor, Key key, ModifierKeys modifiers,
@@ -157,7 +237,7 @@ internal static class EditorLineCommands
             var clipboardText = range?.Text ?? text[start..end];
             if (!clipboardText.EndsWith('\r') && !clipboardText.EndsWith('\n'))
                 clipboardText += newline;
-            TryWriteClipboard(clipboardText, range, writeClipboard);
+            TryWriteClipboard(clipboardText, range, writeClipboard, lineCopy: true);
             return true;
         }
         if (move && (above ? first == 0 : last == lines.Starts.Length - 1))
@@ -333,10 +413,11 @@ internal static class EditorLineCommands
         return true;
     }
 
-    private static bool TryWriteClipboard(string text, TextRange? richRange, Action<IDataObject>? writeClipboard)
+    private static bool TryWriteClipboard(string text, TextRange? richRange, Action<IDataObject>? writeClipboard, bool lineCopy = false)
     {
         var data = new DataObject();
         data.SetData(DataFormats.UnicodeText, text);
+        if (lineCopy) data.SetData(LineCopyFormat, new MemoryStream(new byte[] { 1 }));
         if (richRange is not null)
         {
             using var stream = new MemoryStream();
