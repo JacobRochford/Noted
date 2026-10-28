@@ -54,6 +54,20 @@ Default hotkeys:
 
 These shortcuts can be changed or disabled in Settings. If a shortcut is unavailable, Noted may use a fallback for that session and show a warning.
 
+Local navigation shortcuts:
+
+| Action | Shortcut | Scope |
+| --- | --- | --- |
+| Open an existing note | `Ctrl+O` | Note Editor |
+| Reveal the current note in File Explorer | `Ctrl+Shift+O` | Note Editor |
+| Quick-open by filename | `Ctrl+P` | Note Editor |
+| Go to a logical line number | `Ctrl+G` | Note Editor, MiniPad, Scratchpad |
+| Toggle split editor | `Ctrl+\` | Note Editor; requires two open notes |
+| Focus primary / secondary pane | `Ctrl+1` / `Ctrl+2` | Note Editor; the secondary pane must already be open |
+| Toggle word wrap | `Alt+Z` | Note Editor, MiniPad, Scratchpad editor controls |
+
+Quick Open filters a snapshot of managed note filenames and shows their relative paths to distinguish duplicate names. Reopen it to refresh renamed or deleted entries. Navigation reuses open tabs and keeps unsaved content.
+
 The Notes hotkey hides Notes, Checklist, Dictionary, the Jots collection and individual jot windows, Scratchpad, MiniPads, and the editor together. Pressing it again restores the same windows that were visible before they were hidden.
 
 The MiniPad hotkey shows the most recently active MiniPad or creates one if none is open. Use New MiniPad in a MiniPad window to open another.

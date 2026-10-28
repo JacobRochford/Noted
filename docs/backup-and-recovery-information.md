@@ -10,6 +10,10 @@ Saved documents are selected from every tab in the freshly prepared Note Editor 
 
 Each selected saved file contains the bytes currently on disk, including external edits; unsaved editor text remains in a separate recovery draft. Open documents outside the notes folder retain their session data and any retained recovery drafts and saved-note history, but their saved files are excluded with a backup warning. Closing a tab excludes its saved file from future backups unless it is in `.archive`; retained recovery drafts and saved-note history remain eligible independently.
 
+If a note changes on disk during saving, Noted retains the displaced file beside the original as `noted-conflict-<unique ID>` with the original extension. The editor reports the copy's path and leaves the save unresolved. The original path may already contain the editor's text; Noted does not automatically roll it back over possible subsequent changes. The retained copy survives restarts and is not automatically deleted. Noted also attempts to record its text in the existing saved-note history. A normal save whose history write fails retains its previous disk version in the same way and reports a warning.
+
+These retained copies are ordinary note files, with no new settings or recovery format. Their history entries follow the existing history backup, import, export, and restore rules. The copies themselves follow saved-document selection: inside the notes folder, open them in the editor to include them in the next backup, or enable entire-folder backups. Closed copies are intentionally excluded from the default selection; copies outside the notes folder are excluded like other external saved files.
+
 Settings-history files, rolling `.bak` files, `.tmp`, `.pending-*`, `.corrupt-*`, archived recovery evidence, and obsolete MiniPad storage are normally excluded. Quick Jot is an exception: when its primary file is missing, collection can use its validated `.bak`.
 
 ## User and recent backups
