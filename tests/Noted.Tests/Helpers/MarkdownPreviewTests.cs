@@ -14,6 +14,93 @@ namespace Noted.Tests.Helpers;
 public sealed class MarkdownPreviewTests
 {
     [TestMethod]
+    public void StrikethroughCommandRendersWithoutChangingCodeOrUnmatchedDelimiters() =>
+        Noted.Tests.Services.WpfTestHost.Invoke(() =>
+    {
+        var editor = new TextBox { Text = "remove" };
+        using var surface = new Noted.Tests.Services.WpfEditorTestSurface(editor);
+        EditorTextWrapping.Attach(editor);
+        editor.SelectAll();
+        EditorTextWrapping.Strikethrough.Execute(null, editor);
+        Assert.AreEqual("~~remove~~", editor.Text);
+
+        var document = MarkdownRenderer.Render(editor.Text + " `~~code~~` ~~unfinished");
+        var paragraph = (Paragraph)document.Blocks.FirstBlock;
+        var strike = paragraph.Inlines.OfType<Run>().Single(run => run.Text == "remove");
+        Assert.AreEqual(TextDecorationLocation.Strikethrough, strike.TextDecorations.Single().Location);
+        var code = paragraph.Inlines.OfType<Run>().Single(run => run.Text == "~~code~~");
+        Assert.AreEqual("Consolas", code.FontFamily.Source);
+        Assert.AreEqual(0, code.TextDecorations.Count);
+        StringAssert.Contains(Text(document), "~~unfinished");
+        editor.Undo();
+        Assert.AreEqual("remove", editor.Text);
+    });
+
+    [TestMethod]
+    [DataRow("\n")]
+    [DataRow("\r\n")]
+    [DataRow("\r")]
+    public void FencesKeepShorterMarkersAndSuffixLinesLiteral(string newline) => RunSta(() =>
+    {
+        var code = string.Join(newline, "```", "**literal** ~~literal~~", "````suffix", "  indented");
+        var source = "before" + newline + "````md" + newline + code + newline +
+            "  ````` \t" + newline + "after";
+        var paragraphs = MarkdownRenderer.Render(source).Blocks.Cast<Paragraph>().ToArray();
+        Assert.AreEqual(3, paragraphs.Length);
+        Assert.AreEqual("before", new TextRange(paragraphs[0].ContentStart, paragraphs[0].ContentEnd).Text.TrimEnd('\r', '\n'));
+        Assert.AreEqual(code.Replace(newline, Environment.NewLine),
+            new TextRange(paragraphs[1].ContentStart, paragraphs[1].ContentEnd).Text.TrimEnd('\r', '\n'));
+        Assert.AreEqual("Consolas", paragraphs[1].FontFamily.Source);
+        Assert.AreEqual(1, paragraphs[1].Inlines.Count);
+        Assert.AreEqual("after", new TextRange(paragraphs[2].ContentStart, paragraphs[2].ContentEnd).Text.TrimEnd('\r', '\n'));
+    });
+
+    [TestMethod]
+    [DataRow(0)]
+    [DataRow(1)]
+    [DataRow(2)]
+    [DataRow(3)]
+    public void IndentedFencesRemoveOnlyOpeningIndentationFromCode(int spaces) => RunSta(() =>
+    {
+        var indent = new string(' ', spaces);
+        var source = "paragraph\n" + indent + "```cs\n" + indent + "**literal**\n" +
+            indent + "  extra\n" + indent + "```\n\n| A | B |\n| --- | --- |\n| x | y |";
+        var blocks = MarkdownRenderer.Render(source).Blocks.ToArray();
+        Assert.AreEqual(3, blocks.Length);
+        var code = (Paragraph)blocks[1];
+        Assert.AreEqual("Consolas", code.FontFamily.Source);
+        Assert.AreEqual("**literal**" + Environment.NewLine + "  extra",
+            new TextRange(code.ContentStart, code.ContentEnd).Text.TrimEnd('\r', '\n'));
+        Assert.IsInstanceOfType<Table>(blocks[2]);
+    });
+
+    [TestMethod]
+    public void UnclosedFenceKeepsRemainingContentLiteral() => RunSta(() =>
+    {
+        var document = MarkdownRenderer.Render("  ````\n  **literal**\n  ```\n  ~~literal~~");
+        var code = (Paragraph)document.Blocks.Single();
+        Assert.AreEqual("Consolas", code.FontFamily.Source);
+        Assert.AreEqual("**literal**" + Environment.NewLine + "```" + Environment.NewLine + "~~literal~~",
+            Text(document).TrimEnd('\r', '\n'));
+    });
+
+    [TestMethod]
+    public void StrikethroughUsesExistingInlinePathInTablesAndTracksThemes() => RunSta(() =>
+    {
+        var document = MarkdownRenderer.Render("| Status |\n| --- |\n| ~~removed~~ |");
+        var table = document.Blocks.OfType<Table>().Single();
+        var run = ((Paragraph)table.RowGroups[0].Rows[1].Cells[0].Blocks.FirstBlock).Inlines.OfType<Run>().Single();
+        Assert.AreEqual("removed", run.Text);
+        Assert.AreEqual(TextDecorationLocation.Strikethrough, run.TextDecorations.Single().Location);
+        using var manager = new AppThemeManager(document.Resources, AppThemeMode.Light, "#15FFFF");
+        foreach (var theme in Enum.GetValues<AppThemeMode>())
+        {
+            manager.Apply(theme, "#15FFFF");
+            Assert.AreSame(document.Resources["NotedTextBrush"], run.Foreground);
+        }
+    });
+
+    [TestMethod]
     public void RenderedMarkdownTracksThemeResourcesWithoutRerendering() => RunSta(() =>
     {
         var document = MarkdownRenderer.Render("# Heading\n\nbody **bold** *italic* `code` [link](example)\n\n> quote\n\n- item\n\n```\ncode\n```\n\n---");

@@ -29,9 +29,9 @@ internal static partial class MarkdownRenderer
         {
             var line = lines[index];
 
-            if (line.StartsWith("```", StringComparison.Ordinal))
+            if (TryGetCodeFence(line, out var indentation, out var markerLength, out _))
             {
-                index = AddCodeBlock(document, lines, index + 1);
+                index = AddCodeBlock(document, lines, index + 1, indentation, markerLength);
                 continue;
             }
 
@@ -78,11 +78,31 @@ internal static partial class MarkdownRenderer
             .Split('\n');
     }
 
-    private static int AddCodeBlock(FlowDocument document, string[] lines, int index)
+    private static bool TryGetCodeFence(string line, out int indentation, out int markerLength, out string info)
+    {
+        var match = CodeFencePattern().Match(line);
+        indentation = match.Groups[1].Length;
+        markerLength = match.Groups[2].Length;
+        info = match.Groups[3].Value;
+        return match.Success;
+    }
+
+    private static int AddCodeBlock(FlowDocument document, string[] lines, int index, int indentation, int markerLength)
     {
         var codeLines = new List<string>();
-        while (index < lines.Length && !lines[index].StartsWith("```", StringComparison.Ordinal))
-            codeLines.Add(lines[index++]);
+        while (index < lines.Length)
+        {
+            var line = lines[index];
+            if (TryGetCodeFence(line, out _, out var closingLength, out var info) &&
+                closingLength >= markerLength && info.Trim(' ', '\t').Length == 0)
+                break;
+
+            var spaces = 0;
+            while (spaces < indentation && spaces < line.Length && line[spaces] == ' ')
+                spaces++;
+            codeLines.Add(line[spaces..]);
+            index++;
+        }
 
         if (index < lines.Length)
             index++;
@@ -320,7 +340,7 @@ internal static partial class MarkdownRenderer
 
     private static bool StartsBlock(string line)
     {
-        return line.StartsWith("```", StringComparison.Ordinal) ||
+        return TryGetCodeFence(line, out _, out _, out _) ||
                HeadingPattern().IsMatch(line) ||
                QuotePattern().IsMatch(line) ||
                RulePattern().IsMatch(line) ||
@@ -352,6 +372,10 @@ internal static partial class MarkdownRenderer
                 };
                 code.SetResourceReference(TextElement.BackgroundProperty, "NotedInputBackgroundBrush");
                 inlines.Add(code);
+            }
+            else if (token.StartsWith("~~", StringComparison.Ordinal))
+            {
+                inlines.Add(new Run(token[2..^2]) { TextDecorations = TextDecorations.Strikethrough });
             }
             else if (token.StartsWith("**", StringComparison.Ordinal) ||
                      token.StartsWith("__", StringComparison.Ordinal))
@@ -388,6 +412,9 @@ internal static partial class MarkdownRenderer
     [GeneratedRegex(@"^:?-+:?$")]
     private static partial Regex TableDelimiterPattern();
 
-    [GeneratedRegex(@"(\[[^\]\r\n]+\]\([^()\r\n]*\))|(`[^`\r\n]+`)|(\*\*[^*\r\n]+\*\*)|(__[^_\r\n]+__)|(\*[^*\r\n]+\*)|(_[^_\r\n]+_)")]
+    [GeneratedRegex(@"^( {0,3})(`{3,})([^`]*)$")]
+    private static partial Regex CodeFencePattern();
+
+    [GeneratedRegex(@"(\[[^\]\r\n]+\]\([^()\r\n]*\))|(`[^`\r\n]+`)|(~~[^~\r\n]+~~)|(\*\*[^*\r\n]+\*\*)|(__[^_\r\n]+__)|(\*[^*\r\n]+\*)|(_[^_\r\n]+_)")]
     private static partial Regex InlinePattern();
 }
