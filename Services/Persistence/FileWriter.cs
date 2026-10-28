@@ -31,7 +31,8 @@ internal static class FileWriter
     internal static FileWriteResult WriteAllBytes(
         string destinationPath,
         byte[] content,
-        string? backupPath = null)
+        string? backupPath = null,
+        string? preserveReplacedFileAt = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
         ArgumentNullException.ThrowIfNull(content);
@@ -39,13 +40,15 @@ internal static class FileWriter
         return WriteFile(
             destinationPath,
             backupPath,
-            temporaryPath => WriteTemporaryByteFile(temporaryPath, content));
+            temporaryPath => WriteTemporaryByteFile(temporaryPath, content),
+            preserveReplacedFileAt);
     }
 
     internal static FileWriteResult WriteFile(
         string destinationPath,
         string? backupPath,
-        Action<string> writeTemporaryFile)
+        Action<string> writeTemporaryFile,
+        string? preserveReplacedFileAt = null)
     {
         ArgumentNullException.ThrowIfNull(writeTemporaryFile);
 
@@ -53,6 +56,11 @@ internal static class FileWriter
         var directory = Path.GetDirectoryName(fullDestinationPath)
             ?? throw new ArgumentException("The destination must have a parent directory.", nameof(destinationPath));
         var fullBackupPath = NormalizeBackupPath(backupPath, fullDestinationPath, directory);
+        var fullPreservedPath = NormalizeBackupPath(preserveReplacedFileAt, fullDestinationPath, directory);
+        if (fullBackupPath is not null && fullPreservedPath is not null)
+            throw new ArgumentException("Choose a rolling backup or a preserved file, not both.");
+        if (fullPreservedPath is not null && (File.Exists(fullPreservedPath) || Directory.Exists(fullPreservedPath)))
+            throw new IOException($"The preserved file destination '{fullPreservedPath}' already exists.");
         var temporaryPath = Path.Combine(
             directory,
             $".{Path.GetFileName(fullDestinationPath)}.{Guid.NewGuid():N}.tmp");
@@ -61,6 +69,15 @@ internal static class FileWriter
         {
             Directory.CreateDirectory(directory);
             writeTemporaryFile(temporaryPath);
+
+            if (fullPreservedPath is not null)
+            {
+                if (File.Exists(fullPreservedPath) || Directory.Exists(fullPreservedPath))
+                    throw new IOException($"The preserved file destination '{fullPreservedPath}' already exists.");
+                // retain the exact displaced file, even if it changed after the caller read it.
+                File.Replace(temporaryPath, fullDestinationPath, fullPreservedPath);
+                return new FileWriteResult(true, fullPreservedPath, null);
+            }
 
             if (File.Exists(fullDestinationPath))
             {

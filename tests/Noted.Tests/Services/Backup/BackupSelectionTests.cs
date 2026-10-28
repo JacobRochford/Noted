@@ -9,6 +9,54 @@ namespace Noted.Tests.Services;
 public sealed class BackupSelectionTests
 {
     [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    public void SaveConflictUsesExistingHistoryAndDocumentBackupSelection(bool openCopy, bool entireFolder)
+    {
+        using var directory = new TemporaryTestDirectory();
+        var catalog = CreateCatalog(directory);
+        var appData = directory.File("app");
+        var path = directory.File("notes", "note.md");
+        File.WriteAllText(path, "original");
+        var service = new NoteContentService(appData,
+            new CallbackTimeProvider(() => File.WriteAllText(path, "external")), 20);
+        var conflict = Assert.ThrowsExactly<NoteSaveConflictException>(() => service.Save(path, "editor edits"));
+        var preserved = conflict.PreservedFilePath!;
+        WriteSession(directory, openCopy ? [path, preserved] : [path]);
+
+        var entries = catalog.Collect(out _, out _, includeEntireNotesFolder: entireFolder);
+
+        Assert.AreEqual(openCopy || entireFolder, entries.Any(entry => entry.SourcePath == preserved));
+        Assert.IsTrue(entries.Where(entry => entry.LogicalPath.StartsWith("app/note-history/", StringComparison.Ordinal)).Any(entry =>
+        {
+            using var history = JsonDocument.Parse(File.ReadAllText(entry.SourcePath));
+            return history.RootElement.GetProperty("Content").GetString() == "external";
+        }));
+        var backup = new FullBackupService(appData, directory.File("notes"));
+        Assert.AreEqual(FullBackupStatus.Created, backup.CreateOrUpdateUserBackup(entireFolder).Status);
+        var archive = directory.File("conflict.notedbackup");
+        Assert.IsTrue(backup.ExportUserBackup(archive).Success);
+        var targetApp = directory.File("target-app");
+        var targetNotes = directory.File("target-notes");
+        Directory.CreateDirectory(targetApp);
+        Directory.CreateDirectory(targetNotes);
+        var target = new FullBackupService(targetApp, targetNotes);
+        var imported = target.GetBackupImportPreview(archive);
+        Assert.IsTrue(imported.IsValid);
+        var logicalCopy = "notes/" + Path.GetFileName(preserved);
+        Assert.AreEqual(openCopy || entireFolder, imported.Files.Any(file => file.LogicalPath == logicalCopy));
+        Assert.AreEqual(FullBackupStatus.RestoreScheduled,
+            target.ScheduleBackupImportRestore(archive, imported.BackupId, imported.VerificationToken!).Status);
+        Assert.AreEqual(FullBackupStatus.Restored, target.ApplyPendingUserBackupRestore().Status);
+        Assert.AreEqual("editor edits", File.ReadAllText(Path.Combine(targetNotes, "note.md")));
+        var restoredCopy = Path.Combine(targetNotes, Path.GetFileName(preserved));
+        Assert.AreEqual(openCopy || entireFolder, File.Exists(restoredCopy));
+        if (openCopy || entireFolder) Assert.AreEqual("external", File.ReadAllText(restoredCopy));
+        Assert.AreEqual("external", File.ReadAllText(preserved));
+    }
+
+    [TestMethod]
     public void EmptySessionIncludesManagedDataAndArchivesButNotUnrelatedDocuments()
     {
         using var directory = new TemporaryTestDirectory();

@@ -418,7 +418,7 @@ public sealed class NoteEditorPersistenceTests
 
         public TextFileContent LoadWithEncoding(string filePath) => new(Load(filePath), TextFileEncoding.Utf8);
 
-        public string? Save(string filePath, string content, TextFileEncoding? encoding = null) => throw new NotSupportedException();
+        public string? Save(string filePath, string content, TextFileEncoding? encoding = null, TextFileContent? expectedVersion = null) => throw new NotSupportedException();
         public string? SaveAs(string filePath, string content, TextFileEncoding? encoding = null) => throw new NotSupportedException();
         public string? SaveNewNoteAs(
             string initialPath,

@@ -110,6 +110,7 @@ public sealed class NoteContentServiceTests
 
         Assert.IsNull(warning);
         Assert.AreEqual("current text", File.ReadAllText(notePath));
+        CollectionAssert.AreEqual(new[] { notePath }, Directory.GetFiles(notesDirectory));
         var historyPath = Directory.GetFiles(
             directory.File("note-history"),
             "*.json",

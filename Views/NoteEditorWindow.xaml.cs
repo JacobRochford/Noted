@@ -806,7 +806,8 @@ public partial class NoteEditorWindow : Window
                 _noteSaveWarning = _contentService.Save(
                     document.FilePath,
                     document.Content,
-                    document.Encoding);
+                    document.Encoding,
+                    new TextFileContent(document.SavedContent, document.SavedEncoding));
             }
 
             _workspace.MarkSaved(document);
@@ -822,6 +823,18 @@ public partial class NoteEditorWindow : Window
             if (ReferenceEquals(document, CurrentDocument))
                 UpdateEditorState();
             return true;
+        }
+        catch (NoteSaveConflictException ex)
+        {
+            _noteSaveWarning = ex.Message;
+            ShowError("Note changed outside Noted", ex.Message);
+            return false;
+        }
+        catch (FileVerificationException ex)
+        {
+            _noteSaveWarning = ex.Message;
+            ShowError("Unable to verify saved note", ex.Message);
+            return false;
         }
         catch (TextEncodingException ex)
         {
@@ -1822,6 +1835,18 @@ public partial class NoteEditorWindow : Window
             SaveEditorSession();
             UpdateEditorState();
             return true;
+        }
+        catch (NoteSaveConflictException ex)
+        {
+            _noteSaveWarning = ex.Message;
+            ShowError("Note changed outside Noted", ex.Message);
+            return false;
+        }
+        catch (FileVerificationException ex)
+        {
+            _noteSaveWarning = ex.Message;
+            ShowError("Unable to verify saved note", ex.Message);
+            return false;
         }
         catch (TextEncodingException ex)
         {

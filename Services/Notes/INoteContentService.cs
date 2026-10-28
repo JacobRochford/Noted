@@ -7,7 +7,7 @@ public interface INoteContentService
     string Load(string filePath);
     TextFileContent LoadWithEncoding(string filePath);
 
-    string? Save(string filePath, string content, TextFileEncoding? encoding = null);
+    string? Save(string filePath, string content, TextFileEncoding? encoding = null, TextFileContent? expectedVersion = null);
 
     string? SaveAs(string filePath, string content, TextFileEncoding? encoding = null);
 

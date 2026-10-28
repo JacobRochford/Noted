@@ -42,15 +42,19 @@ public sealed class NoteContentService : INoteContentService
     public TextFileContent LoadWithEncoding(string filePath) =>
         TextFileCodec.Read(ValidateNotePath(filePath));
 
-    public string? Save(string filePath, string content, TextFileEncoding? encoding = null)
+    public string? Save(string filePath, string content, TextFileEncoding? encoding = null, TextFileContent? expectedVersion = null)
     {
         ArgumentNullException.ThrowIfNull(content);
 
         var validatedPath = ValidateNotePath(filePath);
-        var previous = TextFileCodec.Read(validatedPath);
+        var previousBytes = File.ReadAllBytes(validatedPath);
+        var previous = TextFileCodec.Decode(previousBytes);
         var targetEncoding = encoding ?? previous.Encoding;
         var bytes = TextFileCodec.Encode(content, targetEncoding);
         var previousContent = previous.Content;
+        if (expectedVersion is not null && previous != expectedVersion &&
+            (previous.Encoding != targetEncoding || !string.Equals(previousContent, content, StringComparison.Ordinal)))
+            throw new NoteSaveConflictException(validatedPath);
         if (previous.Encoding == targetEncoding && string.Equals(previousContent, content, StringComparison.Ordinal))
             return null;
 
@@ -66,7 +70,44 @@ public sealed class NoteContentService : INoteContentService
                 $"'{Path.GetFileName(validatedPath)}' was saved, but its previous version could not be added to note history.");
         }
 
-        FileWriter.WriteAllBytes(validatedPath, bytes);
+        var preservedPath = Path.Combine(Path.GetDirectoryName(validatedPath)!,
+            $"noted-conflict-{Guid.NewGuid():N}{Path.GetExtension(validatedPath)}");
+        try
+        {
+            FileWriter.WriteAllBytes(validatedPath, bytes, preserveReplacedFileAt: preservedPath);
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex) && File.Exists(preservedPath))
+        {
+            throw new FileVerificationException(
+                $"Saving '{Path.GetFileName(validatedPath)}' did not complete. Check the current file before retrying. " +
+                $"The displaced disk version remains at '{preservedPath}'.", ex);
+        }
+
+        byte[] displacedBytes;
+        try
+        {
+            displacedBytes = File.ReadAllBytes(preservedPath);
+        }
+        catch (Exception ex) when (IsExpectedFileException(ex))
+        {
+            throw new FileVerificationException(
+                $"The previous version of '{Path.GetFileName(validatedPath)}' could not be verified. " +
+                $"Its preserved file was not removed: '{preservedPath}'.", ex);
+        }
+
+        if (!displacedBytes.AsSpan().SequenceEqual(previousBytes))
+        {
+            try
+            {
+                SaveHistoryEntry(validatedPath, TextFileCodec.Decode(displacedBytes).Content);
+            }
+            catch (Exception ex) when (IsExpectedFileException(ex))
+            {
+                ExceptionDiagnostics.Record(ex);
+            }
+            throw new NoteSaveConflictException(validatedPath, preservedPath);
+        }
+
         byte[] persistedBytes;
         try
         {
@@ -75,14 +116,33 @@ public sealed class NoteContentService : INoteContentService
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
             throw new FileVerificationException(
-                $"'{Path.GetFileName(validatedPath)}' was written but could not be read back for verification.",
+                $"'{Path.GetFileName(validatedPath)}' was written but could not be read back for verification. " +
+                $"The previous disk version remains at '{preservedPath}'.",
                 ex);
         }
 
         if (!persistedBytes.AsSpan().SequenceEqual(bytes))
         {
             throw new FileVerificationException(
-                $"'{Path.GetFileName(validatedPath)}' did not match the text that was saved.");
+                $"'{Path.GetFileName(validatedPath)}' did not match the text that was saved. " +
+                $"The previous disk version remains at '{preservedPath}'.");
+        }
+
+        if (warnings.Count == 0)
+        {
+            try
+            {
+                FileWriter.DeleteIfExists(preservedPath);
+            }
+            catch (Exception ex) when (IsExpectedFileException(ex))
+            {
+                ExceptionDiagnostics.Record(ex);
+                warnings.Add($"The previous disk version could not be removed from '{preservedPath}'.");
+            }
+        }
+        else
+        {
+            warnings.Add($"The previous disk version remains at '{preservedPath}'.");
         }
 
         return warnings.Count == 0

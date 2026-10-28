@@ -8,6 +8,92 @@ namespace Noted.Tests.Services;
 public sealed class FileWriterTests
 {
     [TestMethod]
+    public void PreservedReplacementCapturesTheFileChangedAfterStaging()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("note.txt");
+        var preserved = directory.File("conflict.txt");
+        File.WriteAllText(path, "original");
+
+        var result = FileWriter.WriteFile(path, null, temporary =>
+        {
+            File.WriteAllText(temporary, "editor edits");
+            File.WriteAllText(path, "external");
+        }, preserveReplacedFileAt: preserved);
+
+        Assert.AreEqual("editor edits", File.ReadAllText(path));
+        Assert.AreEqual("external", File.ReadAllText(preserved));
+        Assert.AreEqual(preserved, result.PreservedBackupPath);
+        Assert.HasCount(0, Directory.GetFiles(directory.Path, "*.tmp"));
+        Assert.HasCount(0, Directory.GetFiles(directory.Path, "*.pending-*"));
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void PreservedReplacementRejectsDestinationCollisions(bool duringStaging)
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("note.txt");
+        var preserved = directory.File("conflict.txt");
+        File.WriteAllText(path, "original");
+        if (!duringStaging) File.WriteAllText(preserved, "keep me");
+
+        Assert.ThrowsExactly<IOException>(() => FileWriter.WriteFile(path, null, temporary =>
+        {
+            File.WriteAllText(temporary, "editor edits");
+            File.WriteAllText(preserved, "keep me");
+        }, preserveReplacedFileAt: preserved));
+
+        Assert.AreEqual("original", File.ReadAllText(path));
+        Assert.AreEqual("keep me", File.ReadAllText(preserved));
+        Assert.HasCount(0, Directory.GetFiles(directory.Path, "*.tmp"));
+    }
+
+    [TestMethod]
+    public void PreservedReplacementRequiresAnExistingTarget()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("missing.txt");
+        var preserved = directory.File("conflict.txt");
+
+        Assert.Throws<IOException>(() => FileWriter.WriteAllBytes(path, [1, 2], preserveReplacedFileAt: preserved));
+
+        Assert.HasCount(0, Directory.GetFiles(directory.Path));
+    }
+
+    [TestMethod]
+    public void PreservedReplacementFailureKeepsOriginalAndCleansStaging()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("locked.txt");
+        var preserved = directory.File("conflict.txt");
+        File.WriteAllText(path, "original");
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            Assert.Throws<IOException>(() => FileWriter.WriteAllBytes(path, [1, 2], preserveReplacedFileAt: preserved));
+
+        Assert.AreEqual("original", File.ReadAllText(path));
+        Assert.IsFalse(File.Exists(preserved));
+        Assert.HasCount(0, Directory.GetFiles(directory.Path, "*.tmp"));
+    }
+
+    [TestMethod]
+    public void PreservedReplacementRejectsOtherDirectoriesAndRollingBackups()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("note.txt");
+        File.WriteAllText(path, "original");
+
+        Assert.ThrowsExactly<ArgumentException>(() => FileWriter.WriteAllBytes(path, [1],
+            preserveReplacedFileAt: directory.File("other", "conflict.txt")));
+        Assert.ThrowsExactly<ArgumentException>(() => FileWriter.WriteAllBytes(path, [1],
+            backupPath: path + ".bak", preserveReplacedFileAt: directory.File("conflict.txt")));
+
+        Assert.AreEqual("original", File.ReadAllText(path));
+        Assert.HasCount(1, Directory.GetFiles(directory.Path));
+    }
+
+    [TestMethod]
     public void InitialWriteCreatesFileWithoutLeavingTemporaryFiles()
     {
         using var directory = new TemporaryTestDirectory();
