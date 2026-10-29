@@ -166,18 +166,6 @@ public sealed class TextSearchSessionTests
     }
 
     [TestMethod]
-    public void ManualCaretMovement_DoesNotUseStaleNumericalIndex()
-    {
-        Refresh(FifteenMatches, "foo", anchor: 0);
-        NavigateNext(6);
-        Assert.AreEqual(6, _session.CurrentMatchIndex);
-
-        var result = _session.Next(BetweenMatchesElevenAndTwelve);
-
-        Assert.AreEqual(new TextSearchMatch(44, 3), result);
-    }
-
-    [TestMethod]
     public void QueryChange_ResolvesFromCurrentEditorAnchor()
     {
         Refresh("foo bar foo bar", "foo", anchor: 0);

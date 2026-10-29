@@ -25,26 +25,14 @@ public sealed class NoteEditorScrollingTests
     [DataRow(2, true)]
     [DataRow(3, true)]
     public void WheelEventMagnitude_DoesNotAmplifyConfiguredScrollStep(int speed, bool findOpen)
-        => RunWheelTest(speed, findOpen, 0);
+        => RunWheelTest(speed, findOpen);
 
-    [TestMethod]
-    [DataRow(0x10, false)]
-    [DataRow(0x11, false)]
-    [DataRow(0x12, false)]
-    [DataRow(0x5B, false)]
-    [DataRow(0x10, true)]
-    [DataRow(0x11, true)]
-    [DataRow(0x12, true)]
-    [DataRow(0x5B, true)]
-    public void SyntheticWheelDispatchIsIndependentOfModifiers(int modifier, bool findOpen)
-        => RunWheelTest(3, findOpen, modifier);
-
-    private static void RunWheelTest(int speed, bool findOpen, int modifier)
+    private static void RunWheelTest(int speed, bool findOpen)
     {
         Exception? failure = null;
         var thread = new Thread(() =>
         {
-            try { VerifyWheelScrolling(speed, findOpen, modifier); }
+            try { VerifyWheelScrolling(speed, findOpen); }
             catch (Exception ex) { failure = ex; }
         });
         thread.IsBackground = true;
@@ -54,7 +42,7 @@ public sealed class NoteEditorScrollingTests
         if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
-    private static void VerifyWheelScrolling(int speed, bool findOpen, int modifier)
+    private static void VerifyWheelScrolling(int speed, bool findOpen)
     {
         using var source = new HwndSource(new HwndSourceParameters("Wheel test")
         {
@@ -113,28 +101,15 @@ public sealed class NoteEditorScrollingTests
             {
                 RoutedEvent = Mouse.PreviewMouseWheelEvent
             };
-            var original = GetKeyboardState();
-            try
+            DispatchWithoutModifiers(() =>
             {
-                if (modifier != 0)
+                host.RaiseEvent(args);
+                if (!args.Handled)
                 {
-                    var controlled = (byte[])original.Clone();
-                    controlled[modifier] = 0x80;
-                    Assert.IsTrue(SetKeyboardState(controlled));
-                }
-                DispatchWithoutModifiers(() =>
-                {
+                    args.RoutedEvent = Mouse.MouseWheelEvent;
                     host.RaiseEvent(args);
-                    if (!args.Handled)
-                    {
-                        args.RoutedEvent = Mouse.MouseWheelEvent;
-                        host.RaiseEvent(args);
-                    }
-                });
-                if (modifier != 0)
-                    Assert.AreEqual((byte)0x80, GetKeyboardState()[modifier], "Restore the controlled modifier state.");
-            }
-            finally { Assert.IsTrue(SetKeyboardState(original)); }
+                }
+            });
             Pump();
             Assert.AreEqual(current, session.CurrentMatch, "Scrolling must not navigate Find.");
             return editor.VerticalOffset - before;

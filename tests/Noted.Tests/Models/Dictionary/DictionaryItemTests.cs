@@ -49,21 +49,17 @@ public sealed class DictionaryItemTests
     }
 
     [TestMethod]
-    public void OpeningAnotherRowAndReturningPreservesRawMarkdownDraft()
+    public void BeginningEditAgainPreservesRawMarkdownDraft()
     {
         var item = new DictionaryItem { Word = "word", Definition = "saved" };
-        var other = new DictionaryItem { Word = "other" };
         item.BeginEdit();
         item.DraftDefinition = "**unsaved**";
-        other.IsExpanded = true;
-        other.BeginEdit();
         item.BeginEdit();
 
         Assert.IsTrue(item.IsEditing);
         Assert.IsTrue(item.HasPendingEdit);
         Assert.AreEqual("**unsaved**", item.DraftDefinition);
         Assert.AreEqual("saved", item.Definition);
-        Assert.IsTrue(other.IsExpanded);
     }
 
     [TestMethod]

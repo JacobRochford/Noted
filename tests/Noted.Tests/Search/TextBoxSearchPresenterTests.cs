@@ -804,34 +804,17 @@ public sealed class TextBoxSearchPresenterTests
             const int targetLine = 60;
             var targetStart = surface.Editor.GetCharacterIndexFromLineIndex(targetLine);
             var session = CreateSession(surface.Editor, "target", targetStart);
-
-            surface.Presenter.Present(session, bringCurrentIntoView: true);
-            surface.Pump();
-
-            AssertCurrentMatchFullyVisible(surface.Editor, session);
-            var viewport = surface.Presenter.GetGeometrySnapshot().Viewport;
-            var currentRect = surface.Editor.GetRectFromCharacterIndex(session.CurrentMatch!.Value.Start, false);
-            var expectedTop = viewport.Top + (viewport.Height / 3);
-            Assert.AreEqual(expectedTop, currentRect.Top, Math.Max(currentRect.Height, 1.0));
-        });
-    }
-
-    [TestMethod]
-    public void RequiredVerticalReveal_ChangesActualVerticalScrollOffset()
-    {
-        RunOnSta(() =>
-        {
-            var text = string.Join("\n", Enumerable.Range(0, 100).Select(index => $"target line {index}"));
-            using var surface = new TextBoxSurface(text, 240, 120);
-            var targetStart = surface.Editor.GetCharacterIndexFromLineIndex(50);
-            var session = CreateSession(surface.Editor, "target", targetStart);
             var beforeOffset = surface.Editor.VerticalOffset;
 
             surface.Presenter.Present(session, bringCurrentIntoView: true);
             surface.Pump();
 
-            Assert.IsTrue(surface.Editor.VerticalOffset > beforeOffset + 0.01);
             AssertCurrentMatchFullyVisible(surface.Editor, session);
+            Assert.IsTrue(surface.Editor.VerticalOffset > beforeOffset + 0.01);
+            var viewport = surface.Presenter.GetGeometrySnapshot().Viewport;
+            var currentRect = surface.Editor.GetRectFromCharacterIndex(session.CurrentMatch!.Value.Start, false);
+            var expectedTop = viewport.Top + (viewport.Height / 3);
+            Assert.AreEqual(expectedTop, currentRect.Top, Math.Max(currentRect.Height, 1.0));
         });
     }
 

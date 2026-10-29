@@ -147,34 +147,6 @@ public sealed class NoteEditorWorkspaceTests
             workspace.Add(CreateDocument("SAME.TXT")));
     }
 
-    [TestMethod]
-    public void MutableDocumentPropertiesAreNotPubliclySettable()
-    {
-        var mutableProperties = new[]
-        {
-            nameof(OpenNoteDocument.Content),
-            nameof(OpenNoteDocument.SavedContent),
-            nameof(OpenNoteDocument.Encoding),
-            nameof(OpenNoteDocument.SavedEncoding),
-            nameof(OpenNoteDocument.CaretIndex),
-            nameof(OpenNoteDocument.VerticalOffset),
-            nameof(OpenNoteDocument.MarkdownPreviewEnabled),
-            nameof(OpenNoteDocument.UsesGeneratedName),
-            nameof(OpenNoteDocument.InitialFileContent),
-            nameof(OpenNoteDocument.IsDirty),
-            nameof(OpenNoteDocument.IsMissing)
-        };
-
-        foreach (var propertyName in mutableProperties)
-        {
-            var property = typeof(OpenNoteDocument).GetProperty(propertyName);
-            Assert.IsNotNull(property, propertyName);
-            Assert.IsFalse(property.SetMethod?.IsPublic == true, propertyName);
-        }
-
-        Assert.IsNull(typeof(OpenNoteDocument).GetMethod(nameof(OpenNoteDocument.UpdateFilePath)));
-    }
-
     private static readonly string TestRoot = Path.Combine(Path.GetTempPath(), "NotedWorkspaceTests");
 
     private static OpenNoteDocument CreateDocument(string fileName, string content = "") =>

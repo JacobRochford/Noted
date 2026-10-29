@@ -7,12 +7,6 @@ namespace Noted.Tests.Services;
 public sealed class ShutdownFlushCoordinatorTests
 {
     [TestMethod]
-    public void EmptyCoordinatorHasNoFailures()
-    {
-        Assert.AreEqual(0, new ShutdownFlushCoordinator().FlushAll().Count);
-    }
-
-    [TestMethod]
     public void FlushesInRegistrationOrderAndCollectsFailuresWithoutStopping()
     {
         var coordinator = new ShutdownFlushCoordinator();

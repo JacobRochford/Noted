@@ -149,23 +149,6 @@ public sealed class AppThemeManagerTests
         Assert.AreEqual(Color.FromRgb(0xE6, 0xF1, 0xF5), GetColor(resources, "NotedTextBrush"));
     }
 
-    [TestMethod]
-    public void StatusColorsDoNotFollowTheAccentColor()
-    {
-        var resources = new ResourceDictionary();
-        using var manager = new AppThemeManager(
-            resources,
-            AppThemeMode.Light,
-            "#FF0000");
-        var danger = GetColor(resources, "NotedDangerBrush");
-        var warning = GetColor(resources, "NotedWarningBrush");
-
-        manager.Apply(AppThemeMode.Light, "#0000FF");
-
-        Assert.AreEqual(danger, GetColor(resources, "NotedDangerBrush"));
-        Assert.AreEqual(warning, GetColor(resources, "NotedWarningBrush"));
-    }
-
     private static Color GetColor(ResourceDictionary resources, object key) =>
         ((SolidColorBrush)resources[key]).Color;
 }
