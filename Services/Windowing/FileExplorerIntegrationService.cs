@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security;
@@ -11,6 +12,21 @@ internal static class FileExplorerIntegrationService
     private const string ExplorerVerbName = "Noted";
     private const uint SHCNE_ASSOCCHANGED = 0x08000000;
     private const uint SHCNF_IDLIST = 0x0000;
+
+    internal static void RevealFile(string path, Action<ProcessStartInfo>? startProcess = null)
+    {
+        var arguments = File.Exists(path)
+            ? $"/select,\"{path}\""
+            : $"\"{Path.GetDirectoryName(path)}\"";
+        var startInfo = new ProcessStartInfo("explorer.exe", arguments)
+        {
+            UseShellExecute = true
+        };
+        if (startProcess is not null)
+            startProcess(startInfo);
+        else
+            Process.Start(startInfo);
+    }
 
     [DllImport("shell32.dll")]
     private static extern void SHChangeNotify(

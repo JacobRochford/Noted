@@ -100,6 +100,7 @@ internal sealed record AppSettingsDocument
     public bool ReopenEditorTabsOnStartup { get; init; } = true;
 
     public string? PreferredDisplayDeviceName { get; init; }
+    public bool NotedButtonOnLeft { get; init; }
 }
 
 internal sealed class NewNoteModeJsonConverter : JsonConverter<NewNoteMode?>

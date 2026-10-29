@@ -83,4 +83,6 @@ public interface IAppSettingsService {
     void SaveReopenEditorTabsOnStartup(bool enabled);
     string? LoadPreferredDisplayDeviceName();
     void SavePreferredDisplayDeviceName(string? deviceName);
+    bool LoadNotedButtonOnLeft();
+    void SaveNotedButtonOnLeft(bool onLeft);
 }

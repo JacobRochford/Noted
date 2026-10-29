@@ -41,10 +41,12 @@ public partial class NoteEditorWindow : Window
     private readonly Dictionary<string, string> _documentTimeText =
         new(StringComparer.OrdinalIgnoreCase);
     private OpenNoteDocument? _draggedDocument;
+    private OpenNoteDocument? _primaryBeforeTabDrag;
     private OpenNoteDocument? _middlePressedDocument;
     private Point _tabDragStart;
     private bool _isLoading;
     private bool _isLoadingSecondary;
+    private bool _isSelectingTab;
     private Guid? _lastSecondaryDocumentId;
     private bool _hasLoaded;
     private readonly MarkdownPreviewPresenter _primaryPreview;
@@ -172,6 +174,7 @@ public partial class NoteEditorWindow : Window
     }
 
     public string? OpenFilePath => CurrentDocument?.FilePath;
+    internal bool HasOpenDocuments => _documents.Count > 0;
     public bool IsDirty => _workspace.IsDirty;
     public bool IsWindowVisible => IsVisible && WindowState != WindowState.Minimized;
     internal bool CanChangeGroupVisibility
@@ -663,17 +666,17 @@ public partial class NoteEditorWindow : Window
         if (ReferenceEquals(_secondaryDocument, document))
         {
             _workspace.Activate(document);
-            OpenTabsList.SelectedItem = document;
+            SelectTab(document);
             UpdateEditorState();
             if (focusEditor)
-                SecondaryEditorTextBox.Focus();
+                FocusActiveSurface();
             return;
         }
 
         if (ReferenceEquals(_activeDocument, document))
         {
             _workspace.Activate(document);
-            OpenTabsList.SelectedItem = document;
+            SelectTab(document);
             UpdateEditorState();
             if (focusEditor)
                 FocusActiveSurface();
@@ -696,7 +699,7 @@ public partial class NoteEditorWindow : Window
         ResetUndoHistory();
         _isLoading = false;
 
-        OpenTabsList.SelectedItem = document;
+        SelectTab(document);
         _primaryPreview.SetMode(EffectivePreviewMode(document));
         UpdateEditorState();
         SaveEditorSession();
@@ -928,7 +931,7 @@ public partial class NoteEditorWindow : Window
         EditorTextBox.Clear();
         ResetUndoHistory();
         _isLoading = false;
-        OpenTabsList.SelectedItem = null;
+        SelectTab(null);
         SetMarkdownPreviewEnabled(false, saveSession: false);
         UpdateEditorState();
     }
@@ -982,6 +985,11 @@ public partial class NoteEditorWindow : Window
     {
         var hasDocument = _activeDocument is not null;
         var currentDocument = CurrentDocument;
+        SelectTab(currentDocument);
+        PrimaryDocumentHeader.SetResourceReference(Border.BackgroundProperty,
+            ReferenceEquals(currentDocument, _activeDocument) ? "NotedAccentSoftBrush" : "NotedSubtleSurfaceBrush");
+        SecondaryDocumentHeader.SetResourceReference(Border.BackgroundProperty,
+            ReferenceEquals(currentDocument, _secondaryDocument) ? "NotedAccentSoftBrush" : "NotedSubtleSurfaceBrush");
         PrimaryDocumentHeader.Visibility = _secondaryDocument is not null
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -1296,8 +1304,6 @@ public partial class NoteEditorWindow : Window
     private void SecondaryEditorTextBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         _workspace.Focus(_secondaryDocument);
-        if (_secondaryDocument is not null)
-            OpenTabsList.SelectedItem = _secondaryDocument;
         if (FindPanel.Visibility == Visibility.Visible)
         {
             PositionFindPanel();
@@ -1866,23 +1872,25 @@ public partial class NoteEditorWindow : Window
         ShowActiveNoteInFileExplorer();
     }
 
+    private void RevealTabInFileExplorerMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { DataContext: OpenNoteDocument document })
+            ShowNoteInFileExplorer(document.FilePath);
+    }
+
     private void ShowActiveNoteInFileExplorer(Action<ProcessStartInfo>? startProcess = null)
     {
         if (CurrentDocument is not { } document)
             return;
 
+        ShowNoteInFileExplorer(document.FilePath, startProcess);
+    }
+
+    private void ShowNoteInFileExplorer(string path, Action<ProcessStartInfo>? startProcess = null)
+    {
         try
         {
-            var path = document.FilePath;
-            var arguments = File.Exists(path)
-                ? $"/select,\"{path}\""
-                : $"\"{Path.GetDirectoryName(path)}\"";
-            var startInfo = new ProcessStartInfo("explorer.exe", arguments)
-            {
-                UseShellExecute = true
-            };
-            if (startProcess is not null) startProcess(startInfo);
-            else Process.Start(startInfo);
+            FileExplorerIntegrationService.RevealFile(path, startProcess);
         }
         catch (Exception ex) when (ex is Win32Exception || FileSystemErrors.IsExpected(ex))
         {
@@ -1952,8 +1960,17 @@ public partial class NoteEditorWindow : Window
 
     private void OpenTabsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_isLoading && OpenTabsList.SelectedItem is OpenNoteDocument document)
+        if (!_isLoading && !_isSelectingTab && OpenTabsList.SelectedItem is OpenNoteDocument document)
             OpenDocumentInFocusedPane(document, focusEditor: false, saveSession: true);
+    }
+
+    private void SelectTab(OpenNoteDocument? document)
+    {
+        if (ReferenceEquals(OpenTabsList.SelectedItem, document))
+            return;
+        _isSelectingTab = true;
+        try { OpenTabsList.SelectedItem = document; }
+        finally { _isSelectingTab = false; }
     }
 
     private void OpenDocumentInFocusedPane(
@@ -2018,6 +2035,7 @@ public partial class NoteEditorWindow : Window
 
     private void OpenTabsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        _primaryBeforeTabDrag = _activeDocument;
         _tabDragStart = e.GetPosition(OpenTabsList);
         _draggedDocument = FindDocumentFromElement(e.OriginalSource as DependencyObject);
     }
@@ -2043,6 +2061,7 @@ public partial class NoteEditorWindow : Window
         {
             SideBySideDropTarget.Visibility = Visibility.Collapsed;
             _draggedDocument = null;
+            _primaryBeforeTabDrag = null;
         }
     }
 
@@ -2086,9 +2105,15 @@ public partial class NoteEditorWindow : Window
         CaptureActiveDocument();
         if (ReferenceEquals(document, _activeDocument))
         {
-            var primaryDocument = _documents.FirstOrDefault(item => !ReferenceEquals(item, document));
+            var primaryDocument = _secondaryDocument;
+            if (primaryDocument is null && ReferenceEquals(document, _draggedDocument) &&
+                !ReferenceEquals(_primaryBeforeTabDrag, document))
+                primaryDocument = _primaryBeforeTabDrag;
+            primaryDocument ??= _documents.FirstOrDefault(item => !ReferenceEquals(item, document));
             if (primaryDocument is null)
                 return;
+            if (ReferenceEquals(primaryDocument, _secondaryDocument))
+                _workspace.CloseSecondary();
             ActivateDocument(primaryDocument, focusEditor: false);
         }
 
@@ -2107,13 +2132,14 @@ public partial class NoteEditorWindow : Window
         SecondaryEditorColumn.Width = new GridLength(1, GridUnitType.Star);
         EditorSplitter.Visibility = Visibility.Visible;
         SecondaryEditorPane.Visibility = Visibility.Visible;
+        UpdateEditorState();
         if (focusEditor)
         {
-            OpenTabsList.SelectedItem = document;
-            SecondaryEditorTextBox.Focus();
+            SelectTab(document);
+            EditorWorkspace.UpdateLayout();
+            FocusActiveSurface();
         }
 
-        UpdateEditorState();
         if (saveSession)
             SaveEditorSession();
     }
@@ -2176,7 +2202,7 @@ public partial class NoteEditorWindow : Window
 
         var targetIndex = _documents.IndexOf(target);
         _workspace.Move(source, targetIndex);
-        OpenTabsList.SelectedItem = CurrentDocument;
+        SelectTab(CurrentDocument);
         SaveEditorSession();
     }
 
@@ -2603,6 +2629,7 @@ public partial class NoteEditorWindow : Window
         var document = secondary ? _secondaryDocument : _activeDocument;
         if (document is null) return;
         _workspace.Focus(document);
+        UpdateEditorState();
         FocusActiveSurface();
     }
 

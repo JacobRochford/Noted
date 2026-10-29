@@ -46,7 +46,7 @@ public sealed class OpenNoteDocument : ObservableObject
         Path.GetFileName(_filePath),
         keepExtensionForCustomName: false);
     public string TabLabel =>
-        $"{DisplayName}{(_isMissing ? "  (missing)" : string.Empty)}{(_isDirty ? "  •" : string.Empty)}";
+        $"{(_isDirty ? "•  " : string.Empty)}{DisplayName}{(_isMissing ? "  (missing)" : string.Empty)}";
     public string Content { get; internal set; }
     public string SavedContent { get; internal set; }
     public TextFileEncoding Encoding { get; internal set; }

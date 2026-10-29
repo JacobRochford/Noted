@@ -56,11 +56,35 @@ internal static class WindowInterop {
     internal static extern uint GetDoubleClickTime();
 
     [DllImport("user32.dll")]
-    private static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint flags);
+    internal static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint flags);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(IntPtr hWnd, out NativeRect rectangle);
+
+    internal static Rect GetWindowBounds(IntPtr handle) =>
+        GetWindowRect(handle, out var bounds)
+            ? new Rect(bounds.Left, bounds.Top, Math.Max(0, bounds.Right - bounds.Left), Math.Max(0, bounds.Bottom - bounds.Top))
+            : Rect.Empty;
+
+    internal static IntPtr GetMonitorForBounds(Rect bounds)
+    {
+        var native = new NativeRect
+        {
+            Left = (int)bounds.Left, Top = (int)bounds.Top,
+            Right = (int)bounds.Right, Bottom = (int)bounds.Bottom
+        };
+        return MonitorFromRect(ref native, MONITOR_DEFAULTTONULL);
+    }
+
+    internal static Rect GetMonitorBounds(IntPtr monitor)
+    {
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        return GetMonitorInfo(monitor, ref info)
+            ? new Rect(info.Monitor.Left, info.Monitor.Top,
+                info.Monitor.Right - info.Monitor.Left, info.Monitor.Bottom - info.Monitor.Top)
+            : Rect.Empty;
+    }
 
     internal static void CenterOnForegroundMonitor(Window window, IntPtr foreground)
     {

@@ -131,6 +131,20 @@ public sealed class MarkdownPreviewTests
     });
 
     [TestMethod]
+    public void EscapedNumberedMarkersDisplayWithoutBackslashes() => RunSta(() =>
+    {
+        var document = MarkdownRenderer.Render("1\\. first\n2\\. second\n\n`3\\.`\n\n4\\\\. literal slash");
+        var paragraphs = document.Blocks.OfType<Paragraph>().ToArray();
+
+        Assert.AreEqual(3, paragraphs.Length);
+        Assert.AreEqual("1. first" + Environment.NewLine + "2. second",
+            new TextRange(paragraphs[0].ContentStart, paragraphs[0].ContentEnd).Text.TrimEnd('\r', '\n'));
+        Assert.AreEqual(@"3\.", paragraphs[1].Inlines.OfType<Run>().Single().Text);
+        Assert.AreEqual(@"4\. literal slash",
+            new TextRange(paragraphs[2].ContentStart, paragraphs[2].ContentEnd).Text.TrimEnd('\r', '\n'));
+    });
+
+    [TestMethod]
     public void RendererSupportsCommonBlocksAndInlineFormatting() => RunSta(() =>
     {
         var document = MarkdownRenderer.Render("# Heading\n\n**bold** *italic* `code`\n\n> quote\n\n- first\n- second\n\n1. ordered\n\n```cs\n<literal>\n```\n\n---");

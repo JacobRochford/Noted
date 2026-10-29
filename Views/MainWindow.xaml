@@ -759,6 +759,9 @@
                                                 <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE8C8;" FontSize="14" Foreground="{DynamicResource NotedTextBrush}"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
+                                        <MenuItem x:Name="RevealNoteMenuItem"
+                                                  Header="Reveal in File Explorer"
+                                                  Click="RevealNoteInFileExplorer_Click"/>
                                         <Separator x:Name="DeleteSeparator"/>
                                         <MenuItem x:Name="DeleteMenuItem"
                                                   Header="Delete"

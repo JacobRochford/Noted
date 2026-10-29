@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -31,11 +32,14 @@ public partial class MainWindow : Window {
     private readonly CanvasEdgeResizer _notesPanelResizer;
     private readonly HotkeyConfiguration _hotkeys;
     private TrayIcon? _trayIcon;
+    private readonly DispatcherTimer _buttonPlacementTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private bool _notedButtonDragged;
 
     // UI state
     private bool _cleanupCompleted;
     private bool _isNoActivateTemporarilyStripped;
     private bool _isCommittingRename;
+    private double? _notesScrollOffset;
 
 
     // drag
@@ -97,6 +101,7 @@ public partial class MainWindow : Window {
         PreviewMouseDown += MainWindow_PreviewMouseDown;
         KeyDown += MainWindow_KeyDown;
         SourceInitialized += MainWindow_SourceInitialized;
+        _buttonPlacementTimer.Tick += RefreshNotedButtonPlacement;
         SearchBox.TextChanged += SearchBox_TextChanged;
         SearchBox.GotFocus += SearchBox_GotFocus;
         SearchBox.LostFocus += SearchBox_LostFocus;
@@ -195,6 +200,8 @@ public partial class MainWindow : Window {
 
         ResetOverlayBounds();
 
+        _buttonPlacementTimer.Start();
+
         Dispatcher.BeginInvoke(
             PositionNotedOnPreferredDisplay,
             DispatcherPriority.Loaded);
@@ -231,6 +238,16 @@ public partial class MainWindow : Window {
     }
     private void OnNoteEditorHotkeyPressed()
     {
+        if (!_noteEditor.CanChangeGroupVisibility)
+            return;
+
+        if (!_noteEditor.HasOpenDocuments)
+        {
+            _noteEditor.ShowWindow();
+            CreateAndOpenNewNote(_noteEditor);
+            return;
+        }
+
         WindowManager.ToggleEditor();
     }
 
@@ -308,6 +325,10 @@ public partial class MainWindow : Window {
             case nameof(SettingsViewModel.PreferredDisplay):
                 Dispatcher.BeginInvoke(PositionNotedOnPreferredDisplay, DispatcherPriority.Loaded);
                 break;
+            case nameof(SettingsViewModel.NotedButtonOnLeft):
+                _notedButtonDragged = false;
+                Dispatcher.BeginInvoke(() => RefreshNotedButtonPlacement(null, EventArgs.Empty), DispatcherPriority.Loaded);
+                break;
             case nameof(SettingsViewModel.GhostModeEnabled):
                 if (!_settingsViewModel.GhostModeEnabled || IsNotesPanelVisible && !NotesPanel.IsMouseOver)
                     WindowAppearance.Refresh(this);
@@ -375,13 +396,51 @@ public partial class MainWindow : Window {
         Canvas.SetLeft(NotesPanel, panelLeft);
         Canvas.SetTop(NotesPanel, panelTop);
 
-        var buttonWidth = FloatingNotesButton.ActualWidth > 0 ? FloatingNotesButton.ActualWidth : FloatingNotesButton.Width;
-        var buttonHeight = FloatingNotesButton.ActualHeight > 0 ? FloatingNotesButton.ActualHeight : FloatingNotesButton.Height;
+        _notedButtonDragged = false;
+        PositionNotedButton(screen);
+    }
+
+    private void RefreshNotedButtonPlacement(object? sender, EventArgs e)
+    {
+        if (!IsVisible || _notedButtonDragged || _dragElement == FloatingNotesButton)
+            return;
+        var screen = ResolvePreferredDisplay();
+        if (screen is null)
+            return;
+        ResetOverlayBounds();
+        PositionNotedButton(screen);
+    }
+
+    private void PositionNotedButton(DisplayInfo screen)
+    {
+        const double buttonHeight = 44;
+        var buttonSize = new Size(FloatingNotesButton.Width, buttonHeight);
+        var taskbar = TaskbarButtonPlacement.FindTaskbar(screen);
+        var bounds = taskbar is null ? Rect.Empty : TaskbarButtonPlacement.CalculateBounds(
+            ToCanvasBounds(taskbar.Bounds), ToCanvasBounds(taskbar.MonitorBounds),
+            ToCanvasBounds(taskbar.NotificationArea), buttonSize, _settingsViewModel.NotedButtonOnLeft);
+        var onTaskbar = !bounds.IsEmpty;
+        if (!onTaskbar)
+        {
+            var work = ToCanvasBounds(new Rect(screen.WorkLeft, screen.WorkTop, screen.WorkWidth, screen.WorkHeight));
+            var left = _settingsViewModel.NotedButtonOnLeft ? work.Left + 20 : work.Right - buttonSize.Width - 20;
+            bounds = new Rect(left, work.Bottom - buttonHeight - 8, buttonSize.Width, buttonHeight);
+        }
+
         Canvas.SetRight(FloatingNotesButton, double.NaN);
         Canvas.SetBottom(FloatingNotesButton, double.NaN);
-        Canvas.SetLeft(FloatingNotesButton, workLeft + workWidth - buttonWidth - 20);
-        Canvas.SetTop(FloatingNotesButton, workTop + workHeight - buttonHeight - 8);
+        Canvas.SetLeft(FloatingNotesButton, bounds.Left);
+        Canvas.SetTop(FloatingNotesButton, bounds.Top);
+        FloatingNotesButton.Height = bounds.Height;
+
+        // taskbar interaction can raise it above other topmost windows.
+        if (onTaskbar && WindowInterop.GetForegroundWindow() == taskbar!.Handle)
+            WindowInterop.SetWindowPos(new WindowInteropHelper(this).Handle, WindowInterop.HWND_TOPMOST,
+                0, 0, 0, 0, WindowInterop.SWP_NOMOVE | WindowInterop.SWP_NOSIZE | WindowInterop.SWP_NOACTIVATE);
     }
+
+    private Rect ToCanvasBounds(Rect screenBounds) => screenBounds.IsEmpty ? Rect.Empty :
+        new Rect(MainCanvas.PointFromScreen(screenBounds.TopLeft), MainCanvas.PointFromScreen(screenBounds.BottomRight));
 
     private DisplayInfo? ResolvePreferredDisplay()
     {
@@ -424,6 +483,8 @@ public partial class MainWindow : Window {
             WindowState = WindowState.Normal;
         NotesPanel.Visibility = Visibility.Visible;
         WindowAppearance.Refresh(this);
+        if (_notesScrollOffset is not null)
+            Dispatcher.BeginInvoke(RestoreNotesScrollPosition, DispatcherPriority.ContextIdle);
         // force focus for overlay
         var hwnd = TemporarilyAllowWindowActivation();
         try {
@@ -449,11 +510,24 @@ public partial class MainWindow : Window {
 
     internal void HideNotesPanel() {
         try {
+            _notesScrollOffset = string.IsNullOrWhiteSpace(_viewModel.FilterText)
+                ? VisualTreeHelpers.FindDescendant<ScrollViewer>(FileList)?.VerticalOffset
+                : null;
             _viewModel.ClearFilter();
         } finally {
             RestoreNoActivateAfterInteraction();
             NotesPanel.Visibility = Visibility.Collapsed;
         }
+    }
+
+    private void RestoreNotesScrollPosition() {
+        if (_notesScrollOffset is not { } offset || NotesPanel.Visibility != Visibility.Visible)
+            return;
+
+        FileList.UpdateLayout();
+        var scrollViewer = VisualTreeHelpers.FindDescendant<ScrollViewer>(FileList);
+        scrollViewer?.ScrollToVerticalOffset(Math.Min(offset, scrollViewer.ScrollableHeight));
+        _notesScrollOffset = null;
     }
 
     private void HideNotesPanelAndEditor(bool minimizeEditor = false) {
@@ -1158,6 +1232,10 @@ public partial class MainWindow : Window {
     }
 
     private void FileList_ContextMenuOpening(object sender, ContextMenuEventArgs e) {
+        if (e.OriginalSource is DependencyObject source &&
+            VisualTreeHelpers.FindAncestor<ListBoxItem>(source) is { DataContext: NoteItem clickedNote })
+            FileList.SelectedItem = clickedNote;
+
         var note = FileList.SelectedItem as NoteItem;
         var isFolder = note?.IsFolder == true;
         var hasSelection = note is not null;
@@ -1165,8 +1243,23 @@ public partial class MainWindow : Window {
         OpenFolderMenuItem.Visibility = isFolder ? Visibility.Visible : Visibility.Collapsed;
         RenameMenuItem.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
         CopyNameMenuItem.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+        RevealNoteMenuItem.Visibility = !isFolder && hasSelection ? Visibility.Visible : Visibility.Collapsed;
         DeleteSeparator.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
         DeleteMenuItem.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RevealNoteInFileExplorer_Click(object sender, RoutedEventArgs e) {
+        if (FileList.SelectedItem is not NoteItem { IsFolder: false } note)
+            return;
+
+        var path = note.FullPath ?? Path.Combine(_fileService.CurrentDirectory, note.FileName);
+        try {
+            FileExplorerIntegrationService.RevealFile(path);
+        } catch (Exception ex) when (ex is Win32Exception || FileSystemErrors.IsExpected(ex)) {
+            ExceptionDiagnostics.Record(ex);
+            AppDialog.Show(this, "File Explorer could not be opened for this note.",
+                "Unable to open File Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void ChangeFolderButton_Click(object sender, RoutedEventArgs e) {
@@ -1644,6 +1737,8 @@ public partial class MainWindow : Window {
 
         if (!_isDragging) {
             _isDragging = true;
+            if (element == FloatingNotesButton)
+                _notedButtonDragged = true;
             element.CaptureMouse();
         }
 
@@ -1783,6 +1878,8 @@ public partial class MainWindow : Window {
         _settingsViewModel.PreferenceChanged -= OnSettingsPreferenceChanged;
         _settingsViewModel.NoticeRaised -= ShowSettingsNotice;
         _hotkeys.Dispose();
+        _buttonPlacementTimer.Stop();
+        _buttonPlacementTimer.Tick -= RefreshNotedButtonPlacement;
         _notesPanelResizer.Dispose();
 
         // cleanup tray icon

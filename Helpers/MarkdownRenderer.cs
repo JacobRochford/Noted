@@ -354,7 +354,7 @@ internal static partial class MarkdownRenderer
         foreach (Match match in InlinePattern().Matches(text))
         {
             if (match.Index > position)
-                inlines.Add(new Run(text[position..match.Index]));
+                inlines.Add(new Run(UnescapePeriods(text[position..match.Index])));
 
             var token = match.Value;
             if (token.StartsWith('['))
@@ -380,18 +380,52 @@ internal static partial class MarkdownRenderer
             else if (token.StartsWith("**", StringComparison.Ordinal) ||
                      token.StartsWith("__", StringComparison.Ordinal))
             {
-                inlines.Add(new Bold(new Run(token[2..^2])));
+                inlines.Add(new Bold(new Run(UnescapePeriods(token[2..^2]))));
             }
             else
             {
-                inlines.Add(new Italic(new Run(token[1..^1])));
+                inlines.Add(new Italic(new Run(UnescapePeriods(token[1..^1]))));
             }
 
             position = match.Index + match.Length;
         }
 
         if (position < text.Length)
-            inlines.Add(new Run(text[position..]));
+            inlines.Add(new Run(UnescapePeriods(text[position..])));
+    }
+
+    private static string UnescapePeriods(string text)
+    {
+        if (!text.Contains(@"\.", StringComparison.Ordinal))
+            return text;
+
+        var result = new StringBuilder(text.Length);
+        for (var index = 0; index < text.Length;)
+        {
+            if (text[index] != '\\')
+            {
+                result.Append(text[index++]);
+                continue;
+            }
+
+            var slashStart = index;
+            while (index < text.Length && text[index] == '\\')
+                index++;
+
+            var slashCount = index - slashStart;
+            if (index < text.Length && text[index] == '.')
+            {
+                result.Append('\\', slashCount / 2);
+                result.Append('.');
+                index++;
+            }
+            else
+            {
+                result.Append('\\', slashCount);
+            }
+        }
+
+        return result.ToString();
     }
 
     [GeneratedRegex(@"^(#{1,6})\s+(.+?)\s*$")]

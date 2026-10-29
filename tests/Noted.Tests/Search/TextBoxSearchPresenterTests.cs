@@ -129,6 +129,88 @@ public sealed class TextBoxSearchPresenterTests
     }
 
     [TestMethod]
+    [DataRow(TextWrapping.Wrap, FlowDirection.LeftToRight)]
+    [DataRow(TextWrapping.Wrap, FlowDirection.RightToLeft)]
+    [DataRow(TextWrapping.NoWrap, FlowDirection.LeftToRight)]
+    [DataRow(TextWrapping.NoWrap, FlowDirection.RightToLeft)]
+    public void ViewportClipping_MatchesExhaustiveGeometryAfterScrollingAndLayoutChanges(
+        TextWrapping wrapping,
+        FlowDirection flowDirection)
+    {
+        RunOnSta(() =>
+        {
+            var text = string.Join("\n", Enumerable.Range(0, 35).Select(index =>
+                $"target {index} abc \u05d0\u05d1\u05d2 \U0001F600 e\u0301 {new string('x', 40)} target"));
+            using var surface = new TextBoxSurface(text, 240, 105, wrapping);
+            surface.Editor.FlowDirection = flowDirection;
+            var session = CreateSession(surface.Editor, "target", anchor: 0);
+            surface.Presenter.Present(session, bringCurrentIntoView: false);
+            surface.Pump();
+
+            var lineHeight = surface.Editor.GetRectFromCharacterIndex(0).Height;
+            var barelyVisibleLastRow = (lineHeight * 10) - surface.Editor.ViewportHeight + 0.25;
+            foreach (var offset in new[] { 0.0, 100.5, barelyVisibleLastRow, surface.Editor.ExtentHeight })
+            {
+                surface.Editor.ScrollToVerticalOffset(offset);
+                if (wrapping == TextWrapping.NoWrap)
+                    surface.Editor.ScrollToHorizontalOffset(offset > 0 ? 120 : 0);
+                surface.Pump();
+
+                AssertGeometryMatchesExhaustiveCalculation(surface, session);
+            }
+
+            surface.Editor.FontSize = 18;
+            surface.Editor.Padding = new Thickness(12, 30, 16, 25);
+            surface.Resize(205, 110);
+
+            AssertGeometryMatchesExhaustiveCalculation(surface, session);
+        });
+    }
+
+    [TestMethod]
+    [DataRow(TextWrapping.Wrap)]
+    [DataRow(TextWrapping.NoWrap)]
+    public void MatchSpanningViewport_MatchesExhaustiveGeometryWhenBothEndsAreOffscreen(TextWrapping wrapping)
+    {
+        RunOnSta(() =>
+        {
+            var text = string.Join("\n", Enumerable.Repeat(new string('x', 64), 30));
+            using var surface = new TextBoxSurface(text, 150, 105, wrapping);
+            var session = CreateSession(surface.Editor, text, anchor: 0);
+            surface.Presenter.Present(session, bringCurrentIntoView: false);
+            surface.Editor.ScrollToVerticalOffset(180.5);
+            surface.Pump();
+            Assert.IsTrue(surface.Editor.GetFirstVisibleLineIndex() > 0);
+            Assert.IsTrue(surface.Editor.GetLastVisibleLineIndex() < surface.Editor.LineCount - 1);
+
+            AssertGeometryMatchesExhaustiveCalculation(surface, session);
+
+            var geometry = surface.Presenter.GetGeometrySnapshot();
+            Assert.IsTrue(geometry.Matches.Single().Segments.Count > 0);
+            Assert.IsNull(geometry.CurrentVisualRow);
+        });
+    }
+
+    [TestMethod]
+    public void TemplateWithoutTextView_KeepsMatchIdentitiesWithoutVisibleGeometry()
+    {
+        RunOnSta(() =>
+        {
+            using var surface = new TextBoxSurface("foo middle foo", 240, 105);
+            var session = CreateSession(surface.Editor, "foo", anchor: 0);
+            surface.Presenter.Present(session, bringCurrentIntoView: false);
+            surface.Editor.Template = new ControlTemplate(typeof(TextBox));
+            surface.Pump();
+
+            var geometry = surface.Presenter.GetGeometrySnapshot();
+
+            CollectionAssert.AreEqual(session.Matches.ToArray(), geometry.Matches.Select(match => match.Match).ToArray());
+            Assert.IsTrue(geometry.Matches.All(match => match.Segments.Count == 0));
+            Assert.IsNull(geometry.CurrentVisualRow);
+        });
+    }
+
+    [TestMethod]
     public void WordWrapChange_InvalidatesGeometry()
     {
         RunOnSta(() =>
@@ -786,6 +868,71 @@ public sealed class TextBoxSearchPresenterTests
         Assert.IsTrue(
             firstMatchLine >= firstVisibleLine && lastMatchLine <= lastVisibleLine,
             $"Current match lines {firstMatchLine}-{lastMatchLine} were outside visible lines {firstVisibleLine}-{lastVisibleLine}.");
+    }
+
+    private static void AssertGeometryMatchesExhaustiveCalculation(TextBoxSurface surface, TextSearchSession session)
+    {
+        var editor = surface.Editor;
+        var geometry = surface.Presenter.GetGeometrySnapshot();
+        var verticalOffset = editor.VerticalOffset;
+        var horizontalOffset = editor.HorizontalOffset;
+        CollectionAssert.AreEqual(session.Matches.ToArray(), geometry.Matches.Select(match => match.Match).ToArray());
+
+        // retain the original exhaustive calculation as a reference for viewport filtering.
+        foreach (var matchGeometry in geometry.Matches)
+        {
+            var match = matchGeometry.Match;
+            var expected = new List<Rect>();
+            var firstLine = editor.GetLineIndexFromCharacterIndex(match.Start);
+            var lastLine = editor.GetLineIndexFromCharacterIndex(match.End - 1);
+            for (var line = firstLine; line <= lastLine; line++)
+            {
+                var lineStart = editor.GetCharacterIndexFromLineIndex(line);
+                var lineEnd = lineStart + editor.GetLineLength(line);
+                var segmentStart = Math.Max(match.Start, lineStart);
+                var segmentEnd = Math.Min(match.End, lineEnd);
+                if (segmentEnd <= segmentStart)
+                    continue;
+
+                var leading = editor.GetRectFromCharacterIndex(segmentStart, false);
+                var trailing = editor.GetRectFromCharacterIndex(segmentEnd - 1, true);
+                if (leading.IsEmpty || trailing.IsEmpty)
+                    continue;
+
+                var left = Math.Min(leading.Left, trailing.Left);
+                var top = Math.Min(leading.Top, trailing.Top);
+                var segment = new Rect(left, top,
+                    Math.Max(1, Math.Max(leading.Right, trailing.Right) - left),
+                    Math.Max(1, Math.Max(leading.Bottom, trailing.Bottom) - top));
+                var clipped = Rect.Intersect(segment, geometry.Viewport);
+                if (!clipped.IsEmpty && clipped.Width > 0 && clipped.Height > 0)
+                    expected.Add(clipped);
+            }
+
+            CollectionAssert.AreEqual(expected, matchGeometry.Segments.ToArray(),
+                $"Geometry for {match}, line={firstLine}, offset={verticalOffset}, " +
+                $"visible={editor.GetFirstVisibleLineIndex()}-{editor.GetLastVisibleLineIndex()}, " +
+                $"viewport={geometry.Viewport}, expected={string.Join("; ", expected)}, " +
+                $"actual={string.Join("; ", matchGeometry.Segments)}.");
+            Assert.AreEqual(session.CurrentMatch == match, matchGeometry.IsCurrent);
+        }
+
+        Rect? expectedRow = null;
+        if (session.CurrentMatch is { } current)
+        {
+            var rect = editor.GetRectFromCharacterIndex(current.Start, false);
+            if (!rect.IsEmpty)
+            {
+                var row = Rect.Intersect(new Rect(geometry.Viewport.Left, rect.Top,
+                    geometry.Viewport.Width, rect.Height), geometry.Viewport);
+                if (!row.IsEmpty && row.Height > 0)
+                    expectedRow = row;
+            }
+        }
+
+        Assert.AreEqual(expectedRow, geometry.CurrentVisualRow);
+        Assert.AreEqual(verticalOffset, editor.VerticalOffset, 0.01);
+        Assert.AreEqual(horizontalOffset, editor.HorizontalOffset, 0.01);
     }
 
     private static TextSearchSession CreateSession(TextBox editor, string query, int anchor)

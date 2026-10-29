@@ -75,6 +75,28 @@ public sealed class AppSettingsServiceTests
     }
 
     [TestMethod]
+    public void NotedButtonDefaultsRightForExistingSettingsAndPersistsEitherSide()
+    {
+        using var directory = new TemporaryTestDirectory();
+        File.WriteAllText(directory.File("settings.json"), """
+            { "CustomHeader": "My notes", "PreferredDisplayDeviceName": "DISPLAY2" }
+            """);
+        var settings = new AppSettingsService(directory.Path);
+        Assert.IsFalse(settings.LoadNotedButtonOnLeft());
+
+        settings.SaveNotedButtonOnLeft(true);
+        var restarted = new AppSettingsService(directory.Path);
+        Assert.IsTrue(restarted.LoadNotedButtonOnLeft());
+        Assert.AreEqual("My notes", restarted.LoadCustomHeader());
+        Assert.AreEqual("DISPLAY2", restarted.LoadPreferredDisplayDeviceName());
+        using var json = JsonDocument.Parse(File.ReadAllText(directory.File("settings.json")));
+        Assert.IsTrue(json.RootElement.GetProperty("NotedButtonOnLeft").GetBoolean());
+
+        restarted.SaveNotedButtonOnLeft(false);
+        Assert.IsFalse(new AppSettingsService(directory.Path).LoadNotedButtonOnLeft());
+    }
+
+    [TestMethod]
     public void RetryableWriteFailurePreservesItsCauseAndExplainsHowToRetry()
     {
         using var directory = new TemporaryTestDirectory();

@@ -750,6 +750,13 @@
                                               Margin="0,0,0,12"
                                               MinHeight="28"
                                               DisplayMemberPath="Label"/>
+                                    <CheckBox IsChecked="{Binding NotedButtonOnLeft}"
+                                              Foreground="{DynamicResource NotedTextBrush}"
+                                              Margin="0,0,0,12"
+                                              ToolTip="By default, the Noted button appears on the right, beside the system tray.">
+                                        <TextBlock Text="Place the Noted button on the left of the taskbar"
+                                                   TextWrapping="Wrap"/>
+                                    </CheckBox>
                                     <CheckBox x:Name="MainHideButtonHidesAllOption" IsChecked="{Binding MainHideButtonHidesAll}"
                                             Foreground="{DynamicResource NotedTextBrush}"
                                             FontWeight="SemiBold"
