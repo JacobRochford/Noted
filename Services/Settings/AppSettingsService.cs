@@ -473,6 +473,11 @@ public sealed class AppSettingsService : IAppSettingsService {
         });
     }
 
+    public bool LoadNotedButtonOnLeft() => LoadSetting(s => s.NotedButtonOnLeft);
+
+    public void SaveNotedButtonOnLeft(bool onLeft) =>
+        SaveSetting(s => s with { NotedButtonOnLeft = onLeft });
+
     private T LoadSetting<T>(Func<AppSettingsDocument, T> selector) {
         return selector(LoadSettings());
     }

@@ -231,6 +231,23 @@ public sealed class SettingsViewModelTests
     }
 
     [TestMethod]
+    public void NotedButtonSidePersistsAndNotifiesWithoutChangingTheDisplay()
+    {
+        using var context = new Context();
+        var changes = new List<string>();
+        context.Model.PreferenceChanged += changes.Add;
+        Assert.IsFalse(context.Model.NotedButtonOnLeft);
+
+        context.Model.NotedButtonOnLeft = true;
+
+        Assert.IsTrue(context.Settings.LoadNotedButtonOnLeft());
+        CollectionAssert.Contains(changes, nameof(SettingsViewModel.NotedButtonOnLeft));
+        Assert.IsNull(context.Settings.LoadPreferredDisplayDeviceName());
+        context.Model.Reload();
+        Assert.IsTrue(context.Model.NotedButtonOnLeft);
+    }
+
+    [TestMethod]
     public void MissingPreferredDisplayFallsBackInPresentationWithoutOverwritingThePreference()
     {
         using var context = new Context();

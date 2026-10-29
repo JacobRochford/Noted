@@ -31,6 +31,8 @@ public partial class MainWindow : Window {
     private readonly CanvasEdgeResizer _notesPanelResizer;
     private readonly HotkeyConfiguration _hotkeys;
     private TrayIcon? _trayIcon;
+    private readonly DispatcherTimer _buttonPlacementTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private bool _notedButtonDragged;
 
     // UI state
     private bool _cleanupCompleted;
@@ -97,6 +99,7 @@ public partial class MainWindow : Window {
         PreviewMouseDown += MainWindow_PreviewMouseDown;
         KeyDown += MainWindow_KeyDown;
         SourceInitialized += MainWindow_SourceInitialized;
+        _buttonPlacementTimer.Tick += RefreshNotedButtonPlacement;
         SearchBox.TextChanged += SearchBox_TextChanged;
         SearchBox.GotFocus += SearchBox_GotFocus;
         SearchBox.LostFocus += SearchBox_LostFocus;
@@ -194,6 +197,8 @@ public partial class MainWindow : Window {
         QuickNoteButton.Visibility = newNoteMode == NewNoteMode.Both ? Visibility.Visible : Visibility.Collapsed;
 
         ResetOverlayBounds();
+
+        _buttonPlacementTimer.Start();
 
         Dispatcher.BeginInvoke(
             PositionNotedOnPreferredDisplay,
@@ -308,6 +313,10 @@ public partial class MainWindow : Window {
             case nameof(SettingsViewModel.PreferredDisplay):
                 Dispatcher.BeginInvoke(PositionNotedOnPreferredDisplay, DispatcherPriority.Loaded);
                 break;
+            case nameof(SettingsViewModel.NotedButtonOnLeft):
+                _notedButtonDragged = false;
+                Dispatcher.BeginInvoke(() => RefreshNotedButtonPlacement(null, EventArgs.Empty), DispatcherPriority.Loaded);
+                break;
             case nameof(SettingsViewModel.GhostModeEnabled):
                 if (!_settingsViewModel.GhostModeEnabled || IsNotesPanelVisible && !NotesPanel.IsMouseOver)
                     WindowAppearance.Refresh(this);
@@ -375,13 +384,51 @@ public partial class MainWindow : Window {
         Canvas.SetLeft(NotesPanel, panelLeft);
         Canvas.SetTop(NotesPanel, panelTop);
 
-        var buttonWidth = FloatingNotesButton.ActualWidth > 0 ? FloatingNotesButton.ActualWidth : FloatingNotesButton.Width;
-        var buttonHeight = FloatingNotesButton.ActualHeight > 0 ? FloatingNotesButton.ActualHeight : FloatingNotesButton.Height;
+        _notedButtonDragged = false;
+        PositionNotedButton(screen);
+    }
+
+    private void RefreshNotedButtonPlacement(object? sender, EventArgs e)
+    {
+        if (!IsVisible || _notedButtonDragged || _dragElement == FloatingNotesButton)
+            return;
+        var screen = ResolvePreferredDisplay();
+        if (screen is null)
+            return;
+        ResetOverlayBounds();
+        PositionNotedButton(screen);
+    }
+
+    private void PositionNotedButton(DisplayInfo screen)
+    {
+        const double buttonHeight = 44;
+        var buttonSize = new Size(FloatingNotesButton.Width, buttonHeight);
+        var taskbar = TaskbarButtonPlacement.FindTaskbar(screen);
+        var bounds = taskbar is null ? Rect.Empty : TaskbarButtonPlacement.CalculateBounds(
+            ToCanvasBounds(taskbar.Bounds), ToCanvasBounds(taskbar.MonitorBounds),
+            ToCanvasBounds(taskbar.NotificationArea), buttonSize, _settingsViewModel.NotedButtonOnLeft);
+        var onTaskbar = !bounds.IsEmpty;
+        if (!onTaskbar)
+        {
+            var work = ToCanvasBounds(new Rect(screen.WorkLeft, screen.WorkTop, screen.WorkWidth, screen.WorkHeight));
+            var left = _settingsViewModel.NotedButtonOnLeft ? work.Left + 20 : work.Right - buttonSize.Width - 20;
+            bounds = new Rect(left, work.Bottom - buttonHeight - 8, buttonSize.Width, buttonHeight);
+        }
+
         Canvas.SetRight(FloatingNotesButton, double.NaN);
         Canvas.SetBottom(FloatingNotesButton, double.NaN);
-        Canvas.SetLeft(FloatingNotesButton, workLeft + workWidth - buttonWidth - 20);
-        Canvas.SetTop(FloatingNotesButton, workTop + workHeight - buttonHeight - 8);
+        Canvas.SetLeft(FloatingNotesButton, bounds.Left);
+        Canvas.SetTop(FloatingNotesButton, bounds.Top);
+        FloatingNotesButton.Height = bounds.Height;
+
+        // taskbar interaction can raise it above other topmost windows.
+        if (onTaskbar && WindowInterop.GetForegroundWindow() == taskbar!.Handle)
+            WindowInterop.SetWindowPos(new WindowInteropHelper(this).Handle, WindowInterop.HWND_TOPMOST,
+                0, 0, 0, 0, WindowInterop.SWP_NOMOVE | WindowInterop.SWP_NOSIZE | WindowInterop.SWP_NOACTIVATE);
     }
+
+    private Rect ToCanvasBounds(Rect screenBounds) => screenBounds.IsEmpty ? Rect.Empty :
+        new Rect(MainCanvas.PointFromScreen(screenBounds.TopLeft), MainCanvas.PointFromScreen(screenBounds.BottomRight));
 
     private DisplayInfo? ResolvePreferredDisplay()
     {
@@ -1644,6 +1691,8 @@ public partial class MainWindow : Window {
 
         if (!_isDragging) {
             _isDragging = true;
+            if (element == FloatingNotesButton)
+                _notedButtonDragged = true;
             element.CaptureMouse();
         }
 
@@ -1783,6 +1832,8 @@ public partial class MainWindow : Window {
         _settingsViewModel.PreferenceChanged -= OnSettingsPreferenceChanged;
         _settingsViewModel.NoticeRaised -= ShowSettingsNotice;
         _hotkeys.Dispose();
+        _buttonPlacementTimer.Stop();
+        _buttonPlacementTimer.Tick -= RefreshNotedButtonPlacement;
         _notesPanelResizer.Dispose();
 
         // cleanup tray icon

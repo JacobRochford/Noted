@@ -141,6 +141,7 @@ internal sealed class SettingsViewModel : ObservableObject
             RunOnStartup = _startup.IsRunOnStartupEnabled;
             MainHideButtonHidesAll = _settings.LoadMainHideButtonHidesAll();
             PreferredDisplayDeviceName = _settings.LoadPreferredDisplayDeviceName();
+            NotedButtonOnLeft = _settings.LoadNotedButtonOnLeft();
             var screens = _getDisplays();
             var primary = screens.FirstOrDefault(screen => screen.IsPrimary) ?? screens.FirstOrDefault();
             var options = new List<DisplayOption>
@@ -360,6 +361,23 @@ internal sealed class SettingsViewModel : ObservableObject
                 NoticeRaised?.Invoke(new(result.Error ?? "Windows did not apply the requested startup setting.", "Startup Setting Failed"));
         }
     }
+    private bool _notedButtonOnLeft;
+    public bool NotedButtonOnLeft
+    {
+        get => _notedButtonOnLeft;
+        set
+        {
+            if (value == _notedButtonOnLeft) return;
+            if (!_loading && !TrySave(() => _settings.SaveNotedButtonOnLeft(value)))
+            {
+                OnPropertyChanged();
+                return;
+            }
+            SetProperty(ref _notedButtonOnLeft, value);
+            if (!_loading) PreferenceChanged?.Invoke(nameof(NotedButtonOnLeft));
+        }
+    }
+
     private DisplayOption? _preferredDisplay;
     public DisplayOption? PreferredDisplay
     {
