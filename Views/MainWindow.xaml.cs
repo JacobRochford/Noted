@@ -38,6 +38,7 @@ public partial class MainWindow : Window {
     private bool _cleanupCompleted;
     private bool _isNoActivateTemporarilyStripped;
     private bool _isCommittingRename;
+    private double? _notesScrollOffset;
 
 
     // drag
@@ -471,6 +472,8 @@ public partial class MainWindow : Window {
             WindowState = WindowState.Normal;
         NotesPanel.Visibility = Visibility.Visible;
         WindowAppearance.Refresh(this);
+        if (_notesScrollOffset is not null)
+            Dispatcher.BeginInvoke(RestoreNotesScrollPosition, DispatcherPriority.ContextIdle);
         // force focus for overlay
         var hwnd = TemporarilyAllowWindowActivation();
         try {
@@ -496,11 +499,24 @@ public partial class MainWindow : Window {
 
     internal void HideNotesPanel() {
         try {
+            _notesScrollOffset = string.IsNullOrWhiteSpace(_viewModel.FilterText)
+                ? VisualTreeHelpers.FindDescendant<ScrollViewer>(FileList)?.VerticalOffset
+                : null;
             _viewModel.ClearFilter();
         } finally {
             RestoreNoActivateAfterInteraction();
             NotesPanel.Visibility = Visibility.Collapsed;
         }
+    }
+
+    private void RestoreNotesScrollPosition() {
+        if (_notesScrollOffset is not { } offset || NotesPanel.Visibility != Visibility.Visible)
+            return;
+
+        FileList.UpdateLayout();
+        var scrollViewer = VisualTreeHelpers.FindDescendant<ScrollViewer>(FileList);
+        scrollViewer?.ScrollToVerticalOffset(Math.Min(offset, scrollViewer.ScrollableHeight));
+        _notesScrollOffset = null;
     }
 
     private void HideNotesPanelAndEditor(bool minimizeEditor = false) {
