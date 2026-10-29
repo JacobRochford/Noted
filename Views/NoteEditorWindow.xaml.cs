@@ -2035,9 +2035,24 @@ public partial class NoteEditorWindow : Window
 
     private void OpenTabsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        var source = e.OriginalSource as DependencyObject;
+        var document = FindDocumentFromElement(source);
+        if (Keyboard.Modifiers == ModifierKeys.Alt && document is not null &&
+            VisualTreeHelpers.FindAncestor<ButtonBase>(source) is null)
+        {
+            e.Handled = true;
+            _draggedDocument = null;
+            _primaryBeforeTabDrag = null;
+            if (ReferenceEquals(document, _activeDocument) || ReferenceEquals(document, _secondaryDocument))
+                ActivateDocument(document);
+            else
+                ShowSecondaryDocument(document, focusPane: true, focusEditor: true, saveSession: true);
+            return;
+        }
+
         _primaryBeforeTabDrag = _activeDocument;
         _tabDragStart = e.GetPosition(OpenTabsList);
-        _draggedDocument = FindDocumentFromElement(e.OriginalSource as DependencyObject);
+        _draggedDocument = document;
     }
 
     private void OpenTabsList_PreviewMouseMove(object sender, MouseEventArgs e)

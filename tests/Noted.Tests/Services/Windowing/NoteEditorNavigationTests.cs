@@ -124,7 +124,17 @@ public sealed class NoteEditorNavigationTests
         Assert.AreEqual(size, primary.FontSize);
     });
 
-    private static MouseWheelEventArgs Wheel(UIElement target, int delta, ModifierKeys modifiers)
+    private static MouseWheelEventArgs Wheel(UIElement target, int delta, ModifierKeys modifiers) => WithMouseModifiers(modifiers, () =>
+    {
+        var args = new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, delta)
+        {
+            RoutedEvent = Mouse.PreviewMouseWheelEvent
+        };
+        target.RaiseEvent(args);
+        return args;
+    });
+
+    private static T WithMouseModifiers<T>(ModifierKeys modifiers, Func<T> dispatch)
     {
         var original = new byte[256];
         Assert.IsTrue(GetKeyboardState(original));
@@ -138,12 +148,7 @@ public sealed class NoteEditorNavigationTests
         {
             Assert.IsTrue(SetKeyboardState(state));
             Assert.AreEqual(modifiers, Keyboard.Modifiers);
-            var args = new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, delta)
-            {
-                RoutedEvent = Mouse.PreviewMouseWheelEvent
-            };
-            target.RaiseEvent(args);
-            return args;
+            return dispatch();
         }
         finally { Assert.IsTrue(SetKeyboardState(original)); }
     }
@@ -155,6 +160,221 @@ public sealed class NoteEditorNavigationTests
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetKeyboardState(byte[] state);
+
+    private static MouseButtonEventArgs TabMouseDown(UIElement target, ModifierKeys modifiers,
+        MouseButton button = MouseButton.Left) => WithMouseModifiers(modifiers, () =>
+    {
+        var args = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, button)
+        {
+            RoutedEvent = Mouse.PreviewMouseDownEvent
+        };
+        target.RaiseEvent(args);
+        return args;
+    });
+
+    private static ListBoxItem TabItem(NoteEditorWindow editor, int index)
+    {
+        editor.UpdateLayout();
+        var tabs = (ListBox)editor.FindName("OpenTabsList");
+        return (ListBoxItem)tabs.ItemContainerGenerator.ContainerFromIndex(index);
+    }
+
+    [TestMethod]
+    public void AltClickOpensSecondaryAndPreservesPrimaryEditingState() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "left.txt", "left"));
+        editor.OpenNote(CreateNote(files, "right.txt", "right"));
+        var primaryDocument = editor.Workspace.ActiveDocument;
+        var primary = (TextBox)editor.FindName("EditorTextBox");
+        primary.Select(primary.Text.Length, 0);
+        primary.SelectedText = " edited";
+        primary.Select(1, 3);
+        var caret = primary.CaretIndex;
+
+        Assert.IsTrue(TabMouseDown(TabItem(editor, 0), ModifierKeys.Alt).Handled);
+
+        Assert.AreSame(primaryDocument, editor.Workspace.ActiveDocument);
+        Assert.AreSame(editor.Workspace.Documents[0], editor.Workspace.SecondaryDocument);
+        Assert.AreEqual("right edited", primary.Text);
+        Assert.AreEqual(1, primary.SelectionStart);
+        Assert.AreEqual(3, primary.SelectionLength);
+        Assert.AreEqual(caret, primary.CaretIndex);
+        var secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
+        Assert.IsTrue(secondary.IsKeyboardFocused);
+        Assert.AreEqual("left", secondary.Text);
+        Assert.AreSame(editor.Workspace.SecondaryDocument, ((ListBox)editor.FindName("OpenTabsList")).SelectedItem);
+        Assert.IsNull(typeof(NoteEditorWindow).GetField("_draggedDocument", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(editor));
+        primary.Undo();
+        Assert.AreEqual("right", primary.Text);
+        primary.Redo();
+        Assert.AreEqual("right edited", primary.Text);
+    });
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void AltClickVisibleDocumentsKeepsSelectionsCaretsAndUndoRedo(bool leaveRedoPending) => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "left.txt", "left"));
+        editor.OpenNote(CreateNote(files, "right.txt", "right"));
+        TabMouseDown(TabItem(editor, 0), ModifierKeys.Alt);
+        var primary = (TextBox)editor.FindName("EditorTextBox");
+        var secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
+        foreach (var box in new[] { primary, secondary })
+        {
+            box.Select(box.Text.Length, 0);
+            box.SelectedText = " edited";
+            if (leaveRedoPending) box.Undo();
+            box.Select(1, 2);
+        }
+        var primaryCaret = primary.CaretIndex;
+        var secondaryCaret = secondary.CaretIndex;
+        for (var repeat = 0; repeat < 2; repeat++)
+        {
+            Assert.IsTrue(TabMouseDown(TabItem(editor, 1), ModifierKeys.Alt).Handled);
+            Assert.IsTrue(primary.IsKeyboardFocused);
+            Assert.IsTrue(TabMouseDown(TabItem(editor, 0), ModifierKeys.Alt).Handled);
+            Assert.IsTrue(secondary.IsKeyboardFocused);
+        }
+        Assert.AreSame(editor.Workspace.Documents[1], editor.Workspace.ActiveDocument);
+        Assert.AreSame(editor.Workspace.Documents[0], editor.Workspace.SecondaryDocument);
+        Assert.AreEqual(primaryCaret, primary.CaretIndex);
+        Assert.AreEqual(secondaryCaret, secondary.CaretIndex);
+        foreach (var box in new[] { primary, secondary })
+        {
+            Assert.AreEqual(1, box.SelectionStart);
+            Assert.AreEqual(2, box.SelectionLength);
+            var original = ReferenceEquals(box, primary) ? "right" : "left";
+            Assert.AreEqual(leaveRedoPending ? original : original + " edited", box.Text);
+            if (leaveRedoPending)
+            {
+                Assert.IsTrue(box.CanRedo);
+                box.Redo();
+                Assert.AreEqual(original + " edited", box.Text);
+            }
+            Assert.IsTrue(box.CanUndo);
+            box.Undo();
+            Assert.AreEqual(original, box.Text);
+        }
+    });
+
+    [TestMethod]
+    public void AltClickReplacementKeepsOutgoingUnsavedContentAndCaret() => WithEditor((editor, _, _, files) =>
+    {
+        foreach (var name in new[] { "a.txt", "b.txt", "c.txt" })
+            editor.OpenNote(CreateNote(files, name, name));
+        TabMouseDown(TabItem(editor, 0), ModifierKeys.Alt);
+        var outgoing = editor.Workspace.SecondaryDocument!;
+        var primary = editor.Workspace.ActiveDocument;
+        var secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
+        secondary.Select(0, 0);
+        secondary.SelectedText = "unsaved ";
+        secondary.CaretIndex = 3;
+        TabMouseDown(TabItem(editor, 1), ModifierKeys.Alt);
+        Assert.AreSame(primary, editor.Workspace.ActiveDocument);
+        Assert.AreEqual("unsaved a.txt", outgoing.Content);
+        Assert.IsTrue(outgoing.IsDirty);
+        Assert.AreEqual(3, outgoing.CaretIndex);
+        Assert.AreEqual("a.txt", File.ReadAllText(outgoing.FilePath));
+        Assert.AreEqual("b.txt", secondary.Text);
+        Assert.IsTrue(secondary.IsKeyboardFocused);
+        TabMouseDown(TabItem(editor, 0), ModifierKeys.Alt);
+        Assert.AreEqual("unsaved a.txt", secondary.Text);
+        Assert.AreEqual(3, secondary.CaretIndex);
+        Assert.AreSame(primary, editor.Workspace.ActiveDocument);
+    });
+
+    [TestMethod]
+    public void AltClickSingleVisibleDocumentOnlyFocusesIt() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "only.txt", "only"));
+        var primary = (TextBox)editor.FindName("EditorTextBox");
+        primary.Select(1, 2);
+        Assert.IsTrue(TabMouseDown(TabItem(editor, 0), ModifierKeys.Alt).Handled);
+        Assert.IsNull(editor.Workspace.SecondaryDocument);
+        Assert.IsTrue(primary.IsKeyboardFocused);
+        Assert.AreEqual(1, primary.SelectionStart);
+        Assert.AreEqual(2, primary.SelectionLength);
+    });
+
+    [TestMethod]
+    [DataRow(ModifierKeys.None)]
+    [DataRow(ModifierKeys.Control)]
+    [DataRow(ModifierKeys.Shift)]
+    [DataRow(ModifierKeys.Alt | ModifierKeys.Control)]
+    [DataRow(ModifierKeys.Alt | ModifierKeys.Shift)]
+    public void OtherTabModifiersKeepOrdinarySelectionAndDragPreparation(ModifierKeys modifiers) => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "a.txt", "a"));
+        editor.OpenNote(CreateNote(files, "b.txt", "b"));
+        var target = TabItem(editor, 0);
+        var args = TabMouseDown(target, modifiers);
+        Assert.IsFalse(args.Handled);
+        Assert.IsNull(editor.Workspace.SecondaryDocument);
+        Assert.AreSame(editor.Workspace.Documents[0],
+            typeof(NoteEditorWindow).GetField("_draggedDocument", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(editor));
+        if (modifiers == ModifierKeys.None)
+        {
+            args.RoutedEvent = Mouse.MouseDownEvent;
+            target.RaiseEvent(args);
+            Assert.AreSame(editor.Workspace.Documents[0], editor.Workspace.ActiveDocument);
+        }
+    });
+
+    [TestMethod]
+    public void AltClickCloseButtonAndOtherMouseButtonsDoNotOpenSplit() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "a.txt", "a"));
+        editor.OpenNote(CreateNote(files, "b.txt", "b"));
+        var target = TabItem(editor, 0);
+        var close = VisualTreeHelpers.FindDescendant<Button>(target)!;
+        Assert.IsNotNull(close);
+        var content = VisualTreeHelpers.FindDescendant<TextBlock>(close)!;
+        Assert.IsNotNull(content);
+        Assert.IsFalse(TabMouseDown(content, ModifierKeys.Alt).Handled);
+        Assert.IsNull(editor.Workspace.SecondaryDocument);
+        Assert.IsFalse(TabMouseDown(target, ModifierKeys.Alt, MouseButton.Right).Handled);
+        Assert.IsNull(editor.Workspace.SecondaryDocument);
+        close.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.AreEqual(1, editor.Workspace.Documents.Count);
+        Assert.AreEqual("b.txt", Path.GetFileName(editor.Workspace.ActiveDocument!.FilePath));
+    });
+
+    [TestMethod]
+    public void AltClickVisibleMarkdownDocumentFocusesItsPreview() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "preview.md", "# preview"));
+        editor.OpenNote(CreateNote(files, "other.txt", "other"));
+        TabMouseDown(TabItem(editor, 0), ModifierKeys.Alt);
+        var secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
+        KeyboardTestInput.Press(secondary, Key.V, ModifierKeys.Control | ModifierKeys.Shift);
+        editor.HandleNavigationShortcut(Key.D1, ModifierKeys.Control);
+        TabMouseDown(TabItem(editor, 0), ModifierKeys.Alt);
+        Assert.IsTrue(((FrameworkElement)editor.FindName("SecondaryMarkdownPreview")).IsKeyboardFocusWithin);
+        Assert.AreEqual("other.txt", Path.GetFileName(editor.Workspace.ActiveDocument!.FilePath));
+        Assert.AreEqual("# preview", secondary.Text);
+    });
+
+    [TestMethod]
+    public void AltClickBlankTabAreaAndMiddleClickKeepExistingBehavior() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "a.txt", "a"));
+        editor.OpenNote(CreateNote(files, "b.txt", "b"));
+        var tabs = (ListBox)editor.FindName("OpenTabsList");
+        var primary = editor.Workspace.ActiveDocument;
+        Assert.IsFalse(TabMouseDown(tabs, ModifierKeys.Alt).Handled);
+        Assert.AreSame(primary, editor.Workspace.ActiveDocument);
+        Assert.IsNull(editor.Workspace.SecondaryDocument);
+        var target = TabItem(editor, 0);
+        Assert.IsTrue(TabMouseDown(target, ModifierKeys.Alt, MouseButton.Middle).Handled);
+        target.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Middle)
+        {
+            RoutedEvent = Mouse.PreviewMouseUpEvent
+        });
+        Assert.AreEqual(1, editor.Workspace.Documents.Count);
+        Assert.AreSame(primary, editor.Workspace.ActiveDocument);
+        Assert.IsNull(editor.Workspace.SecondaryDocument);
+    });
 
     [TestMethod]
     public void OpenShortcutUsesSupportedFileDialogAndReusesDirtyOpenTab() => WithEditor((editor, directory, _, files) =>
