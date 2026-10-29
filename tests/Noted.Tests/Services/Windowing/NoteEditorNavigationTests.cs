@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -179,11 +180,13 @@ public sealed class NoteEditorNavigationTests
         KeyboardTestInput.Press(secondary, Key.D1, ModifierKeys.Control);
         Assert.IsTrue(primary.IsKeyboardFocused);
         Assert.AreSame(primaryDocument, editor.Workspace.CurrentDocument);
+        Assert.AreSame(primaryDocument, ((ListBox)editor.FindName("OpenTabsList")).SelectedItem);
         Assert.AreEqual(1, primary.SelectionStart);
         Assert.AreEqual(3, primary.SelectionLength);
         KeyboardTestInput.Press(primary, Key.D2, ModifierKeys.Control);
         Assert.IsTrue(secondary.IsKeyboardFocused);
         Assert.AreSame(secondaryDocument, editor.Workspace.CurrentDocument);
+        Assert.AreSame(secondaryDocument, ((ListBox)editor.FindName("OpenTabsList")).SelectedItem);
         Assert.AreEqual(2, secondary.SelectionStart);
         Assert.AreEqual(4, secondary.SelectionLength);
         KeyboardTestInput.Press(secondary, Key.Oem5, ModifierKeys.Control);
@@ -200,6 +203,113 @@ public sealed class NoteEditorNavigationTests
         Assert.IsFalse(editor.HandleNavigationShortcut(Key.D1, ModifierKeys.Control | ModifierKeys.Shift));
         Assert.IsFalse(editor.HandleNavigationShortcut(Key.D2, ModifierKeys.Control | ModifierKeys.Alt));
         Assert.IsFalse(editor.HandleNavigationShortcut(Key.Oem5, ModifierKeys.Control | ModifierKeys.Shift));
+    });
+
+    [TestMethod]
+    public void SwitchingSplitFocusPreservesUndoAndHighlightsTheCurrentTab() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "first.md", "first"));
+        editor.OpenNote(CreateNote(files, "second.md", "second"));
+        editor.HandleNavigationShortcut(Key.Oem5, ModifierKeys.Control);
+        var primary = (TextBox)editor.FindName("EditorTextBox");
+        var secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
+        var tabs = (ListBox)editor.FindName("OpenTabsList");
+        secondary.Select(secondary.Text.Length, 0);
+        secondary.SelectedText = " edited";
+
+        KeyboardTestInput.Press(secondary, Key.D1, ModifierKeys.Control);
+        Assert.AreSame(editor.Workspace.ActiveDocument, tabs.SelectedItem);
+        KeyboardTestInput.Press(primary, Key.D2, ModifierKeys.Control);
+        Assert.AreSame(editor.Workspace.SecondaryDocument, tabs.SelectedItem);
+        Assert.IsTrue(secondary.CanUndo);
+        secondary.Undo();
+        Assert.AreEqual("first", secondary.Text);
+        Assert.AreEqual("second", primary.Text);
+    });
+
+    [TestMethod]
+    public void NewNoteShortcutKeepsTypingInTheFocusedSplitPane() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "first.md", "first"));
+        editor.OpenNote(CreateNote(files, "second.md", "second"));
+        editor.HandleNavigationShortcut(Key.Oem5, ModifierKeys.Control);
+        var primary = editor.Workspace.ActiveDocument;
+        var secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
+        editor.NewNoteRequested += (_, _) => editor.OpenNote(CreateNote(files, "new.md", ""));
+
+        KeyboardTestInput.Press(secondary, Key.N, ModifierKeys.Control);
+
+        Assert.AreSame(primary, editor.Workspace.ActiveDocument);
+        Assert.AreEqual("new.md", Path.GetFileName(editor.Workspace.SecondaryDocument!.FilePath));
+        Assert.AreSame(editor.Workspace.SecondaryDocument, ((ListBox)editor.FindName("OpenTabsList")).SelectedItem);
+        Assert.IsTrue(secondary.IsKeyboardFocused);
+        secondary.SelectedText = "typed into new note";
+        Assert.AreEqual("typed into new note", editor.Workspace.SecondaryDocument.Content);
+        Assert.AreEqual("second", ((TextBox)editor.FindName("EditorTextBox")).Text);
+    });
+
+    [TestMethod]
+    public void ReopeningAnAlreadyVisibleSecondaryPreviewFocusesThePreview() => WithEditor((editor, _, _, files) =>
+    {
+        var first = CreateNote(files, "first.md", "# first");
+        editor.OpenNote(first);
+        editor.OpenNote(CreateNote(files, "second.md", "second"));
+        editor.HandleNavigationShortcut(Key.Oem5, ModifierKeys.Control);
+        var secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
+        KeyboardTestInput.Press(secondary, Key.V, ModifierKeys.Control | ModifierKeys.Shift);
+        editor.HandleNavigationShortcut(Key.D1, ModifierKeys.Control);
+
+        Assert.IsTrue(editor.OpenNote(first));
+
+        Assert.IsTrue(((FrameworkElement)editor.FindName("SecondaryMarkdownPreview")).IsKeyboardFocusWithin);
+        Assert.AreSame(editor.Workspace.SecondaryDocument, ((ListBox)editor.FindName("OpenTabsList")).SelectedItem);
+    });
+
+    [TestMethod]
+    public void DraggingAnotherTabIntoSplitKeepsThePreviouslyVisibleNote() => WithEditor((editor, _, _, files) =>
+    {
+        foreach (var name in new[] { "a.md", "b.md", "c.md" }) editor.OpenNote(CreateNote(files, name, name));
+        var previous = editor.Workspace.ActiveDocument;
+        var dragged = editor.Workspace.Documents[1];
+        var tabs = (ListBox)editor.FindName("OpenTabsList");
+        editor.UpdateLayout();
+        var container = (ListBoxItem)tabs.ItemContainerGenerator.ContainerFromItem(dragged);
+        Assert.IsNotNull(container);
+        var mouseDown = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+        {
+            RoutedEvent = Mouse.PreviewMouseDownEvent,
+            Source = container
+        };
+        typeof(NoteEditorWindow).GetMethod("OpenTabsList_PreviewMouseLeftButtonDown", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(editor, [tabs, mouseDown]);
+        tabs.SelectedItem = dragged;
+        Assert.AreSame(dragged, editor.Workspace.ActiveDocument);
+
+        typeof(NoteEditorWindow).GetMethod("ShowSecondaryDocument", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(editor, [dragged, true, true, true]);
+
+        Assert.AreSame(previous, editor.Workspace.ActiveDocument);
+        Assert.AreSame(dragged, editor.Workspace.SecondaryDocument);
+        Assert.AreEqual("c.md", ((TextBox)editor.FindName("EditorTextBox")).Text);
+        Assert.AreEqual("b.md", ((TextBox)editor.FindName("SecondaryEditorTextBox")).Text);
+    });
+
+    [TestMethod]
+    public void MovingPrimaryToTheRightKeepsTheExistingOtherPaneAndItsEdits() => WithEditor((editor, _, _, files) =>
+    {
+        foreach (var name in new[] { "a.md", "b.md", "c.md" }) editor.OpenNote(CreateNote(files, name, name));
+        editor.HandleNavigationShortcut(Key.Oem5, ModifierKeys.Control);
+        var previousPrimary = editor.Workspace.ActiveDocument;
+        var previousSecondary = editor.Workspace.SecondaryDocument;
+        ((TextBox)editor.FindName("SecondaryEditorTextBox")).Text = "unsaved secondary";
+
+        typeof(NoteEditorWindow).GetMethod("ShowSecondaryDocument", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(editor, [previousPrimary, true, true, true]);
+
+        Assert.AreSame(previousSecondary, editor.Workspace.ActiveDocument);
+        Assert.AreSame(previousPrimary, editor.Workspace.SecondaryDocument);
+        Assert.AreEqual("unsaved secondary", ((TextBox)editor.FindName("EditorTextBox")).Text);
+        Assert.AreEqual("c.md", ((TextBox)editor.FindName("SecondaryEditorTextBox")).Text);
     });
 
     [TestMethod]
@@ -233,7 +343,7 @@ public sealed class NoteEditorNavigationTests
         var edit = (MenuItem)editor.FindName("EditMenu");
         foreach (var box in new[] { primary, secondary })
         {
-            box.Focus();
+            Assert.IsTrue(box.Focus(), $"Could not focus {box.Name}; current focus: {Keyboard.FocusedElement}");
             box.Select(1, 0);
             box.SelectedText = "added";
             var changed = box.Text;
@@ -241,7 +351,8 @@ public sealed class NoteEditorNavigationTests
             var native = edit.Items.OfType<MenuItem>().Where(item => item.Command is RoutedCommand command &&
                 command.OwnerType == typeof(ApplicationCommands)).ToList();
             Assert.AreEqual(6, native.Count);
-            foreach (var item in native) Assert.AreSame(box, item.CommandTarget);
+            foreach (var item in native) Assert.AreSame(box, item.CommandTarget,
+                $"Expected {box.Name}; focused: {((FrameworkElement?)Keyboard.FocusedElement)?.Name}; current: {editor.OpenFilePath}");
             ApplicationCommands.Undo.Execute(null, box);
             Assert.AreNotEqual(changed, box.Text);
             ApplicationCommands.Redo.Execute(null, box);
