@@ -237,6 +237,16 @@ public partial class MainWindow : Window {
     }
     private void OnNoteEditorHotkeyPressed()
     {
+        if (!_noteEditor.CanChangeGroupVisibility)
+            return;
+
+        if (!_noteEditor.HasOpenDocuments)
+        {
+            _noteEditor.ShowWindow();
+            CreateAndOpenNewNote(_noteEditor);
+            return;
+        }
+
         WindowManager.ToggleEditor();
     }
 
