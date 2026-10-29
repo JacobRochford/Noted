@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -1231,6 +1232,10 @@ public partial class MainWindow : Window {
     }
 
     private void FileList_ContextMenuOpening(object sender, ContextMenuEventArgs e) {
+        if (e.OriginalSource is DependencyObject source &&
+            VisualTreeHelpers.FindAncestor<ListBoxItem>(source) is { DataContext: NoteItem clickedNote })
+            FileList.SelectedItem = clickedNote;
+
         var note = FileList.SelectedItem as NoteItem;
         var isFolder = note?.IsFolder == true;
         var hasSelection = note is not null;
@@ -1238,8 +1243,23 @@ public partial class MainWindow : Window {
         OpenFolderMenuItem.Visibility = isFolder ? Visibility.Visible : Visibility.Collapsed;
         RenameMenuItem.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
         CopyNameMenuItem.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+        RevealNoteMenuItem.Visibility = !isFolder && hasSelection ? Visibility.Visible : Visibility.Collapsed;
         DeleteSeparator.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
         DeleteMenuItem.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RevealNoteInFileExplorer_Click(object sender, RoutedEventArgs e) {
+        if (FileList.SelectedItem is not NoteItem { IsFolder: false } note)
+            return;
+
+        var path = note.FullPath ?? Path.Combine(_fileService.CurrentDirectory, note.FileName);
+        try {
+            FileExplorerIntegrationService.RevealFile(path);
+        } catch (Exception ex) when (ex is Win32Exception || FileSystemErrors.IsExpected(ex)) {
+            ExceptionDiagnostics.Record(ex);
+            AppDialog.Show(this, "File Explorer could not be opened for this note.",
+                "Unable to open File Explorer", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void ChangeFolderButton_Click(object sender, RoutedEventArgs e) {

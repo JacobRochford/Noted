@@ -1872,23 +1872,25 @@ public partial class NoteEditorWindow : Window
         ShowActiveNoteInFileExplorer();
     }
 
+    private void RevealTabInFileExplorerMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { DataContext: OpenNoteDocument document })
+            ShowNoteInFileExplorer(document.FilePath);
+    }
+
     private void ShowActiveNoteInFileExplorer(Action<ProcessStartInfo>? startProcess = null)
     {
         if (CurrentDocument is not { } document)
             return;
 
+        ShowNoteInFileExplorer(document.FilePath, startProcess);
+    }
+
+    private void ShowNoteInFileExplorer(string path, Action<ProcessStartInfo>? startProcess = null)
+    {
         try
         {
-            var path = document.FilePath;
-            var arguments = File.Exists(path)
-                ? $"/select,\"{path}\""
-                : $"\"{Path.GetDirectoryName(path)}\"";
-            var startInfo = new ProcessStartInfo("explorer.exe", arguments)
-            {
-                UseShellExecute = true
-            };
-            if (startProcess is not null) startProcess(startInfo);
-            else Process.Start(startInfo);
+            FileExplorerIntegrationService.RevealFile(path, startProcess);
         }
         catch (Exception ex) when (ex is Win32Exception || FileSystemErrors.IsExpected(ex))
         {
