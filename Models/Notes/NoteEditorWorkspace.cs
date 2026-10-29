@@ -170,7 +170,7 @@ internal sealed class NoteEditorWorkspace
     internal void SetMarkdownPreviewMode(OpenNoteDocument document, MarkdownPreviewMode mode)
     {
         EnsureOwned(document);
-        document.MarkdownPreviewMode = Services.NoteFileExtensions.IsMarkdown(document.FilePath) && Enum.IsDefined(mode)
+        document.MarkdownPreviewMode = Services.NoteFileExtensions.SupportsMarkdownPreview(document.FilePath) && Enum.IsDefined(mode)
             ? mode
             : MarkdownPreviewMode.Off;
     }

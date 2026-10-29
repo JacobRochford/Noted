@@ -7,10 +7,12 @@ namespace Noted.Tests.Services;
 public sealed class NoteEditorPersistenceTests
 {
     [TestMethod]
-    public void SidePreviewRestoresThroughWorkspacePersistenceWithoutChangingText()
+    [DataRow("note.md")]
+    [DataRow("note.txt")]
+    public void SidePreviewRestoresThroughWorkspacePersistenceWithoutChangingText(string name)
     {
         using var directory = new TemporaryTestDirectory();
-        var path = CreateNote(directory, "note.md", "# source");
+        var path = CreateNote(directory, name, "# source");
         var workspace = new NoteEditorWorkspace();
         var document = new OpenNoteDocument(path, "# source", "# source", false);
         workspace.Add(document);

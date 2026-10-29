@@ -27,4 +27,7 @@ internal static class NoteFileExtensions
         var extension = Path.GetExtension(filePath);
         return SupportedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase);
     }
+
+    internal static bool SupportsMarkdownPreview(string filePath) =>
+        IsMarkdown(filePath) || Path.GetExtension(filePath).Equals(".txt", StringComparison.OrdinalIgnoreCase);
 }

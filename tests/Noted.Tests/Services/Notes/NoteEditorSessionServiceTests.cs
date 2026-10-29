@@ -9,7 +9,9 @@ namespace Noted.Tests.Services;
 public sealed class NoteEditorSessionServiceTests
 {
     [TestMethod]
-    public void PreviewModesSurviveSessionSaveAndModeOnlyChangesArePersisted()
+    [DataRow("note.md")]
+    [DataRow("note.txt")]
+    public void PreviewModesSurviveSessionSaveAndModeOnlyChangesArePersisted(string name)
     {
         using var directory = new TemporaryTestDirectory();
         var service = new NoteEditorSessionService(directory.Path);
@@ -17,7 +19,7 @@ public sealed class NoteEditorSessionServiceTests
         {
             service.Save(new NoteEditorSession
             {
-                Tabs = [new NoteEditorTabState { FilePath = directory.File("note.md"), MarkdownPreviewMode = mode }]
+                Tabs = [new NoteEditorTabState { FilePath = directory.File(name), MarkdownPreviewMode = mode }]
             });
             Assert.AreEqual(mode, new NoteEditorSessionService(directory.Path).Load().Session.Tabs[0].MarkdownPreviewMode);
         }

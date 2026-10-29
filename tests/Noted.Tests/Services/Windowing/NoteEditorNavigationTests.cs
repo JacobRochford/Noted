@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Noted.Helpers;
+using Noted.Models;
 using Noted.Services;
 using Noted.ViewModels;
 
@@ -15,6 +16,130 @@ namespace Noted.Tests.Services;
 [TestClass]
 public sealed class NoteEditorNavigationTests
 {
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void PlainTextPreviewIsOptInAndKeepsEditingStateInEitherPane(bool split) => WithEditor((editor, _, _, files) =>
+    {
+        var path = CreateNote(files, "source.txt", "# heading\n**bold**");
+        editor.OpenNote(path);
+        if (split)
+        {
+            editor.OpenNote(CreateNote(files, "other.txt", "other"));
+            editor.HandleNavigationShortcut(Key.Oem5, ModifierKeys.Control);
+        }
+        var document = editor.Workspace.CurrentDocument!;
+        var box = (TextBox)editor.FindName(split ? "SecondaryEditorTextBox" : "EditorTextBox");
+        var preview = (FlowDocumentScrollViewer)editor.FindName(split ? "SecondaryMarkdownPreview" : "MarkdownPreview");
+        Assert.AreEqual(MarkdownPreviewMode.Off, document.MarkdownPreviewMode);
+        Assert.AreEqual(Visibility.Collapsed, preview.Visibility);
+        box.Select(box.Text.Length, 0);
+        box.SelectedText = " edited";
+        box.Select(2, 4);
+        var caret = box.CaretIndex;
+        var source = box.Text;
+        var menu = (MenuItem)editor.FindName("HeaderMarkdownMenuItem");
+        Assert.AreEqual(Visibility.Visible, menu.Visibility);
+        Assert.IsTrue(KeyboardTestInput.Press(box, Key.V, ModifierKeys.Control | ModifierKeys.Shift).Handled);
+        Assert.AreEqual(MarkdownPreviewMode.Preview, document.MarkdownPreviewMode);
+        Assert.AreEqual(Visibility.Visible, preview.Visibility);
+        KeyboardTestInput.Press(preview, Key.V, ModifierKeys.Control | ModifierKeys.Shift);
+        foreach (var mode in new[] { MarkdownPreviewMode.SideBySide, MarkdownPreviewMode.Off })
+        {
+            menu.Items.OfType<MenuItem>().Single(item => (MarkdownPreviewMode)item.Tag == mode)
+                .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.AreEqual(mode, document.MarkdownPreviewMode);
+        }
+        Assert.AreEqual(source, box.Text);
+        Assert.AreEqual(2, box.SelectionStart);
+        Assert.AreEqual(4, box.SelectionLength);
+        Assert.AreEqual(caret, box.CaretIndex);
+        Assert.IsTrue(document.IsDirty);
+        Assert.AreEqual("# heading\n**bold**", File.ReadAllText(path));
+        box.Undo();
+        Assert.AreEqual("# heading\n**bold**", box.Text);
+        KeyboardTestInput.Press(box, Key.V, ModifierKeys.Control | ModifierKeys.Shift);
+        KeyboardTestInput.Press(preview, Key.V, ModifierKeys.Control | ModifierKeys.Shift);
+        Assert.IsTrue(box.CanRedo);
+        box.Redo();
+        Assert.AreEqual(source, box.Text);
+        Assert.AreEqual(path, document.FilePath);
+    });
+
+    [TestMethod]
+    public void NewPlainTextNoteKeepsPreviewAndSourceFormatOnFirstSave() => WithEditor((editor, _, _, files) =>
+    {
+        var path = CreateNote(files, "generated.txt", "");
+        editor.OpenCreatedNote(path, usesGeneratedName: true, initialContent: "");
+        var document = editor.Workspace.CurrentDocument!;
+        Assert.AreEqual(MarkdownPreviewMode.Off, document.MarkdownPreviewMode);
+        var box = (TextBox)editor.FindName("EditorTextBox");
+        box.SelectedText = "# unsaved\n**source**";
+        box.Select(2, 3);
+        KeyboardTestInput.Press(box, Key.V, ModifierKeys.Control | ModifierKeys.Shift);
+        var destination = Path.Combine(files.NotesDirectory, "named.txt");
+        editor.NoteRenameRequested += (_, request) =>
+        {
+            Assert.IsTrue(request.IsFirstSave);
+            File.Move(request.FilePath, destination);
+            request.NewFilePath = destination;
+        };
+        KeyboardTestInput.Press((FlowDocumentScrollViewer)editor.FindName("MarkdownPreview"), Key.S, ModifierKeys.Control);
+        Assert.AreEqual(destination, document.FilePath);
+        Assert.AreEqual("# unsaved\n**source**", File.ReadAllText(destination));
+        Assert.IsFalse(document.IsDirty);
+        Assert.IsFalse(document.UsesGeneratedName);
+        Assert.AreEqual(MarkdownPreviewMode.Preview, document.MarkdownPreviewMode);
+        Assert.AreEqual(2, box.SelectionStart);
+        Assert.AreEqual(3, box.SelectionLength);
+        box.Undo();
+        Assert.AreEqual("", box.Text);
+        box.Redo();
+        Assert.AreEqual("# unsaved\n**source**", box.Text);
+    });
+
+    [TestMethod]
+    public void SaveAsReconcilesPreviewEligibilityWithoutChangingSourceOrUndo() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "source.txt", "# source"));
+        var box = (TextBox)editor.FindName("EditorTextBox");
+        box.Select(box.Text.Length, 0);
+        box.SelectedText = " edited";
+        box.Select(1, 3);
+        KeyboardTestInput.Press(box, Key.V, ModifierKeys.Control | ModifierKeys.Shift);
+        foreach (var extension in new[] { ".md", ".txt", ".json", ".TXT" })
+        {
+            var path = Path.Combine(files.NotesDirectory, "saved" + extension);
+            Assert.IsTrue(editor.TrySaveCurrentNoteAs(dialog => { dialog.FileName = path; return true; }));
+            var eligible = extension != ".json";
+            Assert.AreEqual(path, editor.Workspace.CurrentDocument!.FilePath);
+            Assert.AreEqual("# source edited", File.ReadAllText(path));
+            Assert.AreEqual(eligible ? Visibility.Visible : Visibility.Collapsed,
+                ((MenuItem)editor.FindName("HeaderMarkdownMenuItem")).Visibility);
+            Assert.AreEqual(eligible ? Visibility.Visible : Visibility.Collapsed,
+                ((FlowDocumentScrollViewer)editor.FindName("MarkdownPreview")).Visibility);
+            Assert.AreEqual(1, box.SelectionStart);
+            Assert.AreEqual(3, box.SelectionLength);
+        }
+        box.Undo();
+        Assert.AreEqual("# source", box.Text);
+    });
+
+    [TestMethod]
+    public void SwitchingPlainTextDocumentsRestoresTheirOptInPreviewModes() => WithEditor((editor, _, _, files) =>
+    {
+        var first = CreateNote(files, "first.txt", "# first");
+        var second = CreateNote(files, "second.txt", "# second");
+        editor.OpenNote(first);
+        KeyboardTestInput.Press((TextBox)editor.FindName("EditorTextBox"), Key.V, ModifierKeys.Control | ModifierKeys.Shift);
+        editor.OpenNote(second);
+        Assert.AreEqual(MarkdownPreviewMode.Off, editor.Workspace.CurrentDocument!.MarkdownPreviewMode);
+        Assert.AreEqual(Visibility.Collapsed, ((FlowDocumentScrollViewer)editor.FindName("MarkdownPreview")).Visibility);
+        editor.OpenNote(first);
+        Assert.AreEqual(MarkdownPreviewMode.Preview, editor.Workspace.CurrentDocument!.MarkdownPreviewMode);
+        Assert.AreEqual(Visibility.Visible, ((FlowDocumentScrollViewer)editor.FindName("MarkdownPreview")).Visibility);
+    });
+
     [TestMethod]
     public void WheelZoomIsSharedAcrossSplitChangesAndPreservesEditingState() => WithEditor((editor, _, _, files) =>
     {

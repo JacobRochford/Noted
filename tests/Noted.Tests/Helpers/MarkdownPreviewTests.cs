@@ -432,9 +432,14 @@ public sealed class MarkdownPreviewTests
     [TestMethod]
     [DataRow("note.md", true)]
     [DataRow("note.MARKDOWN", true)]
-    [DataRow("note.txt", false)]
-    [DataRow("note.md.txt", false)]
-    public void PreviewModesAreContextualAndDoNotDirtyDocuments(string name, bool markdown)
+    [DataRow("note.txt", true)]
+    [DataRow("note.TXT", true)]
+    [DataRow("note.md.txt", true)]
+    [DataRow("note.json", false)]
+    [DataRow("note.log", false)]
+    [DataRow("note.txt.cs", false)]
+    [DataRow("note", false)]
+    public void PreviewModesAreContextualAndDoNotDirtyDocuments(string name, bool supportsPreview)
     {
         var document = new OpenNoteDocument(System.IO.Path.Combine(System.IO.Path.GetTempPath(), name), "source", "source", false);
         var workspace = new NoteEditorWorkspace();
@@ -442,7 +447,7 @@ public sealed class MarkdownPreviewTests
         foreach (var mode in Enum.GetValues<MarkdownPreviewMode>())
         {
             workspace.SetMarkdownPreviewMode(document, mode);
-            Assert.AreEqual(markdown ? mode : MarkdownPreviewMode.Off, document.MarkdownPreviewMode);
+            Assert.AreEqual(supportsPreview ? mode : MarkdownPreviewMode.Off, document.MarkdownPreviewMode);
             Assert.AreEqual("source", document.Content);
             Assert.IsFalse(document.IsDirty);
         }

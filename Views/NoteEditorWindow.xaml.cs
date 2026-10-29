@@ -1774,7 +1774,7 @@ public partial class NoteEditorWindow : Window
         TrySaveCurrentNoteAs();
     }
 
-    private bool TrySaveCurrentNoteAs()
+    internal bool TrySaveCurrentNoteAs(Func<SaveFileDialog, bool?>? chooseFile = null)
     {
         if (CurrentDocument is not { } document)
             return true;
@@ -1790,7 +1790,7 @@ public partial class NoteEditorWindow : Window
             OverwritePrompt = true,
             Filter = NoteFileExtensions.FileDialogFilter
         };
-        if (dialog.ShowDialog(this) != true)
+        if ((chooseFile is null ? dialog.ShowDialog(this) : chooseFile(dialog)) != true)
             return false;
 
         string newPath;
@@ -2422,7 +2422,7 @@ public partial class NoteEditorWindow : Window
         ? _secondaryPreview : _primaryPreview;
 
     private static MarkdownPreviewMode EffectivePreviewMode(OpenNoteDocument? document) =>
-        document is not null && NoteFileExtensions.IsMarkdown(document.FilePath) && Enum.IsDefined(document.MarkdownPreviewMode)
+        document is not null && NoteFileExtensions.SupportsMarkdownPreview(document.FilePath) && Enum.IsDefined(document.MarkdownPreviewMode)
             ? document.MarkdownPreviewMode : MarkdownPreviewMode.Off;
 
     private void AddMarkdownPreviewMenu(MenuItem menu, Func<OpenNoteDocument?> document)
@@ -2455,7 +2455,7 @@ public partial class NoteEditorWindow : Window
         foreach (var (menu, getDocument) in _previewMenus)
         {
             var document = getDocument();
-            menu.Visibility = document is not null && NoteFileExtensions.IsMarkdown(document.FilePath)
+            menu.Visibility = document is not null && NoteFileExtensions.SupportsMarkdownPreview(document.FilePath)
                 ? Visibility.Visible : Visibility.Collapsed;
             foreach (MenuItem item in menu.Items)
                 item.IsChecked = (MarkdownPreviewMode)item.Tag == EffectivePreviewMode(document);
@@ -2464,7 +2464,7 @@ public partial class NoteEditorWindow : Window
 
     private void ToggleMarkdownPreview()
     {
-        if (CurrentDocument is { } document && NoteFileExtensions.IsMarkdown(document.FilePath))
+        if (CurrentDocument is { } document && NoteFileExtensions.SupportsMarkdownPreview(document.FilePath))
             SetMarkdownPreviewMode(document, CurrentPreview.Mode == MarkdownPreviewMode.Off
                 ? MarkdownPreviewMode.Preview : MarkdownPreviewMode.Off);
     }
@@ -2571,7 +2571,7 @@ public partial class NoteEditorWindow : Window
         }
 
         if (e.Key == Key.V && modifiers == (ModifierKeys.Control | ModifierKeys.Shift) &&
-            CurrentDocument is { } markdownDocument && NoteFileExtensions.IsMarkdown(markdownDocument.FilePath))
+            CurrentDocument is { } markdownDocument && NoteFileExtensions.SupportsMarkdownPreview(markdownDocument.FilePath))
         {
             ToggleMarkdownPreview();
             e.Handled = true;
