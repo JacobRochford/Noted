@@ -20,6 +20,7 @@
         <h:DueDateToTextConverter x:Key="DueDateToText"/>
         <h:DueDateToColorConverter x:Key="DueDateToColor"/>
         <h:NullToVisibilityConverter x:Key="NullToVisibility"/>
+        <h:ChecklistNotesVisibilityConverter x:Key="NotesToVisibility"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <SolidColorBrush x:Key="ChecklistHighPriorityBrush" Color="#FF0000"/>
@@ -505,8 +506,15 @@
                                                 <TextBlock Text="{Binding DueDate, Converter={StaticResource DueDateToText}}"
                                                            Foreground="{DynamicResource NotedAccentTextBrush}" FontSize="10" FontWeight="SemiBold"/>
                                             </Border>
-                                            <Button Grid.Column="4" Style="{StaticResource DetailsButtonStyle}"
-                                                    Click="ExpandButton_Click" ToolTip="Edit details"/>
+                                            <Grid Grid.Column="4">
+                                                <Button Style="{StaticResource DetailsButtonStyle}"
+                                                        Click="ExpandButton_Click" ToolTip="Edit details"/>
+                                                <Ellipse Width="6" Height="6" Margin="0,1,1,0"
+                                                         HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                         Fill="{DynamicResource NotedAccentBrush}"
+                                                         IsHitTestVisible="False"
+                                                         Visibility="{Binding Notes, Converter={StaticResource NotesToVisibility}}"/>
+                                            </Grid>
                                         </Grid>
 
                                         <Border Grid.Row="1" Margin="31,0,5,6" Padding="12,10"
