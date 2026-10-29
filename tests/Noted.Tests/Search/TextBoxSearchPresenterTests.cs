@@ -170,6 +170,28 @@ public sealed class TextBoxSearchPresenterTests
     [TestMethod]
     [DataRow(TextWrapping.Wrap)]
     [DataRow(TextWrapping.NoWrap)]
+    public void FontSizeChangeAloneKeepsHighlightsAligned(TextWrapping wrapping)
+    {
+        RunOnSta(() =>
+        {
+            using var surface = new TextBoxSurface(
+                string.Join("\n", Enumerable.Repeat("before target after target with trailing text", 30)),
+                240, 150, wrapping);
+            var session = CreateSession(surface.Editor, "target", anchor: 0);
+            surface.Presenter.Present(session, bringCurrentIntoView: false);
+            surface.Pump();
+            foreach (var size in new[] { 15.125, 48, 8, 15 })
+            {
+                surface.Editor.FontSize = size;
+                surface.Pump();
+                AssertGeometryMatchesExhaustiveCalculation(surface, session);
+            }
+        });
+    }
+
+    [TestMethod]
+    [DataRow(TextWrapping.Wrap)]
+    [DataRow(TextWrapping.NoWrap)]
     public void MatchSpanningViewport_MatchesExhaustiveGeometryWhenBothEndsAreOffscreen(TextWrapping wrapping)
     {
         RunOnSta(() =>

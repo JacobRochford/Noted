@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Media;
 
@@ -8,6 +9,9 @@ namespace Noted.Helpers;
 
 public sealed class LineNumberGutter : FrameworkElement
 {
+    private static readonly DependencyProperty EditorFontSizeProperty = DependencyProperty.Register(
+        "EditorFontSize", typeof(double), typeof(LineNumberGutter),
+        new PropertyMetadata(14.0, (target, _) => ((LineNumberGutter)target).RefreshMetrics()));
     private TextLineMap _lines = new("");
     private bool _needsLayoutRefresh;
     public static readonly DependencyProperty EditorProperty = DependencyProperty.Register(
@@ -36,11 +40,17 @@ public sealed class LineNumberGutter : FrameworkElement
         }
         if (e.NewValue is TextBox editor)
         {
+            BindingOperations.SetBinding(gutter, EditorFontSizeProperty,
+                new Binding(nameof(TextBox.FontSize)) { Source = editor });
             editor.TextChanged += gutter.TextChanged;
             editor.SizeChanged += gutter.SizeChangedHandler;
             editor.Loaded += gutter.EditorLoaded;
             editor.LayoutUpdated += gutter.EditorLayoutUpdated;
             editor.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(gutter.ScrollChanged));
+        }
+        else
+        {
+            BindingOperations.ClearBinding(gutter, EditorFontSizeProperty);
         }
         gutter.RebuildLines();
     }
@@ -62,6 +72,11 @@ public sealed class LineNumberGutter : FrameworkElement
     private void RebuildLines()
     {
         _lines = new TextLineMap(Editor?.Text ?? "");
+        RefreshMetrics();
+    }
+
+    private void RefreshMetrics()
+    {
         _needsLayoutRefresh = true;
         Width = Math.Max(30, Format(_lines.Starts.Length.ToString(CultureInfo.InvariantCulture)).Width + 14);
         InvalidateVisual();

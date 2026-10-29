@@ -2270,6 +2270,15 @@ public partial class NoteEditorWindow : Window
 
     private void Editor_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
+        if (sender is TextBox && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            var fontSize = Math.Clamp(EditorTextBox.FontSize + e.Delta / 120.0, 8, 48);
+            EditorTextBox.FontSize = fontSize;
+            SecondaryEditorTextBox.FontSize = fontSize;
+            e.Handled = true;
+            return;
+        }
+
         // Let the editor handle modified inputs and smaller touchpad movements
         if (sender is not TextBox editor || _scrollSpeed == 1 || Keyboard.Modifiers != ModifierKeys.None || e.Delta % 120 != 0) return;
         

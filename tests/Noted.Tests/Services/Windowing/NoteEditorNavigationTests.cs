@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -14,6 +15,147 @@ namespace Noted.Tests.Services;
 [TestClass]
 public sealed class NoteEditorNavigationTests
 {
+    [TestMethod]
+    public void WheelZoomIsSharedAcrossSplitChangesAndPreservesEditingState() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "zoom-a.txt", string.Join("\n", Enumerable.Repeat(new string('a', 100), 100))));
+        var primary = (TextBox)editor.FindName("EditorTextBox");
+        var secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
+        var initialSize = primary.FontSize;
+        Assert.IsTrue(Wheel(primary, 120, ModifierKeys.Control).Handled);
+        Assert.AreEqual(initialSize + 1, primary.FontSize);
+        Assert.AreEqual(primary.FontSize, secondary.FontSize);
+        editor.OpenNote(CreateNote(files, "zoom-b.txt", "second note"));
+        editor.OpenNote(Path.Combine(files.NotesDirectory, "zoom-a.txt"));
+        editor.HandleNavigationShortcut(Key.Oem5, ModifierKeys.Control);
+        editor.UpdateLayout();
+        primary.Select(1, 3);
+        secondary.Select(0, 0);
+        secondary.SelectedText = "edited ";
+        secondary.Select(2, 4);
+        var primaryText = primary.Text;
+        var secondaryText = secondary.Text;
+        var gutter = (LineNumberGutter)editor.FindName("PrimaryLineNumbers");
+        var oldWidth = gutter.Width;
+        var oldLineCount = primary.LineCount;
+        Assert.IsTrue(Wheel(secondary, 1200, ModifierKeys.Control).Handled);
+        editor.UpdateLayout();
+        Assert.AreEqual(initialSize + 11, primary.FontSize);
+        Assert.AreEqual(primary.FontSize, secondary.FontSize);
+        Assert.IsTrue(gutter.Width > oldWidth);
+        Assert.IsTrue(primary.LineCount > oldLineCount, "Larger text should wrap onto more visual lines.");
+        Assert.AreEqual(primaryText, primary.Text);
+        Assert.AreEqual(secondaryText, secondary.Text);
+        Assert.AreEqual(1, primary.SelectionStart);
+        Assert.AreEqual(3, primary.SelectionLength);
+        Assert.AreEqual(2, secondary.SelectionStart);
+        Assert.AreEqual(4, secondary.SelectionLength);
+        secondary.Undo();
+        Assert.AreEqual("second note", secondary.Text);
+        secondary.Redo();
+        Assert.AreEqual(secondaryText, secondary.Text);
+        editor.HandleNavigationShortcut(Key.Oem5, ModifierKeys.Control);
+        Wheel(primary, -120, ModifierKeys.Control);
+        Assert.AreEqual(initialSize + 10, secondary.FontSize);
+        editor.HandleNavigationShortcut(Key.Oem5, ModifierKeys.Control);
+        Assert.AreEqual(primary.FontSize, secondary.FontSize);
+    });
+
+    [TestMethod]
+    public void WheelZoomUsesProportionalSmallDeltasAndClampsWithoutAccumulatingOvershoot() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "zoom.txt", "unchanged"));
+        var primary = (TextBox)editor.FindName("EditorTextBox");
+        var initialSize = primary.FontSize;
+        for (var i = 0; i < 8; i++) Wheel(primary, 15, ModifierKeys.Control);
+        Assert.AreEqual(initialSize + 1, primary.FontSize, 0.0001);
+        Wheel(primary, -120, ModifierKeys.Control);
+        Assert.AreEqual(initialSize, primary.FontSize, 0.0001);
+        Wheel(primary, 12000, ModifierKeys.Control);
+        Assert.AreEqual(48, primary.FontSize);
+        Wheel(primary, -15, ModifierKeys.Control);
+        Assert.AreEqual(47.875, primary.FontSize);
+        Wheel(primary, -12000, ModifierKeys.Control);
+        Assert.AreEqual(8, primary.FontSize);
+        Wheel(primary, 15, ModifierKeys.Control);
+        Assert.AreEqual(8.125, primary.FontSize);
+        Assert.IsFalse(editor.IsDirty);
+        Assert.IsFalse(primary.CanUndo);
+    });
+
+    [TestMethod]
+    public void WheelZoomDoesNotCarryIntoAnotherEditorWindow() => WithEditor((editor, directory, settings, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "zoom.txt", "unchanged"));
+        var primary = (TextBox)editor.FindName("EditorTextBox");
+        var initialSize = primary.FontSize;
+        Wheel(primary, 1200, ModifierKeys.Control);
+        Assert.IsTrue(editor.TryPrepareForClose());
+        var reopened = new NoteEditorWindow(new NoteContentService(directory.Path), settings,
+            new NoteRecoveryService(directory.Path), new NoteEditorSessionService(directory.Path), files);
+        try
+        {
+            reopened.Show();
+            Assert.AreEqual(initialSize, ((TextBox)reopened.FindName("EditorTextBox")).FontSize);
+            Assert.AreEqual(initialSize, ((TextBox)reopened.FindName("SecondaryEditorTextBox")).FontSize);
+        }
+        finally
+        {
+            reopened.TryPrepareForClose();
+            reopened.Close();
+        }
+    });
+
+    [TestMethod]
+    [DataRow(ModifierKeys.None)]
+    [DataRow(ModifierKeys.Shift)]
+    [DataRow(ModifierKeys.Alt)]
+    [DataRow(ModifierKeys.Control | ModifierKeys.Shift)]
+    [DataRow(ModifierKeys.Control | ModifierKeys.Alt)]
+    public void WheelZoomLeavesOtherModifiersAndSearchInputsAlone(ModifierKeys modifiers) => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "zoom.txt", "unchanged"));
+        var primary = (TextBox)editor.FindName("EditorTextBox");
+        var size = primary.FontSize;
+        Assert.IsFalse(Wheel(primary, 15, modifiers).Handled);
+        Assert.AreEqual(size, primary.FontSize);
+        var search = (TextBox)editor.FindName("FindTextBox");
+        Wheel(search, 120, ModifierKeys.Control);
+        Assert.AreEqual(size, primary.FontSize);
+    });
+
+    private static MouseWheelEventArgs Wheel(UIElement target, int delta, ModifierKeys modifiers)
+    {
+        var original = new byte[256];
+        Assert.IsTrue(GetKeyboardState(original));
+        var state = (byte[])original.Clone();
+        foreach (var key in new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5 })
+            state[key] = 0;
+        if (modifiers.HasFlag(ModifierKeys.Control)) state[0x11] = state[0xA2] = 0x80;
+        if (modifiers.HasFlag(ModifierKeys.Shift)) state[0x10] = state[0xA0] = 0x80;
+        if (modifiers.HasFlag(ModifierKeys.Alt)) state[0x12] = state[0xA4] = 0x80;
+        try
+        {
+            Assert.IsTrue(SetKeyboardState(state));
+            Assert.AreEqual(modifiers, Keyboard.Modifiers);
+            var args = new MouseWheelEventArgs(Mouse.PrimaryDevice, 0, delta)
+            {
+                RoutedEvent = Mouse.PreviewMouseWheelEvent
+            };
+            target.RaiseEvent(args);
+            return args;
+        }
+        finally { Assert.IsTrue(SetKeyboardState(original)); }
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetKeyboardState([Out] byte[] state);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetKeyboardState(byte[] state);
+
     [TestMethod]
     public void OpenShortcutUsesSupportedFileDialogAndReusesDirtyOpenTab() => WithEditor((editor, directory, _, files) =>
     {
