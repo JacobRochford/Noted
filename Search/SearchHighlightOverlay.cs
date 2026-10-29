@@ -114,13 +114,43 @@ internal sealed class SearchHighlightOverlay : Adorner
         if (viewport.IsEmpty || viewport.Width <= 0 || viewport.Height <= 0)
             return new SearchHighlightGeometrySnapshot(Rect.Empty, [], null);
 
+        if (_matches.Count == 0)
+            return new SearchHighlightGeometrySnapshot(viewport, [], null);
+
+        var firstVisibleLine = 0;
+        var lastVisibleLine = _editor.LineCount - 1;
+        var anchorLine = _editor.GetFirstVisibleLineIndex();
+        if (anchorLine >= 0 && anchorLine <= lastVisibleLine)
+        {
+            var anchorStart = _editor.GetCharacterIndexFromLineIndex(anchorLine);
+            var anchorRect = _editor.GetRectFromCharacterIndex(anchorStart, false);
+            if (IsUsable(anchorRect))
+            {
+                // overlay bounds can include padding and scrollbars beyond the text viewport.
+                firstVisibleLine = Math.Clamp(anchorLine +
+                    (int)Math.Floor((viewport.Top - anchorRect.Top) / anchorRect.Height) - 1,
+                    0, lastVisibleLine);
+                lastVisibleLine = Math.Clamp(anchorLine +
+                    (int)Math.Ceiling((viewport.Bottom - anchorRect.Top) / anchorRect.Height),
+                    firstVisibleLine, lastVisibleLine);
+            }
+        }
+
+        var hasVisibleLines = lastVisibleLine >= firstVisibleLine;
+        var visibleStart = hasVisibleLines ? _editor.GetCharacterIndexFromLineIndex(firstVisibleLine) : 0;
+        var visibleEnd = hasVisibleLines
+            ? _editor.GetCharacterIndexFromLineIndex(lastVisibleLine) + _editor.GetLineLength(lastVisibleLine)
+            : 0;
+
         var geometries = new List<SearchMatchGeometry>(_matches.Count);
         foreach (var match in _matches)
         {
             if (!IsValid(match))
                 continue;
 
-            var segments = GetVisibleSegments(match, viewport);
+            var segments = match.Start < visibleEnd && match.End > visibleStart
+                ? GetVisibleSegments(match, viewport, firstVisibleLine, lastVisibleLine)
+                : [];
             geometries.Add(new SearchMatchGeometry(
                 match,
                 _currentMatch == match,
@@ -128,7 +158,8 @@ internal sealed class SearchHighlightOverlay : Adorner
         }
 
         Rect? currentVisualRow = null;
-        if (_currentMatch is { } current && IsValid(current))
+        if (_currentMatch is { } current && IsValid(current) &&
+            current.Start >= visibleStart && current.Start < visibleEnd)
         {
             var characterRect = _editor.GetRectFromCharacterIndex(current.Start, false);
             if (IsUsable(characterRect))
@@ -188,7 +219,11 @@ internal sealed class SearchHighlightOverlay : Adorner
         drawingContext.Pop();
     }
 
-    private IReadOnlyList<Rect> GetVisibleSegments(TextSearchMatch match, Rect viewport)
+    private IReadOnlyList<Rect> GetVisibleSegments(
+        TextSearchMatch match,
+        Rect viewport,
+        int firstVisibleLine,
+        int lastVisibleLine)
     {
         var firstLine = _editor.GetLineIndexFromCharacterIndex(match.Start);
         var lastCharacterIndex = Math.Min(match.End - 1, _editor.Text.Length - 1);
@@ -197,7 +232,9 @@ internal sealed class SearchHighlightOverlay : Adorner
             return [];
 
         var segments = new List<Rect>();
-        for (var lineIndex = firstLine; lineIndex <= lastLine; lineIndex++)
+        for (var lineIndex = Math.Max(firstLine, firstVisibleLine);
+            lineIndex <= Math.Min(lastLine, lastVisibleLine);
+            lineIndex++)
         {
             var lineStart = _editor.GetCharacterIndexFromLineIndex(lineIndex);
             if (lineStart < 0)
