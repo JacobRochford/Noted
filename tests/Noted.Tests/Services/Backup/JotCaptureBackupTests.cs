@@ -15,15 +15,59 @@ namespace Noted.Tests.Services;
 public sealed class JotCaptureBackupTests
 {
     [TestMethod]
+    public void HistoricalTextOnlyDraftRemainsReadable()
+    {
+        var bytes = Encoding.UTF8.GetBytes("[{\"Id\":\"af3f5a60-065c-4525-9ae1-48b6cbbd44f2\",\"Text\":\"unfinished thought\"}]");
+        var draft = JotCaptureDraftService.ValidateBackupDraft(bytes)!;
+        Assert.AreEqual(Guid.Parse("af3f5a60-065c-4525-9ae1-48b6cbbd44f2"), draft.Id);
+        Assert.AreEqual("unfinished thought", draft.Text);
+        Assert.AreEqual("", draft.Title);
+        Assert.AreEqual("", draft.Category);
+    }
+
+    [TestMethod]
+    [DataRow("title", "")]
+    [DataRow("", "category")]
+    public void MetadataOnlyDraftRecoversFromRollingBackup(string title, string category)
+    {
+        using var directory = new TemporaryTestDirectory();
+        var service = new JotCaptureDraftService(directory.Path);
+        var draft = new JotCaptureDraft { Title = title, Category = category };
+        service.Save(draft);
+        service.Save(draft with { Text = "later text" });
+        File.Delete(directory.File("jot-capture-draft.json"));
+        Assert.AreEqual(draft, new JotCaptureDraftService(directory.Path).Load(out _));
+    }
+
+    [TestMethod]
+    [DataRow("local title", "")]
+    [DataRow("", "local category")]
+    public void RestoreKeepsMetadataOnlyLocalAndIncomingDrafts(string title, string category)
+    {
+        using var directory = new TemporaryTestDirectory();
+        var incoming = new JotCaptureDraft { Title = "incoming title", Category = "incoming category" };
+        var service = CreateService(directory, incoming);
+        Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
+        var current = new JotCaptureDraft { Title = title, Category = category };
+        new JotCaptureDraftService(directory.File("app")).Save(current);
+        Assert.AreEqual(FullBackupStatus.RestoreScheduled, service.ScheduleUserBackupRestore().Status);
+        Assert.AreEqual(FullBackupStatus.Restored, service.ApplyPendingUserBackupRestore().Status);
+        Assert.AreEqual(current, ReadDraft(directory.File("app", "jot-capture-draft.json")));
+        var conflict = Directory.GetFiles(Path.Combine(service.BackupDirectory,
+            PersistencePaths.JotCaptureConflictsDirectory), "*.json").Single();
+        Assert.AreEqual(incoming, ReadDraft(conflict));
+    }
+
+    [TestMethod]
     public void UserRecentAndBeforeRestoreBackupsIncludeDraftIdentityAndText()
     {
         using var directory = new TemporaryTestDirectory();
-        var draft = new JotCaptureDraft { Text = "unfinished\r\nthought" };
+        var draft = new JotCaptureDraft { Text = "unfinished\r\nthought", Title = "Title", Category = "Work" };
         var service = CreateService(directory, draft);
         Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
         AssertDraft(service.GetUserBackupPreview(), service, draft);
 
-        var changed = new JotCaptureDraft { Text = "newer draft" };
+        var changed = new JotCaptureDraft { Text = "newer draft", Title = "New title", Category = "Home" };
         new JotCaptureDraftService(directory.File("app")).Save(changed);
         service = new FullBackupService(directory.File("app"), directory.File("notes"));
         var recent = service.CreateRecentBackup();
@@ -41,7 +85,7 @@ public sealed class JotCaptureBackupTests
     {
         using var source = new TemporaryTestDirectory();
         using var target = new TemporaryTestDirectory();
-        var draft = new JotCaptureDraft { Text = "portable unfinished thought" };
+        var draft = new JotCaptureDraft { Title = "portable title", Category = "Work" };
         var service = CreateService(source, draft);
         Assert.AreEqual(FullBackupStatus.Created, service.CreateOrUpdateUserBackup().Status);
         var archive = source.File("draft.notedbackup");

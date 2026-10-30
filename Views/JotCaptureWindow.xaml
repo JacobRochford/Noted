@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Jot" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize"
-        Width="480" SizeToContent="Height" MaxHeight="420">
+        Width="480" SizeToContent="Height" MaxHeight="560">
     <Border Background="{DynamicResource NotedSurfaceBrush}" BorderBrush="{DynamicResource NotedBorderBrush}"
             BorderThickness="1" CornerRadius="10" Padding="14">
         <StackPanel>
@@ -13,6 +13,32 @@
                 <TextBlock Text="Jot" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
                            Foreground="{DynamicResource NotedTextBrush}"/>
             </DockPanel>
+            <TextBlock Text="Title (optional)" Margin="0,0,0,4"
+                       Foreground="{DynamicResource NotedMutedTextBrush}"/>
+            <TextBox x:Name="TitleTextBox" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"
+                     IsReadOnly="{Binding IsReadOnly}" Margin="0,0,0,8"
+                     AutomationProperties.Name="Title (optional)" Style="{StaticResource NotedTextInput}"/>
+            <TextBlock Text="Category (optional)" Margin="0,0,0,4"
+                       Foreground="{DynamicResource NotedMutedTextBrush}"/>
+            <ComboBox x:Name="CategoryComboBox" IsEditable="True" IsTextSearchEnabled="False"
+                      IsReadOnly="{Binding IsReadOnly}" ItemsSource="{Binding Categories}"
+                      Text="{Binding Category, UpdateSourceTrigger=PropertyChanged}"
+                      PreviewGotKeyboardFocus="CategoryComboBox_PreviewGotKeyboardFocus"
+                      DropDownOpened="CategoryComboBox_DropDownOpened"
+                      AutomationProperties.Name="Category (optional)">
+                <ComboBox.Style>
+                    <Style TargetType="ComboBox">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsReadOnly}" Value="True">
+                                <Setter Property="IsEnabled" Value="False"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ComboBox.Style>
+            </ComboBox>
+            <TextBlock Text="Leave blank for Inbox. Select a category or type a new name."
+                       Margin="0,4,0,8" FontSize="11" TextWrapping="Wrap"
+                       Foreground="{DynamicResource NotedMutedTextBrush}"/>
             <TextBox x:Name="CaptureTextBox" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
                      IsReadOnly="{Binding IsReadOnly}"
                      AutomationProperties.Name="Capture a thought" AcceptsReturn="True" TextWrapping="Wrap"

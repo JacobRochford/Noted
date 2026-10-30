@@ -22,14 +22,14 @@ public partial class JotCaptureWindow : Window
         _viewModel = viewModel;
         DataContext = viewModel;
         EditorTextWrapping.Attach(CaptureTextBox);
-        TextCompositionManager.AddPreviewTextInputStartHandler(CaptureTextBox, (_, _) => _isComposing = true);
-        TextCompositionManager.AddPreviewTextInputHandler(CaptureTextBox, (_, _) =>
+        TextCompositionManager.AddPreviewTextInputStartHandler(this, (_, _) => _isComposing = true);
+        TextCompositionManager.AddPreviewTextInputHandler(this, (_, _) =>
         {
             _isComposing = false;
             HideIfInactive();
         });
-        CaptureTextBox.ContextMenuOpening += (_, _) => _contextMenuOpen = true;
-        CaptureTextBox.ContextMenuClosing += (_, _) =>
+        ContextMenuOpening += (_, _) => _contextMenuOpen = true;
+        ContextMenuClosing += (_, _) =>
         {
             _contextMenuOpen = false;
             HideIfInactive();
@@ -72,9 +72,16 @@ public partial class JotCaptureWindow : Window
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
+        // let the category control accept a selection or close its dropdown without submitting the jot.
+        if ((e.Key == Key.Enter && (CategoryComboBox.IsKeyboardFocusWithin || CategoryComboBox.IsDropDownOpen)) ||
+            (e.Key == Key.Escape && CategoryComboBox.IsDropDownOpen))
+        {
+            base.OnPreviewKeyDown(e);
+            return;
+        }
         if (IsVisible && !_isComposing && e.Key != Key.ImeProcessed)
         {
-            if (e.Key == Key.Enter && !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            if (e.Key == Key.Enter && !e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Shift))
             {
                 e.Handled = true;
                 if (!e.IsRepeat && _viewModel.TrySave())
@@ -89,6 +96,21 @@ public partial class JotCaptureWindow : Window
         base.OnPreviewKeyDown(e);
     }
 
+    private void CategoryComboBox_PreviewGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (!CategoryComboBox.IsKeyboardFocusWithin)
+            RefreshCategories();
+    }
+
+    private void CategoryComboBox_DropDownOpened(object? sender, EventArgs e) => RefreshCategories();
+
+    private void RefreshCategories()
+    {
+        var category = _viewModel.Category;
+        _viewModel.RefreshCategories();
+        CategoryComboBox.SetCurrentValue(System.Windows.Controls.ComboBox.TextProperty, category);
+    }
+
     protected override void OnDeactivated(EventArgs e)
     {
         base.OnDeactivated(e);
@@ -100,7 +122,7 @@ public partial class JotCaptureWindow : Window
         // context menus and IME candidate windows can briefly take focus.
         Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
         {
-            if (IsVisible && !IsActive && !_contextMenuOpen && !_isComposing)
+            if (IsVisible && !IsActive && !_contextMenuOpen && !_isComposing && !CategoryComboBox.IsDropDownOpen)
                 Dismiss(restoreFocus: false);
         }));
     }

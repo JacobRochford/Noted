@@ -66,7 +66,14 @@ public sealed class JotsWorkspace : ObservableObject, IDisposable
         _loaded = true;
     }
 
-    internal bool TryCapture(Guid id, string text, out string? error)
+    internal IReadOnlyList<string> GetCategories() => Items
+        .Select(item => item.Category.Trim())
+        .Where(category => category.Length > 0)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(category => category, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    internal bool TryCapture(Guid id, string text, out string? error, string title = "", string category = "")
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -79,9 +86,11 @@ public sealed class JotsWorkspace : ObservableObject, IDisposable
         var existing = _items.FirstOrDefault(item => item.Id == id);
         if (existing is not null)
         {
-            if (!string.Equals(existing.Details, text, StringComparison.Ordinal))
+            if (!string.Equals(existing.Details, text, StringComparison.Ordinal) ||
+                (!string.IsNullOrWhiteSpace(title) && existing.Title != title.Trim()) ||
+                existing.Category != category.Trim())
             {
-                error = "A saved jot has the same ID with different text. Your Quick Jot draft was kept. Edit the draft before saving to keep both versions.";
+                error = "A saved jot has the same ID with different content. Your Quick Jot draft was kept. Edit the draft before saving to keep both versions.";
                 return false;
             }
             ScheduleSave();
@@ -94,6 +103,8 @@ public sealed class JotsWorkspace : ObservableObject, IDisposable
         var captured = new JotItem { Id = id, CreatedUtc = now, ModifiedUtc = now, IsNew = true };
         captured.BeginEdit();
         captured.DraftDetails = text;
+        captured.DraftTitle = title;
+        captured.DraftCategory = category;
         captured.SaveEdit(now);
         var snapshot = _items.Select(ToState).Append(ToState(captured)).ToList();
         var result = SaveSnapshot(snapshot);

@@ -15,6 +15,96 @@ namespace Noted.Tests.Services;
 public sealed class JotWindowTests
 {
     [TestMethod]
+    public void RefreshingCategoryOptionsKeepsRecoveredDraftIdentity() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var content = new JotsContentService(directory.Path);
+        var draft = new JotCaptureDraft { Text = "Saved body", Title = "Saved title", Category = "Work" };
+        content.SaveItems([new JotItemState { Id = draft.Id, Title = draft.Title, Details = draft.Text, Category = draft.Category }]);
+        new JotCaptureDraftService(directory.Path).Save(draft);
+        using var workspace = new JotsWorkspace(content, Dispatcher.CurrentDispatcher);
+        var model = new JotCaptureViewModel(workspace, new JotCaptureDraftService(directory.Path), Dispatcher.CurrentDispatcher);
+        var popup = new JotCaptureWindow(model);
+        try
+        {
+            popup.ShowCapture();
+            var category = (ComboBox)popup.FindName("CategoryComboBox");
+            var body = (TextBox)popup.FindName("CaptureTextBox");
+            category.Focus();
+            category.IsDropDownOpen = true;
+            category.IsDropDownOpen = false;
+            body.Focus();
+            category.Focus();
+            category.IsDropDownOpen = true;
+            category.IsDropDownOpen = false;
+            Assert.IsTrue(model.TryFlushDraft(out var error), error);
+            Assert.AreEqual(draft, new JotCaptureDraftService(directory.Path).Load(out _));
+            body.Focus();
+            KeyboardTestInput.Press(body, Key.Enter, ModifierKeys.None);
+            Assert.IsFalse(popup.IsVisible);
+            Assert.HasCount(1, content.LoadItems().Items);
+        }
+        finally
+        {
+            popup.PrepareForShutdown();
+            popup.Close();
+        }
+    });
+
+    [TestMethod]
+    public void CategoryEnterDoesNotSubmitAndBodyRetainsSaveAndNewlineShortcuts() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var content = new JotsContentService(directory.Path);
+        content.SaveItems([new JotItemState { Title = "Existing", Category = "Work" }]);
+        using var workspace = new JotsWorkspace(content, Dispatcher.CurrentDispatcher);
+        var model = new JotCaptureViewModel(workspace, new JotCaptureDraftService(directory.Path), Dispatcher.CurrentDispatcher);
+        var popup = new JotCaptureWindow(model);
+        try
+        {
+            popup.ShowCapture();
+            var body = (TextBox)popup.FindName("CaptureTextBox");
+            var title = (TextBox)popup.FindName("TitleTextBox");
+            var category = (ComboBox)popup.FindName("CategoryComboBox");
+            body.Text = "New thought";
+            title.Text = "Optional title";
+            category.Focus();
+            Assert.IsTrue(category.IsKeyboardFocusWithin);
+            CollectionAssert.AreEqual(new[] { "Work" }, category.Items.Cast<string>().ToArray());
+            category.IsDropDownOpen = true;
+            category.SelectedItem = "Work";
+            KeyboardTestInput.Press(category, Key.Enter, ModifierKeys.None);
+            Assert.IsTrue(popup.IsVisible);
+            Assert.HasCount(1, content.LoadItems().Items);
+            category.IsDropDownOpen = false;
+            category.Text = "New category";
+            KeyboardTestInput.Press(category, Key.Enter, ModifierKeys.None);
+            Assert.IsTrue(popup.IsVisible);
+            Assert.HasCount(1, content.LoadItems().Items);
+            category.IsDropDownOpen = true;
+            KeyboardTestInput.Press(category, Key.Escape, ModifierKeys.None);
+            Assert.IsTrue(popup.IsVisible);
+            category.IsDropDownOpen = false;
+            Assert.AreEqual("New category", model.Category);
+            body.Focus();
+            body.CaretIndex = body.Text.Length;
+            KeyboardTestInput.Press(body, Key.Enter, ModifierKeys.Shift);
+            Assert.AreEqual("New thought\r\n", body.Text);
+            Assert.IsTrue(popup.IsVisible);
+            KeyboardTestInput.Press(body, Key.Enter, ModifierKeys.None);
+            Assert.IsFalse(popup.IsVisible);
+            var saved = content.LoadItems().Items.Single(item => item.Title == "Optional title");
+            Assert.AreEqual("New category", saved.Category);
+            Assert.AreEqual("New thought\r\n", saved.Details);
+        }
+        finally
+        {
+            popup.PrepareForShutdown();
+            popup.Close();
+        }
+    });
+
+    [TestMethod]
     public void EnterWaitsForCompositionAndEscapeFlushesDraftBeforeHiding() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();

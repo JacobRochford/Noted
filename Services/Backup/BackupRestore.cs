@@ -139,8 +139,8 @@ internal sealed class BackupRestore
                     retainedDrafts.Add(entry.LogicalPath);
                     continue;
                 }
-                var clearedQuickJot = isQuickJot && string.IsNullOrEmpty(
-                    JotCaptureDraftService.ValidateBackupDraft(bytes)?.Text);
+                var clearedQuickJot = isQuickJot &&
+                    JotCaptureDraftService.ValidateBackupDraft(bytes)?.HasContent != true;
                 if (clearedQuickJot)
                 {
                     var service = new JotCaptureDraftService(Path.GetDirectoryName(destinationPath)!);
@@ -210,7 +210,7 @@ internal sealed class BackupRestore
         var current = service.Load(out var recoveryWarning);
         if (service.WritesBlocked)
             throw new IOException("The local Quick Jot draft could not be recovered safely.");
-        if (string.IsNullOrEmpty(current.Text) || current == incoming)
+        if (!current.HasContent || current == incoming)
             return false;
 
         // keep recovered text at the primary path before other restore writes begin.
@@ -220,7 +220,7 @@ internal sealed class BackupRestore
             if (warning is not null)
                 throw new IOException(warning);
         }
-        if (incoming is not null && incoming.Text.Length > 0)
+        if (incoming is not null && incoming.HasContent)
         {
             var conflictPath = Path.Combine(_backupDirectory, PersistencePaths.JotCaptureConflictsDirectory,
                 $"{incoming.Id:N}-{Convert.ToHexString(SHA256.HashData(bytes))}.json");

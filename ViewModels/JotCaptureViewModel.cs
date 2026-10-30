@@ -32,10 +32,44 @@ internal sealed class JotCaptureViewModel : ObservableObject, IDisposable
         {
             if (_draft.Text == value || _savedAwaitingClear)
                 return;
-            _draft = new JotCaptureDraft { Text = value ?? "" };
+            _draft = _draft with { Id = Guid.NewGuid(), Text = value ?? "" };
             _draftScheduler.Schedule(_draft);
             OnPropertyChanged();
         }
+    }
+
+    public string Title
+    {
+        get => _draft.Title;
+        set
+        {
+            if (_draft.Title == value || _savedAwaitingClear)
+                return;
+            _draft = _draft with { Id = Guid.NewGuid(), Title = value ?? "" };
+            _draftScheduler.Schedule(_draft);
+            OnPropertyChanged();
+        }
+    }
+
+    public string Category
+    {
+        get => _draft.Category;
+        set
+        {
+            if (_draft.Category == value || _savedAwaitingClear)
+                return;
+            _draft = _draft with { Id = Guid.NewGuid(), Category = value ?? "" };
+            _draftScheduler.Schedule(_draft);
+            OnPropertyChanged();
+        }
+    }
+
+    public IReadOnlyList<string> Categories { get; private set; } = [];
+
+    internal void RefreshCategories()
+    {
+        Categories = _workspace.GetCategories();
+        OnPropertyChanged(nameof(Categories));
     }
 
     public string? Error { get => _error; private set => SetProperty(ref _error, value); }
@@ -54,7 +88,7 @@ internal sealed class JotCaptureViewModel : ObservableObject, IDisposable
             _draftScheduler.Schedule(_draft);
             if (!_draftScheduler.TryFlush(out var error))
                 return false;
-            if (!_workspace.TryCapture(_draft.Id, Text, out error))
+            if (!_workspace.TryCapture(_draft.Id, Text, out error, Title, Category))
             {
                 Error = error;
                 return false;
@@ -74,6 +108,8 @@ internal sealed class JotCaptureViewModel : ObservableObject, IDisposable
             _savedAwaitingClear = false;
             Error = null;
             OnPropertyChanged(nameof(Text));
+            OnPropertyChanged(nameof(Title));
+            OnPropertyChanged(nameof(Category));
             OnPropertyChanged(nameof(IsReadOnly));
             return true;
         }

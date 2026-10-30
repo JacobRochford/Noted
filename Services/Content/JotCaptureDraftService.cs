@@ -21,7 +21,7 @@ internal sealed class JotCaptureDraftService
         var result = _fileStore.Load();
         warning = result.Issues.Count == 0 ? null : string.Join(" ", result.Issues.Select(issue => issue.Message));
         var draft = result.Items?.FirstOrDefault() ?? new JotCaptureDraft();
-        if (result.Items is not null && result.Issues.Count == 0 && draft.Text.Length == 0)
+        if (result.Items is not null && result.Issues.Count == 0 && !draft.HasContent)
         {
             try
             {
@@ -42,7 +42,7 @@ internal sealed class JotCaptureDraftService
     internal string? Save(JotCaptureDraft draft)
     {
         ValidateDrafts([draft]);
-        if (draft.Text.Length > 0)
+        if (draft.HasContent)
             return _fileStore.Write([draft]);
         if (WritesBlocked)
             throw new IOException("The Quick Jot draft could not be recovered safely.");
@@ -65,7 +65,7 @@ internal sealed class JotCaptureDraftService
     private static void ValidateDrafts(IReadOnlyList<JotCaptureDraft> drafts)
     {
         if (drafts.Count > 1 || drafts.Any(draft => draft is null ||
-            draft.Id == Guid.Empty || draft.Text is null))
+            draft.Id == Guid.Empty || draft.Text is null || draft.Title is null || draft.Category is null))
             throw new JsonException("The Quick Jot draft is invalid.");
     }
 }

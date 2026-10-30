@@ -12,6 +12,95 @@ namespace Noted.Tests.ViewModels;
 public sealed class JotCaptureViewModelTests
 {
     [TestMethod]
+    public void OptionalFieldsSurviveRestartAndUseExistingJotNormalization() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var content = new JotsContentService(directory.Path);
+        using var workspace = new JotsWorkspace(content, Dispatcher.CurrentDispatcher);
+        using (var capture = CreateCapture(workspace, directory.Path))
+        {
+            capture.Title = "  A title  ";
+            capture.Category = "  Work  ";
+            Assert.IsFalse(capture.TrySave());
+            Assert.IsTrue(capture.TryFlushDraft(out var error), error);
+            Assert.IsFalse(workspace.IsLoaded);
+        }
+        using var reopened = CreateCapture(workspace, directory.Path);
+        Assert.AreEqual("  A title  ", reopened.Title);
+        Assert.AreEqual("  Work  ", reopened.Category);
+        reopened.Text = "body\r\nunchanged";
+        Assert.IsTrue(reopened.TrySave());
+        var saved = content.LoadItems().Items.Single();
+        Assert.AreEqual("A title", saved.Title);
+        Assert.AreEqual("Work", saved.Category);
+        Assert.AreEqual("body\r\nunchanged", saved.Details);
+        Assert.AreEqual("", reopened.Title);
+        Assert.AreEqual("", reopened.Category);
+        Assert.IsFalse(new JotCaptureDraftService(directory.Path).Load(out _).HasContent);
+    });
+
+    [TestMethod]
+    public void CategoryOptionsMatchJotsAndRefreshWithoutChangingTheDraft() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        using var workspace = new JotsWorkspace(new JotsContentService(directory.Path), Dispatcher.CurrentDispatcher);
+        workspace.Items.Add(new JotItem { Category = " Work " });
+        workspace.Items.Add(new JotItem { Category = "work" });
+        workspace.Items.Add(new JotItem { Category = "" });
+        workspace.Items.Add(new JotItem { Category = "Home" });
+        using var jots = new JotsWindowViewModel(workspace, false);
+        using var capture = CreateCapture(workspace, directory.Path);
+        capture.Category = "new category";
+        capture.RefreshCategories();
+        CollectionAssert.AreEqual(new[] { "Home", "Work" }, capture.Categories.ToArray());
+        CollectionAssert.AreEqual(jots.Categories.ToArray(), capture.Categories.ToArray());
+        workspace.Items[0].Category = "Travel";
+        capture.RefreshCategories();
+        CollectionAssert.AreEqual(jots.Categories.ToArray(), capture.Categories.ToArray());
+        Assert.AreEqual("new category", capture.Category);
+    });
+
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void EditingRecoveredMetadataKeepsTheAlreadySavedJot(bool editTitle) => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var draft = new JotCaptureDraft { Text = "body", Title = "Original", Category = "Work" };
+        new JotCaptureDraftService(directory.Path).Save(draft);
+        var content = new JotsContentService(directory.Path);
+        content.SaveItems([new JotItemState { Id = draft.Id, Title = draft.Title, Details = draft.Text, Category = draft.Category }]);
+        using var workspace = new JotsWorkspace(content, Dispatcher.CurrentDispatcher);
+        using var capture = CreateCapture(workspace, directory.Path);
+        if (editTitle)
+            capture.Title = "Changed";
+        else
+            capture.Category = "Home";
+        Assert.IsTrue(capture.TrySave());
+        var saved = content.LoadItems().Items;
+        Assert.HasCount(2, saved);
+        Assert.AreEqual("Original", saved.Single(item => item.Id == draft.Id).Title);
+        Assert.AreEqual("Work", saved.Single(item => item.Id == draft.Id).Category);
+        Assert.AreEqual(editTitle ? "Changed" : "Original", saved.Single(item => item.Id != draft.Id).Title);
+        Assert.AreEqual(editTitle ? "Work" : "Home", saved.Single(item => item.Id != draft.Id).Category);
+    });
+
+    [TestMethod]
+    public void ConflictingSavedMetadataDoesNotClearRecoveredDraft() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var draft = new JotCaptureDraft { Text = "body", Title = "Draft title", Category = "Work" };
+        new JotCaptureDraftService(directory.Path).Save(draft);
+        var content = new JotsContentService(directory.Path);
+        content.SaveItems([new JotItemState { Id = draft.Id, Title = "Other title", Details = draft.Text, Category = "Home" }]);
+        using var workspace = new JotsWorkspace(content, Dispatcher.CurrentDispatcher);
+        using var capture = CreateCapture(workspace, directory.Path);
+        Assert.IsFalse(capture.TrySave());
+        Assert.AreEqual(draft, new JotCaptureDraftService(directory.Path).Load(out _));
+        Assert.AreEqual("Other title", content.LoadItems().Items.Single().Title);
+    });
+
+    [TestMethod]
     public void OpeningAndPersistingDraftDoesNotLoadSavedCollection() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
@@ -55,8 +144,12 @@ public sealed class JotCaptureViewModelTests
         using var workspace = new JotsWorkspace(content, Dispatcher.CurrentDispatcher);
         using var capture = CreateCapture(workspace, directory.Path);
         capture.Text = "Keep me";
+        capture.Title = "Keep title";
+        capture.Category = "Keep category";
         Assert.IsFalse(capture.TrySave());
         Assert.AreEqual("Keep me", capture.Text);
+        Assert.AreEqual("Keep title", capture.Title);
+        Assert.AreEqual("Keep category", capture.Category);
         Assert.IsNotNull(capture.Error);
         Assert.AreEqual(0, workspace.Items.Count);
         using (var recovered = CreateCapture(workspace, directory.Path))
@@ -65,6 +158,8 @@ public sealed class JotCaptureViewModelTests
         Assert.IsTrue(capture.TrySave());
         Assert.IsFalse(capture.TrySave());
         Assert.AreEqual(1, content.Saved.Count);
+        Assert.AreEqual("Keep title", content.Saved.Single().Title);
+        Assert.AreEqual("Keep category", content.Saved.Single().Category);
     });
 
     [TestMethod]
@@ -142,12 +237,18 @@ public sealed class JotCaptureViewModelTests
         try
         {
             capture.Text = "Saved once";
+            capture.Title = "Saved title";
+            capture.Category = "Saved category";
             Assert.IsFalse(capture.TrySave());
             Assert.AreEqual(1, content.Saved.Count);
             Assert.AreEqual("Saved once", capture.Text);
             Assert.IsTrue(capture.IsReadOnly);
             capture.Text = "Do not replace the committed draft";
+            capture.Title = "Do not replace title";
+            capture.Category = "Do not replace category";
             Assert.AreEqual("Saved once", capture.Text);
+            Assert.AreEqual("Saved title", capture.Title);
+            Assert.AreEqual("Saved category", capture.Category);
             draftLock!.Dispose();
             draftLock = null;
             content.AfterSave = null;

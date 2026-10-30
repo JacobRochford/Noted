@@ -398,12 +398,7 @@ public sealed class JotsWindowViewModel : ObservableObject, IDisposable
 
     private void RebuildCategories()
     {
-        _categories = Items
-            .Select(item => item.Category.Trim())
-            .Where(category => category.Length > 0)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(category => category, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        _categories = _workspace.GetCategories();
         OnPropertyChanged(nameof(Categories));
     }
 
