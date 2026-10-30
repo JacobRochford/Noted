@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.IO;
+using System.Security;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -15,6 +17,12 @@ public partial class SettingsView : UserControl
     public SettingsView()
     {
         InitializeComponent();
+        SettingsCategory.SelectionChanged += (_, _) => UpdateCategory();
+        IsVisibleChanged += (_, _) =>
+        {
+            if (IsVisible) RefreshFileExplorerIntegration();
+        };
+        UpdateCategory();
         DataContextChanged += (_, args) =>
         {
             if (args.OldValue is SettingsViewModel previous)
@@ -23,6 +31,34 @@ public partial class SettingsView : UserControl
                 current.PropertyChanged += OnViewModelPropertyChanged;
             RefreshStatusResources();
         };
+    }
+
+    private void UpdateCategory()
+    {
+        var category = (SettingsCategory.SelectedItem as ComboBoxItem)?.Tag;
+        foreach (FrameworkElement section in SettingsSections.Children)
+            section.Visibility = Equals(section.Tag, category) ? Visibility.Visible : Visibility.Collapsed;
+        if (ViewModel is { } model) model.IsHotkeyEditorOpen = false;
+        SettingsScrollViewer.ScrollToTop();
+        if (Equals(category, "Integration")) RefreshFileExplorerIntegration();
+    }
+
+    private void RefreshFileExplorerIntegration() =>
+        FileExplorerIntegrationOption.IsChecked = FileExplorerIntegrationService.IsEnabled();
+
+    private void FileExplorerIntegrationOption_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            FileExplorerIntegrationService.SetEnabled(FileExplorerIntegrationOption.IsChecked == true);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or SecurityException)
+        {
+            ExceptionDiagnostics.Record(ex);
+            AppDialog.Show("The File Explorer integration could not be updated. Check registry access.",
+                "Unable to update File Explorer", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        RefreshFileExplorerIntegration();
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)

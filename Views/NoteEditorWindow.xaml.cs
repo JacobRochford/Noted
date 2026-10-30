@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
-using System.Security;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -168,8 +167,6 @@ public partial class NoteEditorWindow : Window
         SetLineNumbers(windowState.ShowLineNumbers);
         SetScrollSpeed(windowState.ScrollSpeed);
         AlwaysVisibleMenuItem.IsChecked = settingsService.LoadWindowAlwaysVisible(PersistenceKeys.NoteEditorWindow);
-        ReopenTabsOnStartupMenuItem.IsChecked = _settingsService.LoadReopenEditorTabsOnStartup();
-        FileExplorerIntegrationMenuItem.IsChecked = FileExplorerIntegrationService.IsEnabled();
         UpdateEditorState();
     }
 
@@ -1127,7 +1124,7 @@ public partial class NoteEditorWindow : Window
         }
     }
 
-    private bool SaveEditorSession()
+    internal bool SaveEditorSession()
     {
         if (_suppressSessionSave)
             return true;
@@ -1901,21 +1898,6 @@ public partial class NoteEditorWindow : Window
         }
     }
 
-    private void FileExplorerIntegrationMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        var enabled = FileExplorerIntegrationMenuItem.IsChecked;
-        try
-        {
-            FileExplorerIntegrationService.SetEnabled(enabled);
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or SecurityException)
-        {
-            FileExplorerIntegrationMenuItem.IsChecked = !enabled;
-            ExceptionDiagnostics.Record(ex);
-            ShowError("Unable to update File Explorer", "The File Explorer integration could not be updated. Check registry access.");
-        }
-    }
-
     private void NewNoteButton_Click(object sender, RoutedEventArgs e)
     {
         RequestNewNote();
@@ -2327,23 +2309,6 @@ public partial class NoteEditorWindow : Window
             : ScrollBarVisibility.Auto;
         HeaderWordWrapMenuItem.IsChecked = enabled;
         ContextWordWrapMenuItem.IsChecked = enabled;
-    }
-
-    private void ReopenTabsOnStartupMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        var enabled = sender is MenuItem { IsChecked: true };
-        try
-        {
-            _settingsService.SaveReopenEditorTabsOnStartup(enabled);
-            if (enabled)
-                SaveEditorSession();
-        }
-        catch (SettingsPersistenceException ex)
-        {
-            ExceptionDiagnostics.Record(ex);
-            ReopenTabsOnStartupMenuItem.IsChecked = !enabled;
-            ShowError("Unable to save setting", ex.Message);
-        }
     }
 
     private void TabsPanelMenuItem_Click(object sender, RoutedEventArgs e)

@@ -13,11 +13,21 @@
                                 <Style TargetType="ComboBox" BasedOn="{StaticResource NotedComboBox}"/>
                                 <Style TargetType="Slider" BasedOn="{StaticResource NotedSlider}"/>
                             </DockPanel.Resources>
-                            <ScrollViewer DockPanel.Dock="Bottom"
+                            <ComboBox x:Name="SettingsCategory" DockPanel.Dock="Top"
+                                      AutomationProperties.Name="Settings category"
+                                      SelectedIndex="0" Margin="12,0,12,12" MinHeight="28">
+                                <ComboBoxItem Content="Appearance" Tag="Appearance"/>
+                                <ComboBoxItem Content="Notes &amp; Editor" Tag="Editor"/>
+                                <ComboBoxItem Content="Windows &amp; Startup" Tag="Windows"/>
+                                <ComboBoxItem Content="Utilities &amp; Shortcuts" Tag="Utilities"/>
+                                <ComboBoxItem Content="Storage &amp; Backups" Tag="Storage"/>
+                                <ComboBoxItem Content="Windows Integration" Tag="Integration"/>
+                            </ComboBox>
+                            <ScrollViewer x:Name="SettingsScrollViewer"
                                           VerticalScrollBarVisibility="Auto">
-                            <StackPanel>
+                            <StackPanel x:Name="SettingsSections">
 
-                            <Border Background="Transparent"
+                            <Border Tag="Appearance" Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="0,0,0,1"
                                     CornerRadius="0"
@@ -215,7 +225,89 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="Transparent"
+                            <Border Tag="Appearance" Background="Transparent" Padding="12,0,12,4">
+                                <StackPanel>
+                                    <TextBlock Text="App Opacity"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource NotedTextBrush}"
+                                               Margin="0,16,0,8"/>
+
+                                    <!-- Visible opacity (always active) -->
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Visible opacity"
+                                                   Grid.Column="0"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="DefaultOpacityLabel" Text="{Binding DefaultOpacityLabel}"
+                                                   Grid.Column="1"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource NotedAccentBrush}"
+                                                   VerticalAlignment="Center"
+                                                   MinWidth="32"
+                                                   TextAlignment="Right"/>
+                                    </Grid>
+                                    <Slider x:Name="DefaultOpacitySlider" Value="{Binding DefaultOpacityPercent}"
+                                            Minimum="5"
+                                            Maximum="100"
+                                            SmallChange="1"
+                                            LargeChange="1"
+                                            TickFrequency="1"
+                                            IsSnapToTickEnabled="False"
+                                            Margin="0,0,0,14"/>
+
+                                    <!-- Idle fade toggle -->
+                                    <CheckBox x:Name="GhostModeOption" IsChecked="{Binding GhostModeEnabled}"
+                                            Foreground="{DynamicResource NotedTextBrush}"
+                                            FontWeight="SemiBold"
+                                            Margin="0,0,0,10"
+                                            HorizontalAlignment="Stretch">
+                                        <TextBlock Text="Fade windows when inactive"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </CheckBox>
+
+                                    <CheckBox Style="{StaticResource NotedToggleSwitch}" Content="Keep this window visible when inactive" ToolTip="Use the app visible opacity even when this window is inactive" Margin="0,0,0,10"
+                                              IsChecked="{Binding Path=(s:WindowAppearance.AlwaysVisible), RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"/>
+
+                                    <!-- Idle opacity (disabled when idle fade is off) -->
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Idle opacity"
+                                                   Grid.Column="0"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="GhostModeOpacityLabel" Text="{Binding GhostOpacityLabel}"
+                                                   Grid.Column="1"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource NotedAccentBrush}"
+                                                   VerticalAlignment="Center"
+                                                   MinWidth="32"
+                                                   TextAlignment="Right"/>
+                                    </Grid>
+                                    <Slider x:Name="GhostModeOpacitySlider" Value="{Binding GhostOpacityPercent}"
+                                            Minimum="0"
+                                            Maximum="100"
+                                            SmallChange="1"
+                                            LargeChange="1"
+                                            TickFrequency="1"
+                                            IsSnapToTickEnabled="False"
+                                            IsEnabled="{Binding ElementName=GhostModeOption, Path=IsChecked}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Tag="Editor" Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="0,0,0,1"
                                     CornerRadius="0"
@@ -249,7 +341,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="Transparent"
+                            <Border Tag="Editor" Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="0,0,0,1"
                                     CornerRadius="0"
@@ -379,7 +471,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border BorderBrush="{DynamicResource NotedBorderBrush}"
+                            <Border Tag="Utilities" BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="0,0,0,1"
                                     Padding="12,0,12,16" Margin="0,0,0,16">
                                 <StackPanel>
@@ -399,7 +491,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="Transparent"
+                            <Border Tag="Utilities" Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="0,0,0,1"
                                     CornerRadius="0"
@@ -725,7 +817,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="Transparent"
+                            <Border Tag="Windows" Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="0,0,0,1"
                                     CornerRadius="0"
@@ -787,87 +879,15 @@
                                                TextWrapping="Wrap"
                                                VerticalAlignment="Center"/>
                                     </CheckBox>
-                                    <TextBlock Text="App Opacity"
-                                               FontSize="12"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource NotedTextBrush}"
-                                               Margin="0,16,0,8"/>
-
-                                    <!-- Visible opacity (always active) -->
-                                    <Grid Margin="0,0,0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Visible opacity"
-                                                   Grid.Column="0"
-                                                   FontSize="11"
-                                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="DefaultOpacityLabel" Text="{Binding DefaultOpacityLabel}"
-                                                   Grid.Column="1"
-                                                   FontSize="11"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource NotedAccentBrush}"
-                                                   VerticalAlignment="Center"
-                                                   MinWidth="32"
-                                                   TextAlignment="Right"/>
-                                    </Grid>
-                                    <Slider x:Name="DefaultOpacitySlider" Value="{Binding DefaultOpacityPercent}"
-                                            Minimum="5"
-                                            Maximum="100"
-                                            SmallChange="1"
-                                            LargeChange="1"
-                                            TickFrequency="1"
-                                            IsSnapToTickEnabled="False"
-                                            Margin="0,0,0,14"/>
-
-                                    <!-- Idle fade toggle -->
-                                    <CheckBox x:Name="GhostModeOption" IsChecked="{Binding GhostModeEnabled}"
-                                            Foreground="{DynamicResource NotedTextBrush}"
-                                            FontWeight="SemiBold"
-                                            Margin="0,0,0,10"
-                                            HorizontalAlignment="Stretch">
-                                        <TextBlock Text="Fade windows when inactive"
-                                                   TextWrapping="Wrap"
-                                                   VerticalAlignment="Center"/>
+                                    <CheckBox x:Name="ReopenEditorTabsOnStartupOption"
+                                              IsChecked="{Binding ReopenEditorTabsOnStartup}"
+                                              Margin="0,10,0,0">
+                                        <TextBlock Text="Reopen editor tabs on startup" TextWrapping="Wrap"/>
                                     </CheckBox>
-
-                                    <CheckBox Style="{StaticResource NotedToggleSwitch}" Content="Always keep this window visible" ToolTip="Use the app visible opacity even when this window is inactive" Margin="0,0,0,10"
-                                              IsChecked="{Binding Path=(s:WindowAppearance.AlwaysVisible), RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"/>
-
-                                    <!-- Idle opacity (disabled when idle fade is off) -->
-                                    <Grid Margin="0,0,0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Idle opacity"
-                                                   Grid.Column="0"
-                                                   FontSize="11"
-                                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="GhostModeOpacityLabel" Text="{Binding GhostOpacityLabel}"
-                                                   Grid.Column="1"
-                                                   FontSize="11"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource NotedAccentBrush}"
-                                                   VerticalAlignment="Center"
-                                                   MinWidth="32"
-                                                   TextAlignment="Right"/>
-                                    </Grid>
-                                    <Slider x:Name="GhostModeOpacitySlider" Value="{Binding GhostOpacityPercent}"
-                                            Minimum="0"
-                                            Maximum="100"
-                                            SmallChange="1"
-                                            LargeChange="1"
-                                            TickFrequency="1"
-                                            IsSnapToTickEnabled="False"
-                                            IsEnabled="{Binding ElementName=GhostModeOption, Path=IsChecked}"/>
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="Transparent"
+                            <Border Tag="Storage" Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="0,0,0,1"
                                     CornerRadius="0"
@@ -930,7 +950,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border Background="Transparent"
+                            <Border Tag="Storage" Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"
                                     BorderThickness="0"
                                     CornerRadius="0"
@@ -1013,6 +1033,16 @@
                                             HorizontalAlignment="Left" FontSize="11"
                                             Padding="8,3" Margin="0,8,0,0"
                                             Style="{StaticResource NotedSecondaryButton}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Tag="Integration" Background="Transparent" Padding="12,0,12,4">
+                                <StackPanel>
+                                    <TextBlock Text="Windows Integration" FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource NotedTextBrush}" Margin="0,0,0,8"/>
+                                    <CheckBox x:Name="FileExplorerIntegrationOption" Click="FileExplorerIntegrationOption_Click">
+                                        <TextBlock Text="Add 'Open with Noted' to File Explorer" TextWrapping="Wrap"/>
+                                    </CheckBox>
                                 </StackPanel>
                             </Border>
 

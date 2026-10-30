@@ -179,10 +179,6 @@
                             <MenuItem Header="Show in File Explorer"
                                       InputGestureText="Ctrl+Shift+O"
                                       Click="ShowInFileExplorerMenuItem_Click"/>
-                            <MenuItem x:Name="FileExplorerIntegrationMenuItem"
-                                      Header="Add 'Open with Noted' to File Explorer"
-                                      IsCheckable="True"
-                                      Click="FileExplorerIntegrationMenuItem_Click"/>
                             <Separator/>
                             <MenuItem Header="Delete Note..."
                                       Click="DeleteActiveNoteMenuItem_Click"/>
@@ -227,7 +223,7 @@
                                 <MenuItem x:Name="FastScrollMenuItem" Header="Fast (2x)" IsCheckable="True" Tag="2" Click="ScrollSpeedMenuItem_Click"/>
                                 <MenuItem x:Name="FasterScrollMenuItem" Header="Faster (3x)" IsCheckable="True" Tag="3" Click="ScrollSpeedMenuItem_Click"/>
                             </MenuItem>
-                            <MenuItem x:Name="AlwaysVisibleMenuItem" Header="Always Visible" ToolTip="Use the app visible opacity even when this window is inactive" IsCheckable="True" Click="AlwaysVisibleMenuItem_Click"/>
+                            <MenuItem x:Name="AlwaysVisibleMenuItem" Header="Keep visible when inactive" ToolTip="Use the app visible opacity even when this window is inactive" IsCheckable="True" Click="AlwaysVisibleMenuItem_Click"/>
                             <Separator/>
                             <MenuItem x:Name="HeaderWordWrapMenuItem"
                                       Header="Word Wrap"
@@ -239,10 +235,6 @@
                                       Header="Markdown Preview"
                                       InputGestureText="Ctrl+Shift+V"/>
                             <Separator/>
-                            <MenuItem x:Name="ReopenTabsOnStartupMenuItem"
-                                      Header="Reopen Tabs on Startup"
-                                      IsCheckable="True"
-                                      Click="ReopenTabsOnStartupMenuItem_Click"/>
                             <MenuItem x:Name="TabsPanelMenuItem"
                                       Header="Show Tabs"
                                       InputGestureText="Ctrl+Shift+B"

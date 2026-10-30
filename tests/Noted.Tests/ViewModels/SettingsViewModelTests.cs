@@ -11,6 +11,30 @@ namespace Noted.Tests.ViewModels;
 public sealed class SettingsViewModelTests
 {
     [TestMethod]
+    public void ReopenTabsPreferenceReloadsAndNotifiesOnlyAfterSuccessfulSave()
+    {
+        using var context = new Context();
+        context.Settings.SaveReopenEditorTabsOnStartup(false);
+        var changes = new List<string>();
+        context.Model.PreferenceChanged += changes.Add;
+        var bytes = File.ReadAllBytes(context.Directory.File("settings.json"));
+        context.Model.Reload();
+        Assert.IsFalse(context.Model.ReopenEditorTabsOnStartup);
+        Assert.AreEqual(0, changes.Count);
+        CollectionAssert.AreEqual(bytes, File.ReadAllBytes(context.Directory.File("settings.json")));
+
+        using (var locked = new FileStream(context.Directory.File("settings.json"), FileMode.Open, FileAccess.Read, FileShare.Read))
+            context.Model.ReopenEditorTabsOnStartup = true;
+        Assert.IsFalse(context.Model.ReopenEditorTabsOnStartup);
+        Assert.IsFalse(context.Settings.LoadReopenEditorTabsOnStartup());
+        Assert.AreEqual(0, changes.Count);
+
+        context.Model.ReopenEditorTabsOnStartup = true;
+        Assert.IsTrue(context.Settings.LoadReopenEditorTabsOnStartup());
+        CollectionAssert.AreEqual(new[] { nameof(SettingsViewModel.ReopenEditorTabsOnStartup) }, changes);
+    }
+
+    [TestMethod]
     public void EntireFolderPreferenceReloadsAndKeepsSavedValueWhenPersistenceFails()
     {
         using var context = new Context();

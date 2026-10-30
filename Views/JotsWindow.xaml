@@ -479,7 +479,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Style="{StaticResource NotedFooterText}" Text="{Binding StatusText}"/>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <CheckBox Content="Always visible"
+                            <CheckBox Content="Keep visible when inactive"
                                       ToolTip="Use the app visible opacity even when this window is inactive"
                                       Margin="0,0,8,0"
                                       IsChecked="{Binding Path=(s:WindowAppearance.AlwaysVisible), RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"

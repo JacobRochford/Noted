@@ -306,6 +306,10 @@ public partial class MainWindow : Window {
     {
         switch (property)
         {
+            case nameof(SettingsViewModel.ReopenEditorTabsOnStartup):
+                if (_settingsViewModel.ReopenEditorTabsOnStartup)
+                    _noteEditor.SaveEditorSession();
+                break;
             case nameof(SettingsViewModel.ShowModifiedSubtitle):
                 _viewModel.ShowModifiedSubtitle = _settingsViewModel.ShowModifiedSubtitle;
                 break;

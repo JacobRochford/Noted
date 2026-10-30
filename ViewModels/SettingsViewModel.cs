@@ -130,6 +130,7 @@ internal sealed class SettingsViewModel : ObservableObject
             IncludeEntireNotesFolderInBackups = _settings.LoadIncludeEntireNotesFolderInBackups();
             _defaultIndentation = _settings.LoadDefaultIndentation();
             NormalizePastedText = _settings.LoadNormalizePastedText();
+            ReopenEditorTabsOnStartup = _settings.LoadReopenEditorTabsOnStartup();
             ThemeMode = _settings.LoadAppThemeMode();
             _activeAccent = _settings.LoadAccentColor();
             AccentText = _activeAccent;
@@ -301,6 +302,23 @@ internal sealed class SettingsViewModel : ObservableObject
     public bool TimestampPlacementLine { get => TimestampPlacement == NoteTimestampPlacement.Line; set { if (value) TimestampPlacement = NoteTimestampPlacement.Line; } }
     public bool FolderNavigationModeDrillDown { get => FolderNavigationMode == FolderNavigationMode.DrillDown; set { if (value) FolderNavigationMode = FolderNavigationMode.DrillDown; } }
     public bool FolderNavigationModeExpand { get => FolderNavigationMode == FolderNavigationMode.Expand; set { if (value) FolderNavigationMode = FolderNavigationMode.Expand; } }
+    private bool _reopenEditorTabsOnStartup;
+    public bool ReopenEditorTabsOnStartup
+    {
+        get => _reopenEditorTabsOnStartup;
+        set
+        {
+            if (_reopenEditorTabsOnStartup == value) return;
+            if (!_loading && !TrySave(() => _settings.SaveReopenEditorTabsOnStartup(value)))
+            {
+                OnPropertyChanged();
+                return;
+            }
+            SetProperty(ref _reopenEditorTabsOnStartup, value);
+            if (!_loading) PreferenceChanged?.Invoke(nameof(ReopenEditorTabsOnStartup));
+        }
+    }
+
     private bool _includeEntireNotesFolderInBackups;
     public bool IncludeEntireNotesFolderInBackups
     {
