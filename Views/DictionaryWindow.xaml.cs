@@ -16,6 +16,7 @@ public partial class DictionaryWindow : OverlayWindow
 {
     private readonly IAppSettingsService _settingsService;
     private readonly DictionaryWindowViewModel _viewModel;
+    private readonly Dictionary<DictionaryItem, double> _definitionHeights = [];
     private string? _lastPersistenceWarning;
     private bool _reopenOnStartup;
     private bool _preserveOpenStateOnClose;
@@ -122,6 +123,32 @@ public partial class DictionaryWindow : OverlayWindow
     {
         if (!e.Handled && sender is TextBox editor)
             e.Handled = EditorTextWrapping.HandleKey(editor, e.Key, e.KeyboardDevice.Modifiers);
+    }
+
+    private void DefinitionContent_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is Grid content && content.DataContext is DictionaryItem item &&
+            _definitionHeights.TryGetValue(item, out var height))
+        {
+            content.MaxHeight = double.PositiveInfinity;
+            content.Height = height;
+        }
+    }
+
+    private void DefinitionResizeGrip_DragDelta(object sender, DragDeltaEventArgs e)
+    {
+        if (sender is not Thumb grip || grip.Tag is not Grid content ||
+            content.DataContext is not DictionaryItem item || e.VerticalChange == 0)
+            return;
+
+        // leave room for the word, definition heading, and editing actions.
+        var maximumHeight = Math.Max(48, ItemsScrollViewer.ViewportHeight - 140);
+        var currentHeight = double.IsNaN(content.Height) ? content.ActualHeight : content.Height;
+        var height = Math.Clamp(currentHeight + e.VerticalChange, 48, maximumHeight);
+        _definitionHeights[item] = height;
+        content.MaxHeight = double.PositiveInfinity;
+        content.Height = height;
+        e.Handled = true;
     }
 
     internal bool TryFlushPendingContent(out string? error)
@@ -238,6 +265,7 @@ public partial class DictionaryWindow : OverlayWindow
     {
         if (sender is FrameworkElement fe && fe.DataContext is DictionaryItem item)
         {
+            _definitionHeights.Remove(item);
             _viewModel.RemoveItem(item);
         }
     }
@@ -363,7 +391,11 @@ public partial class DictionaryWindow : OverlayWindow
     {
         if (sender is not FrameworkElement { DataContext: DictionaryItem item }) return;
         item.CancelEdit();
-        if (item.IsNew) _viewModel.RemoveItem(item);
+        if (item.IsNew)
+        {
+            _definitionHeights.Remove(item);
+            _viewModel.RemoveItem(item);
+        }
     }
 
     private void WordTextBox_LostFocus(object sender, RoutedEventArgs e)
