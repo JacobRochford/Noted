@@ -368,7 +368,15 @@ namespace Noted.Services
 
         public static void ToggleMiniPad()
         {
-            ShowMiniPad();
+            if (s_miniPads.Any(window => window.IsWindowVisible))
+            {
+                foreach (var window in MiniPads)
+                    window.HideWindow();
+            }
+            else if (s_miniPads.Count == 0)
+                ShowMiniPad();
+            else
+                ShowAllMiniPads();
         }
 
         public static void ToggleEditor()

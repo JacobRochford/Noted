@@ -75,6 +75,68 @@ public sealed class MiniPadWindowTests
     }
 
     [TestMethod]
+    public void MiniPadUtilityTogglesAllInstancesAndCreatesOnlyTheFirst()
+    {
+        WithWindows((settings, directory) =>
+        {
+            WindowManager.MiniPadProvider = () =>
+                new MiniPadWindow(new MiniPadRecoveryService(directory.Path, Guid.NewGuid()), settings);
+            var toggle = UtilityCatalog.Utilities.Single(utility => utility.Id == "MiniPad").Toggle;
+
+            toggle();
+            Assert.HasCount(1, WindowManager.MiniPads);
+            Assert.IsTrue(WindowManager.MiniPad!.IsWindowVisible);
+            toggle();
+            Assert.IsFalse(WindowManager.MiniPad.IsWindowVisible);
+            toggle();
+            Assert.HasCount(1, WindowManager.MiniPads);
+            Assert.IsTrue(WindowManager.MiniPad.IsWindowVisible);
+
+            WindowManager.NewMiniPad();
+            WindowManager.NewMiniPad();
+            var windows = WindowManager.MiniPads.ToArray();
+            windows[0].HideWindow();
+            toggle();
+            Assert.IsTrue(windows.All(window => !window.IsVisible));
+            toggle();
+            Assert.IsTrue(windows.All(window => window.IsWindowVisible));
+            CollectionAssert.AreEquivalent(windows, WindowManager.MiniPads.ToArray());
+        });
+    }
+
+    [TestMethod]
+    public void EditorContextMenuCreatesShowsAndClosesMiniPads()
+    {
+        WithWindows((settings, directory) =>
+        {
+            WindowManager.MiniPadProvider = () =>
+                new MiniPadWindow(new MiniPadRecoveryService(directory.Path, Guid.NewGuid()), settings);
+            WindowManager.ShowMiniPad();
+            var first = WindowManager.MiniPad!;
+            var editor = (TextBox)first.FindName("Editor");
+            var menu = editor.ContextMenu;
+            Assert.IsTrue(menu.Items.OfType<MenuItem>().Any(item => item.Command == System.Windows.Input.ApplicationCommands.Copy));
+
+            menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "New MiniPad"))
+                .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.HasCount(2, WindowManager.MiniPads);
+            var second = WindowManager.MiniPads.Single(window => window != first);
+            Assert.IsTrue(second.IsWindowVisible);
+
+            second.HideWindow();
+            menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Show All MiniPads"))
+                .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.IsTrue(first.IsWindowVisible);
+            Assert.IsTrue(second.IsWindowVisible);
+
+            menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Close MiniPad"))
+                .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.HasCount(1, WindowManager.MiniPads);
+            Assert.AreSame(second, WindowManager.MiniPad);
+        });
+    }
+
+    [TestMethod]
     public void ClosingMiddleInstancePreservesOtherIdentitiesContentAndState()
     {
         WithWindows((settings, directory) =>

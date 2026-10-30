@@ -11,6 +11,6 @@ internal static class UtilityCatalog
         new UtilityDefinition(PersistenceKeys.Dictionary, "Dictionary", "Aa", 10, "Bold", WindowManager.ToggleDictionary),
          new UtilityDefinition(PersistenceKeys.Jots, "Jots", "✦", 12, "SemiBold", WindowManager.ToggleJots),
         new UtilityDefinition(PersistenceKeys.Scratchpad, "Scratchpad", "✎", 13, "SemiBold", WindowManager.ToggleScratchpad),
-        new UtilityDefinition(PersistenceKeys.MiniPad, "MiniPad", "▤", 12, "SemiBold", WindowManager.ShowMiniPad)
+        new UtilityDefinition(PersistenceKeys.MiniPad, "MiniPad", "▤", 12, "SemiBold", WindowManager.ToggleMiniPad)
     });
 }

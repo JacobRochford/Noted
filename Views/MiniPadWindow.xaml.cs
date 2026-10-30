@@ -65,6 +65,7 @@ public partial class MiniPadWindow : OverlayWindow
             SaveWindowState();
         });
         EditorNavigation.AddMenuItem(EditorMenu, () => Editor);
+        AddMiniPadContextMenuItems();
         IndentationButton.Content = EditorIndentation.GetLabel(_indentation);
         EditorIndentation.AttachIndicator(IndentationButton, () => _indentation, value =>
         {
@@ -273,6 +274,23 @@ public partial class MiniPadWindow : OverlayWindow
         {
             menu.PlacementTarget = button;
             menu.IsOpen = true;
+        }
+    }
+
+    private void AddMiniPadContextMenuItems()
+    {
+        var menu = Editor.ContextMenu;
+        menu.Items.Add(new Separator());
+        foreach (var (header, handler) in new (string, RoutedEventHandler)[]
+        {
+            ("New MiniPad", NewMiniPadMenuItem_Click),
+            ("Show All MiniPads", ShowAllMiniPadsMenuItem_Click),
+            ("Close MiniPad", CloseMiniPadMenuItem_Click)
+        })
+        {
+            var item = new MenuItem { Header = header, Style = TryFindResource("NotedContextMenuItem") as Style };
+            item.Click += handler;
+            menu.Items.Add(item);
         }
     }
 
