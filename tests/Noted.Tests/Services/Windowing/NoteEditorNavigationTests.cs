@@ -19,6 +19,32 @@ public sealed class NoteEditorNavigationTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
+    public void EmptyFindUsesTheActivePaneWordAndKeepsAnExistingQuery(bool split) => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "first.txt", "primary"));
+        if (split)
+        {
+            editor.OpenNote(CreateNote(files, "second.txt", "secondary"));
+            editor.HandleNavigationShortcut(Key.Oem5, ModifierKeys.Control);
+        }
+        var box = (TextBox)editor.FindName(split ? "SecondaryEditorTextBox" : "EditorTextBox");
+        var input = (TextBox)editor.FindName("FindTextBox");
+        box.Select(2, 0);
+        var expected = box.Text;
+        Assert.IsTrue(KeyboardTestInput.Press(box, Key.F, ModifierKeys.Control).Handled);
+        Assert.AreEqual(expected, input.Text);
+        Assert.AreEqual(2, box.CaretIndex);
+        Assert.AreEqual(0, box.SelectionLength);
+        input.Text = "previous";
+        KeyboardTestInput.Press(box, Key.F, ModifierKeys.Control);
+        Assert.AreEqual("previous", input.Text);
+        Assert.AreEqual(expected, box.Text);
+        editor.Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
+    });
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
     public void PlainTextPreviewIsOptInAndKeepsEditingStateInEitherPane(bool split) => WithEditor((editor, _, _, files) =>
     {
         var path = CreateNote(files, "source.txt", "# heading\n**bold**");

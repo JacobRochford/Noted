@@ -253,7 +253,7 @@ internal sealed class TextSearchSession
         (start + length == text.Length || !IsWordCharacter(text[start + length]));
 
     // The Unicode categories used by .NET regex \w (UTF-16 code units).
-    private static bool IsWordCharacter(char character) =>
+    internal static bool IsWordCharacter(char character) =>
         char.GetUnicodeCategory(character) is
             UnicodeCategory.UppercaseLetter or UnicodeCategory.LowercaseLetter or
             UnicodeCategory.TitlecaseLetter or UnicodeCategory.ModifierLetter or

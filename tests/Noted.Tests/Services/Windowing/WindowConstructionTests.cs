@@ -20,6 +20,47 @@ namespace Noted.Tests.Services;
 public sealed class WindowConstructionTests
 {
     [TestMethod]
+    public void SettingsCategoriesKeepFolderLocationWithBackupsAndExposeExistingControls()
+    {
+        WpfTestHost.Invoke(() =>
+        {
+            var view = new SettingsView();
+            var categories = (ComboBox)view.FindName("SettingsCategory");
+            var expectedControls = new[]
+            {
+                new[] { "AppearanceModeCombo", "DefaultOpacitySlider", "GhostModeOption" },
+                new[] { "NewNotePromptOption", "TimestampNoneOption", "FolderNavDrillDownOption" },
+                new[] { "PreferredDisplayCombo", "RunOnStartupOption", "ReopenEditorTabsOnStartupOption" },
+                new[] { "HotkeyEditorPopup" },
+                new[] { "NotesFolderPathText", "ChangeFolderButton", "CreateOrUpdateBackupButton", "RestoreBackupButton" },
+                new[] { "FileExplorerIntegrationOption" }
+            };
+            var sections = (StackPanel)view.FindName("SettingsSections");
+            Border SectionFor(string name)
+            {
+                var control = (FrameworkElement)view.FindName(name);
+                while (control.Parent != sections)
+                    control = (FrameworkElement)control.Parent;
+                return (Border)control;
+            }
+
+            foreach (var width in new[] { 250, 430 })
+            for (var category = 0; category < expectedControls.Length; category++)
+            {
+                categories.SelectedIndex = category;
+                view.Measure(new Size(width, 700));
+                view.Arrange(new Rect(0, 0, width, 700));
+                view.UpdateLayout();
+                for (var other = 0; other < expectedControls.Length; other++)
+                foreach (var name in expectedControls[other])
+                    Assert.AreEqual(other == category ? Visibility.Visible : Visibility.Collapsed,
+                        SectionFor(name).Visibility, name);
+                Assert.IsTrue(categories.ActualWidth <= width);
+            }
+        });
+    }
+
+    [TestMethod]
     public void SharedResourcesAndChangedWindowsLoadWithoutStartingTheApplication()
     {
         WpfTestHost.Invoke(() =>
@@ -565,6 +606,37 @@ public sealed class WindowConstructionTests
                 Assert.AreEqual("xx", input.Text);
                 Assert.AreEqual(new TextSearchMatch(11, 2), session.CurrentMatch,
                     "Seeding the same query must establish the selected occurrence from SelectionStart.");
+                Close();
+
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                SetQuery("");
+                Select(5, 0);
+                Assert.IsTrue(editorControl.Focus());
+                Open();
+                Assert.AreEqual("xx", input.Text, window.GetType().Name + " must seed an empty Find from the caret word.");
+                Assert.AreEqual(new TextSearchMatch(4, 2), session.CurrentMatch);
+                content.UpdateLayout();
+                Assert.IsTrue(input.Focus());
+                input.SelectAll();
+                input.SelectedText = "manual";
+                Assert.IsTrue(input.CanUndo, window.GetType().Name + " manual query edit must create an undo entry.");
+                Close();
+                Open();
+                Assert.AreEqual("manual", input.Text, "Reopening without a selection must keep the existing query.");
+                input.Undo();
+                Assert.AreEqual("xx", input.Text, window.GetType().Name + " manual query edits must remain undoable after reopening.");
+                input.Redo();
+                Assert.AreEqual("manual", input.Text);
+                SetQuery("");
+                Assert.IsTrue(input.Focus());
+                Open();
+                Assert.AreEqual("", input.Text, "Ctrl+F in the empty Find input must not seed from the editor.");
+                Assert.IsTrue(editorControl.Focus());
+                Select(1, 0);
+                Open();
+                Assert.AreEqual("foo", input.Text, "An empty, already open Find must use the focused editor's caret word.");
+                Assert.AreEqual(text, window is ScratchpadWindow
+                    ? new RichTextSearchSnapshot(richEditor.Document).Text : ((TextBox)editorControl).Text);
                 Close();
             }
             finally

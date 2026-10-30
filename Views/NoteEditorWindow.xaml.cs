@@ -1466,7 +1466,9 @@ public partial class NoteEditorWindow : Window
     private void OpenFind(bool showReplace)
     {
         var wasVisible = FindPanel.Visibility == Visibility.Visible;
-        var seed = FindSelectionSeed.GetQuery(CurrentEditorTextBox.SelectedText, wasVisible, CurrentEditorTextBox.IsKeyboardFocusWithin);
+        var seed = FindSelectionSeed.GetQuery(CurrentEditorTextBox.SelectedText, wasVisible, CurrentEditorTextBox.IsKeyboardFocusWithin,
+            FindTextBox.Text, () => showReplace ? null :
+                FindSelectionSeed.GetWordAtCaret(CurrentEditorTextBox.Text, CurrentEditorTextBox.CaretIndex));
         if (wasVisible && seed is null)
         {
             if (showReplace)

@@ -36,6 +36,12 @@ internal sealed class RichTextBoxSearchPresenter : IDisposable
 
     internal bool IsApplyingReplacement { get; private set; }
 
+    internal string? GetWordAtCaret()
+    {
+        var snapshot = new RichTextSearchSnapshot(_editor.Document);
+        return FindSelectionSeed.GetWordAtCaret(snapshot.Text, snapshot.GetOffset(_editor.CaretPosition));
+    }
+
     internal void BeginFind()
     {
         _isFindOpen = true;

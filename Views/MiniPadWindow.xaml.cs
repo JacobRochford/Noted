@@ -303,7 +303,8 @@ public partial class MiniPadWindow : OverlayWindow
     private void OpenFind()
     {
         var wasVisible = FindPanel.Visibility == Visibility.Visible;
-        var seed = FindSelectionSeed.GetQuery(Editor.SelectedText, wasVisible, Editor.IsKeyboardFocusWithin);
+        var seed = FindSelectionSeed.GetQuery(Editor.SelectedText, wasVisible, Editor.IsKeyboardFocusWithin,
+            FindTextBox.Text, () => FindSelectionSeed.GetWordAtCaret(Editor.Text, Editor.CaretIndex));
         if (wasVisible && seed is null)
         {
             FindTextBox.Focus();

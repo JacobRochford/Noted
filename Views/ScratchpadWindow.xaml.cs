@@ -702,7 +702,8 @@ public partial class ScratchpadWindow : OverlayWindow
     private void OpenFind()
     {
         var wasVisible = _viewModel.IsFindBarVisible;
-        var seed = FindSelectionSeed.GetQuery(Editor.Selection.Text, wasVisible, Editor.IsKeyboardFocusWithin);
+        var seed = FindSelectionSeed.GetQuery(Editor.Selection.Text, wasVisible, Editor.IsKeyboardFocusWithin,
+            _viewModel.FindText, _findPresenter.GetWordAtCaret);
         if (wasVisible && seed is null)
         {
             FindTextBox.Focus();

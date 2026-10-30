@@ -13,6 +13,29 @@ namespace Noted.Tests.Search;
 public sealed class RichTextBoxSearchPresenterTests
 {
     [TestMethod]
+    public void CaretWordSpansFormattingWithoutChangingTheDocumentOrSelection()
+    {
+        RunOnSta(() =>
+        {
+            using var surface = new Surface("");
+            var first = new Run("config");
+            var second = new Run("uration") { FontWeight = FontWeights.Bold };
+            var paragraph = new Paragraph();
+            paragraph.Inlines.Add(first);
+            paragraph.Inlines.Add(second);
+            surface.Editor.Document = new FlowDocument(paragraph);
+            surface.Editor.CaretPosition = second.ContentStart.GetPositionAtOffset(2)!;
+            var caret = surface.Editor.CaretPosition;
+            var text = new TextRange(surface.Editor.Document.ContentStart, surface.Editor.Document.ContentEnd).Text;
+
+            Assert.AreEqual("configuration", surface.Presenter.GetWordAtCaret());
+            Assert.AreEqual(0, caret.CompareTo(surface.Editor.CaretPosition));
+            Assert.IsTrue(surface.Editor.Selection.IsEmpty);
+            Assert.AreEqual(text, new TextRange(surface.Editor.Document.ContentStart, surface.Editor.Document.ContentEnd).Text);
+        });
+    }
+
+    [TestMethod]
     public void RegexWholeWord_HighlightsSharedRangesAcrossFormattingWithoutChangingSelection()
     {
         RunOnSta(() =>
