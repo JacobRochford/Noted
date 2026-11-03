@@ -281,6 +281,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable {
         SavePinnedNoteKeys();
     }
 
+    public void RemovePinnedNoteKey(string noteKey) {
+        if (_pinnedNoteKeys.Remove(noteKey))
+            SavePinnedNoteKeys();
+    }
+
+    public void RemovePinnedNoteKeysInFolder(string folderNoteKey) {
+        var prefix = folderNoteKey.TrimEnd('/') + "/";
+        if (_pinnedNoteKeys.RemoveWhere(key => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) > 0)
+            SavePinnedNoteKeys();
+    }
+
     private HashSet<string> LoadPinnedNoteKeys() {
         var storedKeys = _settingsService.LoadPinnedNotes() ?? Array.Empty<string>();
         var resolvedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

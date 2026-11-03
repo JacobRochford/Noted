@@ -90,6 +90,50 @@ public sealed class MainWindowViewModelTests
         Assert.IsFalse(Directory.Exists(files.NotesDirectory));
     });
 
+    [TestMethod]
+    public void RemovingDeletedNotePinKeepsOtherPinnedNotes() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveNotesDirectory(directory.File("notes"));
+        using var files = new NoteFileService(settings);
+        var deletedPath = directory.File("notes", "deleted.txt");
+        var keptPath = directory.File("notes", "kept.txt");
+        File.WriteAllText(deletedPath, "deleted");
+        File.WriteAllText(keptPath, "kept");
+        settings.SavePinnedNotes([files.GetNoteKey(deletedPath), files.GetNoteKey(keptPath)]);
+        using var model = new MainWindowViewModel(files, settings, action => action());
+        model.LoadNotes();
+
+        Assert.IsTrue(files.DeleteNote(deletedPath));
+        model.RemovePinnedNoteKey(files.GetNoteKey(deletedPath));
+
+        CollectionAssert.AreEquivalent(
+            new[] { files.GetNoteKey(keptPath) },
+            settings.LoadPinnedNotes().ToArray());
+    });
+
+    [TestMethod]
+    public void RemovingDeletedFolderPinsKeepsSiblingFolderPins() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        settings.SaveNotesDirectory(directory.File("notes"));
+        using var files = new NoteFileService(settings);
+        settings.SavePinnedNotes([
+            "./Work/first.txt", "./Work/Nested/second.txt",
+            "./Work2/kept.txt", "./root.txt"
+        ]);
+        using var model = new MainWindowViewModel(files, settings, action => action());
+        model.LoadNotes();
+
+        model.RemovePinnedNoteKeysInFolder("./work");
+
+        CollectionAssert.AreEquivalent(
+            new[] { "./Work2/kept.txt", "./root.txt" },
+            settings.LoadPinnedNotes().ToArray());
+    });
+
     private static DispatcherTimer? GetTimer(MainWindowViewModel model) =>
         (DispatcherTimer?)typeof(MainWindowViewModel)
             .GetField("_debounceTimer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(model);

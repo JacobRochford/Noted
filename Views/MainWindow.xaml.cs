@@ -1105,9 +1105,10 @@ public partial class MainWindow : Window {
                 return;
 
             var (success, error) = _noteOperations.DeleteFolder(folderPath);
-            if (success)
+            if (success) {
                 _noteEditor.NotifyDirectoryRemoved(folderPath);
-            else
+                _viewModel.RemovePinnedNoteKeysInFolder(_fileService.GetNoteKey(folderPath));
+            } else
                 AppDialog.Show(error ?? "Failed to delete folder.", "Delete Failed", MessageBoxButton.OK, MessageBoxImage.Error);
             _viewModel.LoadNotes();
         } else {
@@ -1152,6 +1153,7 @@ public partial class MainWindow : Window {
         try {
             if (_noteOperations.DeleteNote(filePath)) {
                 _noteEditor.NotifyFileRemoved(filePath);
+                _viewModel.RemovePinnedNoteKey(_fileService.GetNoteKey(filePath));
                 _viewModel.LoadNotes();
                 return;
             }
