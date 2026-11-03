@@ -481,6 +481,34 @@
                         <ColumnDefinition x:Name="SecondaryEditorColumn" Width="0"/>
                     </Grid.ColumnDefinitions>
 
+                    <Border x:Name="EmptyEditorState"
+                            Grid.ColumnSpan="3"
+                            Panel.ZIndex="10"
+                            Background="{DynamicResource NotedEditorBackgroundBrush}"
+                            Visibility="Collapsed">
+                        <StackPanel HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                            <TextBlock HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                       FontSize="16"
+                                       Text="No note open"/>
+                            <StackPanel Margin="0,18,0,0" Orientation="Horizontal">
+                                <Button x:Name="EmptyNewNoteButton"
+                                        MinWidth="95"
+                                        Click="NewNoteButton_Click"
+                                        Content="New note"
+                                        Style="{StaticResource EditorButton}"
+                                        ToolTip="New note (Ctrl+N)"/>
+                                <Button Margin="10,0,0,0"
+                                        MinWidth="95"
+                                        Click="OpenNoteMenuItem_Click"
+                                        Content="Open a note"
+                                        Style="{StaticResource NotedSecondaryButton}"
+                                        ToolTip="Open note (Ctrl+O)"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
                     <Grid x:Name="PrimaryEditorPane" Grid.Column="0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>

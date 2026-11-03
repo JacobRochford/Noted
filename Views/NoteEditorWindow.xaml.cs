@@ -218,7 +218,12 @@ public partial class NoteEditorWindow : Window
         return OpenNoteCore(filePath, usesGeneratedName: false);
     }
 
-    private void OpenNoteMenuItem_Click(object sender, RoutedEventArgs e) => OpenNoteFromDialog();
+    private void OpenNoteMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        OpenNoteFromDialog();
+        if (CurrentDocument is null)
+            FocusActiveSurface();
+    }
 
     internal bool OpenNoteFromDialog(Func<OpenFileDialog, bool?>? showDialog = null)
     {
@@ -910,7 +915,7 @@ public partial class NoteEditorWindow : Window
             else
             {
                 ClearEditorSurface();
-                Hide();
+                FocusActiveSurface();
             }
         }
 
@@ -982,6 +987,7 @@ public partial class NoteEditorWindow : Window
     {
         var hasDocument = _activeDocument is not null;
         var currentDocument = CurrentDocument;
+        EmptyEditorState.Visibility = hasDocument ? Visibility.Collapsed : Visibility.Visible;
         SelectTab(currentDocument);
         PrimaryDocumentHeader.SetResourceReference(Border.BackgroundProperty,
             ReferenceEquals(currentDocument, _activeDocument) ? "NotedAccentSoftBrush" : "NotedSubtleSurfaceBrush");
@@ -1901,6 +1907,8 @@ public partial class NoteEditorWindow : Window
     private void NewNoteButton_Click(object sender, RoutedEventArgs e)
     {
         RequestNewNote();
+        if (CurrentDocument is null)
+            FocusActiveSurface();
     }
 
     private void RequestNewNote()
@@ -2459,6 +2467,13 @@ public partial class NoteEditorWindow : Window
 
     private void FocusActiveSurface()
     {
+        if (CurrentDocument is null)
+        {
+            EmptyNewNoteButton.Focus();
+            Keyboard.Focus(EmptyNewNoteButton);
+            return;
+        }
+
         Control surface = CurrentPreview.Mode == MarkdownPreviewMode.Preview
             ? (ReferenceEquals(CurrentDocument, _secondaryDocument) ? SecondaryMarkdownPreview : MarkdownPreview)
             : CurrentEditorTextBox;
