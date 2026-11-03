@@ -54,6 +54,29 @@ public sealed class AppThemeManagerTests
     }
 
     [TestMethod]
+    public void NotedButtonTextRemainsReadableAcrossThemesAndAccents()
+    {
+        var resources = new ResourceDictionary();
+        using var manager = new AppThemeManager(resources, AppThemeMode.Light, "#15FFFF");
+        foreach (var theme in new[] { AppThemeMode.Light, AppThemeMode.Dark, AppThemeMode.Midnight, AppThemeMode.OLED, AppThemeMode.Warm })
+        foreach (var accent in new[] { "#15FFFF", "#FFFFFF", "#000000", "#3366AA", "#FF0000" })
+        {
+            manager.Apply(theme, accent);
+            var normalText = GetColor(resources, "NotedTextBrush");
+            var pressedText = GetColor(resources, "NotedAccentTextBrush");
+            Assert.IsGreaterThanOrEqualTo(4.5,
+                AppThemeManager.Contrast(normalText, GetColor(resources, "NotedAccentSoftBrush")),
+                $"Normal button text is hard to read in {theme} with {accent}.");
+            Assert.IsGreaterThanOrEqualTo(4.5,
+                AppThemeManager.Contrast(normalText, GetColor(resources, "NotedAccentSoftHoverBrush")),
+                $"Hovered button text is hard to read in {theme} with {accent}.");
+            Assert.IsGreaterThanOrEqualTo(4.5,
+                AppThemeManager.Contrast(pressedText, GetColor(resources, "NotedAccentBrush")),
+                $"Pressed button text is hard to read in {theme} with {accent}.");
+        }
+    }
+
+    [TestMethod]
     [DataRow("#FFFFFF")]
     [DataRow("#000000")]
     [DataRow("#15FFFF")]

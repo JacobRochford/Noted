@@ -116,7 +116,11 @@ internal sealed class AppThemeManager : IDisposable
         SetBrush("NotedAccentPressedBrush", Mix(accent, Colors.Black, 0.23));
         SetBrush("NotedAccentSoftBrush", accentSoft);
         SetBrush("NotedAccentSoftHoverBrush", accentSoftHover);
-        SetBrush("NotedAccentTextBrush", UseDarkText(accent) ? ParseColor("#18252D") : Colors.White);
+        var accentText = UseDarkText(accent) ? ParseColor("#18252D") : Colors.White;
+        if (Contrast(accentText, accent) < 4.5)
+            accentText = Contrast(Colors.Black, accent) >= Contrast(Colors.White, accent)
+                ? Colors.Black : Colors.White;
+        SetBrush("NotedAccentTextBrush", accentText);
         // Keep selections distinct on both text-entry surfaces for every accent.
         var selection = accent;
         for (var i = 0; i < 20 && (Contrast(selection, input) < 3 || Contrast(selection, editor) < 3); i++)

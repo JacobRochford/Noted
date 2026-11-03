@@ -1049,12 +1049,12 @@
             Width="88" Height="44"
                 Canvas.Right="20" Canvas.Bottom="20"
                 FontSize="16" FontWeight="Regular"
-            Foreground="{DynamicResource NotedAccentTextBrush}"
             Background="{DynamicResource NotedAccentSoftBrush}"
             BorderBrush="{DynamicResource NotedStrongBorderBrush}">
 
             <Button.Style>
                 <Style TargetType="Button">
+                    <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="Button">
@@ -1079,6 +1079,11 @@
                             </ControlTemplate>
                         </Setter.Value>
                     </Setter>
+                    <Style.Triggers>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource NotedAccentTextBrush}"/>
+                        </Trigger>
+                    </Style.Triggers>
                 </Style>
             </Button.Style>
         </Button>

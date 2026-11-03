@@ -97,6 +97,7 @@ public sealed class WindowConstructionTests
                     window.UpdateLayout();
                 }
                 VerifyWindowDragTargets(main, checklist, dictionary, scratchpad, miniPad, editor);
+                VerifyNotedButtonForeground(main);
                 var settingsView = (SettingsView)main.FindName("SettingsView");
                 settingsView.Visibility = Visibility.Visible;
                 settingsView.Measure(new Size(430, 900));
@@ -135,6 +136,19 @@ public sealed class WindowConstructionTests
                 }
             }
         });
+    }
+
+    private static void VerifyNotedButtonForeground(MainWindow main)
+    {
+        var button = (Button)main.FindName("FloatingNotesButton");
+        Assert.AreSame(main.FindResource("NotedTextBrush"), button.Foreground);
+        var pressed = button.Style.Triggers.OfType<Trigger>().Single(trigger =>
+            trigger.Property == System.Windows.Controls.Primitives.ButtonBase.IsPressedProperty &&
+            Equals(trigger.Value, true));
+        var foreground = pressed.Setters.OfType<Setter>().Single(setter =>
+            setter.Property == Control.ForegroundProperty);
+        Assert.AreEqual("NotedAccentTextBrush",
+            ((DynamicResourceExtension)foreground.Value).ResourceKey);
     }
 
     [TestMethod]
