@@ -27,6 +27,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
     private bool _isRefreshing;
     private bool _isBulkUpdating;
     private bool _isUpdatingItemText;
+    private bool _deferContentRefresh;
     private string? _persistenceError;
     private string? _itemSaveError;
     private string? _tabSaveError;
@@ -257,8 +258,16 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
         NotifyProgress();
         SaveItems();
-        if (!_isUpdatingItemText)
+        if (!_isUpdatingItemText &&
+            !(_deferContentRefresh && e.PropertyName is nameof(ChecklistItem.Text) or nameof(ChecklistItem.Notes)))
             RefreshFilteredItems();
+    }
+
+    internal void DeferContentRefresh(bool defer)
+    {
+        if (_deferContentRefresh == defer) return;
+        _deferContentRefresh = defer;
+        if (!defer) RefreshFilteredItems();
     }
 
     internal void UpdateItemText(ChecklistItem item, string text)
@@ -546,6 +555,21 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         return _saveScheduler.TryFlush(out error);
     }
 
+    internal bool TrySaveItems(ChecklistItem? excludedItem, out string? error)
+    {
+        var snapshot = CreateItemsSnapshot(excludedItem);
+        _saveScheduler.Schedule(snapshot);
+        if (!_saveScheduler.TryFlush(out error)) return false;
+
+        // a notification during the write may have queued newer content.
+        if (!snapshot.SequenceEqual(CreateItemsSnapshot(excludedItem)))
+        {
+            error = "Checklist content changed while saving. Finish the item again to save the latest changes.";
+            return false;
+        }
+        return true;
+    }
+
     public void Dispose()
     {
         _checklistTabs.SelectionChanged -= ChecklistTabs_SelectionChanged;
@@ -560,9 +584,9 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         _saveScheduler.Schedule(CreateItemsSnapshot());
     }
 
-    private IReadOnlyList<ChecklistItemState> CreateItemsSnapshot()
+    private IReadOnlyList<ChecklistItemState> CreateItemsSnapshot(ChecklistItem? excludedItem = null)
     {
-        return Items.Select(i => new ChecklistItemState
+        return Items.Where(item => !ReferenceEquals(item, excludedItem)).Select(i => new ChecklistItemState
         {
             Text      = i.Text,
             IsChecked = i.IsChecked,

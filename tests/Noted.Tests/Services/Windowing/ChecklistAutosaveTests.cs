@@ -69,6 +69,7 @@ public sealed class ChecklistAutosaveTests
         model.IsSearchVisible = true;
         Layout(window);
         Assert.IsTrue(searchBox.Focus());
+        window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
 
         if (search)
             Assert.HasCount(0, model.FilteredItems);
@@ -100,7 +101,7 @@ public sealed class ChecklistAutosaveTests
         Assert.IsTrue(InvokeKeyHandler(window, title, Key.Escape).Handled);
 
         Assert.AreEqual("kept after Escape", editNewItem ? blank.Text : item.Text);
-        Assert.IsNull(Keyboard.FocusedElement);
+        Assert.AreSame(window.FindName("ItemsList"), Keyboard.FocusedElement);
         Assert.HasCount(3, model.Items);
         Assert.IsTrue(window.TryFlushPendingContent(out var error), error);
         Assert.AreEqual(editNewItem ? "changed" : "kept after Escape", service.Saved[0].Text);

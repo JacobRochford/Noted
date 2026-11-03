@@ -221,7 +221,7 @@ namespace Noted.Services
             Main?.RestoreNotesPosition();
         }
 
-        public static void HideChecklist() => Checklist?.HideWindow();
+        public static void HideChecklist() => Checklist?.TryHide();
         public static void HideDictionary() => Dictionary?.HideWindow();
         public static void HideJots() => Jots?.HideWindow();
         public static void HideScratchpad() => Scratchpad?.HideWindow();

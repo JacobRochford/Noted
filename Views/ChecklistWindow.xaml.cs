@@ -24,6 +24,15 @@ public partial class ChecklistWindow : OverlayWindow
     private string? _lastPersistenceWarning;
     private bool _reopenOnStartup;
     private bool _preserveOpenStateOnClose;
+    private ChecklistItem? _creatingItem;
+    private ChecklistPriority _creationPriority;
+    private string? _creationTabId;
+    private ChecklistItem? _editingItem;
+    private ChecklistItem? _titleSelectionItem;
+    private int _titleSelectionStart;
+    private int _titleSelectionLength;
+    private bool _navigatingItem;
+    private bool _completingItem;
 
     public ChecklistWindow(
         IAppSettingsService settingsService,
@@ -111,12 +120,21 @@ public partial class ChecklistWindow : OverlayWindow
 
     protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
     {
-        if (Keyboard.FocusedElement is TextBox { Name: "ItemTitleTextBox" } textBox &&
-            !ReferenceEquals(
-                VisualTreeHelpers.FindAncestor<TextBox>(e.OriginalSource as DependencyObject),
-                textBox))
+        var target = e.OriginalSource as DependencyObject;
+        var current = _creatingItem ?? _editingItem;
+        if (e.ChangedButton == MouseButton.Left &&
+            !IsWithin(target, TitleBar) && !IsWithin(target, AddItemButton) &&
+            current is not null && !IsItemPopupOpen(current) &&
+            !ReferenceEquals(GetItem(target), current))
         {
-            ItemsList.Focus();
+            var creation = _creatingItem;
+            // let the click reach its original control before refreshing or removing rows.
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (!IsVisible || !_viewModel.Items.Contains(current) ||
+                    !ReferenceEquals(_creatingItem, creation)) return;
+                FinishNavigation(current, completeExisting: true);
+            }, System.Windows.Threading.DispatcherPriority.Input);
         }
 
         base.OnPreviewMouseDown(e);
@@ -154,14 +172,25 @@ public partial class ChecklistWindow : OverlayWindow
 
     protected override void RequestHide()
     {
-        if (!TryFlushPendingContent(out var error))
+        TryHide();
+    }
+
+    internal bool TryHide()
+    {
+        var item = _creatingItem ?? _editingItem;
+        if (item is not null)
+        {
+            if (!TryFinishItem(item, keepEmpty: false, focusList: true)) return false;
+        }
+        else if (!TryFlushPendingContent(out var error))
         {
             ShowPersistenceWarningOnce(error);
-            return;
+            return false;
         }
 
         ShowPersistenceWarningOnce(_viewModel.PersistenceError);
         HideWindow();
+        return true;
     }
 
     private void ChecklistWindow_IsVisibleChanged(
@@ -208,9 +237,52 @@ public partial class ChecklistWindow : OverlayWindow
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
-        if (!e.Handled)
-            e.Handled = HandleSearchShortcut(e.Key, e.KeyboardDevice.Modifiers);
+        var modifiers = e.KeyboardDevice.Modifiers;
+        var item = GetItem(e.OriginalSource as DependencyObject);
+        var popupItem = item ?? _creatingItem ?? _editingItem;
+        if (!e.Handled && e.Key == Key.Escape && e.IsRepeat)
+            e.Handled = true;
+        if (!e.Handled && !TabNamePopup.IsOpen && (popupItem is null || !IsItemPopupOpen(popupItem)))
+        {
+            if (e.Key == Key.N && modifiers == ModifierKeys.Control)
+            {
+                if (!e.IsRepeat) BeginNewItem();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter && modifiers == ModifierKeys.Control && item is not null)
+            {
+                TryFinishItem(item, keepEmpty: true, focusList: true);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Tab && item is not null &&
+                     (modifiers == ModifierKeys.None || modifiers == ModifierKeys.Shift))
+            {
+                NavigateItem(item, e.OriginalSource as UIElement, modifiers == ModifierKeys.Shift);
+                e.Handled = true;
+            }
+            else
+                e.Handled = HandleSearchShortcut(e.Key, modifiers);
+        }
         base.OnPreviewKeyDown(e);
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (!e.Handled && e.Key == Key.Escape && e.KeyboardDevice.Modifiers == ModifierKeys.None &&
+            !TabNamePopup.IsOpen)
+        {
+            var item = GetItem(e.OriginalSource as DependencyObject);
+            var popupItem = item ?? _creatingItem ?? _editingItem;
+            if (popupItem is null || !IsItemPopupOpen(popupItem))
+            {
+                if (item is not null && (e.OriginalSource is TextBox || ReferenceEquals(item, _creatingItem)))
+                    TryFinishItem(item, keepEmpty: false, focusList: true);
+                else
+                    RequestHide();
+                e.Handled = true;
+            }
+        }
+        base.OnKeyDown(e);
     }
 
     internal bool HandleSearchShortcut(Key key, ModifierKeys modifiers)
@@ -416,9 +488,7 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void AddButton_Click(object sender, RoutedEventArgs e)
     {
-        var item = _viewModel.AddItem();
-        Dispatcher.BeginInvoke(() => FocusItem(item),
-            System.Windows.Threading.DispatcherPriority.Input);
+        BeginNewItem();
     }
 
     private void DeleteItemMenuItem_Click(object sender, RoutedEventArgs e)
@@ -560,6 +630,196 @@ public partial class ChecklistWindow : OverlayWindow
 
     // Keyboard navigation
 
+    private void BeginNewItem(ChecklistItem? anchor = null)
+    {
+        if (!_viewModel.CanAddItem) return;
+        if (_creatingItem is not null && !TryFinishItem(_creatingItem, keepEmpty: true, focusList: false))
+            return;
+
+        var item = _viewModel.AddItem(anchor);
+        if (item is null) return;
+        _creatingItem = item;
+        _creationPriority = item.Priority;
+        _creationTabId = item.TabId;
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (ReferenceEquals(_creatingItem, item) && _viewModel.Items.Contains(item))
+                FocusItem(item);
+        }, System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private bool IsEmptyCreation(ChecklistItem item) =>
+        ReferenceEquals(item, _creatingItem) &&
+        string.IsNullOrWhiteSpace(item.Text) && string.IsNullOrWhiteSpace(item.Notes) &&
+        item.DueDate is null && !item.IsChecked &&
+        item.Priority == _creationPriority && item.TabId == _creationTabId;
+
+    private bool TryFinishItem(ChecklistItem item, bool keepEmpty, bool focusList)
+    {
+        if (!_viewModel.Items.Contains(item))
+        {
+            if (!TryFlushPendingContent(out var pendingError))
+            {
+                ShowPersistenceWarningOnce(pendingError);
+                return false;
+            }
+            if (ReferenceEquals(_creatingItem, item)) _creatingItem = null;
+            if (ReferenceEquals(_editingItem, item)) _editingItem = null;
+            return true;
+        }
+
+        var remove = !keepEmpty && IsEmptyCreation(item);
+        if (!_viewModel.TrySaveItems(remove ? item : null, out var error))
+        {
+            ShowPersistenceWarningOnce(error);
+            return false;
+        }
+        // content entered during a save notification must not be removed as an empty creation.
+        if (remove && !IsEmptyCreation(item))
+        {
+            if (!_viewModel.TrySaveItems(null, out error))
+            {
+                ShowPersistenceWarningOnce(error);
+                return false;
+            }
+            remove = false;
+        }
+
+        _completingItem = true;
+        try
+        {
+            if (ReferenceEquals(_creatingItem, item)) _creatingItem = null;
+            if (ReferenceEquals(_editingItem, item)) _editingItem = null;
+            item.IsExpanded = false;
+            if (remove) _viewModel.RemoveItem(item);
+            _viewModel.DeferContentRefresh(false);
+            if (focusList)
+            {
+                if (!remove && _viewModel.FilteredItems.Contains(item)) ItemsList.SelectedItem = item;
+                ItemsList.Focus();
+            }
+        }
+        finally { _completingItem = false; }
+        return true;
+    }
+
+    private void NavigateItem(ChecklistItem item, UIElement? source, bool backward)
+    {
+        if (source is null) return;
+        _navigatingItem = true;
+        try
+        {
+            if (!backward && source is TextBox { Name: "ItemTitleTextBox" })
+            {
+                item.IsExpanded = true;
+                ItemsList.UpdateLayout();
+                FindItemControl<TextBox>(item, "NotesTextBox")?.Focus();
+            }
+            else if (backward && source is TextBox { Name: "NotesTextBox" })
+            {
+                var title = FindItemControl<TextBox>(item, "ItemTitleTextBox");
+                if (title is not null && title.Focus())
+                {
+                    if (ReferenceEquals(_titleSelectionItem, item))
+                        RestoreSelection(title, _titleSelectionStart, _titleSelectionLength);
+                    else
+                        title.CaretIndex = title.Text.Length;
+                }
+            }
+            else
+                source.MoveFocus(new TraversalRequest(backward ? FocusNavigationDirection.Previous : FocusNavigationDirection.Next));
+        }
+        finally { _navigatingItem = false; }
+
+        var destination = Keyboard.FocusedElement as FrameworkElement;
+        if (destination is null || ReferenceEquals(GetItem(destination), item)) return;
+        FinishNavigation(item, completeExisting: false);
+    }
+
+    private void FinishNavigation(ChecklistItem item, bool completeExisting)
+    {
+        var destination = Keyboard.FocusedElement as FrameworkElement;
+        var destinationItem = GetItem(destination);
+        var destinationName = destination?.Name ?? "";
+        var selectionStart = (destination as TextBox)?.SelectionStart ?? 0;
+        var selectionLength = (destination as TextBox)?.SelectionLength ?? 0;
+        if ((completeExisting || ReferenceEquals(_creatingItem, item)) &&
+            !TryFinishItem(item, keepEmpty: false, focusList: false))
+        {
+            FocusItem(item);
+            return;
+        }
+        _viewModel.DeferContentRefresh(false);
+        if (ReferenceEquals(destinationItem, item))
+        {
+            ItemsList.Focus();
+            return;
+        }
+        if (destinationItem is not null &&
+            (destination?.IsKeyboardFocused != true || !ReferenceEquals(GetItem(destination), destinationItem)))
+        {
+            ItemsList.UpdateLayout();
+            var target = destination is ListBoxItem
+                ? ItemsList.ItemContainerGenerator.ContainerFromItem(destinationItem) as FrameworkElement
+                : FindItemControl<FrameworkElement>(destinationItem, destinationName);
+            if (target?.Focus() == true && target is TextBox textBox)
+                RestoreSelection(textBox, selectionStart, selectionLength);
+        }
+        if (destinationItem is not null) _viewModel.DeferContentRefresh(true);
+    }
+
+    private void Item_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (GetItem(e.NewFocus as DependencyObject) is not ChecklistItem item) return;
+        _editingItem = item;
+        _viewModel.DeferContentRefresh(true);
+    }
+
+    private void Item_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (_navigatingItem || _completingItem || sender is not FrameworkElement { DataContext: ChecklistItem item })
+            return;
+        if (ReferenceEquals(GetItem(e.NewFocus as DependencyObject), item) || IsItemPopupOpen(item)) return;
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (!ReferenceEquals(_editingItem, item) || _navigatingItem || _completingItem || IsItemPopupOpen(item) ||
+                ReferenceEquals(GetItem(Keyboard.FocusedElement as DependencyObject), item)) return;
+            _editingItem = null;
+            _viewModel.DeferContentRefresh(false);
+            if (GetItem(Keyboard.FocusedElement as DependencyObject) is not null)
+                _viewModel.DeferContentRefresh(true);
+        }, System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private T? FindItemControl<T>(ChecklistItem item, string name) where T : DependencyObject
+    {
+        return VisualTreeHelpers.FindDescendant<T>(ItemsList.ItemContainerGenerator.ContainerFromItem(item), name);
+    }
+
+    private static void RestoreSelection(TextBox editor, int start, int length)
+    {
+        start = Math.Min(start, editor.Text.Length);
+        editor.Select(start, Math.Min(length, editor.Text.Length - start));
+    }
+
+    private bool IsItemPopupOpen(ChecklistItem item) =>
+        FindItemControl<DatePicker>(item, "ItemDueDatePicker")?.IsDropDownOpen == true ||
+        FindItemControl<Grid>(item, "ChecklistItemRoot")?.ContextMenu?.IsOpen == true;
+
+    private static ChecklistItem? GetItem(DependencyObject? target)
+    {
+        var element = VisualTreeHelpers.FindAncestor<FrameworkElement>(target);
+        if (element?.DataContext is ChecklistItem item) return item;
+        var menu = VisualTreeHelpers.FindAncestor<ContextMenu>(target);
+        return (menu?.PlacementTarget as FrameworkElement)?.DataContext as ChecklistItem;
+    }
+
+    private static bool IsWithin(DependencyObject? target, DependencyObject ancestor)
+    {
+        return ReferenceEquals(target, ancestor) ||
+            target is Visual visual && ancestor is Visual parent && parent.IsAncestorOf(visual);
+    }
+
     private void ItemTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (sender is TextBox textBox && textBox.DataContext is ChecklistItem item)
@@ -570,17 +830,14 @@ public partial class ChecklistWindow : OverlayWindow
     {
         if (sender is not TextBox tb || tb.DataContext is not ChecklistItem item) return;
 
-        if (e.Key == Key.Enter)
+        if (e.Key == Key.Enter && e.KeyboardDevice.Modifiers == ModifierKeys.None)
         {
-            _viewModel.RefreshFilteredItems();
-            var newItem = _viewModel.InsertItemAfter(item);
-            Dispatcher.BeginInvoke(() => FocusItem(newItem),
-                System.Windows.Threading.DispatcherPriority.Input);
+            if (TryFinishItem(item, keepEmpty: true, focusList: false)) BeginNewItem(item);
             e.Handled = true;
         }
         else if (e.Key == Key.Escape)
         {
-            Keyboard.ClearFocus();
+            if (!e.IsRepeat) TryFinishItem(item, keepEmpty: false, focusList: true);
             e.Handled = true;
         }
     }
@@ -600,9 +857,16 @@ public partial class ChecklistWindow : OverlayWindow
     {
         if (sender is TextBox textBox)
         {
-            textBox.Select(0, 0);
-            textBox.ScrollToHorizontalOffset(0);
-            _viewModel.RefreshFilteredItems();
+            var item = textBox.DataContext;
+            _titleSelectionItem = textBox.DataContext as ChecklistItem;
+            _titleSelectionStart = textBox.SelectionStart;
+            _titleSelectionLength = textBox.SelectionLength;
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (textBox.IsKeyboardFocused || !textBox.IsVisible || !ReferenceEquals(textBox.DataContext, item)) return;
+                textBox.Select(0, 0);
+                textBox.ScrollToHorizontalOffset(0);
+            }, System.Windows.Threading.DispatcherPriority.Input);
         }
     }
 

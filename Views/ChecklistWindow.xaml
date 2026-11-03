@@ -223,7 +223,7 @@
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                             <Button Content="&#xE721;" Style="{StaticResource HeaderIconBtn}"
                                     Click="SearchToggle_Click" ToolTip="Search (Ctrl+F)"/>
-                            <Button Content="&#xE711;" Margin="3,0,0,0"
+                            <Button x:Name="HideChecklistButton" Content="&#xE711;" Margin="3,0,0,0"
                                     Style="{StaticResource HeaderIconBtn}"
                                     Click="HideButton_Click" ToolTip="Hide"/>
                         </StackPanel>
@@ -368,6 +368,7 @@
                         BorderThickness="0" CornerRadius="0" ClipToBounds="True">
                     <Grid>
                         <ListBox x:Name="ItemsList" ItemsSource="{Binding FilteredItems}"
+                                 KeyboardNavigation.TabNavigation="Continue"
                                  h:WindowDragHitTest.AllowBackgroundDrag="True"
                                  Padding="2,0,3,0" Background="Transparent" BorderThickness="0"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -386,6 +387,7 @@
                             </ListBox.Template>
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem">
+                                    <Setter Property="KeyboardNavigation.TabNavigation" Value="Continue"/>
                                     <Setter Property="Margin" Value="0,1"/>
                                     <Setter Property="Padding" Value="0"/>
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -413,7 +415,9 @@
 
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Background="Transparent"
+                                    <Grid x:Name="ChecklistItemRoot" Background="Transparent"
+                                          KeyboardNavigation.TabNavigation="Local"
+                                          GotKeyboardFocus="Item_GotKeyboardFocus" LostKeyboardFocus="Item_LostKeyboardFocus"
                                           PreviewMouseRightButtonDown="ChecklistItem_PreviewMouseRightButtonDown">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -475,10 +479,11 @@
                                                      Style="{StaticResource PriorityDotStyle}"
                                                      Cursor="Hand" ToolTip="Click to change priority"
                                                      MouseLeftButtonDown="PriorityDot_MouseLeftButtonDown"/>
-                                            <CheckBox Grid.Column="1" Style="{StaticResource ChecklistBox}"
+                                            <CheckBox x:Name="ItemCompletionCheckBox" Grid.Column="1" Style="{StaticResource ChecklistBox}"
+                                                      KeyboardNavigation.TabIndex="0" FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}"
                                                       IsChecked="{Binding IsChecked, UpdateSourceTrigger=PropertyChanged}"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="ItemTitleTextBox" Grid.Column="2"
+                                            <TextBox x:Name="ItemTitleTextBox" Grid.Column="2" KeyboardNavigation.TabIndex="1"
                                                      Text="{Binding Text, Mode=OneWay}"
                                                      Padding="4,3" Background="Transparent" BorderThickness="0"
                                                      FontSize="13" TextWrapping="NoWrap" VerticalAlignment="Center"
@@ -507,7 +512,8 @@
                                                            Foreground="{DynamicResource NotedAccentTextBrush}" FontSize="10" FontWeight="SemiBold"/>
                                             </Border>
                                             <Grid Grid.Column="4">
-                                                <Button Style="{StaticResource DetailsButtonStyle}"
+                                                <Button x:Name="ItemDetailsButton" Style="{StaticResource DetailsButtonStyle}"
+                                                        KeyboardNavigation.TabIndex="5" FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}"
                                                         Click="ExpandButton_Click" ToolTip="Edit details"/>
                                                 <Ellipse Width="6" Height="6" Margin="0,1,1,0"
                                                          HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -535,6 +541,7 @@
                                                 <TextBlock Text="NOTES" Margin="1,0,0,5"
                                                            Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="10" FontWeight="SemiBold"/>
                                                 <TextBox x:Name="NotesTextBox" Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}"
+                                                         KeyboardNavigation.TabIndex="2"
                                                          PreviewKeyDown="NotesTextBox_PreviewKeyDown"
                                                          MinHeight="52" MaxHeight="120" Padding="8,6"
                                                          AcceptsReturn="True" TextWrapping="Wrap"
@@ -554,7 +561,7 @@
                                                     <TextBlock Grid.Column="0" Text="DUE" Margin="1,0,9,0"
                                                                Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="10" FontWeight="SemiBold"
                                                                VerticalAlignment="Center"/>
-                                                    <DatePicker Grid.Column="1" Height="28"
+                                                    <DatePicker x:Name="ItemDueDatePicker" Grid.Column="1" Height="28" KeyboardNavigation.TabIndex="3"
                                                                 SelectedDate="{Binding DueDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                 Background="{DynamicResource NotedInputBackgroundBrush}"
                                                                 BorderBrush="{DynamicResource NotedBorderBrush}"
@@ -578,7 +585,8 @@
                                                                    BasedOn="{StaticResource NotedCalendarButton}"/>
                                                         </DatePicker.Resources>
                                                     </DatePicker>
-                                                    <Button Grid.Column="2" Content="&#xE711;" Margin="4,0,0,0"
+                                                    <Button x:Name="ClearItemDueDateButton" Grid.Column="2" Content="&#xE711;" Margin="4,0,0,0"
+                                                            KeyboardNavigation.TabIndex="4" FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}"
                                                             Style="{StaticResource SmallIconBtn}"
                                                             FontFamily="Segoe MDL2 Assets"
                                                             Click="ClearDueDate_Click" ToolTip="Clear due date"
@@ -648,9 +656,9 @@
                                   Foreground="{DynamicResource NotedSecondaryTextBrush}"
                                   Style="{StaticResource NotedToggleSwitch}"
                                   FontSize="11" VerticalAlignment="Center"/>
-                        <Button Content="+ Add" Style="{StaticResource NotedFooterButton}" Padding="11,6"
+                        <Button x:Name="AddItemButton" Content="+ Add" Style="{StaticResource NotedFooterButton}" Padding="11,6"
                                 IsEnabled="{Binding CanAddItem}"
-                                Click="AddButton_Click" ToolTip="Add item"/>
+                                Click="AddButton_Click" ToolTip="Add item (Ctrl+N)"/>
                     </StackPanel>
                 </Grid>
             </Grid>
