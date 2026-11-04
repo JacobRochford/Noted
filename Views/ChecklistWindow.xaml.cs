@@ -657,6 +657,15 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void DueDateTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (!e.Handled && e.Key == Key.Space && e.KeyboardDevice.Modifiers == ModifierKeys.None &&
+            sender is DatePickerTextBox editor &&
+            (string.IsNullOrWhiteSpace(editor.Text) || editor.SelectionLength == editor.Text.Length))
+        {
+            e.Handled = true;
+            if (!e.IsRepeat && GetItem(editor) is ChecklistItem datedItem && TryCommitDueDate(datedItem))
+                VisualTreeHelpers.FindAncestor<DatePicker>(editor)?.SetCurrentValue(DatePicker.IsDropDownOpenProperty, true);
+            return;
+        }
         var opensCalendar = e.Key == Key.System && e.SystemKey == Key.Down &&
             e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Alt);
         if ((e.Key == Key.Enter || opensCalendar) &&

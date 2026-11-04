@@ -829,6 +829,76 @@ public sealed class ChecklistInteractionTests
         Assert.AreEqual(title.Text.Length, title.SelectionLength);
     });
 
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(false, true)]
+    [DataRow(true, false)]
+    [DataRow(true, true)]
+    public void DateSpaceOpensCalendarAfterTabWithoutFinishingEditing(bool creation, bool hasDate) => WithWindow((window, model, service) =>
+    {
+        var item = creation ? Create(window, model) : model.Items[0];
+        if (hasDate) item.DueDate = new DateTime(2027, 3, 14);
+        var expectedDate = item.DueDate;
+        var notes = EditNotes(window, item);
+        Press(notes, Key.Tab);
+        var picker = Control<DatePicker>(window, item, "ItemDueDatePicker");
+        var editor = VisualTreeHelpers.FindDescendant<DatePickerTextBox>(picker)!;
+        Assert.AreSame(editor, Keyboard.FocusedElement);
+        Assert.AreEqual(editor.Text.Length, editor.SelectionLength);
+        Assert.IsTrue(KeyboardTestInput.Press(editor, Key.Space, ModifierKeys.None).Handled);
+        Pump();
+        Assert.IsTrue(picker.IsDropDownOpen);
+        Assert.IsTrue(item.IsExpanded);
+        Assert.AreEqual(creation, item.IsEditingTitle);
+        Assert.IsFalse(item.IsChecked);
+        Assert.AreEqual(expectedDate, item.DueDate);
+        Assert.HasCount(creation ? 3 : 2, model.Items);
+        Press((UIElement)Keyboard.FocusedElement, Key.Escape);
+        Pump();
+        Assert.IsFalse(picker.IsDropDownOpen);
+        Assert.IsTrue(window.IsVisible);
+        Assert.IsTrue(item.IsExpanded);
+        Assert.IsTrue(model.Items.Contains(item));
+    });
+
+    [TestMethod]
+    public void DateSpaceKeepsSpacesAvailableInsideAManuallyTypedDate() => WithWindow((window, model, service) =>
+    {
+        var item = model.Items[0];
+        var notes = EditNotes(window, item);
+        Press(notes, Key.Tab);
+        var picker = Control<DatePicker>(window, item, "ItemDueDatePicker");
+        var editor = VisualTreeHelpers.FindDescendant<DatePickerTextBox>(picker)!;
+        var date = new DateTime(2027, 3, 14);
+        editor.SelectedText = date.ToString("MMMM", picker.Language.GetSpecificCulture());
+        Assert.IsFalse(KeyboardTestInput.Press(editor, Key.Space, ModifierKeys.None).Handled);
+        Assert.IsFalse(picker.IsDropDownOpen);
+        // routed key events do not generate the separate text input event for a space.
+        editor.SelectedText = date.ToString(" dd yyyy", picker.Language.GetSpecificCulture());
+        Press(editor, Key.Enter, ModifierKeys.Control);
+        Assert.AreEqual(date, item.DueDate);
+        Assert.AreEqual(date, service.Load()[0].DueDate);
+        Assert.IsFalse(item.IsExpanded);
+    });
+
+    [TestMethod]
+    public void DateSpacePreservesSelectedInvalidInputAndShowsValidation() => WithWindow((window, model, service) =>
+    {
+        var item = model.Items[0];
+        var notes = EditNotes(window, item);
+        Press(notes, Key.Tab);
+        var picker = Control<DatePicker>(window, item, "ItemDueDatePicker");
+        var editor = VisualTreeHelpers.FindDescendant<DatePickerTextBox>(picker)!;
+        editor.SelectedText = "not a date";
+        editor.SelectAll();
+        Assert.IsTrue(KeyboardTestInput.Press(editor, Key.Space, ModifierKeys.None).Handled);
+        Assert.IsFalse(picker.IsDropDownOpen);
+        Assert.AreEqual("not a date", editor.Text);
+        Assert.AreSame(editor, Keyboard.FocusedElement);
+        Assert.IsTrue(Control<TextBlock>(window, item, "DueDateErrorText").IsVisible);
+        editor.Clear();
+    });
+
     private static ChecklistItem Create(ChecklistWindow window, ChecklistWindowViewModel model)
     {
         Press((ListBox)window.FindName("ItemsList"), Key.N, ModifierKeys.Control);
