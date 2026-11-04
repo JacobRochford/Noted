@@ -305,8 +305,10 @@ public sealed class ChecklistAutosaveTests
         var container = (DependencyObject)list.ItemContainerGenerator.ContainerFromItem(item);
         if (!item.IsEditingTitle)
         {
-            var pencil = VisualTreeHelpers.FindDescendant<Button>(container, "ItemEditTitleButton")!;
-            pencil.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var root = VisualTreeHelpers.FindDescendant<Grid>(container, "ChecklistItemRoot")!;
+            root.ContextMenu.PlacementTarget = root;
+            root.ContextMenu.Items.OfType<MenuItem>().Single(entry => Equals(entry.Header, "Edit title"))
+                .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             Layout(window);
             container = (DependencyObject)list.ItemContainerGenerator.ContainerFromItem(item);
         }

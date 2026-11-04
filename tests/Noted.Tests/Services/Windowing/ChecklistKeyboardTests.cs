@@ -178,30 +178,28 @@ public sealed class ChecklistKeyboardTests
     });
 
     [TestMethod]
-    public void TabTraversesDateAndDetailsWithoutActivatingThem() => WithWindow((window, model, _) =>
+    public void TabTraversesDateAndChevronWithoutActivatingThem() => WithWindow((window, model, _) =>
     {
         var item = Create(window, model);
         var title = Control<TextBox>(window, item, "ItemTitleTextBox");
         Press(title, Key.Tab);
         var notes = Control<TextBox>(window, item, "NotesTextBox");
-        var pencil = Control<Button>(window, item, "ItemEditTitleButton");
+        var details = Control<Button>(window, item, "ItemDetailsButton");
         var picker = Control<DatePicker>(window, item, "ItemDueDatePicker");
         var clicks = 0;
-        pencil.Click += (_, _) => clicks++;
+        details.Click += (_, _) => clicks++;
         Press(notes, Key.Tab);
         Assert.IsTrue(picker.IsKeyboardFocusWithin);
-        for (var index = 0; index < 6 && !pencil.IsKeyboardFocused; index++)
-            Press((UIElement)Keyboard.FocusedElement, Key.Tab);
-        Assert.IsTrue(pencil.IsKeyboardFocused);
+        for (var index = 0; index < 6 && !details.IsKeyboardFocused; index++)
+            Press((UIElement)Keyboard.FocusedElement, Key.Tab, ModifierKeys.Shift);
+        Assert.IsTrue(details.IsKeyboardFocused);
         Assert.AreEqual(0, clicks);
         Assert.IsTrue(item.IsExpanded);
         Assert.IsFalse(item.IsChecked);
         Assert.IsNull(item.DueDate);
-        Press(pencil, Key.Enter);
+        Press(details, Key.Enter);
         Assert.AreEqual(1, clicks);
-        Assert.IsTrue(item.IsExpanded);
-        Assert.IsTrue(item.IsEditingTitle);
-        Assert.AreSame(title, Keyboard.FocusedElement);
+        Assert.IsFalse(item.IsExpanded);
     });
 
     [TestMethod]
@@ -210,9 +208,10 @@ public sealed class ChecklistKeyboardTests
         model.SortMode = ChecklistSortMode.Alphabetical;
         var item = Create(window, model);
         Press((UIElement)Keyboard.FocusedElement, Key.Tab);
-        var pencil = Control<Button>(window, item, "ItemEditTitleButton");
-        pencil.Focus();
-        Press(pencil, Key.Tab);
+        var picker = Control<DatePicker>(window, item, "ItemDueDatePicker");
+        var dateEditor = VisualTreeHelpers.FindDescendant<TextBox>(picker)!;
+        dateEditor.Focus();
+        Press(dateEditor, Key.Tab);
         Assert.IsFalse(model.Items.Contains(item));
         Assert.IsFalse(((ListBox)window.FindName("ItemsList")).IsKeyboardFocusWithin);
         Press((UIElement)Keyboard.FocusedElement, Key.Enter, ModifierKeys.Control);
@@ -486,7 +485,10 @@ public sealed class ChecklistKeyboardTests
 
     private static TextBox EditTitle(ChecklistWindow window, ChecklistItem item)
     {
-        Control<Button>(window, item, "ItemEditTitleButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var root = Control<Grid>(window, item, "ChecklistItemRoot");
+        root.ContextMenu.PlacementTarget = root;
+        root.ContextMenu.Items.OfType<MenuItem>().Single(entry => Equals(entry.Header, "Edit title"))
+            .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         return Control<TextBox>(window, item, "ItemTitleTextBox");
     }
 

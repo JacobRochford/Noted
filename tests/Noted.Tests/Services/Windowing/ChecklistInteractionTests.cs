@@ -188,7 +188,7 @@ public sealed class ChecklistInteractionTests
                 case "tab": model.SelectTab(model.FindTab("done")); break;
                 case "search": model.SearchQuery = "no match"; break;
                 case "sort": model.SortMode = ChecklistSortMode.Alphabetical; break;
-                case "title": Click(Control<Button>(window, model.Items[1], "ItemEditTitleButton")); break;
+                case "title": EditTitleFromMenu(window, model.Items[1]); break;
                 case "notes": EditNotes(window, model.Items[1]); break;
                 case "hide": Assert.IsFalse(window.TryHide()); break;
                 case "create tab":
@@ -398,9 +398,7 @@ public sealed class ChecklistInteractionTests
         Assert.IsTrue(item.IsExpanded);
         MouseClick(Control<Border>(window, item, "ItemDueDateChip"));
         Assert.IsTrue(item.IsExpanded);
-        var pencil = Control<Button>(window, item, "ItemEditTitleButton");
-        MouseClick(pencil);
-        Click(pencil);
+        MouseClick(title);
         Assert.IsTrue(item.IsEditingTitle);
         Assert.IsTrue(item.IsExpanded);
         MouseClick(Control<TextBox>(window, item, "NotesTextBox"));
@@ -615,6 +613,222 @@ public sealed class ChecklistInteractionTests
         Assert.AreEqual("later content", notesField ? saved.Notes : saved.Text);
     });
 
+    [TestMethod]
+    [DataRow("alpha")]
+    [DataRow("")]
+    [DataRow("   ")]
+    public void TitleClickCollapsedRowOnlyExpandsAndWaitsForAnIntentionalEdit(string text) => WithWindow((window, model, service) =>
+    {
+        var item = model.Items[0];
+        item.Text = text;
+        var display = Control<TextBlock>(window, item, "ItemTitleText");
+        MouseClick(display);
+        Assert.IsTrue(item.IsExpanded);
+        Assert.IsFalse(item.IsEditingTitle);
+        Assert.IsFalse(Control<TextBox>(window, item, "ItemTitleTextBox").IsVisible);
+        Assert.IsFalse(Keyboard.FocusedElement is TextBox);
+        Assert.AreEqual(text, item.Text);
+    });
+
+    [TestMethod]
+    public void TitleClickExpandedRowReusesTheEditorWithoutSelectingAllAndKeepsUndo() => WithWindow((window, model, service) =>
+    {
+        var item = model.Items[0];
+        item.IsExpanded = true;
+        var editor = Control<TextBox>(window, item, "ItemTitleTextBox");
+        MouseClick(Control<TextBlock>(window, item, "ItemTitleText"));
+        Assert.IsTrue(item.IsExpanded);
+        Assert.IsTrue(item.IsEditingTitle);
+        Assert.AreSame(editor, Keyboard.FocusedElement);
+        Assert.AreEqual(0, editor.SelectionLength);
+        Assert.AreEqual("alpha", editor.Text);
+        editor.SelectedText = "edited ";
+        Assert.IsTrue(editor.CanUndo);
+        Press(editor, Key.Enter);
+        Assert.HasCount(2, model.Items);
+        Assert.IsTrue(item.IsExpanded);
+        Assert.IsFalse(item.IsEditingTitle);
+        Assert.AreEqual(item.Text, service.Load()[0].Text);
+        MouseClick(Control<TextBlock>(window, item, "ItemTitleText"));
+        Assert.AreSame(editor, Keyboard.FocusedElement);
+        Assert.AreEqual(0, editor.SelectionLength);
+        Assert.IsTrue(editor.CanUndo);
+        editor.Undo();
+        Assert.AreEqual("alpha", item.Text);
+    });
+
+    [TestMethod]
+    [DataRow("", false)]
+    [DataRow("", true)]
+    [DataRow("   ", false)]
+    public void TitleClickPlaceholderIsDisplayOnlyAndNeverDisposesEstablishedEmptyItems(string text, bool completed) => WithWindow((window, model, service) =>
+    {
+        var item = model.Items[0];
+        item.Text = text;
+        item.IsChecked = completed;
+        var display = Control<TextBlock>(window, item, "ItemTitleText");
+        Assert.AreEqual("Add a title...", display.Text);
+        Assert.IsTrue(display.ActualWidth > 0);
+        MouseClick(display);
+        MouseClick(display);
+        var editor = Control<TextBox>(window, item, "ItemTitleTextBox");
+        Assert.AreSame(editor, Keyboard.FocusedElement);
+        Assert.AreEqual(text, editor.Text);
+        Assert.AreEqual(0, editor.SelectionLength);
+        Press(editor, Key.Enter, ModifierKeys.Control);
+        Assert.IsTrue(model.Items.Contains(item));
+        Assert.IsTrue(model.FilteredItems.Contains(item));
+        Assert.AreEqual(text, service.Load()[0].Text);
+        Assert.AreEqual("", service.Load()[0].Notes);
+        Assert.AreEqual("Add a title...", Control<TextBlock>(window, item, "ItemTitleText").Text);
+        MouseClick(Control<TextBlock>(window, item, "ItemTitleText"));
+        MouseClick(Control<TextBlock>(window, item, "ItemTitleText"));
+        Press(Control<TextBox>(window, item, "ItemTitleTextBox"), Key.Escape);
+        Assert.IsTrue(model.Items.Contains(item));
+        Assert.HasCount(2, service.Load());
+    });
+
+    [TestMethod]
+    public void TitleClickPreservedBlankCreationRemainsEstablishedWhenEditedAndExited() => WithWindow((window, model, service) =>
+    {
+        var item = Create(window, model);
+        Press(Control<TextBox>(window, item, "ItemTitleTextBox"), Key.Enter, ModifierKeys.Control);
+        var display = Control<TextBlock>(window, item, "ItemTitleText");
+        Assert.AreEqual("Add a title...", display.Text);
+        MouseClick(display);
+        MouseClick(display);
+        Press(Control<TextBox>(window, item, "ItemTitleTextBox"), Key.Escape);
+        Assert.IsTrue(model.Items.Contains(item));
+        Assert.IsFalse(item.IsExpanded);
+        Assert.HasCount(3, service.Load());
+        Assert.AreEqual("", service.Load().Last().Text);
+    });
+
+    [TestMethod]
+    public void TitleClickDoubleClickAndHeaderControlsKeepExpansionSeparateFromEditing() => WithWindow((window, model, service) =>
+    {
+        var item = model.Items[0];
+        var display = Control<TextBlock>(window, item, "ItemTitleText");
+        MouseClick(display);
+        MouseClick(display, 2);
+        Assert.IsTrue(item.IsExpanded);
+        Assert.IsFalse(item.IsEditingTitle);
+        MouseClick(Control<Grid>(window, item, "ItemDragArea"));
+        Assert.IsFalse(item.IsExpanded);
+        Click(Control<Button>(window, item, "ItemDetailsButton"));
+        Assert.IsTrue(item.IsExpanded);
+        Assert.IsFalse(item.IsEditingTitle);
+        MouseClick(Control<CheckBox>(window, item, "ItemCompletionCheckBox"));
+        Assert.IsTrue(item.IsExpanded);
+        Assert.IsFalse(item.IsEditingTitle);
+        EditNotes(window, item);
+        Assert.IsFalse(item.IsEditingTitle);
+        MouseClick(display);
+        Assert.IsTrue(item.IsExpanded);
+        Assert.IsTrue(item.IsEditingTitle);
+        Click(Control<Button>(window, item, "ItemDetailsButton"));
+        Assert.IsFalse(item.IsExpanded);
+        Assert.IsFalse(item.IsEditingTitle);
+    });
+
+    [TestMethod]
+    public void TitleClickMouseDownLeavesRoomForDraggingBeforeEditingOnRelease() => WithWindow((window, model, service) =>
+    {
+        var item = model.Items[0];
+        item.IsExpanded = true;
+        var display = Control<TextBlock>(window, item, "ItemTitleText");
+        var down = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+        {
+            RoutedEvent = Mouse.PreviewMouseDownEvent
+        };
+        typeof(MouseButtonEventArgs).GetProperty("ClickCount")!.SetValue(down, 1);
+        display.RaiseEvent(down);
+        Assert.IsFalse(item.IsEditingTitle);
+        Assert.IsFalse(down.Handled);
+        display.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+        {
+            RoutedEvent = Mouse.PreviewMouseUpEvent
+        });
+        Assert.IsTrue(item.IsExpanded);
+        Assert.IsTrue(item.IsEditingTitle);
+    });
+
+    [TestMethod]
+    public void TitleClickFailedPreviousNotesSaveKeepsItsEditorAndSuccessfulRetryEditsTheDestination() => WithWindow((window, model, service) =>
+    {
+        model.SortMode = ChecklistSortMode.Alphabetical;
+        var origin = model.Items[0];
+        var destination = model.Items[1];
+        var notes = EditNotes(window, origin);
+        notes.Text = "pending notes";
+        origin.Text = "zulu";
+        destination.IsExpanded = true;
+        service.FailSave = true;
+        WithWarningDismissed(window, () => MouseClick(Control<TextBlock>(window, destination, "ItemTitleText")));
+        Pump();
+        Assert.AreSame(notes, Keyboard.FocusedElement);
+        Assert.IsTrue(origin.IsExpanded);
+        Assert.IsFalse(destination.IsEditingTitle);
+        service.FailSave = false;
+        MouseClick(Control<TextBlock>(window, destination, "ItemTitleText"), pumpBeforeRelease: true);
+        Pump();
+        Assert.IsFalse(origin.IsExpanded);
+        Assert.IsTrue(destination.IsExpanded);
+        Assert.IsTrue(destination.IsEditingTitle);
+        Assert.AreSame(Control<TextBox>(window, destination, "ItemTitleTextBox"), Keyboard.FocusedElement);
+        Assert.AreEqual("pending notes", service.Load()[0].Notes);
+    });
+
+    [TestMethod]
+    public void TitleClickRetainsTitleNotesNavigationAndLeavesTheListAfterDateControls() => WithWindow((window, model, service) =>
+    {
+        var item = model.Items[0];
+        item.IsExpanded = true;
+        item.DueDate = new DateTime(2027, 3, 14);
+        MouseClick(Control<TextBlock>(window, item, "ItemTitleText"));
+        var title = Control<TextBox>(window, item, "ItemTitleTextBox");
+        title.Select(1, 2);
+        Press(title, Key.Tab);
+        var notes = Control<TextBox>(window, item, "NotesTextBox");
+        Assert.AreSame(notes, Keyboard.FocusedElement);
+        Press(notes, Key.Tab, ModifierKeys.Shift);
+        Assert.AreSame(title, Keyboard.FocusedElement);
+        Assert.AreEqual(1, title.SelectionStart);
+        Assert.AreEqual(2, title.SelectionLength);
+        Press(title, Key.Tab);
+        Press(notes, Key.Tab);
+        Assert.IsTrue(Control<DatePicker>(window, item, "ItemDueDatePicker").IsKeyboardFocusWithin);
+        for (var index = 0; index < 4 && ((ListBox)window.FindName("ItemsList")).IsKeyboardFocusWithin; index++)
+            Press((UIElement)Keyboard.FocusedElement, Key.Tab);
+        Assert.IsFalse(((ListBox)window.FindName("ItemsList")).IsKeyboardFocusWithin);
+        Assert.IsFalse(item.IsEditingTitle);
+        Assert.IsNotNull(item.DueDate);
+        Assert.IsNull(VisualTreeHelpers.FindDescendant<Button>(Row(window, item), "ItemEditTitleButton"));
+    });
+
+    [TestMethod]
+    public void TitleClickCoordinatesChooseTheCaretWhileF2AndContextMenuRetainTheirBehavior() => WithWindow((window, model, service) =>
+    {
+        var item = model.Items[0];
+        item.Text = "a longer title with several words";
+        item.IsExpanded = true;
+        typeof(ChecklistWindow).GetMethod("BeginTitleEditing", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(window, [item, new Point(0, 0)]);
+        var title = Control<TextBox>(window, item, "ItemTitleTextBox");
+        Assert.AreSame(title, Keyboard.FocusedElement);
+        Assert.AreEqual(0, title.SelectionLength);
+        Assert.AreEqual(0, title.CaretIndex);
+        Press(title, Key.Enter);
+        EditTitle(window, item);
+        Assert.AreEqual(title.Text.Length, title.SelectionLength);
+        Press(title, Key.Enter);
+        EditTitleFromMenu(window, item);
+        Assert.AreSame(title, Keyboard.FocusedElement);
+        Assert.IsTrue(item.IsExpanded);
+        Assert.IsTrue(item.IsEditingTitle);
+        Assert.AreEqual(title.Text.Length, title.SelectionLength);
+    });
+
     private static ChecklistItem Create(ChecklistWindow window, ChecklistWindowViewModel model)
     {
         Press((ListBox)window.FindName("ItemsList"), Key.N, ModifierKeys.Control);
@@ -627,6 +841,14 @@ public sealed class ChecklistInteractionTests
         Row(window, item).Focus();
         Press(Row(window, item), Key.F2);
         return Control<TextBox>(window, item, "ItemTitleTextBox");
+    }
+
+    private static void EditTitleFromMenu(ChecklistWindow window, ChecklistItem item)
+    {
+        var root = Control<Grid>(window, item, "ChecklistItemRoot");
+        root.ContextMenu.PlacementTarget = root;
+        root.ContextMenu.Items.OfType<MenuItem>().Single(entry => Equals(entry.Header, "Edit title"))
+            .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
     }
 
     private static TextBox EditNotes(ChecklistWindow window, ChecklistItem item)
@@ -651,7 +873,7 @@ public sealed class ChecklistInteractionTests
 
     private static void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 
-    private static void MouseClick(UIElement target, int count = 1)
+    private static void MouseClick(UIElement target, int count = 1, bool pumpBeforeRelease = false)
     {
         var down = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
         {
@@ -659,6 +881,11 @@ public sealed class ChecklistInteractionTests
         };
         typeof(MouseButtonEventArgs).GetProperty("ClickCount")!.SetValue(down, count);
         target.RaiseEvent(down);
+        if (pumpBeforeRelease)
+        {
+            VisualTreeHelpers.FindAncestor<ListBoxItem>(target)?.Focus();
+            Pump();
+        }
         target.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
         {
             RoutedEvent = Mouse.PreviewMouseUpEvent

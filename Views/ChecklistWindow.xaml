@@ -498,18 +498,28 @@
                                                       AutomationProperties.Name="Mark item completed"
                                                       IsChecked="{Binding IsChecked, UpdateSourceTrigger=PropertyChanged}"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="ItemTitleText" Grid.Column="3" Text="{Binding Text}"
+                                            <TextBlock x:Name="ItemTitleText" Grid.Column="3"
                                                        Margin="4,3" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
+                                                        <Setter Property="Text" Value="{Binding Text}"/>
                                                         <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
                                                         <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                                <Setter Property="Cursor" Value="IBeam"/>
+                                                            </DataTrigger>
                                                             <DataTrigger Binding="{Binding IsEditingTitle}" Value="True">
                                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding IsChecked}" Value="True">
                                                                 <Setter Property="TextDecorations" Value="Strikethrough"/>
                                                                 <Setter Property="Foreground" Value="{DynamicResource NotedMutedTextBrush}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Text, Converter={StaticResource NotesToVisibility}}" Value="Collapsed">
+                                                                <Setter Property="Text" Value="Add a title..."/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource NotedMutedTextBrush}"/>
+                                                                <Setter Property="FontStyle" Value="Italic"/>
+                                                                <Setter Property="TextDecorations" Value="{x:Null}"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -522,7 +532,7 @@
                                                      FontSize="13" TextWrapping="NoWrap" VerticalAlignment="Center"
                                                      VerticalContentAlignment="Center" KeyDown="ItemTextBox_KeyDown"
                                                      TextChanged="ItemTextBox_TextChanged"
-                                                     GotFocus="ItemTextBox_GotFocus" LostFocus="ItemTextBox_LostFocus">
+                                                     LostFocus="ItemTextBox_LostFocus">
                                                 <TextBox.Style>
                                                     <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                                         <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
@@ -545,20 +555,6 @@
                                                            Foreground="{DynamicResource NotedAccentTextBrush}" FontSize="10" FontWeight="SemiBold"/>
                                             </Border>
                                             <Grid Grid.Column="5" MinWidth="12">
-                                                <Button x:Name="ItemEditTitleButton" Content="&#xE70F;" FontFamily="Segoe MDL2 Assets"
-                                                        KeyboardNavigation.TabIndex="6" FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}"
-                                                        Click="EditTitle_Click" ToolTip="Edit title (F2)" AutomationProperties.Name="Edit item title">
-                                                    <Button.Style>
-                                                        <Style TargetType="Button" BasedOn="{StaticResource SmallIconBtn}">
-                                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Button.Style>
-                                                </Button>
                                                 <Ellipse Width="6" Height="6" Margin="0,1,1,0"
                                                          HorizontalAlignment="Right" VerticalAlignment="Top"
                                                          Fill="{DynamicResource NotedAccentBrush}"

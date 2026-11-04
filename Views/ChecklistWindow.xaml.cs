@@ -39,6 +39,7 @@ public partial class ChecklistWindow : OverlayWindow
     private FocusTarget? _lastEditorFocus;
     private FocusTarget? _refreshFocus;
     private ChecklistItem? _headerClickItem;
+    private bool _headerClickEditsTitle;
     private bool _ignoreHeaderClick;
     private bool _isClosed;
     private int _interactionVersion;
@@ -151,6 +152,7 @@ public partial class ChecklistWindow : OverlayWindow
 
     protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
     {
+        _headerClickItem = null;
         _interactionVersion++;
         var target = e.OriginalSource as DependencyObject;
         var picker = VisualTreeHelpers.FindAncestor<DatePicker>(target);
@@ -280,6 +282,7 @@ public partial class ChecklistWindow : OverlayWindow
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
+        _headerClickItem = null;
         _interactionVersion++;
         var modifiers = e.KeyboardDevice.Modifiers;
         var item = GetItem(e.OriginalSource as DependencyObject);
@@ -602,7 +605,7 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void EditTitle_Click(object sender, RoutedEventArgs e)
     {
-        var item = sender is MenuItem menuItem ? GetItemFromContextMenu(menuItem) : GetItemFromSender(sender);
+        var item = GetItemFromContextMenu(sender as MenuItem);
         if (item is not null) BeginTitleEditing(item);
     }
 
@@ -916,7 +919,7 @@ public partial class ChecklistWindow : OverlayWindow
     {
         var controls = new List<UIElement>();
         if (ItemsList.ItemContainerGenerator.ContainerFromItem(item) is ListBoxItem row) controls.Add(row);
-        foreach (var name in new[] { "ItemDetailsButton", "ItemCompletionCheckBox", "ItemTitleTextBox", "NotesTextBox", "ItemDueDatePicker", "ClearItemDueDateButton", "ItemEditTitleButton" })
+        foreach (var name in new[] { "ItemDetailsButton", "ItemCompletionCheckBox", "ItemTitleTextBox", "NotesTextBox", "ItemDueDatePicker", "ClearItemDueDateButton" })
         {
             var control = FindItemControl<UIElement>(item, name);
             if (control is DatePicker picker)
@@ -944,6 +947,8 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void FinishNavigation(ChecklistItem item)
     {
+        // keep the clicked title in place until mouse-up resolves the editing handoff.
+        if (_headerClickItem is not null && _headerClickEditsTitle) return;
         if (!ReferenceEquals(item, _creatingItem) && !ReferenceEquals(item, _editingItem)) return;
         TryFinishItem(item, keepEmpty: false, focusList: false);
     }
@@ -1004,7 +1009,7 @@ public partial class ChecklistWindow : OverlayWindow
         }, System.Windows.Threading.DispatcherPriority.Input);
     }
 
-    private void BeginTitleEditing(ChecklistItem item)
+    private void BeginTitleEditing(ChecklistItem item, Point? clickPosition = null)
     {
         var previous = _creatingItem ?? _editingItem;
         if (previous is not null && !ReferenceEquals(previous, item) &&
@@ -1013,10 +1018,10 @@ public partial class ChecklistWindow : OverlayWindow
         _editingItem = item;
         item.IsEditingTitle = true;
         _viewModel.DeferContentRefresh(true);
-        FocusTitle(item, selectAll: true);
+        FocusTitle(item, selectAll: clickPosition is null, clickPosition);
     }
 
-    private void FocusTitle(ChecklistItem item, bool selectAll)
+    private void FocusTitle(ChecklistItem item, bool selectAll, Point? clickPosition = null)
     {
         ItemsList.SelectedItem = item;
         ItemsList.ScrollIntoView(item);
@@ -1024,6 +1029,14 @@ public partial class ChecklistWindow : OverlayWindow
         var editor = FindItemControl<TextBox>(item, "ItemTitleTextBox");
         if (editor?.Focus() != true) return;
         if (selectAll) editor.SelectAll();
+        else if (clickPosition is Point point)
+        {
+            editor.ScrollToHorizontalOffset(0);
+            editor.UpdateLayout();
+            var index = editor.GetCharacterIndexFromPoint(
+                new Point(point.X + editor.Padding.Left, editor.ActualHeight / 2), snapToText: true);
+            editor.CaretIndex = index >= 0 ? index : editor.Text.Length;
+        }
         else editor.CaretIndex = editor.Text.Length;
     }
 
@@ -1228,11 +1241,6 @@ public partial class ChecklistWindow : OverlayWindow
             e.Handled = EditorTextWrapping.HandleKey(editor, e.Key, e.KeyboardDevice.Modifiers);
     }
 
-    private void ItemTextBox_GotFocus(object sender, RoutedEventArgs e)
-    {
-        if (sender is TextBox tb) tb.SelectAll();
-    }
-
     private void ItemTextBox_LostFocus(object sender, RoutedEventArgs e)
     {
         if (sender is TextBox textBox)
@@ -1260,6 +1268,8 @@ public partial class ChecklistWindow : OverlayWindow
         var dragArea = GetHeaderBackground(e.OriginalSource as DependencyObject);
         if (dragArea?.DataContext is not ChecklistItem item) return;
         _headerClickItem = item;
+        _headerClickEditsTitle = item.IsExpanded &&
+            VisualTreeHelpers.FindAncestor<TextBlock>(e.OriginalSource as DependencyObject)?.Name == "ItemTitleText";
         _dragStartPoint = e.GetPosition(ItemsList);
         if (!_viewModel.CanManuallyReorder) return;
 
@@ -1318,7 +1328,13 @@ public partial class ChecklistWindow : OverlayWindow
             Math.Abs(point.Y - _dragStartPoint.Y) >= SystemParameters.MinimumVerticalDragDistance ||
             !ReferenceEquals(GetHeaderBackground(e.OriginalSource as DependencyObject)?.DataContext, item)) return;
         ItemsList.SelectedItem = item;
-        ToggleDetails(item);
+        if (_headerClickEditsTitle)
+        {
+            var title = FindItemControl<TextBlock>(item, "ItemTitleText");
+            if (title is not null) BeginTitleEditing(item, e.GetPosition(title));
+            e.Handled = true;
+        }
+        else ToggleDetails(item);
     }
 
     private static Grid? GetHeaderBackground(DependencyObject? source)
