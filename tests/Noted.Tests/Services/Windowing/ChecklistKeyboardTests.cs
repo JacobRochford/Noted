@@ -46,7 +46,8 @@ public sealed class ChecklistKeyboardTests
         Assert.HasCount(3, model.Items);
         Assert.IsFalse(item.IsExpanded);
         Assert.AreEqual(item.Notes, service.Load().Last().Notes);
-        Assert.IsTrue(list.IsKeyboardFocused);
+        Assert.IsTrue(list.IsKeyboardFocusWithin);
+        Assert.IsTrue(Keyboard.FocusedElement is ListBoxItem);
     });
 
     [TestMethod]
@@ -61,7 +62,7 @@ public sealed class ChecklistKeyboardTests
         Assert.IsTrue(model.Items.Contains(item));
         Assert.IsFalse(item.IsExpanded);
         Assert.HasCount(3, service.Load());
-        Control<TextBox>(window, item, "ItemTitleTextBox").Focus();
+        EditTitle(window, item);
         Press((UIElement)Keyboard.FocusedElement, Key.Escape);
         Assert.IsTrue(model.Items.Contains(item), "An established blank placeholder must survive Escape.");
     });
@@ -116,6 +117,12 @@ public sealed class ChecklistKeyboardTests
     [DataRow("tab")]
     public void EscapePreservesPopulatedAndMetadataOnlyCreations(string content) => WithWindow((window, model, service) =>
     {
+        ChecklistTab? destinationTab = null;
+        if (content == "tab")
+        {
+            Assert.IsTrue(model.TryCreateTab("Work", out destinationTab));
+            model.SelectTab(model.FindTab("all"));
+        }
         var item = Create(window, model);
         switch (content)
         {
@@ -125,8 +132,7 @@ public sealed class ChecklistKeyboardTests
             case "priority": item.Priority = ChecklistPriority.High; break;
             case "checked": item.IsChecked = true; break;
             case "tab":
-                Assert.IsTrue(model.TryCreateTab("Work", out var tab));
-                model.MoveItemToTab(item, tab!.Id);
+                model.MoveItemToTab(item, destinationTab!.Id);
                 break;
         }
         if (model.FilteredItems.Contains(item))
@@ -158,8 +164,7 @@ public sealed class ChecklistKeyboardTests
         var item = model.Items[0];
         if (search) model.SearchQuery = "alpha";
         else model.SortMode = ChecklistSortMode.Alphabetical;
-        var title = Control<TextBox>(window, item, "ItemTitleTextBox");
-        title.Focus();
+        var title = EditTitle(window, item);
         title.Text = "zulu";
         Press(title, Key.Tab);
         var notes = Control<TextBox>(window, item, "NotesTextBox");
@@ -179,37 +184,37 @@ public sealed class ChecklistKeyboardTests
         var title = Control<TextBox>(window, item, "ItemTitleTextBox");
         Press(title, Key.Tab);
         var notes = Control<TextBox>(window, item, "NotesTextBox");
-        var details = Control<Button>(window, item, "ItemDetailsButton");
+        var pencil = Control<Button>(window, item, "ItemEditTitleButton");
         var picker = Control<DatePicker>(window, item, "ItemDueDatePicker");
         var clicks = 0;
-        details.Click += (_, _) => clicks++;
+        pencil.Click += (_, _) => clicks++;
         Press(notes, Key.Tab);
         Assert.IsTrue(picker.IsKeyboardFocusWithin);
-        for (var index = 0; index < 6 && !details.IsKeyboardFocused; index++)
+        for (var index = 0; index < 6 && !pencil.IsKeyboardFocused; index++)
             Press((UIElement)Keyboard.FocusedElement, Key.Tab);
-        Assert.IsTrue(details.IsKeyboardFocused);
+        Assert.IsTrue(pencil.IsKeyboardFocused);
         Assert.AreEqual(0, clicks);
         Assert.IsTrue(item.IsExpanded);
         Assert.IsFalse(item.IsChecked);
         Assert.IsNull(item.DueDate);
-        Press(details, Key.Enter);
+        Press(pencil, Key.Enter);
         Assert.AreEqual(1, clicks);
-        Assert.IsFalse(item.IsExpanded);
+        Assert.IsTrue(item.IsExpanded);
+        Assert.IsTrue(item.IsEditingTitle);
+        Assert.AreSame(title, Keyboard.FocusedElement);
     });
 
     [TestMethod]
-    public void TabbingIntoAnotherItemFinishesOnlyTheOriginatingCreation() => WithWindow((window, model, service) =>
+    public void TabbingOutOfTheListFinishesOnlyTheOriginatingCreation() => WithWindow((window, model, service) =>
     {
         model.SortMode = ChecklistSortMode.Alphabetical;
         var item = Create(window, model);
         Press((UIElement)Keyboard.FocusedElement, Key.Tab);
-        var details = Control<Button>(window, item, "ItemDetailsButton");
-        details.Focus();
-        Press(details, Key.Tab);
+        var pencil = Control<Button>(window, item, "ItemEditTitleButton");
+        pencil.Focus();
+        Press(pencil, Key.Tab);
         Assert.IsFalse(model.Items.Contains(item));
-        var focused = (FrameworkElement)Keyboard.FocusedElement;
-        Assert.AreSame(model.Items[0], focused.DataContext,
-            $"Focus: {focused.GetType().Name}/{focused.Name}, item: {(focused.DataContext as ChecklistItem)?.Text}, visible: {focused.IsVisible}");
+        Assert.IsFalse(((ListBox)window.FindName("ItemsList")).IsKeyboardFocusWithin);
         Press((UIElement)Keyboard.FocusedElement, Key.Enter, ModifierKeys.Control);
         Assert.HasCount(2, model.Items);
         Assert.AreEqual("alpha", service.Load()[0].Text);
@@ -260,8 +265,7 @@ public sealed class ChecklistKeyboardTests
         window.Show();
         Pump();
         Assert.IsFalse(Keyboard.FocusedElement is TextBox);
-        var title = Control<TextBox>(window, item, "ItemTitleTextBox");
-        title.Focus();
+        var title = EditTitle(window, item);
         title.Clear();
         item.Notes = "";
         Press(title, Key.Escape);
@@ -274,8 +278,7 @@ public sealed class ChecklistKeyboardTests
         model.SortMode = ChecklistSortMode.Alphabetical;
         var edited = model.Items[0];
         var clicked = model.Items[1];
-        var title = Control<TextBox>(window, edited, "ItemTitleTextBox");
-        title.Focus();
+        var title = EditTitle(window, edited);
         title.Text = "zulu";
         var details = Control<Button>(window, clicked, "ItemDetailsButton");
         PreviewClick(details);
@@ -355,9 +358,10 @@ public sealed class ChecklistKeyboardTests
     });
 
     [TestMethod]
-    public void SearchAndTabNameEscapeDoNotCompleteCreationOrHideTheWindow() => WithWindow((window, model, _) =>
+    public void SearchAndTabNameEscapeDoNotDeleteContentOrHideTheWindow() => WithWindow((window, model, _) =>
     {
         var item = Create(window, model);
+        item.Notes = "keep content when leaving the editor for search";
         Press((UIElement)Keyboard.FocusedElement, Key.Tab);
         Press((UIElement)Keyboard.FocusedElement, Key.F, ModifierKeys.Control);
         Pump();
@@ -411,11 +415,9 @@ public sealed class ChecklistKeyboardTests
     public void OldFocusLossCannotRefreshTheNewlyEditedRow() => WithWindow((window, model, _) =>
     {
         model.SortMode = ChecklistSortMode.Alphabetical;
-        var first = Control<TextBox>(window, model.Items[0], "ItemTitleTextBox");
+        EditTitle(window, model.Items[0]);
         var secondItem = model.Items[1];
-        var second = Control<TextBox>(window, secondItem, "ItemTitleTextBox");
-        first.Focus();
-        second.Focus();
+        var second = EditTitle(window, secondItem);
         second.Text = "aardvark";
         Pump();
         Assert.IsTrue(second.IsKeyboardFocused);
@@ -480,6 +482,12 @@ public sealed class ChecklistKeyboardTests
         Press((UIElement)window.FindName("ItemsList"), Key.N, ModifierKeys.Control);
         Pump();
         return model.Items.Last();
+    }
+
+    private static TextBox EditTitle(ChecklistWindow window, ChecklistItem item)
+    {
+        Control<Button>(window, item, "ItemEditTitleButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        return Control<TextBox>(window, item, "ItemTitleTextBox");
     }
 
     private static T Control<T>(ChecklistWindow window, ChecklistItem item, string name) where T : DependencyObject

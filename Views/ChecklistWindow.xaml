@@ -112,9 +112,14 @@
         <Style x:Key="DetailsButtonStyle" TargetType="Button" BasedOn="{StaticResource SmallIconBtn}">
             <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
             <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Content" Value="&#xE70F;"/>
+            <Setter Property="Content" Value="&#xE76C;"/>
+            <Setter Property="ToolTip" Value="Expand details"/>
+            <Setter Property="AutomationProperties.Name" Value="Expand item details"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                    <Setter Property="Content" Value="&#xE70D;"/>
+                    <Setter Property="ToolTip" Value="Collapse details"/>
+                    <Setter Property="AutomationProperties.Name" Value="Collapse item details"/>
                     <Setter Property="Background" Value="{DynamicResource NotedAccentSoftBrush}"/>
                     <Setter Property="Foreground" Value="{DynamicResource NotedAccentBrush}"/>
                 </DataTrigger>
@@ -368,7 +373,8 @@
                         BorderThickness="0" CornerRadius="0" ClipToBounds="True">
                     <Grid>
                         <ListBox x:Name="ItemsList" ItemsSource="{Binding FilteredItems}"
-                                 KeyboardNavigation.TabNavigation="Continue"
+                                 KeyboardNavigation.TabNavigation="Once"
+                                 GotKeyboardFocus="ItemsList_GotKeyboardFocus"
                                  h:WindowDragHitTest.AllowBackgroundDrag="True"
                                  Padding="2,0,3,0" Background="Transparent" BorderThickness="0"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -387,7 +393,7 @@
                             </ListBox.Template>
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem">
-                                    <Setter Property="KeyboardNavigation.TabNavigation" Value="Continue"/>
+                                    <Setter Property="KeyboardNavigation.TabNavigation" Value="Local"/>
                                     <Setter Property="Margin" Value="0,1"/>
                                     <Setter Property="Padding" Value="0"/>
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -418,6 +424,8 @@
                                     <Grid x:Name="ChecklistItemRoot" Background="Transparent"
                                           KeyboardNavigation.TabNavigation="Local"
                                           GotKeyboardFocus="Item_GotKeyboardFocus" LostKeyboardFocus="Item_LostKeyboardFocus"
+                                          PreviewGotKeyboardFocus="Item_PreviewGotKeyboardFocus"
+                                          PreviewLostKeyboardFocus="Item_PreviewLostKeyboardFocus"
                                           PreviewMouseRightButtonDown="ChecklistItem_PreviewMouseRightButtonDown">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
@@ -426,6 +434,8 @@
                                         <Grid.ContextMenu>
                                             <ContextMenu Style="{StaticResource NotedContextMenu}"
                                                          Opened="ItemContextMenu_Opened">
+                                                <MenuItem Header="Edit title" InputGestureText="F2"
+                                                          Style="{StaticResource NotedContextMenuItem}" Click="EditTitle_Click"/>
                                                 <MenuItem Header="High priority" Tag="High"
                                                           Style="{StaticResource NotedContextMenuItem}"
                                                           Click="SetPriority_Click">
@@ -469,21 +479,44 @@
 
                                         <Grid x:Name="ItemDragArea" Grid.Row="0" MinHeight="40" Margin="5,0,4,0" Background="Transparent">
                                             <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="28"/>
                                                 <ColumnDefinition Width="20"/>
                                                 <ColumnDefinition Width="30"/>
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="30"/>
+                                                <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
-                                            <Ellipse Grid.Column="0" Width="8" Height="8"
+                                            <Button x:Name="ItemDetailsButton" Grid.Column="0" Style="{StaticResource DetailsButtonStyle}"
+                                                    KeyboardNavigation.TabIndex="0" FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}"
+                                                    Click="ExpandButton_Click"/>
+                                            <Ellipse Grid.Column="1" Width="8" Height="8"
                                                      Style="{StaticResource PriorityDotStyle}"
                                                      Cursor="Hand" ToolTip="Click to change priority"
                                                      MouseLeftButtonDown="PriorityDot_MouseLeftButtonDown"/>
-                                            <CheckBox x:Name="ItemCompletionCheckBox" Grid.Column="1" Style="{StaticResource ChecklistBox}"
-                                                      KeyboardNavigation.TabIndex="0" FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}"
+                                            <CheckBox x:Name="ItemCompletionCheckBox" Grid.Column="2" Style="{StaticResource ChecklistBox}"
+                                                      KeyboardNavigation.TabIndex="1" FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}"
+                                                      AutomationProperties.Name="Mark item completed"
                                                       IsChecked="{Binding IsChecked, UpdateSourceTrigger=PropertyChanged}"
                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="ItemTitleTextBox" Grid.Column="2" KeyboardNavigation.TabIndex="1"
+                                            <TextBlock x:Name="ItemTitleText" Grid.Column="3" Text="{Binding Text}"
+                                                       Margin="4,3" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsEditingTitle}" Value="True">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsChecked}" Value="True">
+                                                                <Setter Property="TextDecorations" Value="Strikethrough"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource NotedMutedTextBrush}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBox x:Name="ItemTitleTextBox" Grid.Column="3" KeyboardNavigation.TabIndex="2"
+                                                     AutomationProperties.Name="Item title"
                                                      Text="{Binding Text, Mode=OneWay}"
                                                      Padding="4,3" Background="Transparent" BorderThickness="0"
                                                      FontSize="13" TextWrapping="NoWrap" VerticalAlignment="Center"
@@ -494,16 +527,16 @@
                                                     <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                                         <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
                                                         <Setter Property="Cursor" Value="IBeam"/>
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
                                                         <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsChecked}" Value="True">
-                                                                <Setter Property="TextDecorations" Value="Strikethrough"/>
-                                                                <Setter Property="Foreground" Value="{DynamicResource NotedMutedTextBrush}"/>
+                                                            <DataTrigger Binding="{Binding IsEditingTitle}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
                                                 </TextBox.Style>
                                             </TextBox>
-                                            <Border Grid.Column="3" Margin="5,0" Padding="6,3"
+                                            <Border x:Name="ItemDueDateChip" Grid.Column="4" Margin="5,0" Padding="6,3"
                                                     Background="{Binding DueDate, Converter={StaticResource DueDateToColor}}"
                                                     CornerRadius="4" Cursor="Hand" ToolTip="Edit details"
                                                     Visibility="{Binding DueDate, Converter={StaticResource NullToVisibility}}"
@@ -511,10 +544,21 @@
                                                 <TextBlock Text="{Binding DueDate, Converter={StaticResource DueDateToText}}"
                                                            Foreground="{DynamicResource NotedAccentTextBrush}" FontSize="10" FontWeight="SemiBold"/>
                                             </Border>
-                                            <Grid Grid.Column="4">
-                                                <Button x:Name="ItemDetailsButton" Style="{StaticResource DetailsButtonStyle}"
-                                                        KeyboardNavigation.TabIndex="5" FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}"
-                                                        Click="ExpandButton_Click" ToolTip="Edit details"/>
+                                            <Grid Grid.Column="5" MinWidth="12">
+                                                <Button x:Name="ItemEditTitleButton" Content="&#xE70F;" FontFamily="Segoe MDL2 Assets"
+                                                        KeyboardNavigation.TabIndex="6" FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}"
+                                                        Click="EditTitle_Click" ToolTip="Edit title (F2)" AutomationProperties.Name="Edit item title">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SmallIconBtn}">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
                                                 <Ellipse Width="6" Height="6" Margin="0,1,1,0"
                                                          HorizontalAlignment="Right" VerticalAlignment="Top"
                                                          Fill="{DynamicResource NotedAccentBrush}"
@@ -523,7 +567,7 @@
                                             </Grid>
                                         </Grid>
 
-                                        <Border Grid.Row="1" Margin="31,0,5,6" Padding="12,10"
+                                        <Border Grid.Row="1" Margin="59,0,5,6" Padding="12,10"
                                                 Background="{DynamicResource NotedSubtleSurfaceBrush}"
                                                 BorderBrush="{DynamicResource NotedBorderBrush}"
                                                 BorderThickness="1" CornerRadius="6">
@@ -541,7 +585,7 @@
                                                 <TextBlock Text="NOTES" Margin="1,0,0,5"
                                                            Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="10" FontWeight="SemiBold"/>
                                                 <TextBox x:Name="NotesTextBox" Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}"
-                                                         KeyboardNavigation.TabIndex="2"
+                                                         KeyboardNavigation.TabIndex="3" AutomationProperties.Name="Item notes"
                                                          PreviewKeyDown="NotesTextBox_PreviewKeyDown"
                                                          MinHeight="52" MaxHeight="120" Padding="8,6"
                                                          AcceptsReturn="True" TextWrapping="Wrap"
@@ -561,7 +605,8 @@
                                                     <TextBlock Grid.Column="0" Text="DUE" Margin="1,0,9,0"
                                                                Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="10" FontWeight="SemiBold"
                                                                VerticalAlignment="Center"/>
-                                                    <DatePicker x:Name="ItemDueDatePicker" Grid.Column="1" Height="28" KeyboardNavigation.TabIndex="3"
+                                                    <DatePicker x:Name="ItemDueDatePicker" Grid.Column="1" Height="28" KeyboardNavigation.TabIndex="4"
+                                                                AutomationProperties.Name="Due date"
                                                                 SelectedDate="{Binding DueDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                                 Background="{DynamicResource NotedInputBackgroundBrush}"
                                                                 BorderBrush="{DynamicResource NotedBorderBrush}"
@@ -569,6 +614,7 @@
                                                                 FontSize="12">
                                                         <DatePicker.Resources>
                                                             <Style TargetType="DatePickerTextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                                                <EventSetter Event="PreviewKeyDown" Handler="DueDateTextBox_PreviewKeyDown"/>
                                                                 <Setter Property="Background" Value="{DynamicResource NotedInputBackgroundBrush}"/>
                                                                 <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
                                                                 <Setter Property="CaretBrush" Value="{DynamicResource NotedTextBrush}"/>
@@ -586,12 +632,16 @@
                                                         </DatePicker.Resources>
                                                     </DatePicker>
                                                     <Button x:Name="ClearItemDueDateButton" Grid.Column="2" Content="&#xE711;" Margin="4,0,0,0"
-                                                            KeyboardNavigation.TabIndex="4" FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}"
+                                                            KeyboardNavigation.TabIndex="5" FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}"
                                                             Style="{StaticResource SmallIconBtn}"
                                                             FontFamily="Segoe MDL2 Assets"
                                                             Click="ClearDueDate_Click" ToolTip="Clear due date"
                                                             Visibility="{Binding DueDate, Converter={StaticResource NullToVisibility}}"/>
                                                 </Grid>
+                                                <TextBlock x:Name="DueDateErrorText" Text="Enter a valid date or clear the date field."
+                                                           Visibility="Collapsed" TextWrapping="Wrap" Margin="0,5,0,0"
+                                                           Foreground="{DynamicResource NotedDangerBrush}" FontSize="11"
+                                                           AutomationProperties.LiveSetting="Assertive"/>
                                             </StackPanel>
                                         </Border>
                                     </Grid>
@@ -639,7 +689,7 @@
                         <TextBlock Style="{StaticResource NotedFooterText}" Text="{Binding FooterText}" Margin="0,0,4,0"/>
                         <Button Content="Clear done" Margin="2,0,0,0"
                                 Style="{StaticResource NotedFooterButton}" Click="ClearCompleted_Click"
-                                ToolTip="Remove all completed items"
+                                ToolTip="Delete all completed items across all tabs"
                                 Visibility="{Binding HasCompleted, Converter={StaticResource BoolToVisibility}}"/>
                         <Button Content="Check all" Margin="2,0,0,0"
                                 Style="{StaticResource NotedFooterButton}" Click="CheckAll_Click"

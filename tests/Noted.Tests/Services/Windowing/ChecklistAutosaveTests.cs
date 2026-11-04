@@ -80,7 +80,7 @@ public sealed class ChecklistAutosaveTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public void EnterAndEscapeKeepTheirEditingBehavior(bool editNewItem) => WithWindow((window, model, service) =>
+    public void EstablishedTitleEnterAndEscapeKeepAutosavedContent(bool editNewItem) => WithWindow((window, model, service) =>
     {
         var item = model.Items[0];
         var title = Title(window, item);
@@ -88,24 +88,28 @@ public sealed class ChecklistAutosaveTests
         title.SelectAll();
         title.SelectedText = "changed";
         Assert.IsTrue(InvokeKeyHandler(window, title, Key.Enter).Handled);
-        PumpUntil(() => model.Items.Count == 3 && Keyboard.FocusedElement is TextBox box && box.Text.Length == 0);
+        Assert.HasCount(2, model.Items);
+        Assert.IsFalse(item.IsEditingTitle);
         Assert.AreEqual("changed", item.Text);
-        var blank = model.Items[1];
-        var blankTitle = Title(window, blank);
-        Assert.AreSame(blankTitle, Keyboard.FocusedElement);
-
-        title = editNewItem ? blankTitle : Title(window, item);
+        ChecklistItem? created = null;
+        if (editNewItem)
+        {
+            ((Button)window.FindName("AddItemButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            PumpUntil(() => model.Items.Count == 3 && Keyboard.FocusedElement is TextBox box && box.Text.Length == 0);
+            created = model.Items.Last();
+        }
+        title = Title(window, created ?? item);
         Assert.IsTrue(title.Focus());
         title.SelectAll();
         title.SelectedText = "kept after Escape";
         Assert.IsTrue(InvokeKeyHandler(window, title, Key.Escape).Handled);
 
-        Assert.AreEqual("kept after Escape", editNewItem ? blank.Text : item.Text);
-        Assert.AreSame(window.FindName("ItemsList"), Keyboard.FocusedElement);
-        Assert.HasCount(3, model.Items);
+        Assert.AreEqual("kept after Escape", (created ?? item).Text);
+        Assert.IsTrue(Keyboard.FocusedElement is ListBoxItem);
+        Assert.HasCount(editNewItem ? 3 : 2, model.Items);
         Assert.IsTrue(window.TryFlushPendingContent(out var error), error);
         Assert.AreEqual(editNewItem ? "changed" : "kept after Escape", service.Saved[0].Text);
-        Assert.AreEqual(editNewItem ? "kept after Escape" : "", service.Saved[1].Text);
+        if (editNewItem) Assert.AreEqual("kept after Escape", service.Saved.Last().Text);
     });
 
     [TestMethod]
@@ -299,6 +303,13 @@ public sealed class ChecklistAutosaveTests
         Layout(window);
         var list = (ListBox)window.FindName("ItemsList");
         var container = (DependencyObject)list.ItemContainerGenerator.ContainerFromItem(item);
+        if (!item.IsEditingTitle)
+        {
+            var pencil = VisualTreeHelpers.FindDescendant<Button>(container, "ItemEditTitleButton")!;
+            pencil.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Layout(window);
+            container = (DependencyObject)list.ItemContainerGenerator.ContainerFromItem(item);
+        }
         return VisualTreeHelpers.FindDescendant<TextBox>(container, "ItemTitleTextBox")!;
     }
 

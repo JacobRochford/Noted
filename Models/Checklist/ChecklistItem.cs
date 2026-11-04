@@ -17,6 +17,7 @@ public sealed class ChecklistItem : ObservableObject
     private DateTime? _dueDate;
     private string _notes = "";
     private bool _isExpanded;
+    private bool _isEditingTitle;
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
@@ -61,6 +62,12 @@ public sealed class ChecklistItem : ObservableObject
     {
         get => _isExpanded;
         set => SetProperty(ref _isExpanded, value);
+    }
+
+    public bool IsEditingTitle
+    {
+        get => _isEditingTitle;
+        set => SetProperty(ref _isEditingTitle, value);
     }
 
 }
