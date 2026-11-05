@@ -289,6 +289,17 @@ public partial class ChecklistWindow : OverlayWindow
         var popupItem = item ?? _creatingItem ?? _editingItem;
         if (!e.Handled && e.Key == Key.Escape && e.IsRepeat)
             e.Handled = true;
+        if (!e.Handled && e.Key == Key.Escape && modifiers == ModifierKeys.None &&
+            !TabNamePopup.IsOpen && popupItem is not null)
+        {
+            var picker = FindItemControl<DatePicker>(popupItem, "ItemDueDatePicker");
+            if (picker?.IsDropDownOpen == true)
+            {
+                picker.SetCurrentValue(DatePicker.IsDropDownOpenProperty, false);
+                FocusDate(popupItem);
+                e.Handled = true;
+            }
+        }
         if (!e.Handled && !TabNamePopup.IsOpen && (popupItem is null || !IsItemPopupOpen(popupItem)))
         {
             if (e.Key == Key.N && modifiers == ModifierKeys.Control)

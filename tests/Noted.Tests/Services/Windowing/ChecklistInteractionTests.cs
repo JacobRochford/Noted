@@ -856,6 +856,7 @@ public sealed class ChecklistInteractionTests
         Press((UIElement)Keyboard.FocusedElement, Key.Escape);
         Pump();
         Assert.IsFalse(picker.IsDropDownOpen);
+        Assert.AreSame(editor, Keyboard.FocusedElement);
         Assert.IsTrue(window.IsVisible);
         Assert.IsTrue(item.IsExpanded);
         Assert.IsTrue(model.Items.Contains(item));
@@ -870,11 +871,14 @@ public sealed class ChecklistInteractionTests
         var picker = Control<DatePicker>(window, item, "ItemDueDatePicker");
         var editor = VisualTreeHelpers.FindDescendant<DatePickerTextBox>(picker)!;
         var date = new DateTime(2027, 3, 14);
-        editor.SelectedText = date.ToString("MMMM", picker.Language.GetSpecificCulture());
-        Assert.IsFalse(KeyboardTestInput.Press(editor, Key.Space, ModifierKeys.None).Handled);
+        var month = date.ToString("MMMM", picker.Language.GetSpecificCulture());
+        editor.SelectedText = month;
+        editor.CaretIndex = editor.Text.Length;
+        Press(editor, Key.Space);
+        Assert.AreEqual(month + " ", editor.Text);
+        Assert.AreEqual(editor.Text.Length, editor.CaretIndex);
         Assert.IsFalse(picker.IsDropDownOpen);
-        // routed key events do not generate the separate text input event for a space.
-        editor.SelectedText = date.ToString(" dd yyyy", picker.Language.GetSpecificCulture());
+        editor.SelectedText = date.ToString("dd yyyy", picker.Language.GetSpecificCulture());
         Press(editor, Key.Enter, ModifierKeys.Control);
         Assert.AreEqual(date, item.DueDate);
         Assert.AreEqual(date, service.Load()[0].DueDate);
@@ -1001,6 +1005,16 @@ public sealed class ChecklistInteractionTests
         {
             service.FailSave = false;
             service.BeforeSave = null;
+            // invalid test input must not cancel cleanup and keep focus in a later test.
+            var list = (ListBox)window.FindName("ItemsList");
+            foreach (var item in ((ChecklistWindowViewModel)window.DataContext).FilteredItems.ToArray())
+            {
+                var row = list.ItemContainerGenerator.ContainerFromItem(item) as DependencyObject;
+                var picker = VisualTreeHelpers.FindDescendant<DatePicker>(row, "ItemDueDatePicker");
+                if (picker is null) continue;
+                picker.IsDropDownOpen = false;
+                VisualTreeHelpers.FindDescendant<DatePickerTextBox>(picker)?.Clear();
+            }
             window.Close();
             Pump();
         }
