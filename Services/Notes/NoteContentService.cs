@@ -150,16 +150,24 @@ public sealed class NoteContentService : INoteContentService
             : string.Join(" ", warnings);
     }
 
-    public string? SaveAs(string filePath, string content, TextFileEncoding? encoding = null)
+    public string? SaveAs(string filePath, string content, TextFileEncoding? encoding = null,
+        NoteSaveDestination? destinationState = null)
     {
         ArgumentNullException.ThrowIfNull(content);
 
         var validatedPath = ValidateNotePath(filePath);
-        if (File.Exists(validatedPath))
+        if (destinationState is not null)
+        {
+            if (!string.Equals(validatedPath, Path.GetFullPath(destinationState.FilePath), StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("The confirmed destination does not match the save path.", nameof(destinationState));
+            if (destinationState.ExistingContent is { } expected)
+                return Save(validatedPath, content, encoding, expected);
+        }
+        else if (File.Exists(validatedPath))
             return Save(validatedPath, content, encoding);
 
         var bytes = TextFileCodec.Encode(content, encoding ?? TextFileEncoding.Utf8);
-        FileWriter.WriteAllBytes(validatedPath, bytes);
+        FileWriter.WriteAllBytes(validatedPath, bytes, createOnly: destinationState is not null);
         byte[] persistedBytes;
         try
         {
@@ -181,11 +189,12 @@ public sealed class NoteContentService : INoteContentService
         return null;
     }
 
-    public string? SaveNewNoteAs(string initialPath, string destinationPath, string content, string initialContent, TextFileEncoding? encoding = null)
+    public string? SaveNewNoteAs(string initialPath, string destinationPath, string content, string initialContent,
+        TextFileEncoding? encoding = null, NoteSaveDestination? destinationState = null)
     {
         var source = ValidateNotePath(initialPath);
         var destination = ValidateNotePath(destinationPath);
-        var warning = SaveAs(destination, content, encoding ?? TextFileEncoding.Utf8);
+        var warning = SaveAs(destination, content, encoding ?? TextFileEncoding.Utf8, destinationState);
         if (string.Equals(source, destination, StringComparison.OrdinalIgnoreCase)) return warning;
 
         try

@@ -8,6 +8,22 @@ namespace Noted.Tests.Services;
 public sealed class FileWriterTests
 {
     [TestMethod]
+    public void CreateOnlyWriteRejectsDestinationCreatedDuringStaging()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var path = directory.File("new.txt");
+
+        Assert.ThrowsExactly<IOException>(() => FileWriter.WriteFile(path, null, temporary =>
+        {
+            File.WriteAllText(temporary, "editor edits");
+            File.WriteAllText(path, "new external file");
+        }, createOnly: true));
+
+        Assert.AreEqual("new external file", File.ReadAllText(path));
+        Assert.HasCount(1, Directory.GetFiles(directory.Path));
+    }
+
+    [TestMethod]
     public void PreservedReplacementCapturesTheFileChangedAfterStaging()
     {
         using var directory = new TemporaryTestDirectory();

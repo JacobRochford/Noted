@@ -292,6 +292,15 @@ public sealed class WindowConstructionTests
         Assert.AreEqual(noteCount + 1, files.GetNotes().Count);
         Assert.IsNotNull(editor.OpenFilePath);
         Assert.IsTrue(File.Exists(editor.OpenFilePath));
+        var generatedPath = editor.OpenFilePath;
+        var mainModel = (MainWindowViewModel)main.DataContext;
+        mainModel.TogglePin(mainModel.FindNote(files.GetNoteKey(generatedPath))!);
+        var savedPath = Path.Combine(files.CurrentDirectory, "toolbar saved.md");
+        Assert.IsTrue(editor.TrySaveCurrentNote(dialog => { dialog.FileName = savedPath; return true; }));
+        Assert.IsFalse(File.Exists(generatedPath));
+        Assert.IsTrue(mainModel.FindNote(files.GetNoteKey(savedPath))!.IsPinned);
+        Assert.AreEqual(files.GetNoteKey(savedPath), mainModel.SelectedNoteKey);
+        CollectionAssert.DoesNotContain(settings.LoadPinnedNotes().ToArray(), files.GetNoteKey(generatedPath));
         editor.HideWindow();
 
         foreach (var option in model.UtilityVisibility.Utilities) option.IsVisible = true;
@@ -372,8 +381,7 @@ public sealed class WindowConstructionTests
             if (window is NoteEditorWindow)
             {
                 // save the edited fixture so shutdown checks don't open an unsaved-changes dialog.
-                var saved = typeof(NoteEditorWindow).GetMethod("TrySaveCurrentNote", BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .Invoke(noteEditor, null);
+                var saved = noteEditor.TrySaveCurrentNote();
                 Assert.AreEqual(true, saved, "The search fixture must be saved before checking shutdown.");
             }
         }

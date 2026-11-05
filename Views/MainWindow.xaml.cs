@@ -108,6 +108,7 @@ public partial class MainWindow : Window {
         _noteEditor.NewNoteRequested += NoteEditor_NewNoteRequested;
         _noteEditor.DeleteNoteRequested += NoteEditor_DeleteNoteRequested;
         _noteEditor.NoteRenameRequested += NoteEditor_NoteRenameRequested;
+        _noteEditor.FirstSaveCompleted += NoteEditor_FirstSaveCompleted;
         _viewModel.PropertyChanged += OnViewModelFilterTextChanged;
     }
 
@@ -1017,6 +1018,18 @@ public partial class MainWindow : Window {
         }
     }
 
+    private void NoteEditor_FirstSaveCompleted(object? sender, NoteEditorDocumentPathsChangedEventArgs e) {
+        var change = e.Changes.Single();
+        var hasNewKey = _fileService.TryGetNoteKey(change.NewFilePath, out var newKey);
+        if (!File.Exists(change.OldFilePath) && _fileService.TryGetNoteKey(change.OldFilePath, out var oldKey)) {
+            if (hasNewKey)
+                _viewModel.ReplacePinnedNoteKey(oldKey, newKey);
+            else
+                _viewModel.RemovePinnedNoteKey(oldKey);
+        }
+        _viewModel.LoadNotes(hasNewKey ? newKey : null);
+    }
+
     private void CreateAndOpenNewNote(Window owner) {
         try {
             var result = CreateNewNoteFromCurrentSettings(owner);
@@ -1917,6 +1930,7 @@ public partial class MainWindow : Window {
         _noteEditor.NewNoteRequested -= NoteEditor_NewNoteRequested;
         _noteEditor.DeleteNoteRequested -= NoteEditor_DeleteNoteRequested;
         _noteEditor.NoteRenameRequested -= NoteEditor_NoteRenameRequested;
+        _noteEditor.FirstSaveCompleted -= NoteEditor_FirstSaveCompleted;
         _viewModel.PropertyChanged -= OnViewModelFilterTextChanged;
 
         _viewModel.NotesLoaded -= OnNotesLoaded;

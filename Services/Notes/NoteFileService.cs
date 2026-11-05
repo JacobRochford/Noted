@@ -597,6 +597,10 @@ public sealed class NoteFileService : INoteFileService {
         return sanitized;
     }
 
+    internal static bool IsValidFileName(string fileName) =>
+        fileName.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 &&
+        string.Equals(fileName, ValidateBaseName(fileName), StringComparison.Ordinal);
+
     private static string NormalizeBaseName(string value) {
         return value.Trim().TrimEnd('.').TrimEnd();
     }

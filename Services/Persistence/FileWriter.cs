@@ -32,7 +32,8 @@ internal static class FileWriter
         string destinationPath,
         byte[] content,
         string? backupPath = null,
-        string? preserveReplacedFileAt = null)
+        string? preserveReplacedFileAt = null,
+        bool createOnly = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
         ArgumentNullException.ThrowIfNull(content);
@@ -41,14 +42,16 @@ internal static class FileWriter
             destinationPath,
             backupPath,
             temporaryPath => WriteTemporaryByteFile(temporaryPath, content),
-            preserveReplacedFileAt);
+            preserveReplacedFileAt,
+            createOnly);
     }
 
     internal static FileWriteResult WriteFile(
         string destinationPath,
         string? backupPath,
         Action<string> writeTemporaryFile,
-        string? preserveReplacedFileAt = null)
+        string? preserveReplacedFileAt = null,
+        bool createOnly = false)
     {
         ArgumentNullException.ThrowIfNull(writeTemporaryFile);
 
@@ -69,6 +72,13 @@ internal static class FileWriter
         {
             Directory.CreateDirectory(directory);
             writeTemporaryFile(temporaryPath);
+
+            if (createOnly)
+            {
+                // moving without overwrite also rejects a destination created during staging.
+                File.Move(temporaryPath, fullDestinationPath);
+                return new FileWriteResult(false, null, null);
+            }
 
             if (fullPreservedPath is not null)
             {

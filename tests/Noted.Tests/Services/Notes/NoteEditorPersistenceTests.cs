@@ -421,12 +421,14 @@ public sealed class NoteEditorPersistenceTests
         public TextFileContent LoadWithEncoding(string filePath) => new(Load(filePath), TextFileEncoding.Utf8);
 
         public string? Save(string filePath, string content, TextFileEncoding? encoding = null, TextFileContent? expectedVersion = null) => throw new NotSupportedException();
-        public string? SaveAs(string filePath, string content, TextFileEncoding? encoding = null) => throw new NotSupportedException();
+        public string? SaveAs(string filePath, string content, TextFileEncoding? encoding = null,
+            NoteSaveDestination? destinationState = null) => throw new NotSupportedException();
         public string? SaveNewNoteAs(
             string initialPath,
             string destinationPath,
             string content,
-            string initialContent, TextFileEncoding? encoding = null) => throw new NotSupportedException();
+            string initialContent, TextFileEncoding? encoding = null,
+            NoteSaveDestination? destinationState = null) => throw new NotSupportedException();
     }
 
     private sealed class StubRecoveryService : INoteRecoveryService

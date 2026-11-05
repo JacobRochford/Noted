@@ -9,6 +9,47 @@ namespace Noted.Tests.Services;
 public sealed class NoteContentServiceTests
 {
     [TestMethod]
+    public void FirstSaveRejectsAnUnconfirmedDestinationAndKeepsTheInitialFile()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var source = directory.File("initial.txt");
+        var destination = directory.File("chosen.md");
+        File.WriteAllText(source, "initial");
+        var approved = new NoteSaveDestination(destination, null);
+        File.WriteAllText(destination, "appeared after approval");
+
+        Assert.ThrowsExactly<IOException>(() => new NoteContentService(directory.Path).SaveNewNoteAs(
+            source, destination, "editor edits", "initial", destinationState: approved));
+
+        Assert.AreEqual("initial", File.ReadAllText(source));
+        Assert.AreEqual("appeared after approval", File.ReadAllText(destination));
+        Assert.HasCount(2, Directory.GetFiles(directory.Path));
+    }
+
+    [TestMethod]
+    public void FirstSaveReplacesOnlyTheConfirmedDestinationVersion()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var source = directory.File("initial.txt");
+        var destination = directory.File("chosen.md");
+        File.WriteAllText(source, "initial");
+        File.WriteAllText(destination, "confirmed version");
+        var service = new NoteContentService(directory.Path);
+        var approved = new NoteSaveDestination(destination, service.LoadWithEncoding(destination));
+        File.WriteAllText(destination, "changed after confirmation");
+
+        Assert.ThrowsExactly<NoteSaveConflictException>(() => service.SaveNewNoteAs(
+            source, destination, "editor edits", "initial", destinationState: approved));
+
+        Assert.AreEqual("initial", File.ReadAllText(source));
+        Assert.AreEqual("changed after confirmation", File.ReadAllText(destination));
+        Assert.IsNull(service.SaveNewNoteAs(source, destination, "editor edits", "initial",
+            destinationState: new(destination, service.LoadWithEncoding(destination))));
+        Assert.IsFalse(File.Exists(source));
+        Assert.AreEqual("editor edits", File.ReadAllText(destination));
+    }
+
+    [TestMethod]
     public void FirstSaveAsToTheSamePathNeverRemovesTheSavedFile()
     {
         using var directory = new TemporaryTestDirectory();

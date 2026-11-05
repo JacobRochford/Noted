@@ -104,13 +104,7 @@ public sealed class NoteEditorNavigationTests
         box.Select(2, 3);
         KeyboardTestInput.Press(box, Key.V, ModifierKeys.Control | ModifierKeys.Shift);
         var destination = Path.Combine(files.NotesDirectory, "named.txt");
-        editor.NoteRenameRequested += (_, request) =>
-        {
-            Assert.IsTrue(request.IsFirstSave);
-            File.Move(request.FilePath, destination);
-            request.NewFilePath = destination;
-        };
-        KeyboardTestInput.Press((FlowDocumentScrollViewer)editor.FindName("MarkdownPreview"), Key.S, ModifierKeys.Control);
+        Assert.IsTrue(editor.TrySaveCurrentNote(dialog => { dialog.FileName = destination; return true; }));
         Assert.AreEqual(destination, document.FilePath);
         Assert.AreEqual("# unsaved\n**source**", File.ReadAllText(destination));
         Assert.IsFalse(document.IsDirty);

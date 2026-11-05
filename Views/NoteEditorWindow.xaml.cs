@@ -190,6 +190,7 @@ public partial class NoteEditorWindow : Window
     public event EventHandler? NewNoteRequested;
     public event EventHandler<NoteDeleteRequestedEventArgs>? DeleteNoteRequested;
     public event EventHandler<NoteRenameRequestedEventArgs>? NoteRenameRequested;
+    internal event EventHandler<NoteEditorDocumentPathsChangedEventArgs>? FirstSaveCompleted;
     internal NoteEditorWorkspace Workspace => _workspace;
 
     private OpenNoteDocument? CurrentDocument => _workspace.CurrentDocument;
@@ -756,13 +757,19 @@ public partial class NoteEditorWindow : Window
         return true;
     }
 
-    private bool TrySaveCurrentNote()
+    internal bool TrySaveCurrentNote(Func<SaveFileDialog, bool?>? chooseFile = null,
+        Func<string, bool>? confirmOverwrite = null)
     {
-        return CurrentDocument is not { } document || TrySaveDocument(document);
+        return CurrentDocument is not { } document || (document.UsesGeneratedName
+            ? TrySaveNoteAs(document, firstSave: true, chooseFile, confirmOverwrite)
+            : TrySaveDocument(document));
     }
 
     private bool TrySaveDocument(OpenNoteDocument document)
     {
+        if (document.UsesGeneratedName)
+            return TrySaveNoteAs(document, firstSave: true);
+
         if (ReferenceEquals(document, _activeDocument) || ReferenceEquals(document, _secondaryDocument))
             CaptureActiveDocument();
 
@@ -802,9 +809,6 @@ public partial class NoteEditorWindow : Window
 
                 _noteSaveWarning = null;
             }
-
-            if (document.UsesGeneratedName && !TryRenameNote(document, isFirstSave: true))
-                return false;
 
             if (shouldWriteContent)
             {
@@ -1781,11 +1785,14 @@ public partial class NoteEditorWindow : Window
 
     internal bool TrySaveCurrentNoteAs(Func<SaveFileDialog, bool?>? chooseFile = null)
     {
-        if (CurrentDocument is not { } document)
-            return true;
+        return CurrentDocument is not { } document || TrySaveNoteAs(document, firstSave: false, chooseFile);
+    }
 
+    private bool TrySaveNoteAs(OpenNoteDocument document, bool firstSave,
+        Func<SaveFileDialog, bool?>? chooseFile = null, Func<string, bool>? confirmOverwrite = null)
+    {
         CaptureActiveDocument();
-        var dialog = new SaveFileDialog
+        var dialog = firstSave ? NoteSaveDialog.Create(document.FilePath) : new SaveFileDialog
         {
             Title = "Save Note As",
             InitialDirectory = Path.GetDirectoryName(document.FilePath),
@@ -1795,7 +1802,32 @@ public partial class NoteEditorWindow : Window
             OverwritePrompt = true,
             Filter = NoteFileExtensions.FileDialogFilter
         };
+
+        NoteSaveDestination? destinationState = null;
+        bool AcceptFirstSave()
+        {
+            try
+            {
+                destinationState = NoteSaveDialog.ConfirmDestination(dialog, _contentService,
+                    confirmOverwrite ?? (path => MessageBox.Show(this,
+                        $"'{Path.GetFileName(path)}' already exists.\n\nDo you want to replace it?",
+                        dialog.Title, MessageBoxButton.YesNo, MessageBoxImage.Warning,
+                        MessageBoxResult.No) == MessageBoxResult.Yes));
+                return destinationState is not null;
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException || IsExpectedFileException(ex))
+            {
+                ExceptionDiagnostics.Record(ex);
+                ShowError("Unable to save note", ex.Message);
+                return false;
+            }
+        }
+
+        if (firstSave)
+            dialog.FileOk += (_, e) => e.Cancel = !AcceptFirstSave();
         if ((chooseFile is null ? dialog.ShowDialog(this) : chooseFile(dialog)) != true)
+            return false;
+        if (firstSave && destinationState is null && !AcceptFirstSave())
             return false;
 
         string newPath;
@@ -1810,9 +1842,9 @@ public partial class NoteEditorWindow : Window
             return false;
         }
 
-        if (PathsEqual(document.FilePath, newPath))
+        if (!firstSave && PathsEqual(document.FilePath, newPath))
             return TrySaveDocument(document);
-        if (FindDocument(newPath) is not null)
+        if (FindDocument(newPath) is { } openDocument && !ReferenceEquals(openDocument, document))
         {
             ShowError(
                 "Note is already open",
@@ -1824,8 +1856,8 @@ public partial class NoteEditorWindow : Window
         {
             var oldPath = document.FilePath;
             _noteSaveWarning = document.InitialFileContent is { } initialContent
-                ? _contentService.SaveNewNoteAs(oldPath, newPath, document.Content, initialContent, document.Encoding)
-                : _contentService.SaveAs(newPath, document.Content, document.Encoding);
+                ? _contentService.SaveNewNoteAs(oldPath, newPath, document.Content, initialContent, document.Encoding, destinationState)
+                : _contentService.SaveAs(newPath, document.Content, document.Encoding, destinationState);
             _workspace.UpdatePath(
                 document,
                 newPath,
@@ -1845,6 +1877,9 @@ public partial class NoteEditorWindow : Window
                 ShowRecoveryCleanupWarning(cleanupError!);
             SaveEditorSession();
             UpdateEditorState();
+            if (firstSave)
+                FirstSaveCompleted?.Invoke(this, new NoteEditorDocumentPathsChangedEventArgs(
+                    [new NoteEditorDocumentPathChange(document, oldPath, newPath)]));
             return true;
         }
         catch (NoteSaveConflictException ex)
