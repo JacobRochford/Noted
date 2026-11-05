@@ -281,11 +281,11 @@
                                                             <Button Content="Cancel" Click="CancelEntry_Click" Margin="6,0,0,0" Style="{StaticResource NotedSecondaryButton}"/>
                                                         </StackPanel>
                                                         <Thumb x:Name="DefinitionResizeGrip" Width="16" Height="16"
-                                                               HorizontalAlignment="Right" Cursor="SizeNS" Focusable="False"
+                                                               HorizontalAlignment="Right" Cursor="SizeNWSE" Focusable="False"
                                                                Tag="{Binding ElementName=DefinitionContent}"
-                                                               DragDelta="DefinitionResizeGrip_DragDelta"
-                                                               ToolTip="Drag to resize definition height"
-                                                               AutomationProperties.Name="Resize definition height">
+                                                               DragDelta="DefinitionResizeGrip_DragDelta" DragCompleted="DefinitionResizeGrip_DragCompleted"
+                                                               ToolTip="Drag horizontally to resize the window; vertically to resize the definition and window"
+                                                               AutomationProperties.Name="Resize definition and window">
                                                             <Thumb.Template>
                                                                 <ControlTemplate TargetType="Thumb">
                                                                     <Border Background="Transparent">

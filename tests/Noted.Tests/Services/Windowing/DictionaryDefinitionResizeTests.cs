@@ -21,17 +21,73 @@ public sealed class DictionaryDefinitionResizeTests
         var scroll = (ScrollViewer)window.FindName("ItemsScrollViewer");
         Assert.AreEqual(200, content.MaxHeight);
         Assert.IsTrue(double.IsNaN(content.Height));
+        var initialWindowHeight = window.Height;
+        var initialContentHeight = content.ActualHeight;
 
         Drag(window, item, -10000);
+        Assert.AreEqual(initialWindowHeight - Math.Max(0, initialContentHeight - 48), window.Height, 0.1);
         Assert.AreEqual(48, content.Height);
         Drag(window, item, 20);
         Drag(window, item, 20);
         Assert.AreEqual(88, content.Height);
-        Drag(window, item, 10000);
-        Assert.IsTrue(content.Height >= 200);
-        Assert.IsTrue(content.Height < scroll.ViewportHeight);
+        Drag(window, item, 300);
+        Assert.AreEqual(initialWindowHeight - Math.Max(0, initialContentHeight - 48) + 340, window.Height, 0.1);
+        Assert.AreEqual(388, content.Height);
         window.UpdateLayout();
+        Assert.IsTrue(content.Height < scroll.ViewportHeight);
         Assert.AreEqual(content.Height, content.ActualHeight, 0.1);
+    });
+
+    [TestMethod]
+    public void FractionalWindowRoundingDoesNotChangeRequestedDefinitionHeight() => WithWindow((window, model, _) =>
+    {
+        var item = model.Items.First();
+        Drag(window, item, -10000);
+        var content = Content(window, item);
+        for (var index = 1; index <= 4; index++)
+        {
+            Drag(window, item, 0.25);
+            Assert.AreEqual(48 + index * 0.25, content.Height, 0.0001);
+        }
+    });
+
+    [TestMethod]
+    public void UpwardDragKeepsBottomItemGripVisible() => WithWindow((window, model, _) =>
+    {
+        for (var index = 0; index < 20; index++)
+            model.AddItem().Word = $"entry {index}";
+
+        var item = model.Items.Last();
+        item.IsExpanded = true;
+        window.UpdateLayout();
+        var scroll = (ScrollViewer)window.FindName("ItemsScrollViewer");
+        scroll.ScrollToEnd();
+        window.UpdateLayout();
+        var grip = VisualTreeHelpers.FindDescendant<Thumb>(Container(window, item), "DefinitionResizeGrip")!;
+
+        Drag(window, item, -1000);
+        window.UpdateLayout();
+        var gripTop = grip.TranslatePoint(new Point(), scroll).Y;
+        Assert.IsTrue(gripTop >= 0);
+        Assert.IsTrue(gripTop + grip.ActualHeight <= scroll.ViewportHeight);
+    });
+
+    [TestMethod]
+    public void HorizontalDragResizesWindowAndDefinitionWithoutChangingItemHeight() => WithWindow((window, model, _) =>
+    {
+        var item = model.Items.First();
+        var content = Content(window, item);
+        var initialWidth = window.Width;
+        var initialContentWidth = content.ActualWidth;
+
+        Drag(window, item, 0, 70);
+        window.UpdateLayout();
+        Assert.AreEqual(initialWidth + 70, window.Width);
+        Assert.AreEqual(initialContentWidth + 70, content.ActualWidth, 0.1);
+        Assert.IsTrue(double.IsNaN(content.Height));
+
+        Drag(window, item, 0, -10000);
+        Assert.AreEqual(window.MinWidth, window.Width);
     });
 
     [TestMethod]
@@ -95,10 +151,10 @@ public sealed class DictionaryDefinitionResizeTests
         Assert.AreEqual(68, Content(window, item).Height);
     });
 
-    private static void Drag(DictionaryWindow window, DictionaryItem item, double change)
+    private static void Drag(DictionaryWindow window, DictionaryItem item, double change, double horizontalChange = 0)
     {
         var grip = VisualTreeHelpers.FindDescendant<Thumb>(Container(window, item), "DefinitionResizeGrip")!;
-        var args = new DragDeltaEventArgs(0, change) { RoutedEvent = Thumb.DragDeltaEvent };
+        var args = new DragDeltaEventArgs(horizontalChange, change) { RoutedEvent = Thumb.DragDeltaEvent };
         grip.RaiseEvent(args);
         Assert.IsTrue(args.Handled);
     }

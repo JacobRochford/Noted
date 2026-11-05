@@ -146,18 +146,37 @@ public partial class DictionaryWindow : OverlayWindow
     private void DefinitionResizeGrip_DragDelta(object sender, DragDeltaEventArgs e)
     {
         if (sender is not Thumb grip || grip.Tag is not Grid content ||
-            content.DataContext is not DictionaryItem item || e.VerticalChange == 0)
+            content.DataContext is not DictionaryItem item ||
+            e.HorizontalChange == 0 && e.VerticalChange == 0)
             return;
 
-        // leave room for the word, definition heading, and editing actions.
-        var maximumHeight = Math.Max(48, ItemsScrollViewer.ViewportHeight - 140);
-        var currentHeight = double.IsNaN(content.Height) ? content.ActualHeight : content.Height;
-        var height = Math.Clamp(currentHeight + e.VerticalChange, 48, maximumHeight);
-        _definitionHeights[item] = height;
-        content.MaxHeight = double.PositiveInfinity;
-        content.Height = height;
+        if (e.HorizontalChange != 0)
+            Width = Math.Clamp(Width + e.HorizontalChange, MinWidth, MaxWidth);
+
+        if (e.VerticalChange != 0)
+        {
+            var currentHeight = double.IsNaN(content.Height) ? content.ActualHeight : content.Height;
+            var previousHeight = Height;
+            var verticalChange = Math.Max(e.VerticalChange, Math.Min(0, 48 - currentHeight));
+            var windowHeight = Math.Clamp(previousHeight + verticalChange, MinHeight, MaxHeight);
+            Height = windowHeight;
+
+            // leave room for the word, definition heading, and editing actions.
+            var maximumHeight = Math.Max(48, ItemsScrollViewer.ViewportHeight + windowHeight - previousHeight - 140);
+            // use the requested size so native window rounding does not change the definition height.
+            var height = Math.Clamp(currentHeight + windowHeight - previousHeight, 48, maximumHeight);
+            _definitionHeights[item] = height;
+            content.MaxHeight = double.PositiveInfinity;
+            content.Height = height;
+
+            ItemsScrollViewer.UpdateLayout();
+            grip.BringIntoView();
+        }
+
         e.Handled = true;
     }
+
+    private void DefinitionResizeGrip_DragCompleted(object sender, DragCompletedEventArgs e) => SaveWindowState();
 
     internal bool TryFlushPendingContent(out string? error)
     {
