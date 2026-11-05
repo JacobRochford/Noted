@@ -96,9 +96,17 @@ public partial class DictionaryWindow : OverlayWindow
         }
         else if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control &&
             VisualTreeHelpers.FindAncestor<FrameworkElement>(Keyboard.FocusedElement as DependencyObject)?.DataContext
-                is DictionaryItem { IsEditing: true, IsAutoSaving: false } item)
+                is DictionaryItem { IsEditing: true } item)
         {
-            SaveEntry(item);
+            if (item.IsAutoSaving)
+            {
+                if (FinishNewEntries())
+                    _viewModel.TryFlushPendingItems(out _);
+            }
+            else
+            {
+                SaveEntry(item);
+            }
             e.Handled = true;
         }
         else if (e.Key == Key.F && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))

@@ -182,12 +182,13 @@
                                                         <ColumnDefinition Width="30"/>
                                                     </Grid.ColumnDefinitions>
                                                     <Grid Grid.Column="0">
-                                                        <Button Content="{Binding Word}" Click="ViewDefinition_Click" MouseDoubleClick="WordHeader_MouseDoubleClick" ToolTip="Click to expand or collapse; double-click to edit"
+                                                        <Button Content="{Binding Word}" Click="ViewDefinition_Click" MouseDoubleClick="WordHeader_MouseDoubleClick" ToolTip="Click or press Enter or Space to expand or collapse; double-click to edit"
                                                                 HorizontalContentAlignment="Left" Padding="5,4"
                                                                 Background="Transparent" BorderThickness="0"
                                                                 Foreground="{DynamicResource NotedTextBrush}" FontWeight="SemiBold">
                                                             <Button.Style><Style TargetType="Button">
                                                                 <Setter Property="Cursor" Value="Hand"/>
+                                                                <Setter Property="FocusVisualStyle" Value="{StaticResource NotedKeyboardFocusVisual}"/>
                                                                 <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
                                                                     <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
                                                                         <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
