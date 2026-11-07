@@ -32,6 +32,7 @@ public partial class NoteEditorWindow : Window
     private readonly INoteFileService? _noteFiles;
     private readonly INoteRecoveryService _recoveryService;
     private readonly NoteEditorPersistence _persistence;
+    private readonly NoteDraftStorage _draftStorage;
     private readonly SaveScheduler<IReadOnlyList<RecoveryDraftSnapshot>> _recoverySaveScheduler;
     private readonly NoteEditorWorkspace _workspace = new();
     private readonly HashSet<OpenNoteDocument> _discardedDocumentsPendingDraftDeletion = [];
@@ -93,7 +94,9 @@ public partial class NoteEditorWindow : Window
         _settingsService = settingsService;
         _noteFiles = noteFiles;
         _recoveryService = recoveryService;
-        _persistence = new NoteEditorPersistence(contentService, recoveryService, sessionService, settingsService.LoadDefaultIndentation);
+        _draftStorage = new NoteDraftStorage(settingsService.AppDataDirectory);
+        _persistence = new NoteEditorPersistence(contentService, recoveryService, sessionService,
+            settingsService.LoadDefaultIndentation, _draftStorage);
         _workspace.DocumentPathsChanged += Workspace_DocumentPathsChanged;
 
         InitializeComponent();
@@ -328,6 +331,11 @@ public partial class NoteEditorWindow : Window
         TryFlushRecoveryDraft(out _);
         if (!TryResolveDirtyDocuments(_documents))
             return false;
+        foreach (var document in _documents.Where(document => _draftStorage.IsDraftPath(document.FilePath)).ToList())
+        {
+            if (!RemoveDocument(document, deleteRecoveryDraft: true))
+                return false;
+        }
         if (!SaveEditorSession())
         {
             ShowError(
@@ -617,6 +625,15 @@ public partial class NoteEditorWindow : Window
 
         try
         {
+            var managed = _draftStorage.IsDraftPath(normalizedPath);
+            var draftState = managed ? _draftStorage.Read(normalizedPath) : null;
+            if (draftState?.CleanupCommitted == true)
+                throw new IOException("This Quick Note was already saved or discarded. Restart Noted to retry its pending cleanup.");
+            if (managed)
+            {
+                usesGeneratedName = true;
+                initialFileContent = draftState?.InitialContent;
+            }
             var loadedFile = _contentService.LoadWithEncoding(normalizedPath);
             var persistedContent = loadedFile.Content;
             // Reopening an explicitly closed tab always reads disk, respecting the close decision.
@@ -645,6 +662,8 @@ public partial class NoteEditorWindow : Window
                 encoding: loadedFile.Encoding);
             if (reopenState is not null)
                 document.MarkdownPreviewMode = reopenState.MarkdownPreviewMode;
+            if (managed)
+                document.IsDirty = initialFileContent is null || recoveredContent != initialFileContent;
             _workspace.Add(document);
             OpenDocumentInFocusedPane(document, focusEditor: true, saveSession: true);
             ShowWindow();
@@ -742,7 +761,7 @@ public partial class NoteEditorWindow : Window
     private bool TryResolveDirtyDocuments(IEnumerable<OpenNoteDocument> documents)
     {
         CaptureActiveDocument();
-        foreach (var document in documents.Where(document => document.IsDirty).ToList())
+        foreach (var document in documents.Where(HasUnsavedChanges).ToList())
         {
             _discardedDocumentsPendingDraftDeletion.Remove(document);
             var result = ShowSavePrompt(document.DisplayName);
@@ -760,14 +779,14 @@ public partial class NoteEditorWindow : Window
     internal bool TrySaveCurrentNote(Func<SaveFileDialog, bool?>? chooseFile = null,
         Func<string, bool>? confirmOverwrite = null)
     {
-        return CurrentDocument is not { } document || (document.UsesGeneratedName
+        return CurrentDocument is not { } document || (document.UsesGeneratedName || _draftStorage.IsDraftPath(document.FilePath)
             ? TrySaveNoteAs(document, firstSave: true, chooseFile, confirmOverwrite)
             : TrySaveDocument(document));
     }
 
     private bool TrySaveDocument(OpenNoteDocument document)
     {
-        if (document.UsesGeneratedName)
+        if (document.UsesGeneratedName || _draftStorage.IsDraftPath(document.FilePath))
             return TrySaveNoteAs(document, firstSave: true);
 
         if (ReferenceEquals(document, _activeDocument) || ReferenceEquals(document, _secondaryDocument))
@@ -891,7 +910,22 @@ public partial class NoteEditorWindow : Window
         bool rememberClosed = false)
     {
         CaptureActiveDocument();
-        if (deleteRecoveryDraft &&
+        var managed = _draftStorage.IsDraftPath(document.FilePath);
+        if (managed && deleteRecoveryDraft)
+        {
+            try
+            {
+                var warning = _persistence.DiscardManagedDraft(_workspace, document);
+                if (warning is not null)
+                    ShowRecoveryCleanupWarning(warning);
+            }
+            catch (Exception ex) when (IsExpectedFileException(ex))
+            {
+                ShowError("Unable to close Quick Note", ex.Message);
+                return false;
+            }
+        }
+        if (!managed && deleteRecoveryDraft &&
             !TryDeleteRecoveryDraft(document.FilePath, out var cleanupError))
         {
             ShowRecoveryCleanupWarning(cleanupError!);
@@ -1792,6 +1826,8 @@ public partial class NoteEditorWindow : Window
         Func<SaveFileDialog, bool?>? chooseFile = null, Func<string, bool>? confirmOverwrite = null)
     {
         CaptureActiveDocument();
+        var managed = _draftStorage.IsDraftPath(document.FilePath);
+        firstSave |= managed;
         var dialog = firstSave ? NoteSaveDialog.Create(document.FilePath) : new SaveFileDialog
         {
             Title = "Save Note As",
@@ -1802,12 +1838,19 @@ public partial class NoteEditorWindow : Window
             OverwritePrompt = true,
             Filter = NoteFileExtensions.FileDialogFilter
         };
+        if (managed)
+        {
+            dialog.InitialDirectory = _noteFiles?.CurrentDirectory ?? _settingsService.LoadNotesDirectory();
+            dialog.FileName = NoteNameFormatter.GetSaveName(document.FilePath);
+        }
 
         NoteSaveDestination? destinationState = null;
         bool AcceptFirstSave()
         {
             try
             {
+                if (managed && _draftStorage.ContainsPath(dialog.FileName))
+                    throw new IOException("Choose a permanent location outside Noted's managed Drafts folder.");
                 destinationState = NoteSaveDialog.ConfirmDestination(dialog, _contentService,
                     confirmOverwrite ?? (path => MessageBox.Show(this,
                         $"'{Path.GetFileName(path)}' already exists.\n\nDo you want to replace it?",
@@ -1855,25 +1898,25 @@ public partial class NoteEditorWindow : Window
         try
         {
             var oldPath = document.FilePath;
-            _noteSaveWarning = document.InitialFileContent is { } initialContent
-                ? _contentService.SaveNewNoteAs(oldPath, newPath, document.Content, initialContent, document.Encoding, destinationState)
-                : _contentService.SaveAs(newPath, document.Content, document.Encoding, destinationState);
-            _workspace.UpdatePath(
-                document,
-                newPath,
-                clearGeneratedName: true,
-                markPresent: true,
-                notifyChange: false);
+            if (managed)
+                _noteSaveWarning = _persistence.SaveManagedDraft(_workspace, document, newPath, destinationState!);
+            else
+            {
+                _noteSaveWarning = document.InitialFileContent is { } initialContent
+                    ? _contentService.SaveNewNoteAs(oldPath, newPath, document.Content, initialContent, document.Encoding, destinationState)
+                    : _contentService.SaveAs(newPath, document.Content, document.Encoding, destinationState);
+                _workspace.UpdatePath(document, newPath, clearGeneratedName: true, markPresent: true, notifyChange: false);
+                _workspace.MarkSaved(document);
+            }
             _documentTimeText.Remove(oldPath);
             _documentTimeText.Remove(newPath);
-            _workspace.MarkSaved(document);
             if (ReferenceEquals(document, _secondaryDocument))
                 SecondaryDocumentTitle.Text = document.TabLabel;
             _unsavedRecoveredPaths.Remove(oldPath);
             _unsavedRecoveredPaths.Remove(newPath);
             _discardedDocumentsPendingDraftDeletion.Remove(document);
             RefreshScheduledRecoveryDrafts();
-            if (!TryDeleteRecoveryDraft(oldPath, out var cleanupError))
+            if (!managed && !TryDeleteRecoveryDraft(oldPath, out var cleanupError))
                 ShowRecoveryCleanupWarning(cleanupError!);
             SaveEditorSession();
             UpdateEditorState();
@@ -1967,6 +2010,11 @@ public partial class NoteEditorWindow : Window
     {
         if (sender is not MenuItem { DataContext: OpenNoteDocument document })
             return;
+        if (_draftStorage.IsDraftPath(document.FilePath))
+        {
+            TrySaveNoteAs(document, firstSave: true);
+            return;
+        }
         if (document.IsMissing)
         {
             ShowError(
@@ -1982,6 +2030,11 @@ public partial class NoteEditorWindow : Window
 
     private void RequestNoteDeletion(OpenNoteDocument document)
     {
+        if (_draftStorage.IsDraftPath(document.FilePath))
+        {
+            TryCloseDocument(document);
+            return;
+        }
         DeleteNoteRequested?.Invoke(this, new NoteDeleteRequestedEventArgs(document.FilePath));
     }
 
@@ -2272,11 +2325,15 @@ public partial class NoteEditorWindow : Window
     private bool TryCloseDocument(OpenNoteDocument document)
     {
         CaptureActiveDocument();
-        if (document.IsDirty && !TryResolveDirtyDocuments([document]))
+        if (HasUnsavedChanges(document) && !TryResolveDirtyDocuments([document]))
             return false;
 
         return RemoveDocument(document, deleteRecoveryDraft: true, rememberClosed: true);
     }
+
+    private bool HasUnsavedChanges(OpenNoteDocument document) => document.IsDirty ||
+        _draftStorage.IsDraftPath(document.FilePath) &&
+        (document.InitialFileContent is null || document.Content != document.InitialFileContent);
 
     private void LineNumbersMenuItem_Click(object sender, RoutedEventArgs e)
     {

@@ -199,25 +199,7 @@ public sealed class NoteContentService : INoteContentService
 
         try
         {
-            // Hold the exact source file against writes and replacement while comparing and deleting it.
-            // DELETE access is needed for FileDispositionInfo; no deletion occurs just by opening this handle.
-            using var handle = OpenInitialFile(source, GenericRead | DeleteAccess, ShareRead,
-                IntPtr.Zero, OpenExisting, NormalAttributes, IntPtr.Zero);
-            if (handle.IsInvalid)
-            {
-                var error = Marshal.GetLastWin32Error();
-                if (error is 2 or 3) return warning;
-                throw new IOException("The original note could not be opened for cleanup.", new Win32Exception(error));
-            }
-            using var stream = new FileStream(handle, FileAccess.Read);
-            using var buffer = new MemoryStream();
-            stream.CopyTo(buffer);
-            if (!string.Equals(TextFileCodec.Decode(buffer.ToArray()).Content, initialContent, StringComparison.Ordinal))
-                throw new IOException("Its content changed after the note was created.");
-
-            var disposition = new FileDispositionInfo { DeleteFile = 1 };
-            if (!SetFileInformationByHandle(handle, FileDispositionInfoClass, ref disposition, 1))
-                throw new IOException("The original note could not be removed.", new Win32Exception(Marshal.GetLastWin32Error()));
+            DeleteInitialFile(source, initialContent);
         }
         catch (Exception ex) when (IsExpectedFileException(ex))
         {
@@ -227,6 +209,27 @@ public sealed class NoteContentService : INoteContentService
             return string.IsNullOrWhiteSpace(warning) ? cleanupWarning : $"{warning} {cleanupWarning}";
         }
         return warning;
+    }
+
+    internal static void DeleteInitialFile(string source, string initialContent)
+    {
+        // hold the exact source file against writes and replacement while comparing and deleting it.
+        using var handle = OpenInitialFile(source, GenericRead | DeleteAccess, ShareRead,
+            IntPtr.Zero, OpenExisting, NormalAttributes, IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            var error = Marshal.GetLastWin32Error();
+            if (error is 2 or 3) return;
+            throw new IOException("The original note could not be opened for cleanup.", new Win32Exception(error));
+        }
+        using var stream = new FileStream(handle, FileAccess.Read);
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        if (!string.Equals(TextFileCodec.Decode(buffer.ToArray()).Content, initialContent, StringComparison.Ordinal))
+            throw new IOException("Its content changed after the note was created.");
+        var disposition = new FileDispositionInfo { DeleteFile = 1 };
+        if (!SetFileInformationByHandle(handle, FileDispositionInfoClass, ref disposition, 1))
+            throw new IOException("The original note could not be removed.", new Win32Exception(Marshal.GetLastWin32Error()));
     }
 
     private const uint GenericRead = 0x80000000;

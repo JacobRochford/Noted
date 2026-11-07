@@ -11,6 +11,7 @@ public sealed class NoteFileService : INoteFileService {
     private readonly IAppSettingsService _settingsService;
     private readonly NoteBrowserNavigation _navigation;
     private readonly NoteDirectoryWatcher _directoryWatcher = new();
+    private readonly NoteDraftStorage _draftStorage;
     private static readonly TimeSpan s_deletedNoteRetention = TimeSpan.FromDays(14); // how long to keep deleted notes
     private static readonly HashSet<string> s_reservedFileNames = new(StringComparer.OrdinalIgnoreCase) {
         // windows reserved names
@@ -32,6 +33,7 @@ public sealed class NoteFileService : INoteFileService {
 
     public NoteFileService(IAppSettingsService settingsService) {
         _settingsService = settingsService;
+        _draftStorage = new NoteDraftStorage(settingsService.AppDataDirectory);
         DeletedNotesDirectory = Path.Combine(_settingsService.AppDataDirectory, PersistencePaths.DeletedNotesDirectory);
         _navigation = new NoteBrowserNavigation(ResolveInitialNotesDirectory());
         _directoryWatcher.Changed += OnFilesChanged;
@@ -78,7 +80,8 @@ public sealed class NoteFileService : INoteFileService {
     public bool TryGetNoteKey(string filePath, out string noteKey)
     {
         noteKey = string.Empty;
-        if (!TryNormalizeContainedPath(NotesDirectory, filePath, out var fullPath, allowRoot: false))
+        if (_draftStorage.ContainsPath(filePath) ||
+            !TryNormalizeContainedPath(NotesDirectory, filePath, out var fullPath, allowRoot: false))
             return false;
 
         noteKey = GetNoteKey(fullPath);
@@ -87,7 +90,7 @@ public sealed class NoteFileService : INoteFileService {
 
     public string GetNoteKey(string filePath) {
         var fullPath = Path.GetFullPath(filePath);
-        if (!IsPathWithinNotesDirectory(fullPath))
+        if (_draftStorage.ContainsPath(fullPath) || !IsPathWithinNotesDirectory(fullPath))
             throw new ArgumentException("The note path must be inside the configured notes directory.", nameof(filePath));
 
         var relativePath = Path.GetRelativePath(Path.GetFullPath(NotesDirectory), fullPath)
@@ -103,19 +106,24 @@ public sealed class NoteFileService : INoteFileService {
         var now = DateTime.Now;
         var usesGeneratedName = string.IsNullOrWhiteSpace(requestedName);
         var (filename, error) = usesGeneratedName
-            ? (BuildUniqueFileName(now), (string?)null)
+            ? (NoteDraftStorage.CreateFileName(now), (string?)null)
             : BuildRequestedFileName(requestedName!);
         if (filename is null)
             return (null, error);
-        var fullPath = Path.Combine(CurrentDirectory, filename);
+        if (!usesGeneratedName && _draftStorage.ContainsPath(CurrentDirectory))
+            return (null, "Choose a notes folder outside Noted's managed Drafts folder.");
+        var fullPath = Path.Combine(usesGeneratedName ? _draftStorage.DirectoryPath : CurrentDirectory, filename);
         var content = BuildNewNoteContent(
             now,
             _settingsService.LoadTimestampPlacement(),
             _settingsService.LoadTimestampLine());
-        FileWriter.WriteAllText(fullPath, content);
+        if (usesGeneratedName)
+            _draftStorage.Create(fullPath, content);
+        else
+            FileWriter.WriteAllText(fullPath, content);
         if (!string.Equals(File.ReadAllText(fullPath), content, StringComparison.Ordinal))
             throw new IOException("The new note was created but could not be verified.");
-        return (new CreatedNote(filename, usesGeneratedName, content), null);
+        return (new CreatedNote(filename, usesGeneratedName, content, fullPath), null);
     }
 
     public bool ChangeNotesDirectory(string newDirectory) {
@@ -445,6 +453,7 @@ public sealed class NoteFileService : INoteFileService {
             _navigation.EnsureCurrentDirectoryExists();
             return Directory.GetDirectories(CurrentDirectory)
                 .Where(path => !PathsEqual(path, ArchivedNotesDirectory))
+                .Where(path => !_draftStorage.ContainsPath(path))
                 .Select(path => new DirectoryInfo(path))
                 .OrderBy(info => info.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(info => new NoteItem {
@@ -491,12 +500,13 @@ public sealed class NoteFileService : INoteFileService {
             .ToList();
     }
 
-    private static IEnumerable<string> EnumerateNoteFiles(
+    private IEnumerable<string> EnumerateNoteFiles(
         string directory,
         SearchOption searchOption = SearchOption.TopDirectoryOnly)
     {
         return Directory.EnumerateFiles(directory, "*", searchOption)
-            .Where(NoteFileExtensions.IsSupported);
+            .Where(NoteFileExtensions.IsSupported)
+            .Where(path => !_draftStorage.ContainsPath(path));
     }
 
     // go into a folder (blocks path traversal)

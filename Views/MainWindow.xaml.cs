@@ -1037,7 +1037,7 @@ public partial class MainWindow : Window {
                 return;
 
             _viewModel.LoadNotes(result.NoteKey);
-            // OnNotesLoaded fires synchronously above, so selection is already set.
+            // named notes have their browser selection set by OnNotesLoaded.
             OpenCreatedNoteInEditor(
                 result.FilePath!,
                 result.Note.UsesGeneratedName,
@@ -1574,7 +1574,7 @@ public partial class MainWindow : Window {
 
     private void RestoreSelectionToOpenEditorNote() {
         var openFilePath = _noteEditor.OpenFilePath;
-        var openNoteKey = openFilePath is null ? null : _fileService.GetNoteKey(openFilePath);
+        var openNoteKey = openFilePath is not null && _fileService.TryGetNoteKey(openFilePath, out var key) ? key : null;
         _viewModel.SelectedNoteKey = openNoteKey;
         FileList.SelectedItem = openNoteKey is null ? null : _viewModel.FindNote(openNoteKey);
     }

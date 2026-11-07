@@ -330,7 +330,27 @@ public sealed class NoteRecoveryService : INoteRecoveryService
         return false;
     }
 
-    private string GetDraftFilePath(string filePath)
+    internal bool HasUnverifiedDraftFiles(string filePath)
+    {
+        FileSystemLinkValidator.ValidateDirectory(_recoveryDirectory);
+        if (!Directory.Exists(_recoveryDirectory))
+            return false;
+        bool HasUnverifiedFamily(string primaryPath)
+        {
+            if (Directory.EnumerateFiles(_recoveryDirectory, $"{Path.GetFileName(primaryPath)}*.corrupt-*").Any())
+                return true;
+            var primary = ReadDraft(primaryPath);
+            var backup = ReadDraft(GetBackupFilePath(primaryPath));
+            return primary.Status is JsonFileReadStatus.Corrupt or JsonFileReadStatus.Unavailable ||
+                backup.Status is JsonFileReadStatus.Corrupt or JsonFileReadStatus.Unavailable;
+        }
+        if (HasUnverifiedFamily(GetDraftFilePath(filePath)))
+            return true;
+        var legacy = ReadDraft(_legacyDraftFilePath).Draft;
+        return legacy is not null && PathsEqual(legacy.FilePath, filePath) && HasUnverifiedFamily(_legacyDraftFilePath);
+    }
+
+    internal string GetDraftFilePath(string filePath)
     {
         var hash = NotePathIdentity.GetHash(filePath);
         return Path.Combine(_recoveryDirectory, $"{hash}.json");

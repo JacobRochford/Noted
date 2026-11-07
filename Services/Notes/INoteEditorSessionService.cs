@@ -37,6 +37,9 @@ public sealed record NoteEditorSession
     public IReadOnlyList<NoteEditorTabState> Tabs { get; init; } = [];
     public string? ActiveFilePath { get; init; }
     public string? SecondaryFilePath { get; init; }
+    // older draft sessions used paths alone; cleanup now requires the matching transition token.
+    public IReadOnlyList<string> CompletedDraftPaths { get; init; } = [];
+    public IReadOnlyDictionary<string, Guid> CompletedDraftTransitions { get; init; } = new Dictionary<string, Guid>();
 }
 
 public sealed record NoteEditorSessionIssue(

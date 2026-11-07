@@ -105,7 +105,10 @@ public sealed class NoteEditorSessionService : INoteEditorSessionService
                 left.SecondaryFilePath,
                 right.SecondaryFilePath,
                 StringComparison.OrdinalIgnoreCase) ||
-            left.Tabs.Count != right.Tabs.Count)
+            left.Tabs.Count != right.Tabs.Count ||
+            !left.CompletedDraftPaths.SequenceEqual(right.CompletedDraftPaths, StringComparer.OrdinalIgnoreCase) ||
+            left.CompletedDraftTransitions.Count != right.CompletedDraftTransitions.Count ||
+            left.CompletedDraftTransitions.Any(pair => !right.CompletedDraftTransitions.TryGetValue(pair.Key, out var token) || token != pair.Value))
         {
             return false;
         }
@@ -155,6 +158,23 @@ public sealed class NoteEditorSessionService : INoteEditorSessionService
 
     internal static void ValidateSession(NoteEditorSession session)
     {
+        if (session.CompletedDraftPaths is null || session.CompletedDraftPaths.Any(string.IsNullOrWhiteSpace))
+            throw new JsonException("The editor session contains invalid Quick Note cleanup references.");
+        if (session.CompletedDraftTransitions is null || session.CompletedDraftTransitions.Any(pair =>
+            string.IsNullOrWhiteSpace(pair.Key) || !Path.IsPathFullyQualified(pair.Key) ||
+            !Path.GetExtension(pair.Key).Equals(".txt", StringComparison.OrdinalIgnoreCase) || pair.Value == Guid.Empty) ||
+            session.CompletedDraftTransitions.Keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != session.CompletedDraftTransitions.Count)
+            throw new JsonException("The editor session contains invalid Quick Note transition proofs.");
+        try
+        {
+            if (session.CompletedDraftTransitions.Keys.Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+                session.CompletedDraftTransitions.Count)
+                throw new JsonException("The editor session repeats a Quick Note transition path.");
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+        {
+            throw new JsonException("The editor session contains an invalid Quick Note transition path.", ex);
+        }
         if (session.Tabs is null)
             throw new JsonException("The editor session does not contain a tab list.");
         if (session.Tabs.Any(tab => tab is null))

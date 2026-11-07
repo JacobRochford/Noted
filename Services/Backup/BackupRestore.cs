@@ -90,8 +90,8 @@ internal sealed class BackupRestore
             // check all destinations before writing anything; keep the request if a check fails.
             foreach (var entry in manifest.Entries)
                 ValidateDestination(entry.LogicalPath, manifest);
-
             var filesDirectory = Path.Combine(restorePath, FilesDirectoryName);
+            ValidateManagedDraftCollisions(manifest, filesDirectory);
             var retainedDrafts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var entry in manifest.Entries)
             {
@@ -112,6 +112,14 @@ internal sealed class BackupRestore
                 var destinationPath = ValidateDestination(entry.LogicalPath, manifest);
                 if (BackupContentDefinitions.Find(NormalizeLogicalPath(entry.LogicalPath))?.Content != FixedBackupContent.JotCapture)
                 {
+                    var managedDraft = NoteDraftStorage.IsBackupPath(entry.LogicalPath) ||
+                        IsManagedDraftRecovery(entry.LogicalPath, sourcePath, manifest);
+                    if (managedDraft && File.Exists(destinationPath))
+                    {
+                        BackupArchiveReader.VerifyFile(destinationPath, entry);
+                        restoredCount++;
+                        continue;
+                    }
                     FileWriter.WriteFile(destinationPath, null, temporaryPath =>
                     {
                         FileSystemLinkValidator.ValidatePath(sourcePath);
@@ -125,7 +133,7 @@ internal sealed class BackupRestore
                         BackupArchiveReader.VerifyFile(temporaryPath, entry);
                         if (!string.Equals(destinationPath, ValidateDestination(entry.LogicalPath, manifest), StringComparison.OrdinalIgnoreCase))
                             throw new IOException("The restore destination changed during preparation.");
-                    });
+                    }, createOnly: managedDraft);
                     BackupArchiveReader.VerifyFile(destinationPath, entry);
                     restoredCount++;
                     continue;
@@ -242,6 +250,68 @@ internal sealed class BackupRestore
             return FileSystemLinkValidator.ValidateWithinRoot(manifest.NotesRoot, destination);
         FileSystemLinkValidator.ValidatePath(destination);
         return destination;
+    }
+
+    private bool IsManagedDraftRecovery(string logicalPath, string sourcePath, FullBackupManifest manifest)
+    {
+        if (!logicalPath.StartsWith(PersistencePaths.RecoveryBackupPrefix, StringComparison.OrdinalIgnoreCase) ||
+            logicalPath.Replace('\\', '/').Split('/').Length != 3)
+            return false;
+        var draft = JsonSerializer.Deserialize<NoteRecoveryDraft>(BackupArchiveReader.ReadFileBytes(sourcePath));
+        var appRoot = Path.GetDirectoryName(_getRestoreDestination(
+            PersistencePaths.AppBackupPrefix + PersistencePaths.SettingsFile, manifest))!;
+        return draft is not null && new NoteDraftStorage(appRoot).IsDraftPath(draft.FilePath);
+    }
+
+    private void ValidateManagedDraftCollisions(FullBackupManifest manifest, string filesDirectory)
+    {
+        var appRoot = Path.GetDirectoryName(_getRestoreDestination(
+            PersistencePaths.AppBackupPrefix + PersistencePaths.SettingsFile, manifest))!;
+        var storage = new NoteDraftStorage(appRoot);
+        var backings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in manifest.Entries.Where(entry => NoteDraftStorage.IsBackupPath(entry.LogicalPath)))
+        {
+            var destination = ValidateDestination(entry.LogicalPath, manifest);
+            var backing = destination.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? destination[..^5] : destination;
+            backings.Add(backing);
+        }
+        foreach (var entry in manifest.Entries)
+        {
+            var definition = BackupContentDefinitions.Find(NormalizeLogicalPath(entry.LogicalPath));
+            if (definition?.Content == FixedBackupContent.EditorSession)
+            {
+                var session = BackupContentCatalog.ValidateEditorSession(BackupArchiveReader.ReadFileBytes(
+                    GetContainedPath(filesDirectory, entry.LogicalPath)));
+                foreach (var path in session.Tabs.Select(tab => tab.FilePath).Concat(session.CompletedDraftPaths)
+                    .Concat(session.CompletedDraftTransitions.Keys))
+                    if (storage.IsDraftPath(path))
+                        backings.Add(path);
+            }
+            else if (entry.LogicalPath.StartsWith(PersistencePaths.RecoveryBackupPrefix, StringComparison.OrdinalIgnoreCase) &&
+                entry.LogicalPath.Replace('\\', '/').Split('/').Length == 3)
+            {
+                var draft = JsonSerializer.Deserialize<NoteRecoveryDraft>(BackupArchiveReader.ReadFileBytes(
+                    GetContainedPath(filesDirectory, entry.LogicalPath)));
+                if (draft is not null && storage.IsDraftPath(draft.FilePath))
+                    backings.Add(draft.FilePath);
+            }
+        }
+        foreach (var backing in backings)
+        {
+            var recovery = new NoteRecoveryService(appRoot).GetDraftFilePath(backing);
+            foreach (var path in new[] { backing, NoteDraftStorage.GetMetadataPath(backing),
+                NoteDraftStorage.GetMetadataPath(backing) + ".bak", recovery, recovery + ".bak" })
+            {
+                FileSystemLinkValidator.ValidatePath(path);
+                if (!File.Exists(path))
+                    continue;
+                var expected = manifest.Entries.FirstOrDefault(candidate => string.Equals(
+                    ValidateDestination(candidate.LogicalPath, manifest), path, StringComparison.OrdinalIgnoreCase));
+                if (expected is null)
+                    throw new IOException($"A local Quick Note conflicts with the restore: '{path}'. Nothing was restored.");
+                BackupArchiveReader.VerifyFile(path, expected);
+            }
+        }
     }
 
     private static bool IsExpectedBackupException(Exception exception) =>

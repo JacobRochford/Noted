@@ -20,6 +20,63 @@ namespace Noted.Tests.Services;
 public sealed class WindowConstructionTests
 {
     [TestMethod]
+    [DataRow(NewNoteMode.Prompt)]
+    [DataRow(NewNoteMode.Quick)]
+    [DataRow(NewNoteMode.Both)]
+    public void NoteBehaviorSettingsKeepTheirButtonsAndRouteOnlyQuickNotesIntoDrafts(NewNoteMode mode) => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.File("app"));
+        settings.SaveNotesDirectory(directory.File("notes"));
+        settings.SaveNewNoteMode(mode);
+        using var files = new NoteFileService(settings);
+        var editor = new NoteEditorWindow(new NoteContentService(settings.AppDataDirectory), settings,
+            new NoteRecoveryService(settings.AppDataDirectory), new NoteEditorSessionService(settings.AppDataDirectory), files);
+        var main = new MainWindow(settings, files, editor, new NoteOperations(files, editor.Workspace),
+            new ConstructionStartupService(), new BackupCoordinator(
+                new FullBackupService(settings.AppDataDirectory, files.NotesDirectory),
+                new ShutdownFlushCoordinator(), () => files.NotesDirectory), (_, _) => { });
+        try
+        {
+            var quick = (Button)main.FindName("QuickNoteButton");
+            Assert.AreEqual(mode == NewNoteMode.Both ? Visibility.Visible : Visibility.Collapsed, quick.Visibility);
+            var prompts = 0;
+            DispatcherOperation? acceptName = null;
+            _ = new WindowInteropHelper(main).EnsureHandle();
+            if (mode != NewNoteMode.Quick)
+                acceptName = editor.Dispatcher.BeginInvoke(() =>
+                {
+                    var dialog = Application.Current.Windows.OfType<NewNoteNameDialog>().Single();
+                    prompts++;
+                    ((TextBox)dialog.FindName("NoteNameTextBox")).Text = "named note";
+                    dialog.DialogResult = true;
+                }, DispatcherPriority.ApplicationIdle);
+            try { ((Button)main.FindName("NewNoteButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); }
+            finally { acceptName?.Abort(); }
+
+            Assert.AreEqual(mode == NewNoteMode.Quick ? 0 : 1, prompts);
+            Assert.AreEqual(mode == NewNoteMode.Quick ? 0 : 1, files.GetNotes().Count);
+            var storage = new NoteDraftStorage(settings.AppDataDirectory);
+            Assert.AreEqual(mode == NewNoteMode.Quick, storage.IsDraftPath(editor.OpenFilePath!));
+            if (mode == NewNoteMode.Both)
+            {
+                quick.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert.IsTrue(storage.IsDraftPath(editor.OpenFilePath!));
+                Assert.AreEqual(1, files.GetNotes().Count);
+                Assert.AreEqual(2, editor.Workspace.Documents.Count);
+            }
+        }
+        finally
+        {
+            main.CleanupResources();
+            main.Close();
+            editor.CloseAllDocuments();
+            editor.TryPrepareForClose();
+            editor.Close();
+        }
+    });
+
+    [TestMethod]
     public void SettingsCategoriesKeepFolderLocationWithBackupsAndExposeExistingControls()
     {
         WpfTestHost.Invoke(() =>
@@ -289,18 +346,26 @@ public sealed class WindowConstructionTests
         settings.SaveNewNoteMode(NewNoteMode.Quick);
         var noteCount = files.GetNotes().Count;
         newNote.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert.AreEqual(noteCount + 1, files.GetNotes().Count);
+        Assert.AreEqual(noteCount, files.GetNotes().Count);
         Assert.IsNotNull(editor.OpenFilePath);
         Assert.IsTrue(File.Exists(editor.OpenFilePath));
         var generatedPath = editor.OpenFilePath;
         var mainModel = (MainWindowViewModel)main.DataContext;
-        mainModel.TogglePin(mainModel.FindNote(files.GetNoteKey(generatedPath))!);
         var savedPath = Path.Combine(files.CurrentDirectory, "toolbar saved.md");
         Assert.IsTrue(editor.TrySaveCurrentNote(dialog => { dialog.FileName = savedPath; return true; }));
         Assert.IsFalse(File.Exists(generatedPath));
-        Assert.IsTrue(mainModel.FindNote(files.GetNoteKey(savedPath))!.IsPinned);
         Assert.AreEqual(files.GetNoteKey(savedPath), mainModel.SelectedNoteKey);
-        CollectionAssert.DoesNotContain(settings.LoadPinnedNotes().ToArray(), files.GetNoteKey(generatedPath));
+
+        // older Quick Notes remain normal files until the user saves them explicitly.
+        var legacyPath = Path.Combine(files.CurrentDirectory, "2026-10-01_10-20-30.txt");
+        File.WriteAllText(legacyPath, "legacy content");
+        mainModel.LoadNotes();
+        mainModel.TogglePin(mainModel.FindNote(files.GetNoteKey(legacyPath))!);
+        editor.OpenCreatedNote(legacyPath, usesGeneratedName: true, initialContent: "legacy content");
+        var legacyDestination = Path.Combine(files.CurrentDirectory, "legacy saved.md");
+        Assert.IsTrue(editor.TrySaveCurrentNote(dialog => { dialog.FileName = legacyDestination; return true; }));
+        Assert.IsTrue(mainModel.FindNote(files.GetNoteKey(legacyDestination))!.IsPinned);
+        CollectionAssert.DoesNotContain(settings.LoadPinnedNotes().ToArray(), files.GetNoteKey(legacyPath));
         editor.HideWindow();
 
         foreach (var option in model.UtilityVisibility.Utilities) option.IsVisible = true;

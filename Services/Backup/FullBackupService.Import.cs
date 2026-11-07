@@ -12,8 +12,22 @@ namespace Noted.Services;
 
 internal sealed partial class FullBackupService
 {
-    internal FullBackupPreview GetBackupImportPreview(string archivePath) =>
-        _archiveReader.GetImportPreview(archivePath);
+    internal FullBackupPreview GetBackupImportPreview(string archivePath)
+    {
+        var preview = _archiveReader.GetImportPreview(archivePath);
+        if (!preview.IsValid)
+            return preview;
+        try
+        {
+            foreach (var file in preview.Files)
+                ValidateImportedDraftCollisionByLogicalPath(file.LogicalPath);
+            return preview;
+        }
+        catch (Exception ex) when (IsExpectedBackupException(ex))
+        {
+            return preview with { IsValid = false, Error = ex.Message };
+        }
+    }
 
     internal BackupFileContent ReadBackupImportFile(
         string archivePath,
@@ -69,7 +83,9 @@ internal sealed partial class FullBackupService
             importId = Guid.NewGuid();
 
             // check rebased paths and content before creating restore files.
-            _archiveReader.InspectImportedFiles(archive, cancellationToken);
+            var inspectedFiles = _archiveReader.InspectImportedFiles(archive, cancellationToken);
+            foreach (var file in inspectedFiles)
+                ValidateImportedDraftCollisionByLogicalPath(file.LogicalPath);
 
             FileSystemLinkValidator.ValidateDirectory(_backupDirectory);
 
@@ -230,15 +246,20 @@ internal sealed partial class FullBackupService
                 Tabs = session.Tabs
                     .Select(tab => tab with
                     {
-                        FilePath = RebaseNotePath(tab.FilePath, manifest.NotesRoot)
+                        FilePath = RebaseNotePath(tab.FilePath, manifest.NotesRoot, manifest.AppDataRoot)
                     })
                     .ToList(),
                 ActiveFilePath = string.IsNullOrWhiteSpace(session.ActiveFilePath)
                     ? null
-                    : RebaseNotePath(session.ActiveFilePath, manifest.NotesRoot),
+                    : RebaseNotePath(session.ActiveFilePath, manifest.NotesRoot, manifest.AppDataRoot),
                 SecondaryFilePath = string.IsNullOrWhiteSpace(session.SecondaryFilePath)
                     ? null
-                    : RebaseNotePath(session.SecondaryFilePath, manifest.NotesRoot)
+                    : RebaseNotePath(session.SecondaryFilePath, manifest.NotesRoot, manifest.AppDataRoot),
+                CompletedDraftPaths = session.CompletedDraftPaths
+                    .Select(path => RebaseNotePath(path, manifest.NotesRoot, manifest.AppDataRoot)).ToArray(),
+                CompletedDraftTransitions = session.CompletedDraftTransitions.ToDictionary(
+                    pair => RebaseNotePath(pair.Key, manifest.NotesRoot, manifest.AppDataRoot), pair => pair.Value,
+                    StringComparer.OrdinalIgnoreCase)
             };
             transformed = JsonSerializer.SerializeToUtf8Bytes(importedSession);
             _ = ValidateEditorSession(transformed);
@@ -247,6 +268,25 @@ internal sealed partial class FullBackupService
         else if (fixedFile is not null)
         {
             details = ValidateFixedFile(fixedFile.Content, bytes);
+        }
+        else if (NoteDraftStorage.IsBackupPath(sourcePath))
+        {
+            var parts = sourcePath.Split('/');
+            if (parts.Length != 3 || !parts[2].EndsWith(".txt", StringComparison.OrdinalIgnoreCase) &&
+                !parts[2].EndsWith(".txt.json", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("The imported Quick Note has an unsupported storage path.");
+            if (parts[2].EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                var state = JsonSerializer.Deserialize<NoteDraftState>(bytes)
+                    ?? throw new InvalidDataException("The imported Quick Note metadata is empty.");
+                NoteDraftStorage.ValidateState(state);
+                if (state.SavedFilePath is not null)
+                    state = state with { SavedFilePath = RebaseNotePath(state.SavedFilePath, manifest.NotesRoot, manifest.AppDataRoot) };
+                transformed = JsonSerializer.SerializeToUtf8Bytes(state);
+                details = new BackupContentDetails(null, state.InitialContent.Length);
+            }
+            else
+                details = new BackupContentDetails(null, TextFileCodec.Decode(bytes).Content.Length);
         }
         else if (MiniPadStorage.IsBackupPath(sourcePath))
         {
@@ -268,7 +308,7 @@ internal sealed partial class FullBackupService
                 ?? throw new JsonException("The imported note recovery file contains no value.");
             var importedDraft = draft with
             {
-                FilePath = RebaseNotePath(draft.FilePath, manifest.NotesRoot)
+                FilePath = RebaseNotePath(draft.FilePath, manifest.NotesRoot, manifest.AppDataRoot)
             };
             transformed = JsonSerializer.SerializeToUtf8Bytes(importedDraft, BackupFormat.JsonOptions);
             var fileName = Path.GetFileName(sourcePath).Equals(
@@ -293,7 +333,7 @@ internal sealed partial class FullBackupService
 
             var importedHistory = history with
             {
-                NotePath = RebaseNotePath(history.NotePath, manifest.NotesRoot)
+                NotePath = RebaseNotePath(history.NotePath, manifest.NotesRoot, manifest.AppDataRoot)
             };
             transformed = JsonSerializer.SerializeToUtf8Bytes(importedHistory, BackupFormat.JsonOptions);
             logicalPath = $"{PersistencePaths.NoteHistoryBackupPrefix}{NotePathIdentity.GetHash(NormalizeBackupDataPath(importedHistory.NotePath))}/{sourceParts[3]}";
@@ -343,7 +383,7 @@ internal sealed partial class FullBackupService
         return placeholder with { Entries = entries };
     }
 
-    private string RebaseNotePath(string notePath, string oldNotesDirectory)
+    private string RebaseNotePath(string notePath, string oldNotesDirectory, string? oldAppDataDirectory = null)
     {
         if (string.IsNullOrWhiteSpace(notePath))
             throw new InvalidDataException("The imported note path is empty.");
@@ -354,8 +394,20 @@ internal sealed partial class FullBackupService
                 $"The imported note path '{notePath}' is not a supported full note path.");
         }
 
-        var oldRoot = Path.GetFullPath(oldNotesDirectory);
         var sourcePath = NormalizeBackupDataPath(notePath);
+        if (oldAppDataDirectory is not null)
+        {
+            var draftRoot = Path.Combine(Path.GetFullPath(oldAppDataDirectory), PersistencePaths.NoteDraftsDirectory);
+            if (NoteDraftStorage.IsWithinDirectory(sourcePath, draftRoot))
+            {
+                if (!string.Equals(Path.GetDirectoryName(sourcePath), draftRoot, StringComparison.OrdinalIgnoreCase) ||
+                    !Path.GetExtension(sourcePath).Equals(".txt", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("The imported Quick Note reference is invalid.");
+                var rebased = Path.Combine(_appDataDirectory, PersistencePaths.NoteDraftsDirectory, Path.GetFileName(sourcePath));
+                return rebased;
+            }
+        }
+        var oldRoot = Path.GetFullPath(oldNotesDirectory);
         var relativePath = Path.GetRelativePath(oldRoot, sourcePath);
         if (Path.IsPathRooted(relativePath) ||
             relativePath.Equals("..", StringComparison.Ordinal) ||
@@ -367,6 +419,28 @@ internal sealed partial class FullBackupService
         }
 
         return GetContainedPath(_notesDirectory, relativePath);
+    }
+
+    private void ValidateImportedDraftCollision(string path)
+    {
+        var recovery = new NoteRecoveryService(_appDataDirectory).GetDraftFilePath(path);
+        foreach (var local in new[] { path, NoteDraftStorage.GetMetadataPath(path),
+            NoteDraftStorage.GetMetadataPath(path) + ".bak", recovery, recovery + ".bak" })
+        {
+            FileSystemLinkValidator.ValidatePath(local);
+            if (File.Exists(local) || Directory.Exists(local))
+                throw new InvalidDataException($"The imported Quick Note conflicts with local draft '{path}'. Nothing was restored.");
+        }
+    }
+
+    private void ValidateImportedDraftCollisionByLogicalPath(string logicalPath)
+    {
+        if (!NoteDraftStorage.IsBackupPath(logicalPath))
+            return;
+        var name = logicalPath.Replace('\\', '/').Split('/')[2];
+        if (name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            name = name[..^5];
+        ValidateImportedDraftCollision(Path.Combine(_appDataDirectory, PersistencePaths.NoteDraftsDirectory, name));
     }
 
     private string GetPendingImportPath(Guid importId) =>

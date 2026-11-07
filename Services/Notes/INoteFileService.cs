@@ -2,7 +2,7 @@ using Noted.Models;
 
 namespace Noted.Services;
 
-public sealed record CreatedNote(string FileName, bool UsesGeneratedName, string InitialContent);
+public sealed record CreatedNote(string FileName, bool UsesGeneratedName, string InitialContent, string? FilePath = null);
 
 public interface INoteFileService : IDisposable {
     string NotesDirectory { get; }

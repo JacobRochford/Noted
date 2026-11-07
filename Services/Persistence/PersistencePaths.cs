@@ -18,6 +18,7 @@ internal static class PersistencePaths
     internal const string SessionDirectory = "session";
     internal const string EditorSessionFile = "editor-workspace.json";
     internal const string RecoveryDirectory = "recovery";
+    internal const string NoteDraftsDirectory = "Drafts";
     internal const string LegacyEditorDraftFile = "editor-draft.json";
     internal const string NoteHistoryDirectory = "note-history";
     internal const string DeletedNotesDirectory = "DeletedNotes";
@@ -29,6 +30,7 @@ internal static class PersistencePaths
     internal const string NotesBackupPrefix = NotesBackupRoot + "/";
     internal const string ArchivedNotesBackupPrefix = NotesBackupPrefix + ArchivedNotesDirectory + "/";
     internal const string RecoveryBackupPrefix = AppBackupPrefix + RecoveryDirectory + "/";
+    internal const string NoteDraftsBackupPrefix = AppBackupPrefix + NoteDraftsDirectory + "/";
     internal const string NoteHistoryBackupPrefix = AppBackupPrefix + NoteHistoryDirectory + "/";
     internal const string DeletedNotesBackupPrefix = AppBackupPrefix + DeletedNotesDirectory + "/";
 

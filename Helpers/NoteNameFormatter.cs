@@ -24,6 +24,11 @@ internal static class NoteNameFormatter
         return TryGetGeneratedDate(Path.GetFileNameWithoutExtension(fileName), out _);
     }
 
+    internal static string GetSaveName(string fileName) =>
+        TryGetGeneratedDate(Path.GetFileNameWithoutExtension(fileName), out var timestamp)
+            ? timestamp.ToString(GeneratedNameFormat, CultureInfo.InvariantCulture)
+            : Path.GetFileNameWithoutExtension(fileName);
+
     private static bool TryGetGeneratedDate(string name, out DateTime createdAt)
     {
         var timestampText = name.StartsWith("Note_", StringComparison.Ordinal)

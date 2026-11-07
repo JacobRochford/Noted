@@ -55,6 +55,8 @@ internal static class BackupFormat
             return "MiniPad";
         if (path.StartsWith(PersistencePaths.RecoveryBackupPrefix, StringComparison.OrdinalIgnoreCase))
             return "Open notes";
+        if (NoteDraftStorage.IsBackupPath(path))
+            return "Open notes";
         return BackupContentDefinitions.Find(path)?.Category ?? "Application data";
     }
 

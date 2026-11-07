@@ -278,6 +278,7 @@ public sealed class NoteFileServiceTests
         Assert.IsNotNull(createdNote);
 
         Assert.IsTrue(createdNote.UsesGeneratedName);
-        Assert.IsTrue(File.Exists(Path.Combine(notesDirectory, createdNote.FileName)));
+        Assert.IsTrue(File.Exists(createdNote.FilePath));
+        Assert.IsFalse(File.Exists(Path.Combine(notesDirectory, createdNote.FileName)));
     }
 }

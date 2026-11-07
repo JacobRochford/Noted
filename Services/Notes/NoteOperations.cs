@@ -45,11 +45,11 @@ internal sealed class NoteOperations
         if (note is null)
             return new NoteCreationResult(null, null, null, error);
 
-        var filePath = Path.Combine(_fileService.CurrentDirectory, note.FileName);
+        var filePath = note.FilePath ?? Path.Combine(_fileService.CurrentDirectory, note.FileName);
         return new NoteCreationResult(
             note,
             filePath,
-            _fileService.GetNoteKey(filePath),
+            _fileService.TryGetNoteKey(filePath, out var noteKey) ? noteKey : null,
             null);
     }
 

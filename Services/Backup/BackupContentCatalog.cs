@@ -60,6 +60,7 @@ internal sealed class BackupContentCatalog
                 session = capturedSession;
         }
         AddNoteRecoveryFiles(sources);
+        AddManagedNoteDrafts(sources);
         AddNoteHistoryFiles(sources);
         AddDeletedNotes(sources);
         selectedNotePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -184,6 +185,25 @@ internal sealed class BackupContentCatalog
         }
     }
 
+    private void AddManagedNoteDrafts(ICollection<BackupSourceEntry> sources)
+    {
+        var storage = new NoteDraftStorage(_appDataDirectory);
+        foreach (var path in storage.GetDraftPaths())
+        {
+            var state = storage.Read(path);
+            if (File.Exists(path))
+                AddRecoveryFile(sources, path, bytes => new BackupContentDetails(null, TextFileCodec.Decode(bytes).Content.Length));
+            if (state is not null)
+                AddRecoveryFile(sources, NoteDraftStorage.GetMetadataPath(path), bytes =>
+                {
+                    var saved = JsonSerializer.Deserialize<NoteDraftState>(bytes)
+                        ?? throw new InvalidDataException("The Quick Note metadata is empty.");
+                    NoteDraftStorage.ValidateState(saved);
+                    return new BackupContentDetails(null, saved.InitialContent.Length);
+                });
+        }
+    }
+
     private void AddRecoveryFile(
         ICollection<BackupSourceEntry> sources,
         string path,
@@ -257,6 +277,8 @@ internal sealed class BackupContentCatalog
                 !NoteFileExtensions.IsSupported(tab.FilePath))
                 throw new InvalidDataException("The editor session contains an invalid saved-document path.");
             var path = Path.GetFullPath(tab.FilePath);
+            if (new NoteDraftStorage(_appDataDirectory).ContainsPath(path))
+                continue;
             if (resolvedNotesRoot is not null && !IsPathWithin(path, _notesDirectory))
             {
                 var resolvedPath = Path.Combine(FileSystemLinkValidator.ResolveDirectory(Path.GetDirectoryName(path)!), Path.GetFileName(path));
@@ -290,6 +312,8 @@ internal sealed class BackupContentCatalog
             var folderPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var path in EnumerateFilesWithoutLinks(_notesDirectory, allowRootLinks: true))
             {
+                if (new NoteDraftStorage(_appDataDirectory).ContainsPath(path))
+                    continue;
                 var logicalPath = ToLogicalPath(PersistencePaths.NotesBackupRoot, Path.GetRelativePath(_notesDirectory, path));
                 if (!folderPaths.Add(logicalPath))
                     throw new IOException($"Multiple source files map to '{logicalPath}'.");
