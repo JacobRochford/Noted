@@ -20,6 +20,17 @@ public partial class DictionaryWindow : OverlayWindow
     private string? _lastPersistenceWarning;
     private bool _reopenOnStartup;
     private bool _preserveOpenStateOnClose;
+    private bool _completingEntry;
+    private bool _isClosed;
+    private FocusTarget? _lastEditorFocus;
+    private DictionaryItem? _wordSelectionItem;
+    private int _wordSelectionStart;
+    private int _wordSelectionLength;
+    private DictionaryItem[] _outsideClickEntries = [];
+    private int _mouseInteractionVersion;
+
+    private sealed record FocusTarget(
+        FrameworkElement Element, DictionaryItem? Item, string Name, int Start, int Length);
 
     public DictionaryWindow(
         IAppSettingsService settingsService,
@@ -62,26 +73,43 @@ public partial class DictionaryWindow : OverlayWindow
 
     protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
     {
-        var clickedItem = VisualTreeHelpers.FindAncestor<FrameworkElement>(e.OriginalSource as DependencyObject)?.DataContext as DictionaryItem;
-        var finishedNewEntries = FinishNewEntries(except: clickedItem);
-        if (Keyboard.FocusedElement is TextBox textBox &&
-            !ReferenceEquals(
-                VisualTreeHelpers.FindAncestor<TextBox>(e.OriginalSource as DependencyObject),
-                textBox))
+        if (e.ChangedButton == MouseButton.Left)
         {
-            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
-            ItemsList.Focus();
+            _outsideClickEntries = [];
+            _mouseInteractionVersion++;
         }
-
-        if (finishedNewEntries)
-            _viewModel.TryFlushPendingItems(out _);
-
+        var target = e.OriginalSource as DependencyObject;
+        if (!_completingEntry && e.ChangedButton == MouseButton.Left &&
+            !IsWithin(target, TitleBar) && !IsWithin(target, AddEntryButton))
+        {
+            var clickedItem = GetItem(target);
+            _outsideClickEntries = _viewModel.Items.Where(item => item.IsAutoSaving &&
+                !ReferenceEquals(item, clickedItem) && !IsEntryPopupOpen(item)).ToArray();
+        }
         base.OnPreviewMouseDown(e);
+    }
+
+    protected override void OnPreviewMouseUp(MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            var entries = _outsideClickEntries;
+            var interactionVersion = _mouseInteractionVersion;
+            _outsideClickEntries = [];
+            if (entries.Length > 0)
+                Dispatcher.BeginInvoke(() =>
+                {
+                    if (!_isClosed && IsVisible && !_completingEntry &&
+                        interactionVersion == _mouseInteractionVersion && Mouse.LeftButton != MouseButtonState.Pressed)
+                        TryFinishCreations(entries);
+                }, System.Windows.Threading.DispatcherPriority.Input);
+        }
+        base.OnPreviewMouseUp(e);
     }
 
     protected override void OnDeactivated(EventArgs e)
     {
-        if (_viewModel.Items.Any(item => item.IsAutoSaving))
+        if (!_completingEntry && _viewModel.Items.Any(item => item.IsAutoSaving))
             _viewModel.TryFlushPendingItems(out _);
 
         base.OnDeactivated(e);
@@ -89,27 +117,53 @@ public partial class DictionaryWindow : OverlayWindow
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
-        if (e.Key == Key.N && Keyboard.Modifiers == ModifierKeys.Control)
+        if (!e.Handled && e.Key == Key.Escape && e.IsRepeat) e.Handled = true;
+        var item = GetItem(e.OriginalSource as DependencyObject);
+        var modifiers = e.KeyboardDevice.Modifiers;
+        if (e.Handled || _completingEntry || _viewModel.Items.Any(IsEntryPopupOpen))
         {
-            AddEntry();
+            base.OnPreviewKeyDown(e);
+            return;
+        }
+        if (e.Key == Key.N && modifiers == ModifierKeys.Control)
+        {
+            if (!e.IsRepeat) AddEntry();
             e.Handled = true;
         }
-        else if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control &&
-            VisualTreeHelpers.FindAncestor<FrameworkElement>(Keyboard.FocusedElement as DependencyObject)?.DataContext
-                is DictionaryItem { IsEditing: true } item)
+        else if (e.Key == Key.Enter && modifiers == ModifierKeys.Control && item?.IsEditing == true)
         {
             if (item.IsAutoSaving)
             {
-                if (FinishNewEntries())
-                    _viewModel.TryFlushPendingItems(out _);
+                TryFinishCreations([item], focusList: true);
             }
             else
             {
-                SaveEntry(item);
+                TrySaveEntry(item, collapse: true);
             }
             e.Handled = true;
         }
-        else if (e.Key == Key.F && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        else if (e.Key == Key.Tab && item?.IsEditing == true &&
+            e.OriginalSource is TextBox editor &&
+            (modifiers == ModifierKeys.None && editor.Name == "WordTextBox" ||
+             modifiers == ModifierKeys.Shift && editor.Name == "DefinitionBox"))
+        {
+            if (modifiers == ModifierKeys.None)
+            {
+                RememberEditorFocus();
+                FindEntryControl<TextBox>(item, "DefinitionBox")?.Focus();
+            }
+            else
+            {
+                var word = FindEntryControl<TextBox>(item, "WordTextBox");
+                if (word?.Focus() == true)
+                {
+                    if (ReferenceEquals(_wordSelectionItem, item)) RestoreSelection(word, _wordSelectionStart, _wordSelectionLength);
+                    else word.CaretIndex = word.Text.Length;
+                }
+            }
+            e.Handled = true;
+        }
+        else if (e.Key == Key.F && modifiers.HasFlag(ModifierKeys.Control))
         {
             SearchTextBox.Focus();
             SearchTextBox.SelectAll();
@@ -125,6 +179,25 @@ public partial class DictionaryWindow : OverlayWindow
         }
 
         base.OnPreviewKeyDown(e);
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (!e.Handled && e.Key == Key.Escape && e.KeyboardDevice.Modifiers == ModifierKeys.None &&
+            !_viewModel.Items.Any(IsEntryPopupOpen) && !_completingEntry)
+        {
+            var item = GetItem(e.OriginalSource as DependencyObject);
+            if (item?.IsEditing != true) item = _viewModel.Items.LastOrDefault(entry => entry.IsAutoSaving);
+            if (item?.IsAutoSaving == true) TryFinishCreations([item], focusList: true);
+            else if (item?.IsEditing == true)
+            {
+                CancelEntry(item);
+                FocusEntry(item);
+            }
+            else RequestHide();
+            e.Handled = true;
+        }
+        base.OnKeyDown(e);
     }
 
     private void DefinitionBox_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -212,6 +285,7 @@ public partial class DictionaryWindow : OverlayWindow
 
     protected override void OnClosed(EventArgs e)
     {
+        _isClosed = true;
         IsVisibleChanged -= DictionaryWindow_IsVisibleChanged;
         _viewModel.Dispose();
         base.OnClosed(e);
@@ -221,14 +295,14 @@ public partial class DictionaryWindow : OverlayWindow
 
     private void AddEntry()
     {
-        if (FinishNewEntries())
-            _viewModel.TryFlushPendingItems(out _);
+        if (!TryFinishCreations(_viewModel.Items.Where(item => item.IsAutoSaving).ToArray())) return;
 
         var item = _viewModel.AddItem(beginEdit: true, autoSave: true);
         Dispatcher.BeginInvoke(
             System.Windows.Threading.DispatcherPriority.Input,
             new Action(() =>
             {
+                if (_isClosed || !IsVisible || !item.IsAutoSaving || !_viewModel.Items.Contains(item)) return;
                 ItemsList.UpdateLayout();
                 if (ItemsList.ItemContainerGenerator.ContainerFromItem(item) is not DependencyObject container)
                     return;
@@ -246,14 +320,36 @@ public partial class DictionaryWindow : OverlayWindow
 
     protected override void RequestHide()
     {
-        if (!TryFlushPendingContent(out var error))
-        {
-            ShowPersistenceWarningOnce(error);
-            return;
-        }
+        TryHide();
+    }
 
+    internal bool TryHide()
+    {
+        if (_completingEntry || !CheckHideDrafts()) return false;
+        if (!TryFinishCreations(_viewModel.Items.Where(item => item.IsAutoSaving).ToArray(), hiding: true))
+            return false;
+        if (!CheckHideDrafts()) return false;
+        foreach (var item in _viewModel.Items.Where(item => item.IsEditing))
+        {
+            item.CancelEdit();
+            item.IsExpanded = false;
+        }
+        ItemsList.Focus();
         ShowPersistenceWarningOnce(_viewModel.PersistenceError);
         HideWindow();
+        return true;
+    }
+
+    private bool CheckHideDrafts()
+    {
+        var pending = _viewModel.Items.FirstOrDefault(item => item.HasPendingEdit);
+        if (pending is not null)
+        {
+            ShowPersistenceWarningOnce("Save or cancel the dictionary entry being edited first.");
+            RestoreEditorFocus(pending);
+            return false;
+        }
+        return true;
     }
 
     private void DictionaryWindow_IsVisibleChanged(
@@ -312,12 +408,149 @@ public partial class DictionaryWindow : OverlayWindow
         var finished = false;
         foreach (var item in _viewModel.Items.Where(item => item.IsAutoSaving && !ReferenceEquals(item, except)).ToList())
         {
-            var empty = string.IsNullOrWhiteSpace(item.Word) && string.IsNullOrWhiteSpace(item.Definition);
+            var empty = item.IsEmpty;
             item.FinishAutoSave();
             finished = true;
             if (empty) _viewModel.RemoveItem(item);
         }
         return finished;
+    }
+
+    private bool TryFinishCreations(IReadOnlyList<DictionaryItem> candidates, bool focusList = false, bool hiding = false)
+    {
+        if (_completingEntry) return false;
+        var entries = candidates.Where(item => item.IsAutoSaving && _viewModel.Items.Contains(item)).ToArray();
+        if (entries.Length == 0 && !hiding) return true;
+        _completingEntry = true;
+        try
+        {
+            var destination = CaptureFocus();
+            RememberEditorFocus();
+            if (!_viewModel.TryFlushCurrentItems(out var error))
+            {
+                ShowPersistenceWarningOnce(error);
+                var active = entries.FirstOrDefault(item => ReferenceEquals(item, _lastEditorFocus?.Item)) ?? entries.FirstOrDefault();
+                if (active is not null) RestoreEditorFocus(active);
+                return false;
+            }
+            if (hiding && !CheckHideDrafts()) return false;
+            foreach (var item in entries)
+            {
+                var empty = item.IsEmpty;
+                if (empty)
+                {
+                    _definitionHeights.Remove(item);
+                    _viewModel.RemoveSavedEmptyCreation(item);
+                }
+                item.FinishAutoSave();
+                item.IsExpanded = false;
+            }
+            if (entries.Length > 0) _viewModel.FilteredItems.Refresh();
+            if (focusList) FocusEntry(entries.FirstOrDefault());
+            else if (destination is not null && !entries.Contains(destination.Item)) RestoreFocus(destination);
+            else if (entries.Length > 0) FocusEntry(entries[0]);
+            return true;
+        }
+        finally { _completingEntry = false; }
+    }
+
+    private bool TrySaveEntry(DictionaryItem item, bool collapse)
+    {
+        if (_completingEntry) return false;
+        _completingEntry = true;
+        try
+        {
+            RememberEditorFocus();
+            if (!_viewModel.TrySaveEntry(item, out _) || item.IsEditing)
+            {
+                RestoreEditorFocus(item);
+                return false;
+            }
+            if (collapse) item.IsExpanded = false;
+            FocusEntry(item);
+            return true;
+        }
+        finally { _completingEntry = false; }
+    }
+
+    private static DictionaryItem? GetItem(DependencyObject? target)
+    {
+        for (var element = VisualTreeHelpers.FindAncestor<FrameworkElement>(target); element is not null;
+             element = VisualTreeHelpers.FindAncestor<FrameworkElement>(VisualTreeHelper.GetParent(element)))
+        {
+            if (element.DataContext is DictionaryItem item) return item;
+            if (element is ContextMenu menu) return (menu.PlacementTarget as FrameworkElement)?.DataContext as DictionaryItem;
+        }
+        return null;
+    }
+
+    private static bool IsWithin(DependencyObject? target, Visual ancestor) =>
+        ReferenceEquals(target, ancestor) || target is Visual visual && ancestor.IsAncestorOf(visual);
+
+    private T? FindEntryControl<T>(DictionaryItem item, string name) where T : DependencyObject =>
+        VisualTreeHelpers.FindDescendant<T>(ItemsList.ItemContainerGenerator.ContainerFromItem(item), name);
+
+    private bool IsEntryPopupOpen(DictionaryItem item) =>
+        FindEntryControl<Border>(item, "DictionaryItemRoot")?.ContextMenu?.IsOpen == true;
+
+    private FocusTarget? CaptureFocus()
+    {
+        if (Keyboard.FocusedElement is not FrameworkElement element) return null;
+        return new FocusTarget(element, GetItem(element), element.Name,
+            (element as TextBox)?.SelectionStart ?? 0, (element as TextBox)?.SelectionLength ?? 0);
+    }
+
+    private void RememberEditorFocus()
+    {
+        var target = CaptureFocus();
+        if (target?.Item is not null && target.Element is TextBox { Name: "WordTextBox" or "DefinitionBox" })
+            _lastEditorFocus = target;
+    }
+
+    private void DictionaryItem_PreviewLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (!_completingEntry) RememberEditorFocus();
+    }
+
+    private void RestoreEditorFocus(DictionaryItem item)
+    {
+        if (!_viewModel.Items.Contains(item)) return;
+        if (!_viewModel.FilteredItems.Contains(item)) _viewModel.SearchText = "";
+        item.IsExpanded = true;
+        ItemsList.UpdateLayout();
+        if (_lastEditorFocus is { } target && ReferenceEquals(target.Item, item)) RestoreFocus(target);
+        else FindEntryControl<TextBox>(item, "WordTextBox")?.Focus();
+    }
+
+    private void RestoreFocus(FocusTarget target)
+    {
+        if (target.Item is null || VisualTreeHelpers.FindAncestor<ContextMenu>(target.Element)?.IsOpen == true)
+        {
+            if (target.Element.IsVisible) target.Element.Focus();
+            return;
+        }
+        ItemsList.UpdateLayout();
+        var control = FindEntryControl<FrameworkElement>(target.Item, target.Name);
+        if (control?.IsVisible != true || !control.Focus())
+        {
+            FocusEntry(target.Item);
+            return;
+        }
+        if (control is TextBox editor) RestoreSelection(editor, target.Start, target.Length);
+    }
+
+    private static void RestoreSelection(TextBox editor, int start, int length)
+    {
+        start = Math.Min(start, editor.Text.Length);
+        editor.Select(start, Math.Min(length, editor.Text.Length - start));
+    }
+
+    private void FocusEntry(DictionaryItem? item)
+    {
+        ItemsList.UpdateLayout();
+        if (item is not null && FindEntryControl<Button>(item, "WordHeaderButton") is { IsVisible: true } header)
+            header.Focus();
+        else ItemsList.Focus();
     }
 
     private void Definition_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -380,13 +613,12 @@ public partial class DictionaryWindow : OverlayWindow
     private void EditDefinitionButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: DictionaryItem item }) return;
-        item.FinishAutoSave();
         item.BeginEdit();
         Dispatcher.BeginInvoke(
             System.Windows.Threading.DispatcherPriority.Input,
             new Action(() =>
             {
-                if (!item.IsEditing)
+                if (_isClosed || !IsVisible || !item.IsEditing || !_viewModel.Items.Contains(item))
                     return;
 
                 ItemsList.UpdateLayout();
@@ -411,12 +643,18 @@ public partial class DictionaryWindow : OverlayWindow
 
     private void SaveEntry(DictionaryItem item)
     {
-        _viewModel.TrySaveEntry(item, out _);
+        if (item.IsAutoSaving) TryFinishCreations([item], focusList: true);
+        else TrySaveEntry(item, collapse: false);
     }
 
     private void CancelEntry_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: DictionaryItem item }) return;
+        CancelEntry(item);
+    }
+
+    private void CancelEntry(DictionaryItem item)
+    {
         item.CancelEdit();
         if (item.IsNew)
         {
@@ -429,6 +667,9 @@ public partial class DictionaryWindow : OverlayWindow
     {
         if (sender is TextBox textBox)
         {
+            _wordSelectionItem = textBox.DataContext as DictionaryItem;
+            _wordSelectionStart = textBox.SelectionStart;
+            _wordSelectionLength = textBox.SelectionLength;
             if (textBox.DataContext is DictionaryItem { IsAutoSaving: true })
                 return;
 

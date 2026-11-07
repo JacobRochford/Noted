@@ -177,6 +177,7 @@ public partial class NoteEditorWindow : Window
     internal bool HasOpenDocuments => _documents.Count > 0;
     public bool IsDirty => _workspace.IsDirty;
     public bool IsWindowVisible => IsVisible && WindowState != WindowState.Minimized;
+    internal bool IsHiddenTogether => _isHiddenTogether;
     internal bool CanChangeGroupVisibility
     {
         get

@@ -482,6 +482,7 @@ public partial class MainWindow : Window {
         && NotesPanel.Visibility == Visibility.Visible;
 
     internal void ShowNotesPanel() {
+        WindowManager.ForgetHiddenNotesPanel();
         if (!IsVisible)
             Show();
         if (WindowState == WindowState.Minimized)
@@ -514,6 +515,7 @@ public partial class MainWindow : Window {
 
 
     internal void HideNotesPanel() {
+        WindowManager.ForgetHiddenNotesPanel();
         try {
             _notesScrollOffset = string.IsNullOrWhiteSpace(_viewModel.FilterText)
                 ? VisualTreeHelpers.FindDescendant<ScrollViewer>(FileList)?.VerticalOffset

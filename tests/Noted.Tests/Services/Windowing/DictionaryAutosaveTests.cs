@@ -63,6 +63,7 @@ public sealed class DictionaryAutosaveTests
         var model = (DictionaryWindowViewModel)window.DataContext;
         try
         {
+            window.Show();
             var item = model.AddItem(beginEdit: true, autoSave: true);
             item.DraftWord = "new word";
             var blank = model.AddItem(beginEdit: true, autoSave: true);
@@ -72,6 +73,12 @@ public sealed class DictionaryAutosaveTests
                 Source = window
             };
             Invoke(window, "OnPreviewMouseDown", mouse);
+            Invoke(window, "OnPreviewMouseUp", new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+            {
+                RoutedEvent = Mouse.PreviewMouseUpEvent,
+                Source = window
+            });
+            window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             Assert.IsFalse(item.IsEditing);
             Assert.IsFalse(item.IsAutoSaving);
             Assert.IsFalse(model.Items.Contains(blank));

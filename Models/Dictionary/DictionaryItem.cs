@@ -71,6 +71,7 @@ public sealed class DictionaryItem : ObservableObject
     }
 
     public bool IsAutoSaving { get; private set; }
+    internal bool IsEmpty => string.IsNullOrWhiteSpace(Word) && string.IsNullOrWhiteSpace(Definition);
     public bool ShowEditActions => IsEditing && !IsAutoSaving;
     public bool HasPendingEdit => IsEditing && !IsAutoSaving &&
         (IsNew || DraftWord != Word || DraftDefinition != Definition);

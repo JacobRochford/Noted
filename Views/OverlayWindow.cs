@@ -152,6 +152,20 @@ public abstract class OverlayWindow : Window
         }
     }
 
+    internal bool TryHideTogether()
+    {
+        if (!IsWindowVisible) return false;
+        _isChangingGroupVisibility = true;
+        try
+        {
+            RequestHide();
+            if (IsVisible) return false;
+            IsHiddenTogether = true;
+            return true;
+        }
+        finally { _isChangingGroupVisibility = false; }
+    }
+
     internal void RestoreTogether()
     {
         _isChangingGroupVisibility = true;

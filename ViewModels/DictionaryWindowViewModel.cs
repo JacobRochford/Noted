@@ -116,7 +116,7 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
     private void Item_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is not (nameof(DictionaryItem.Word) or nameof(DictionaryItem.Definition))) return;
-        if (!string.IsNullOrWhiteSpace(SearchText))
+        if (!string.IsNullOrWhiteSpace(SearchText) && sender is not DictionaryItem { IsAutoSaving: true })
             FilteredItems.Refresh();
         SaveItems();
     }
@@ -157,7 +157,7 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
             return false;
 
         var searchText = SearchText.Trim();
-        return searchText.Length == 0 ||
+        return dictionaryItem.IsAutoSaving || searchText.Length == 0 ||
                dictionaryItem.Word.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
                dictionaryItem.Definition.Contains(searchText, StringComparison.OrdinalIgnoreCase);
     }
@@ -173,6 +173,30 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
     public bool TryFlushPendingItems(out string? error)
     {
         return _saveScheduler.TryFlush(out error);
+    }
+
+    internal void RemoveSavedEmptyCreation(DictionaryItem item)
+    {
+        if (!item.IsAutoSaving || !item.IsEmpty)
+            throw new ArgumentException("The entry must be an empty creation.", nameof(item));
+
+        // the verified snapshot already excludes this placeholder; newer changes still schedule a save.
+        var previousItems = _publishingSavedItems;
+        _publishingSavedItems = CreateItemsSnapshot(new SaveRequest());
+        try { RemoveItem(item); }
+        finally { _publishingSavedItems = previousItems; }
+    }
+
+    internal bool TryFlushCurrentItems(out string? error)
+    {
+        var snapshot = CreateItemsSnapshot(new SaveRequest());
+        if (!_saveScheduler.TryFlush(out error)) return false;
+        if (!snapshot.SequenceEqual(CreateItemsSnapshot(new SaveRequest())))
+        {
+            error = "Dictionary content changed while saving. Finish the entry again to save the latest changes.";
+            return false;
+        }
+        return true;
     }
 
     public bool TrySaveEntry(DictionaryItem item, out string? error)
@@ -209,8 +233,7 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
 
     private List<DictionaryItemState> CreateItemsSnapshot(SaveRequest request) => Items
         .Where(item => ReferenceEquals(item, request.EditedItem) ||
-            (!item.IsNew && (!item.IsAutoSaving ||
-                !string.IsNullOrWhiteSpace(item.Word) || !string.IsNullOrWhiteSpace(item.Definition))))
+            (!item.IsNew && (!item.IsAutoSaving || !item.IsEmpty)))
         .Select(item => ReferenceEquals(item, request.EditedItem)
             ? request.Edit!
             : new DictionaryItemState

@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Interop;
 using Noted.Helpers;
 
@@ -14,9 +15,16 @@ namespace Noted.Services
             IReadOnlyList<Guid> JotWindows,
             bool Scratchpad,
             IReadOnlyList<Guid> MiniPads,
-            bool Editor);
+            bool Editor,
+            MainWindow? NotesWindow = null)
+        {
+            internal bool HasWindows => Notes || Checklist || Dictionary || Jots || JotWindows.Count > 0 ||
+                Scratchpad || MiniPads.Count > 0 || Editor;
+        }
 
         private static NotedWindowVisibility? s_hiddenNotedWindows;
+        private static bool s_changingGroupVisibility;
+        private static int s_notesVisibilityVersion;
         public const int MaximumMiniPads = 5;
         private static readonly List<MiniPadWindow> s_miniPads = [];
         public static IReadOnlyList<MiniPadWindow> MiniPads => s_miniPads.ToArray();
@@ -161,36 +169,101 @@ namespace Noted.Services
 
         public static void HideAll()
         {
-            if (Editor?.CanChangeGroupVisibility == false)
-                return;
+            if (s_changingGroupVisibility) return;
+            s_changingGroupVisibility = true;
+            try
+            {
+                var main = Main;
+                var checklist = Checklist;
+                var dictionary = Dictionary;
+                var jots = Jots;
+                var jotWindows = JotWindows.Where(window => window.IsWindowVisible).ToArray();
+                var scratchpad = Scratchpad;
+                var miniPads = MiniPads.Where(window => window.IsWindowVisible).ToArray();
+                var editor = Editor;
+                var visibleWindows = new NotedWindowVisibility(
+                    main?.IsNotesPanelVisible == true,
+                    checklist?.IsWindowVisible == true,
+                    dictionary?.IsWindowVisible == true,
+                    jots?.IsWindowVisible == true,
+                    jotWindows.Select(window => window.JotId!.Value).ToArray(),
+                    scratchpad?.IsWindowVisible == true,
+                    miniPads.Select(window => window.InstanceId).ToArray(),
+                    editor?.IsWindowVisible == true,
+                    main);
 
-            var visibleWindows = new NotedWindowVisibility(
-                Main?.IsNotesPanelVisible == true,
-                Checklist?.IsWindowVisible == true,
-                Dictionary?.IsWindowVisible == true,
-                Jots?.IsWindowVisible == true,
-                JotWindows.Where(window => window.IsWindowVisible).Select(window => window.JotId!.Value).ToArray(),
-                Scratchpad?.IsWindowVisible == true,
-                s_miniPads.Where(window => window.IsWindowVisible).Select(window => window.InstanceId).ToArray(),
-                Editor?.IsWindowVisible == true);
-            s_hiddenNotedWindows = visibleWindows;
+                if (visibleWindows.Notes && ReferenceEquals(main, Main) && IsOpen(main) && main!.IsNotesPanelVisible)
+                    main.HideNotesPanel();
+                var notesVisibilityVersion = s_notesVisibilityVersion;
+                if (visibleWindows.Checklist && ReferenceEquals(checklist, Checklist) && CanHide(checklist))
+                    checklist!.TryHideTogether();
+                if (visibleWindows.Dictionary && ReferenceEquals(dictionary, Dictionary) && CanHide(dictionary))
+                    dictionary!.TryHideTogether();
+                if (visibleWindows.Jots && ReferenceEquals(jots, Jots) && CanHide(jots))
+                    jots!.HideTogether();
+                foreach (var window in jotWindows)
+                    if (JotWindows.Contains(window) && CanHide(window)) window.HideTogether();
+                if (visibleWindows.Scratchpad && ReferenceEquals(scratchpad, Scratchpad) && CanHide(scratchpad))
+                    scratchpad!.HideTogether();
+                foreach (var window in miniPads)
+                    if (MiniPads.Contains(window) && CanHide(window)) window.HideTogether();
+                if (visibleWindows.Editor && ReferenceEquals(editor, Editor) && IsOpen(editor) && editor!.IsWindowVisible)
+                    editor.HideTogether();
 
-            if (visibleWindows.Notes)
-                Main?.HideNotesPanel();
-            if (visibleWindows.Checklist)
-                Checklist?.HideTogether();
-            if (visibleWindows.Dictionary)
-                Dictionary?.HideTogether();
-            if (visibleWindows.Jots)
-                Jots?.HideTogether();
-            foreach (var window in JotWindows.Where(window => visibleWindows.JotWindows.Contains(window.JotId!.Value)))
-                window.HideTogether();
-            if (visibleWindows.Scratchpad)
-                Scratchpad?.HideTogether();
-            foreach (var window in MiniPads.Where(window => visibleWindows.MiniPads.Contains(window.InstanceId)))
-                window.HideTogether();
-            if (visibleWindows.Editor)
-                Editor?.HideTogether();
+                if (notesVisibilityVersion != s_notesVisibilityVersion)
+                    visibleWindows = visibleWindows with { Notes = false };
+                var hidden = FilterHiddenWindows(visibleWindows);
+                var previous = GetOutstandingHiddenWindows();
+                var merged = new NotedWindowVisibility(
+                    hidden.Notes || previous?.Notes == true,
+                    hidden.Checklist || previous?.Checklist == true,
+                    hidden.Dictionary || previous?.Dictionary == true,
+                    hidden.Jots || previous?.Jots == true,
+                    hidden.JotWindows.Concat(previous?.JotWindows ?? []).Distinct().ToArray(),
+                    hidden.Scratchpad || previous?.Scratchpad == true,
+                    hidden.MiniPads.Concat(previous?.MiniPads ?? []).Distinct().ToArray(),
+                    hidden.Editor || previous?.Editor == true,
+                    hidden.Notes ? hidden.NotesWindow : previous?.NotesWindow);
+                s_hiddenNotedWindows = merged.HasWindows ? merged : null;
+            }
+            finally { s_changingGroupVisibility = false; }
+        }
+
+        private static bool IsOpen(Window? window) => window is not null && Application.Current.Windows.Cast<Window>().Contains(window);
+
+        private static bool CanHide(OverlayWindow? window) => window?.IsWindowVisible == true && IsOpen(window);
+
+        private static bool IsHidden(OverlayWindow? window) =>
+            window?.IsHiddenTogether == true && !window.IsWindowVisible && IsOpen(window);
+
+        private static bool IsHiddenEditor() => Editor?.IsHiddenTogether == true && !Editor.IsWindowVisible && IsOpen(Editor);
+
+        private static NotedWindowVisibility FilterHiddenWindows(NotedWindowVisibility candidates) => candidates with
+        {
+            Notes = candidates.Notes && ReferenceEquals(candidates.NotesWindow, Main) && Main?.IsNotesPanelVisible == false && IsOpen(Main),
+            Checklist = candidates.Checklist && IsHidden(Checklist),
+            Dictionary = candidates.Dictionary && IsHidden(Dictionary),
+            Jots = candidates.Jots && IsHidden(Jots),
+            JotWindows = JotWindows.Where(window => candidates.JotWindows.Contains(window.JotId!.Value) && IsHidden(window))
+                .Select(window => window.JotId!.Value).ToArray(),
+            Scratchpad = candidates.Scratchpad && IsHidden(Scratchpad),
+            MiniPads = MiniPads.Where(window => candidates.MiniPads.Contains(window.InstanceId) && IsHidden(window))
+                .Select(window => window.InstanceId).ToArray(),
+            Editor = candidates.Editor && IsHiddenEditor()
+        };
+
+        private static NotedWindowVisibility? GetOutstandingHiddenWindows()
+        {
+            if (s_hiddenNotedWindows is null) return null;
+            var outstanding = FilterHiddenWindows(s_hiddenNotedWindows);
+            return outstanding.HasWindows ? outstanding : null;
+        }
+
+        internal static void ForgetHiddenNotesPanel()
+        {
+            s_notesVisibilityVersion++;
+            if (s_hiddenNotedWindows is not null)
+                s_hiddenNotedWindows = s_hiddenNotedWindows with { Notes = false };
         }
 
         public static void ShowNotesPanel()
@@ -222,7 +295,7 @@ namespace Noted.Services
         }
 
         public static void HideChecklist() => Checklist?.TryHide();
-        public static void HideDictionary() => Dictionary?.HideWindow();
+        public static void HideDictionary() => Dictionary?.TryHide();
         public static void HideJots() => Jots?.HideWindow();
         public static void HideScratchpad() => Scratchpad?.HideWindow();
         public static void HideMiniPad() => MiniPad?.HideWindow();
@@ -299,39 +372,43 @@ namespace Noted.Services
 
         public static void ToggleNotedWindows()
         {
-            if (Editor?.CanChangeGroupVisibility == false)
-                return;
-
-            if (AnyWindowVisible())
+            if (s_changingGroupVisibility) return;
+            var visibilityToRestore = GetOutstandingHiddenWindows();
+            s_hiddenNotedWindows = visibilityToRestore;
+            if (visibilityToRestore is null && AnyWindowVisible())
             {
                 HideAll();
                 return;
             }
 
-            var visibilityToRestore = s_hiddenNotedWindows;
-            s_hiddenNotedWindows = null;
             if (visibilityToRestore is null)
             {
                 ShowNotesPanel();
                 return;
             }
 
-            if (visibilityToRestore.Notes)
-                Main?.ShowNotesPanel();
-            if (visibilityToRestore.Checklist)
-                Checklist?.RestoreTogether();
-            if (visibilityToRestore.Dictionary)
-                Dictionary?.RestoreTogether();
-            if (visibilityToRestore.Jots)
-                Jots?.RestoreTogether();
-            foreach (var window in JotWindows.Where(window => visibilityToRestore.JotWindows.Contains(window.JotId!.Value)))
-                window.RestoreTogether();
-            if (visibilityToRestore.Scratchpad)
-                Scratchpad?.RestoreTogether();
-            foreach (var window in MiniPads.Where(window => visibilityToRestore.MiniPads.Contains(window.InstanceId)))
-                window.RestoreTogether();
-            if (visibilityToRestore.Editor)
-                Editor?.RestoreTogether();
+            s_changingGroupVisibility = true;
+            try
+            {
+                if (visibilityToRestore.Notes)
+                    Main?.ShowNotesPanel();
+                if (visibilityToRestore.Checklist)
+                    Checklist?.RestoreTogether();
+                if (visibilityToRestore.Dictionary)
+                    Dictionary?.RestoreTogether();
+                if (visibilityToRestore.Jots)
+                    Jots?.RestoreTogether();
+                foreach (var window in JotWindows.Where(window => visibilityToRestore.JotWindows.Contains(window.JotId!.Value)))
+                    window.RestoreTogether();
+                if (visibilityToRestore.Scratchpad)
+                    Scratchpad?.RestoreTogether();
+                foreach (var window in MiniPads.Where(window => visibilityToRestore.MiniPads.Contains(window.InstanceId)))
+                    window.RestoreTogether();
+                if (visibilityToRestore.Editor && Editor?.CanChangeGroupVisibility == true)
+                    Editor?.RestoreTogether();
+                s_hiddenNotedWindows = GetOutstandingHiddenWindows();
+            }
+            finally { s_changingGroupVisibility = false; }
         }
 
         public static void ToggleChecklist()
@@ -463,6 +540,8 @@ namespace Noted.Services
             ScratchpadProvider = null;
             MiniPadProvider = null;
             s_hiddenNotedWindows = null;
+            s_changingGroupVisibility = false;
+            s_notesVisibilityVersion = 0;
         }
     }
 }
