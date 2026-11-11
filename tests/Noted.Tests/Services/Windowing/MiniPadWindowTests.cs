@@ -36,6 +36,7 @@ public sealed class MiniPadWindowTests
     }
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void NewCommandCapsInstancesAndShowingUsesMostRecentlyActivatedWindow()
     {
         WithWindows((settings, directory) =>
@@ -75,6 +76,7 @@ public sealed class MiniPadWindowTests
     }
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void MiniPadUtilityTogglesAllInstancesAndCreatesOnlyTheFirst()
     {
         WithWindows((settings, directory) =>
@@ -105,6 +107,7 @@ public sealed class MiniPadWindowTests
     }
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void EditorContextMenuCreatesShowsAndClosesMiniPads()
     {
         WithWindows((settings, directory) =>
@@ -137,6 +140,7 @@ public sealed class MiniPadWindowTests
     }
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void ClosingMiddleInstancePreservesOtherIdentitiesContentAndState()
     {
         WithWindows((settings, directory) =>
@@ -173,6 +177,7 @@ public sealed class MiniPadWindowTests
     }
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void GroupVisibilityRestoresOnlyPreviouslyVisibleSurvivingInstances()
     {
         WithWindows((settings, directory) =>
@@ -199,6 +204,7 @@ public sealed class MiniPadWindowTests
     }
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void RestartPreservesInstanceStateAndDoesNotRestoreClosedInstances()
     {
         WithWindows((settings, directory) =>
@@ -254,6 +260,7 @@ public sealed class MiniPadWindowTests
     }
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void ShutdownPreservesGroupHiddenVisibilityAndIndependentAppearanceKeys()
     {
         WithWindows((settings, directory) =>

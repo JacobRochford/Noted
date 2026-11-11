@@ -16,6 +16,7 @@ namespace Noted.Tests.Services;
 public sealed class EditorShortcutTests
 {
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void MiniPadAndScratchpadRouteLineCommandsAndKeepRichBoldNative() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
@@ -64,6 +65,7 @@ public sealed class EditorShortcutTests
     });
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void NoteEditorRoutesBoldToBothPanesAndKeepsTabNavigationAndReopen() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
@@ -130,6 +132,7 @@ public sealed class EditorShortcutTests
     });
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void ChecklistFormatsNotesAndCtrlFFocusesItsExistingSearch() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
@@ -168,6 +171,7 @@ public sealed class EditorShortcutTests
     });
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void TransformationMenusFollowTheFocusedNotePaneAndContextMenusKeepTheirOwnTargets() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
@@ -218,6 +222,7 @@ public sealed class EditorShortcutTests
     });
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void QuickJotJotsAndDictionaryKeepFormattingOutOfNamingFields() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();

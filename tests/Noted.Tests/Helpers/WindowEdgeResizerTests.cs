@@ -56,6 +56,7 @@ public sealed class WindowEdgeResizerTests
     }
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     [DataRow(false)]
     [DataRow(true)]
     public void ReleasedButtonRejectsDelayedMouseDownAndClearsStaleCapture(bool handled)
@@ -64,12 +65,14 @@ public sealed class WindowEdgeResizerTests
     }
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void ReleasedButtonEndsResizeOnMovementWithoutWaitingForAnotherClick()
     {
         VerifyReleasedInput(Mouse.PreviewMouseMoveEvent, true);
     }
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void ReleasedButtonEndsResizeOnOtherButtonRelease()
     {
         VerifyReleasedInput(Mouse.PreviewMouseUpEvent, true);

@@ -9,6 +9,7 @@ using Noted.Services;
 namespace Noted.Tests.Services;
 
 [TestClass]
+[TestCategory("DesktopInteraction")]
 public sealed class ManagedNoteDraftWindowTests
 {
     [TestMethod]
@@ -132,7 +133,6 @@ public sealed class ManagedNoteDraftWindowTests
         var editor = new NoteEditorWindow(new NoteContentService(settings.AppDataDirectory), settings, recovery, session, files);
         try
         {
-            editor.Show();
             Assert.IsTrue(editor.OpenCreatedNote(created.FilePath!, true, created.InitialContent));
             if (edited)
             {

@@ -9,6 +9,7 @@ using Noted.ViewModels;
 namespace Noted.Tests.Services;
 
 [TestClass]
+[TestCategory("DesktopInteraction")]
 public sealed class GroupVisibilityTests
 {
     [TestMethod]

@@ -39,6 +39,7 @@ public sealed class PlainTextPasteTests
     }
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     [DoNotParallelize]
     public void NativePasteReplacesSelectionSupportsUndoAndReadsCurrentSetting()
     {

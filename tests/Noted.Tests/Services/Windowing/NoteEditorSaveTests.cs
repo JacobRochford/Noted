@@ -8,6 +8,7 @@ using Noted.Services;
 namespace Noted.Tests.Services;
 
 [TestClass]
+[TestCategory("DesktopInteraction")]
 public sealed class NoteEditorSaveTests
 {
     [TestMethod]
@@ -198,7 +199,6 @@ public sealed class NoteEditorSaveTests
         var editor = new NoteEditorWindow(content, new AppSettingsService(appData), recovery, session);
         try
         {
-            editor.Show();
             Assert.IsTrue(editor.OpenCreatedNote(source, usesGeneratedName: true, initialContent: ""));
             var box = (TextBox)editor.FindName("EditorTextBox");
             box.SelectedText = "editor edits";
@@ -251,7 +251,6 @@ public sealed class NoteEditorSaveTests
         var editor = new NoteEditorWindow(content, settings, recovery, new NoteEditorSessionService(appData));
         try
         {
-            editor.Show();
             Assert.IsTrue(editor.OpenNote(path));
             if (secondary)
             {
@@ -311,7 +310,6 @@ public sealed class NoteEditorSaveTests
             new NoteRecoveryService(directory.Path), new NoteEditorSessionService(directory.Path));
         try
         {
-            editor.Show();
             Assert.IsTrue(editor.OpenNote(path));
             ((TextBox)editor.FindName("EditorTextBox")).Text = "editor edits";
             File.WriteAllText(path, "external before saving");

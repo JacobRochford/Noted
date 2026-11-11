@@ -14,6 +14,7 @@ using Noted.ViewModels;
 namespace Noted.Tests.Services;
 
 [TestClass]
+[TestCategory("DesktopInteraction")]
 public sealed class NoteEditorNavigationTests
 {
     [TestMethod]
@@ -240,7 +241,6 @@ public sealed class NoteEditorNavigationTests
             new NoteRecoveryService(directory.Path), new NoteEditorSessionService(directory.Path), files);
         try
         {
-            reopened.Show();
             Assert.AreEqual(initialSize, ((TextBox)reopened.FindName("EditorTextBox")).FontSize);
             Assert.AreEqual(initialSize, ((TextBox)reopened.FindName("SecondaryEditorTextBox")).FontSize);
         }
@@ -619,6 +619,7 @@ public sealed class NoteEditorNavigationTests
     [TestMethod]
     public void QuickOpenFiltersInMemoryNavigatesAndCancelsWithoutOpening() => WithEditor((editor, _, _, files) =>
     {
+        editor.Show();
         var first = CreateNote(files, "a/alpha.md", "alpha");
         var second = CreateNote(files, "b/alpha.md", "alpha");
         CreateNote(files, "beta.txt", "alpha content must not match");
@@ -649,6 +650,7 @@ public sealed class NoteEditorNavigationTests
     [TestMethod]
     public void QuickOpenRejectsStaleEntriesAndEnterSelectsTheRemainingNote() => WithEditor((editor, _, _, files) =>
     {
+        editor.Show();
         var stale = CreateNote(files, "old.md", "old");
         var valid = CreateNote(files, "valid.md", "valid");
         var dialog = new QuickOpenDialog(editor.GetQuickOpenNotes()) { Owner = editor };
@@ -985,7 +987,6 @@ public sealed class NoteEditorNavigationTests
             new NoteRecoveryService(directory.Path), new NoteEditorSessionService(directory.Path), files);
         try
         {
-            editor.Show();
             action(editor, directory, settings, files);
         }
         finally

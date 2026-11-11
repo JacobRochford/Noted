@@ -20,6 +20,7 @@ namespace Noted.Tests.Services;
 public sealed class WindowConstructionTests
 {
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void ChecklistAndJotsSaveNormalBoundsWhenMaximized() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
@@ -56,6 +57,7 @@ public sealed class WindowConstructionTests
     });
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     [DataRow(NewNoteMode.Prompt)]
     [DataRow(NewNoteMode.Quick)]
     [DataRow(NewNoteMode.Both)]
@@ -154,6 +156,7 @@ public sealed class WindowConstructionTests
     }
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void SharedResourcesAndChangedWindowsLoadWithoutStartingTheApplication()
     {
         WpfTestHost.Invoke(() =>

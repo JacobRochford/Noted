@@ -6,6 +6,7 @@ using Noted.Tests.Services;
 namespace Noted.Tests.Helpers;
 
 [TestClass]
+[TestCategory("DesktopInteraction")]
 public sealed class WindowRecoveryTests
 {
     [TestMethod]

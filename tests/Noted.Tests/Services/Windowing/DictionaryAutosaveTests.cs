@@ -55,6 +55,7 @@ public sealed class DictionaryAutosaveTests
     });
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     public void OutsideClickFinishesNewEntriesRemovesBlankAndFlushes() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();

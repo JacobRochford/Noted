@@ -67,6 +67,7 @@ public sealed class EditorLinePasteTests
     });
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     [DoNotParallelize]
     [DataRow(false)]
     [DataRow(true)]
@@ -88,6 +89,7 @@ public sealed class EditorLinePasteTests
     });
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     [DoNotParallelize]
     public void LinePasteKeepsNormalizationSettingsAndTheExistingBypassCommand() => WithClipboard(() =>
     {
@@ -110,6 +112,7 @@ public sealed class EditorLinePasteTests
     });
 
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     [DoNotParallelize]
     public void OrdinaryClipboardTextAndSelectedPasteKeepNativeInsertionBehavior() => WithClipboard(() =>
     {

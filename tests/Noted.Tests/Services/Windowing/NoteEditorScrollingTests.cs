@@ -18,6 +18,7 @@ namespace Noted.Tests.Services;
 public sealed class NoteEditorScrollingTests
 {
     [TestMethod]
+    [TestCategory("DesktopInteraction")]
     [DataRow(1, false)]
     [DataRow(2, false)]
     [DataRow(3, false)]

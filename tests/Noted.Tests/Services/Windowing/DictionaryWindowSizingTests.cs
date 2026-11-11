@@ -7,6 +7,7 @@ using Noted.Services;
 namespace Noted.Tests.Services;
 
 [TestClass]
+[TestCategory("DesktopInteraction")]
 public sealed class DictionaryWindowSizingTests
 {
     [TestMethod]
