@@ -59,6 +59,8 @@ public partial class ChecklistWindow : OverlayWindow
         ApplyPriorityColors();
         _reopenOnStartup = state.ReopenOnStartup;
         RestoreWindowBounds(state.Left, state.Top, state.Width, state.Height);
+        if (state.IsMaximized)
+            WindowState = WindowState.Maximized;
 
         _viewModel = new ChecklistWindowViewModel(
             contentService,
@@ -187,12 +189,14 @@ public partial class ChecklistWindow : OverlayWindow
 
     protected override void SaveWindowState()
     {
+        var bounds = GetNormalWindowBounds();
         _settingsService.SaveChecklistWindowState(new ChecklistWindowState
         {
-            Left            = Left,
-            Top             = Top,
-            Width           = Width,
-            Height          = Height,
+            Left            = bounds.Left,
+            Top             = bounds.Top,
+            Width           = bounds.Width,
+            Height          = bounds.Height,
+            IsMaximized = WindowState == WindowState.Maximized,
             Opacity         = _defaultOpacity,
             GhostModeOpacity = _ghostModeOpacity,
             GhostModeEnabled = _ghostModeEnabled,

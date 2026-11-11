@@ -139,7 +139,8 @@ public sealed class ScratchpadWindowViewModel : ObservableObject
         double top,
         double width,
         double height,
-        bool? reopenOnStartup = null)
+        bool? reopenOnStartup = null,
+        bool? isMaximized = null)
     {
         _windowState = _windowState with
         {
@@ -147,6 +148,7 @@ public sealed class ScratchpadWindowViewModel : ObservableObject
             Top = top,
             Width = width,
             Height = height,
+            IsMaximized = isMaximized ?? _windowState.IsMaximized,
             ReopenOnStartup = reopenOnStartup ?? _windowState.ReopenOnStartup
         };
         return TrySaveWindowState();

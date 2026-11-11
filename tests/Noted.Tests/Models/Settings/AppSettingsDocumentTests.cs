@@ -33,6 +33,30 @@ public sealed class AppSettingsDocumentTests
     }
 
     [TestMethod]
+    public void ExistingUtilityBoundsWithoutMaximizedFlagStayNormal()
+    {
+        var document = JsonSerializer.Deserialize<AppSettingsDocument>("""
+            {
+              "ChecklistWindowState": { "Width": 380, "Height": 540 },
+              "DictionaryWindowState": { "Left": 120, "Top": 80, "Width": 400, "Height": 500 },
+              "JotsWindowState": { "Width": 430, "Height": 570 },
+              "ScratchpadWindowState": { "Width": 450, "Height": 500 }
+            }
+            """);
+
+        Assert.IsNotNull(document?.ChecklistWindowState);
+        Assert.IsNotNull(document.DictionaryWindowState);
+        Assert.IsNotNull(document.JotsWindowState);
+        Assert.IsNotNull(document.ScratchpadWindowState);
+        Assert.IsFalse(document.ChecklistWindowState.IsMaximized);
+        Assert.IsFalse(document.DictionaryWindowState.IsMaximized);
+        Assert.IsFalse(document.JotsWindowState.IsMaximized);
+        Assert.IsFalse(document.ScratchpadWindowState.IsMaximized);
+        Assert.AreEqual(400, document.DictionaryWindowState.Width);
+        Assert.AreEqual(500, document.DictionaryWindowState.Height);
+    }
+
+    [TestMethod]
     public void SerializationKeepsEstablishedSettingsPropertyNames()
     {
         var document = new AppSettingsDocument

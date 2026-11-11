@@ -11,6 +11,24 @@ namespace Noted.Tests.ViewModels;
 public sealed class ScratchpadWindowViewModelTests
 {
     [TestMethod]
+    public void WindowLayoutSavesMaximizedStateWithNormalBounds()
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        var viewModel = new ScratchpadWindowViewModel(
+            settings, new ScratchpadContentService(directory.Path));
+
+        Assert.IsTrue(viewModel.TrySaveWindowLayout(120, 80, 450, 500, true, true));
+        var maximized = new AppSettingsService(directory.Path).LoadScratchpadWindowState();
+        Assert.IsTrue(maximized.IsMaximized);
+        Assert.AreEqual(450, maximized.Width);
+        Assert.AreEqual(500, maximized.Height);
+
+        Assert.IsTrue(viewModel.TrySaveWindowLayout(120, 80, 450, 500, true, false));
+        Assert.IsFalse(new AppSettingsService(directory.Path).LoadScratchpadWindowState().IsMaximized);
+    }
+
+    [TestMethod]
     public void LockedSettingsReturnLayoutSaveFailureAndRetryClearsTheError()
     {
         using var directory = new TemporaryTestDirectory();

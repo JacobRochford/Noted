@@ -24,6 +24,8 @@ public abstract class OverlayWindow : Window
         _edgeResizer ??= new WindowEdgeResizer(this, SaveWindowState);
         PreviewMouseLeftButtonDown += Background_MouseLeftButtonDown;
         AddHandler(Mouse.QueryCursorEvent, new QueryCursorEventHandler(Background_QueryCursor), true);
+        if (FindName("MaximizeRestoreButton") is Button maximizeRestoreButton)
+            maximizeRestoreButton.Click += MaximizeRestoreButton_Click;
         // Retain legacy state fields for persistence; WindowAppearance owns the live opacity.
         _ghostModeEnabled = ghostModeEnabled;
         _ghostModeOpacity = NormalizeOpacity(ghostModeOpacity, 0.25);
@@ -55,6 +57,14 @@ public abstract class OverlayWindow : Window
         Height = bounds.Height;
     }
 
+    protected Rect GetNormalWindowBounds()
+    {
+        var bounds = WindowState == WindowState.Normal
+            ? new Rect(Left, Top, Width, Height)
+            : RestoreBounds;
+        return bounds.IsEmpty ? new Rect(Left, Top, Width, Height) : bounds;
+    }
+
     private void OnOverlayClosing(object? sender, CancelEventArgs e)
     {
         SaveWindowState();
@@ -83,7 +93,7 @@ public abstract class OverlayWindow : Window
                 WindowDragHitTest.CanDrag(e.OriginalSource as DependencyObject, titleBar))
             {
                 e.Handled = true;
-                RequestHide();
+                ToggleMaximize();
             }
             return;
         }
@@ -114,12 +124,20 @@ public abstract class OverlayWindow : Window
 
     protected abstract void SaveWindowState();
     protected abstract void RequestHide();
+    protected virtual bool ShouldSaveWindowStateAfterStateChange => true;
+
+    private void MaximizeRestoreButton_Click(object sender, RoutedEventArgs e) => ToggleMaximize();
+
+    private void ToggleMaximize() =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
 
     protected override void OnStateChanged(EventArgs e)
     {
         if (WindowState != WindowState.Minimized)
             _restoreWindowState = WindowState;
         base.OnStateChanged(e);
+        if (IsLoaded && WindowState != WindowState.Minimized && ShouldSaveWindowStateAfterStateChange)
+            SaveWindowState();
     }
 
     internal bool IsWindowVisible => IsVisible && WindowState != WindowState.Minimized;

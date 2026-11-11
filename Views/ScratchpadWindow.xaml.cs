@@ -75,6 +75,8 @@ public partial class ScratchpadWindow : OverlayWindow
         Top = state.Top;
         Width = state.Width;
         Height = state.Height;
+        if (state.IsMaximized)
+            WindowState = WindowState.Maximized;
 
         InitializeOverlay(state.GhostModeEnabled, state.GhostModeOpacity, state.Opacity);
 
@@ -300,7 +302,10 @@ public partial class ScratchpadWindow : OverlayWindow
             return true;
         }
 
-        if (_viewModel.TrySaveWindowLayout(Left, Top, Width, Height, _reopenOnStartup))
+        var bounds = GetNormalWindowBounds();
+        if (_viewModel.TrySaveWindowLayout(
+            bounds.Left, bounds.Top, bounds.Width, bounds.Height,
+            _reopenOnStartup, WindowState == WindowState.Maximized))
         {
             _isWindowStateDirty = false;
             error = null;

@@ -77,6 +77,8 @@
                                     </ContextMenu>
                                 </Button.ContextMenu>
                             </Button>
+                            <Button x:Name="MaximizeRestoreButton" Margin="3,0,0,0"
+                                    Style="{StaticResource NotedMaximizeRestoreButton}"/>
                             <Button Content="&#xE711;"
                                     Style="{StaticResource HeaderIconBtn}"
                                     Click="HideButton_Click"

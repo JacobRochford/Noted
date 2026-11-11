@@ -236,6 +236,22 @@
         </Setter>
     </Style>
 
+    <Style x:Key="NotedMaximizeRestoreButton" TargetType="Button"
+           BasedOn="{StaticResource NotedHeaderIconButton}">
+        <Setter Property="Content" Value="&#xE922;"/>
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="ToolTip" Value="Maximize"/>
+        <Setter Property="AutomationProperties.Name" Value="Maximize"/>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}"
+                         Value="Maximized">
+                <Setter Property="Content" Value="&#xE923;"/>
+                <Setter Property="ToolTip" Value="Restore"/>
+                <Setter Property="AutomationProperties.Name" Value="Restore"/>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
     <Style x:Key="NotedPrimaryButton" TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource NotedAccentBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource NotedAccentBrush}"/>

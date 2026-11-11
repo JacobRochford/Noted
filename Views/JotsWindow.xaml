@@ -118,9 +118,13 @@
                                        Visibility="{Binding HasPersistenceError, Converter={StaticResource BoolToVisibility}}"
                                        ToolTip="{Binding PersistenceError}"/>
                         </StackPanel>
-                        <Button x:Name="HideButton" Grid.Column="1" Content="&#xE711;"
-                                Style="{StaticResource HeaderIconBtn}"
-                                Click="HideButton_Click" ToolTip="Hide"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="MaximizeRestoreButton"
+                                    Style="{StaticResource NotedMaximizeRestoreButton}"/>
+                            <Button x:Name="HideButton" Content="&#xE711;" Margin="3,0,0,0"
+                                    Style="{StaticResource HeaderIconBtn}"
+                                    Click="HideButton_Click" ToolTip="Hide"/>
+                        </StackPanel>
                     </Grid>
                 </Border>
 

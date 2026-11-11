@@ -20,6 +20,42 @@ namespace Noted.Tests.Services;
 public sealed class WindowConstructionTests
 {
     [TestMethod]
+    public void ChecklistAndJotsSaveNormalBoundsWhenMaximized() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.Path);
+        var checklist = new ChecklistWindow(settings, new ChecklistContentService(directory.Path));
+        var jots = new JotsWindow(settings, new JotsContentService(directory.Path));
+        try
+        {
+            checklist.Show();
+            var checklistWidth = checklist.Width;
+            var checklistButton = (Button)checklist.FindName("MaximizeRestoreButton");
+            checklistButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var checklistState = new AppSettingsService(directory.Path).LoadChecklistWindowState();
+            Assert.IsTrue(checklistState.IsMaximized);
+            Assert.AreEqual(checklistWidth, checklistState.Width, 2);
+            checklistButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.IsFalse(new AppSettingsService(directory.Path).LoadChecklistWindowState().IsMaximized);
+
+            jots.Show();
+            var jotsWidth = jots.Width;
+            var jotsButton = (Button)jots.FindName("MaximizeRestoreButton");
+            jotsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var jotsState = new AppSettingsService(directory.Path).LoadJotsWindowState();
+            Assert.IsTrue(jotsState.IsMaximized);
+            Assert.AreEqual(jotsWidth, jotsState.Width, 2);
+            jotsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.IsFalse(new AppSettingsService(directory.Path).LoadJotsWindowState().IsMaximized);
+        }
+        finally
+        {
+            checklist.Close();
+            jots.Close();
+        }
+    });
+
+    [TestMethod]
     [DataRow(NewNoteMode.Prompt)]
     [DataRow(NewNoteMode.Quick)]
     [DataRow(NewNoteMode.Both)]
@@ -153,7 +189,7 @@ public sealed class WindowConstructionTests
                     window.Arrange(new Rect(0, 0, window.Width, window.Height));
                     window.UpdateLayout();
                 }
-                VerifyWindowDragTargets(main, checklist, dictionary, scratchpad, miniPad, editor);
+                VerifyWindowDragTargets(main, checklist, dictionary, jots, scratchpad, miniPad, editor);
                 VerifyNotedButtonForeground(main);
                 var settingsView = (SettingsView)main.FindName("SettingsView");
                 settingsView.Visibility = Visibility.Visible;
@@ -740,12 +776,13 @@ public sealed class WindowConstructionTests
     }
 
     private static void VerifyWindowDragTargets(
-        MainWindow main, ChecklistWindow checklist, DictionaryWindow dictionary,
+        MainWindow main, ChecklistWindow checklist, DictionaryWindow dictionary, JotsWindow jots,
         ScratchpadWindow scratchpad, MiniPadWindow miniPad, NoteEditorWindow editor)
     {
-        foreach (var window in new OverlayWindow[] { checklist, dictionary, scratchpad, miniPad })
+        foreach (var window in new OverlayWindow[] { checklist, dictionary, jots, scratchpad, miniPad })
         {
             var header = (Border)window.FindName("TitleBar");
+            Assert.IsNotNull(window.FindName("MaximizeRestoreButton"), window.GetType().Name);
             Assert.IsTrue(WindowDragHitTest.CanDrag(header, window), window.GetType().Name);
             var query = new System.Windows.Input.QueryCursorEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0)
             {

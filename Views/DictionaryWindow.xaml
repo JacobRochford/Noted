@@ -61,7 +61,15 @@
                 </Grid.RowDefinitions>
 
                 <Border x:Name="TitleBar" Grid.Row="0" Background="Transparent"
+                        MouseRightButtonUp="TitleBar_MouseRightButtonUp"
                         Padding="2,0,0,5">
+                    <Border.Resources>
+                        <ContextMenu x:Key="TitleBarMenu" Style="{StaticResource NotedContextMenu}"
+                                     Placement="MousePoint">
+                            <MenuItem Header="Reset size" Style="{StaticResource NotedContextMenuItem}"
+                                      Click="ResetSizeMenuItem_Click"/>
+                        </ContextMenu>
+                    </Border.Resources>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -78,9 +86,13 @@
                                        Visibility="{Binding HasPersistenceError, Converter={StaticResource BoolToVisibility}}"
                                        ToolTip="{Binding PersistenceError}"/>
                         </StackPanel>
-                        <Button x:Name="HideDictionaryButton" Grid.Column="1" Content="&#xE711;"
-                                Style="{StaticResource HeaderIconBtn}"
-                                Click="HideButton_Click" ToolTip="Hide"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="MaximizeRestoreButton"
+                                    Style="{StaticResource NotedMaximizeRestoreButton}"/>
+                            <Button x:Name="HideDictionaryButton" Content="&#xE711;" Margin="3,0,0,0"
+                                    Style="{StaticResource HeaderIconBtn}"
+                                    Click="HideButton_Click" ToolTip="Hide"/>
+                        </StackPanel>
                     </Grid>
                 </Border>
 

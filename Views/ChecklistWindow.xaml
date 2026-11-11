@@ -228,6 +228,8 @@
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                             <Button Content="&#xE721;" Style="{StaticResource HeaderIconBtn}"
                                     Click="SearchToggle_Click" ToolTip="Search (Ctrl+F)"/>
+                            <Button x:Name="MaximizeRestoreButton" Margin="3,0,0,0"
+                                    Style="{StaticResource NotedMaximizeRestoreButton}"/>
                             <Button x:Name="HideChecklistButton" Content="&#xE711;" Margin="3,0,0,0"
                                     Style="{StaticResource HeaderIconBtn}"
                                     Click="HideButton_Click" ToolTip="Hide"/>

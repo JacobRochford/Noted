@@ -22,6 +22,7 @@ public partial class DictionaryWindow : OverlayWindow
     private bool _preserveOpenStateOnClose;
     private bool _completingEntry;
     private bool _isClosed;
+    private bool _isResettingSize;
     private FocusTarget? _lastEditorFocus;
     private DictionaryItem? _wordSelectionItem;
     private int _wordSelectionStart;
@@ -46,6 +47,8 @@ public partial class DictionaryWindow : OverlayWindow
             windowState.Top,
             windowState.Width,
             windowState.Height);
+        if (windowState.IsMaximized)
+            WindowState = WindowState.Maximized;
 
         _viewModel = new DictionaryWindowViewModel(
             contentService,
@@ -317,6 +320,33 @@ public partial class DictionaryWindow : OverlayWindow
     }
 
     private void HideButton_Click(object sender, RoutedEventArgs e) => RequestHide();
+
+    private void TitleBar_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!WindowDragHitTest.CanDrag(e.OriginalSource as DependencyObject, TitleBar))
+            return;
+
+        var menu = (ContextMenu)TitleBar.FindResource("TitleBarMenu");
+        menu.PlacementTarget = TitleBar;
+        menu.IsOpen = true;
+        e.Handled = true;
+    }
+
+    private void ResetSizeMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        _isResettingSize = true;
+        try
+        {
+            WindowState = WindowState.Normal;
+            var defaults = new DictionaryWindowState();
+            RestoreWindowBounds(Left, Top, defaults.Width, defaults.Height);
+        }
+        finally
+        {
+            _isResettingSize = false;
+        }
+        SaveWindowState();
+    }
 
     protected override void RequestHide()
     {
@@ -680,12 +710,14 @@ public partial class DictionaryWindow : OverlayWindow
 
     protected override void SaveWindowState()
     {
+        var bounds = GetNormalWindowBounds();
         var newState = new DictionaryWindowState
         {
-            Left = Left,
-            Top = Top,
-            Width = Width,
-            Height = Height,
+            Left = bounds.Left,
+            Top = bounds.Top,
+            Width = bounds.Width,
+            Height = bounds.Height,
+            IsMaximized = WindowState == WindowState.Maximized,
             Opacity = _defaultOpacity,
             GhostModeOpacity = _ghostModeOpacity,
             GhostModeEnabled = _ghostModeEnabled,
@@ -693,6 +725,8 @@ public partial class DictionaryWindow : OverlayWindow
         };
         _settingsService.SaveDictionaryWindowState(newState);
     }
+
+    protected override bool ShouldSaveWindowStateAfterStateChange => !_isResettingSize;
 
     internal void CancelPreparedClose() => _preserveOpenStateOnClose = false;
 

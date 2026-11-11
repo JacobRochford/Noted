@@ -42,6 +42,8 @@ public partial class JotsWindow : OverlayWindow
             : settingsService.LoadJotsWindowState();
         _reopenOnStartup = windowState.ReopenOnStartup;
         RestoreWindowBounds(windowState.Left, windowState.Top, windowState.Width, windowState.Height);
+        if (windowState.IsMaximized)
+            WindowState = WindowState.Maximized;
         _viewModel = new JotsWindowViewModel(workspace, windowState.GhostModeEnabled);
         DataContext = _viewModel;
         EditorTextWrapping.Attach(DetailsTextBox);
@@ -189,12 +191,14 @@ public partial class JotsWindow : OverlayWindow
 
     protected override void SaveWindowState()
     {
+        var bounds = GetNormalWindowBounds();
         var state = new JotsWindowState
         {
-            Left = Left,
-            Top = Top,
-            Width = Width,
-            Height = Height,
+            Left = bounds.Left,
+            Top = bounds.Top,
+            Width = bounds.Width,
+            Height = bounds.Height,
+            IsMaximized = WindowState == WindowState.Maximized,
             Opacity = _defaultOpacity,
             GhostModeOpacity = _ghostModeOpacity,
             GhostModeEnabled = _ghostModeEnabled,
