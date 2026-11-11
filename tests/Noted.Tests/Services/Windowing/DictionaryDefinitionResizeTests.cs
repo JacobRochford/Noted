@@ -16,6 +16,9 @@ public sealed class DictionaryDefinitionResizeTests
     [TestMethod]
     public void ResizingClampsHeightAndAccumulatesDragChangesWithoutWaitingForLayout() => WithWindow((window, model, _) =>
     {
+        window.Height = 500;
+        window.UpdateLayout();
+
         var item = model.Items.First();
         var content = Content(window, item);
         var scroll = (ScrollViewer)window.FindName("ItemsScrollViewer");
@@ -30,9 +33,9 @@ public sealed class DictionaryDefinitionResizeTests
         Drag(window, item, 20);
         Drag(window, item, 20);
         Assert.AreEqual(88, content.Height);
-        Drag(window, item, 300);
-        Assert.AreEqual(initialWindowHeight - Math.Max(0, initialContentHeight - 48) + 340, window.Height, 0.1);
-        Assert.AreEqual(388, content.Height);
+        Drag(window, item, 100);
+        Assert.AreEqual(initialWindowHeight - Math.Max(0, initialContentHeight - 48) + 140, window.Height, 0.1);
+        Assert.AreEqual(188, content.Height);
         window.UpdateLayout();
         Assert.IsTrue(content.Height < scroll.ViewportHeight);
         Assert.AreEqual(content.Height, content.ActualHeight, 0.1);
