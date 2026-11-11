@@ -116,15 +116,7 @@ public sealed class EditorIndentationTests
             editor.CaretIndex = 1;
             var settings = new IndentationSettings();
             EditorIndentation.Attach(editor, () => settings);
-            KeyEventArgs Press(Key key)
-            {
-                var args = new KeyEventArgs(Keyboard.PrimaryDevice, surface.Source, 0, key)
-                {
-                    RoutedEvent = Keyboard.PreviewKeyDownEvent
-                };
-                editor.RaiseEvent(args);
-                return args;
-            }
+            KeyEventArgs Press(Key key) => KeyboardTestInput.Press(editor, key, ModifierKeys.None, previewOnly: true);
             Assert.IsFalse(Press(Key.F3).Handled);
             Assert.AreEqual("a", editor.Text);
             Assert.IsTrue(Press(Key.Tab).Handled);

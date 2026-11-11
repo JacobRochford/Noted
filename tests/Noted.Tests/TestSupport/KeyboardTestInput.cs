@@ -10,7 +10,7 @@ internal static class KeyboardTestInput
     [ThreadStatic]
     private static TestKeyboardDevice? s_keyboard;
 
-    internal static KeyEventArgs Press(UIElement target, Key key, ModifierKeys modifiers)
+    internal static KeyEventArgs Press(UIElement target, Key key, ModifierKeys modifiers, bool previewOnly = false)
     {
         // this exercises routed handlers; native WPF command bindings are checked separately.
         var keyboard = s_keyboard ??= new TestKeyboardDevice();
@@ -28,7 +28,7 @@ internal static class KeyboardTestInput
             typeof(KeyEventArgs).GetMethod("MarkSystem", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(args, null);
         target.RaiseEvent(args);
-        if (!args.Handled)
+        if (!args.Handled && !previewOnly)
         {
             args.RoutedEvent = Keyboard.KeyDownEvent;
             target.RaiseEvent(args);

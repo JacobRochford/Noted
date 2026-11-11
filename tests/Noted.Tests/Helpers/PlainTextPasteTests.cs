@@ -1,10 +1,12 @@
 using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Noted.Helpers;
 using Noted.Tests.Services;
+using static Noted.Tests.Services.ClipboardTestSupport;
 
 namespace Noted.Tests.Helpers;
 
@@ -42,13 +44,15 @@ public sealed class PlainTextPasteTests
     {
         RunSta(() =>
         {
-            var previousClipboard = Clipboard.GetDataObject();
+            IDataObject? previousClipboard = null;
+            RetryClipboard(() => previousClipboard = Clipboard.GetDataObject());
+            Exception? testFailure = null;
             try
             {
                 var data = new DataObject();
                 data.SetData(DataFormats.UnicodeText, "\u201Cpaste\u201D\u00A0\u00AD");
                 data.SetData(DataFormats.Rtf, "{\\rtf1 rich text must not be pasted}");
-                Clipboard.SetDataObject(data);
+                RetryClipboard(() => Clipboard.SetDataObject(data));
                 var enabled = true;
                 var editor = new TextBox { Text = "\u2018before REMOVE after\u2019", AcceptsReturn = true };
                 using var surface = new WpfEditorTestSurface(editor);
@@ -82,12 +86,70 @@ public sealed class PlainTextPasteTests
                 Assert.AreEqual(Key.V, binding.Key);
                 Assert.AreEqual(ModifierKeys.Control | ModifierKeys.Alt, binding.Modifiers);
             }
+            catch (Exception ex)
+            {
+                testFailure = ex;
+                throw;
+            }
             finally
             {
-                if (previousClipboard is null) Clipboard.Clear();
-                else Clipboard.SetDataObject(previousClipboard, true);
+                try
+                {
+                    RetryClipboard(() =>
+                    {
+                        if (previousClipboard is null) Clipboard.Clear();
+                        else Clipboard.SetDataObject(previousClipboard, true);
+                    });
+                }
+                catch (Exception restoreFailure) when (testFailure is not null)
+                {
+                    throw new AggregateException("Paste test and clipboard restoration both failed.",
+                        testFailure, restoreFailure);
+                }
             }
         });
+    }
+
+    [TestMethod]
+    public void ClipboardRetryAllowsSuccessOnLastAttempt()
+    {
+        var attempts = 0;
+        RetryClipboard(() =>
+        {
+            if (++attempts < 5)
+                throw new COMException("Clipboard is busy.", unchecked((int)0x800401D0));
+        });
+        Assert.AreEqual(5, attempts);
+    }
+
+    [TestMethod]
+    [DataRow(unchecked((int)0x800401D0), 5)]
+    [DataRow(unchecked((int)0x80004005), 1)]
+    public void ClipboardRetryPropagatesComFailures(int hresult, int expectedAttempts)
+    {
+        var failure = new COMException("Clipboard operation failed.", hresult);
+        var attempts = 0;
+        var actual = Assert.ThrowsExactly<COMException>(() => RetryClipboard(() =>
+        {
+            attempts++;
+            throw failure;
+        }));
+        Assert.AreSame(failure, actual);
+        Assert.AreEqual(expectedAttempts, attempts);
+    }
+
+    [TestMethod]
+    public void ClipboardRetryPropagatesOtherExceptionsWithoutRetrying()
+    {
+        var failure = new InvalidOperationException("Clipboard operation failed.");
+        var attempts = 0;
+        var actual = Assert.ThrowsExactly<InvalidOperationException>(() => RetryClipboard(() =>
+        {
+            attempts++;
+            throw failure;
+        }));
+        Assert.AreSame(failure, actual);
+        Assert.AreEqual(1, attempts);
     }
 
     private static void RunSta(Action action)

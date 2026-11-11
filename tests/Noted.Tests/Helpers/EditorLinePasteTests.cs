@@ -7,6 +7,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Noted.Helpers;
 using Noted.Search;
 using Noted.Tests.Services;
+using static Noted.Tests.Services.ClipboardTestSupport;
 
 namespace Noted.Tests.Helpers;
 
@@ -92,7 +93,7 @@ public sealed class EditorLinePasteTests
     {
         const string original = "a “quote” line";
         var source = new TextBox { Text = original };
-        Clipboard.SetDataObject(CopyLine(source), true);
+        RetryClipboard(() => Clipboard.SetDataObject(CopyLine(source), true));
         foreach (var normalize in new[] { false, true })
         {
             var target = new TextBox { Text = "target", AcceptsReturn = true, CaretIndex = 3 };
@@ -116,12 +117,12 @@ public sealed class EditorLinePasteTests
         using var surface = new WpfEditorTestSurface(editor);
         PlainTextPaste.Attach(editor, () => false);
         EditorLineCommands.Attach(editor);
-        Clipboard.SetText("ordinary");
+        RetryClipboard(() => Clipboard.SetText("ordinary"));
         editor.CaretIndex = 7;
         editor.Paste();
         Assert.AreEqual("before ordinaryafter", editor.Text);
 
-        Clipboard.SetDataObject(CopyLine(new TextBox { Text = "copied" }), true);
+        RetryClipboard(() => Clipboard.SetDataObject(CopyLine(new TextBox { Text = "copied" }), true));
         editor.Text = "before REMOVE after";
         editor.Select(7, 6);
         editor.Paste();
@@ -243,23 +244,42 @@ public sealed class EditorLinePasteTests
         {
             try
             {
-                var current = Clipboard.GetDataObject();
                 DataObject? previous = null;
-                if (current is not null)
+                RetryClipboard(() =>
                 {
-                    previous = new DataObject();
+                    var current = Clipboard.GetDataObject();
+                    if (current is null) return;
+                    var snapshot = new DataObject();
                     foreach (var format in current.GetFormats(autoConvert: false))
                     {
                         var value = current.GetData(format, autoConvert: false);
                         if (value is System.IO.MemoryStream stream) value = new System.IO.MemoryStream(stream.ToArray());
-                        if (value is not null) previous.SetData(format, value, autoConvert: false);
+                        if (value is not null) snapshot.SetData(format, value, autoConvert: false);
                     }
-                }
+                    previous = snapshot;
+                });
+                Exception? testFailure = null;
                 try { action(); }
+                catch (Exception ex)
+                {
+                    testFailure = ex;
+                    throw;
+                }
                 finally
                 {
-                    if (previous is null) Clipboard.Clear();
-                    else Clipboard.SetDataObject(previous, true);
+                    try
+                    {
+                        RetryClipboard(() =>
+                        {
+                            if (previous is null) Clipboard.Clear();
+                            else Clipboard.SetDataObject(previous, true);
+                        });
+                    }
+                    catch (Exception restoreFailure) when (testFailure is not null)
+                    {
+                        throw new AggregateException("Line paste test and clipboard restoration both failed.",
+                            testFailure, restoreFailure);
+                    }
                 }
             }
             catch (Exception ex) { failure = ex; }
