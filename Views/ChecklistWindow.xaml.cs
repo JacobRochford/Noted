@@ -284,6 +284,9 @@ public partial class ChecklistWindow : OverlayWindow
             _viewModel.SearchQuery = "";
     }
 
+    private void FindMenuItem_Click(object sender, RoutedEventArgs e) =>
+        HandleSearchShortcut(Key.F, ModifierKeys.Control);
+
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         _headerClickItem = null;

@@ -68,6 +68,9 @@
                                      Placement="MousePoint">
                             <MenuItem Header="Reset size" Style="{StaticResource NotedContextMenuItem}"
                                       Click="ResetSizeMenuItem_Click"/>
+                            <Separator/>
+                            <MenuItem Header="Find..." InputGestureText="Ctrl+F"
+                                      Style="{StaticResource NotedContextMenuItem}" Click="FindMenuItem_Click"/>
                         </ContextMenu>
                     </Border.Resources>
                     <Grid>
@@ -87,7 +90,10 @@
                                        ToolTip="{Binding PersistenceError}"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button x:Name="MaximizeRestoreButton"
+                            <Button x:Name="OptionsButton" Content="&#xE712;"
+                                    Style="{StaticResource HeaderIconBtn}" ToolTip="Options"
+                                    AutomationProperties.Name="Options" ContextMenu="{StaticResource TitleBarMenu}"/>
+                            <Button x:Name="MaximizeRestoreButton" Margin="3,0,0,0"
                                     Style="{StaticResource NotedMaximizeRestoreButton}"/>
                             <Button x:Name="HideDictionaryButton" Content="&#xE711;" Margin="3,0,0,0"
                                     Style="{StaticResource HeaderIconBtn}"

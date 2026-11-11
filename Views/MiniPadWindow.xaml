@@ -63,7 +63,7 @@
                         <StackPanel Grid.Column="1"
                                     Orientation="Horizontal"
                                     VerticalAlignment="Center">
-                            <Button Content="&#xE712;" Style="{StaticResource HeaderIconBtn}" Click="OptionsButton_Click" ToolTip="Options">
+                            <Button x:Name="OptionsButton" Content="&#xE712;" Style="{StaticResource HeaderIconBtn}" ToolTip="Options">
                                 <Button.ContextMenu>
                                     <ContextMenu x:Name="EditorMenu" Style="{StaticResource NotedContextMenu}">
                                         <ContextMenu.Resources><Style TargetType="MenuItem" BasedOn="{StaticResource NotedContextMenuItem}"/></ContextMenu.Resources>

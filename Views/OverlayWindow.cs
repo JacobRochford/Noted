@@ -26,6 +26,8 @@ public abstract class OverlayWindow : Window
         AddHandler(Mouse.QueryCursorEvent, new QueryCursorEventHandler(Background_QueryCursor), true);
         if (FindName("MaximizeRestoreButton") is Button maximizeRestoreButton)
             maximizeRestoreButton.Click += MaximizeRestoreButton_Click;
+        if (FindName("OptionsButton") is Button optionsButton)
+            optionsButton.Click += OptionsButton_Click;
         // Retain legacy state fields for persistence; WindowAppearance owns the live opacity.
         _ghostModeEnabled = ghostModeEnabled;
         _ghostModeOpacity = NormalizeOpacity(ghostModeOpacity, 0.25);
@@ -127,6 +129,15 @@ public abstract class OverlayWindow : Window
     protected virtual bool ShouldSaveWindowStateAfterStateChange => true;
 
     private void MaximizeRestoreButton_Click(object sender, RoutedEventArgs e) => ToggleMaximize();
+
+    private void OptionsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.ContextMenu is { } menu)
+        {
+            menu.PlacementTarget = button;
+            menu.IsOpen = true;
+        }
+    }
 
     private void ToggleMaximize() =>
         WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;

@@ -168,8 +168,7 @@ public partial class DictionaryWindow : OverlayWindow
         }
         else if (e.Key == Key.F && modifiers.HasFlag(ModifierKeys.Control))
         {
-            SearchTextBox.Focus();
-            SearchTextBox.SelectAll();
+            FocusSearch();
             e.Handled = true;
         }
         else if (e.Key == Key.Escape && SearchTextBox.IsKeyboardFocusWithin)
@@ -320,6 +319,15 @@ public partial class DictionaryWindow : OverlayWindow
     }
 
     private void HideButton_Click(object sender, RoutedEventArgs e) => RequestHide();
+
+    private void FindMenuItem_Click(object sender, RoutedEventArgs e) =>
+        Dispatcher.BeginInvoke(() => FocusSearch(), System.Windows.Threading.DispatcherPriority.Input);
+
+    private void FocusSearch()
+    {
+        SearchTextBox.Focus();
+        SearchTextBox.SelectAll();
+    }
 
     private void TitleBar_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {

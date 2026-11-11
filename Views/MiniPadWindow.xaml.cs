@@ -268,15 +268,6 @@ public partial class MiniPadWindow : OverlayWindow
         Closed -= MiniPadWindow_Closed;
     }
 
-    private void OptionsButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { ContextMenu: { } menu } button)
-        {
-            menu.PlacementTarget = button;
-            menu.IsOpen = true;
-        }
-    }
-
     private void AddMiniPadContextMenuItems()
     {
         var menu = Editor.ContextMenu;
