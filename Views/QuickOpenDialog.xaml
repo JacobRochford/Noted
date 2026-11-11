@@ -2,11 +2,19 @@
         x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Quick Open" Width="580" Height="440" MinWidth="380" MinHeight="280"
+        Title="Quick Open"
+        Icon="/Noted;component/Resources/notes.ico"
+        Width="580"
+        Height="440"
+        MinWidth="380"
+        MinHeight="280"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{DynamicResource NotedWindowBackgroundBrush}"
         Foreground="{DynamicResource NotedTextBrush}" FontFamily="Segoe UI"
         PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource NotedScrollBar}"/>
+    </Window.Resources>
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>

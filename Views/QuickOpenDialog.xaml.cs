@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using Noted.Services;
 
 namespace Noted;
 
@@ -29,6 +30,12 @@ internal partial class QuickOpenDialog : Window
         ResultsList.ItemsSource = _results;
         RefreshResults();
         Loaded += (_, _) => QueryTextBox.Focus();
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        AppThemeManager.ApplyTitleBar(this);
     }
 
     private void QueryTextBox_TextChanged(object sender, TextChangedEventArgs e)
