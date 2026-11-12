@@ -575,20 +575,18 @@ public partial class NoteEditorWindow : Window
 
     internal void BeginEditingCreatedNote(bool moveCaretToEnd)
     {
-        SetMarkdownPreviewEnabled(false);
+        if (CurrentDocument is not { } document)
+            return;
+
+        SetMarkdownPreviewMode(document, MarkdownPreviewMode.Off);
+        var editor = CurrentEditorTextBox;
         if (moveCaretToEnd)
         {
-            EditorTextBox.CaretIndex = EditorTextBox.Text.Length;
-            EditorTextBox.ScrollToEnd();
+            editor.CaretIndex = editor.Text.Length;
+            editor.ScrollToEnd();
         }
 
-        if (_activeDocument is not null)
-        {
-            _workspace.UpdateViewState(
-                _activeDocument,
-                EditorTextBox.CaretIndex,
-                EditorTextBox.VerticalOffset);
-        }
+        _workspace.UpdateViewState(document, editor.CaretIndex, editor.VerticalOffset);
         FocusActiveSurface();
     }
 

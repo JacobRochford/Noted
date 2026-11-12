@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -103,6 +104,53 @@ public sealed class WindowConstructionTests
                 Assert.AreEqual(1, files.GetNotes().Count);
                 Assert.AreEqual(2, editor.Workspace.Documents.Count);
             }
+        }
+        finally
+        {
+            main.CleanupResources();
+            main.Close();
+            editor.CloseAllDocuments();
+            editor.TryPrepareForClose();
+            editor.Close();
+        }
+    });
+
+    [TestMethod]
+    [TestCategory("DesktopInteraction")]
+    public void MainWindowNewNoteShortcutKeepsFocusAndCaretInRightPane() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var settings = new AppSettingsService(directory.File("app"));
+        settings.SaveNotesDirectory(directory.File("notes"));
+        settings.SaveNewNoteMode(NewNoteMode.Quick);
+        settings.SaveTimestampPlacement(NoteTimestampPlacement.Top);
+        using var files = new NoteFileService(settings);
+        var editor = new NoteEditorWindow(new NoteContentService(settings.AppDataDirectory), settings,
+            new NoteRecoveryService(settings.AppDataDirectory), new NoteEditorSessionService(settings.AppDataDirectory), files);
+        var main = new MainWindow(settings, files, editor, new NoteOperations(files, editor.Workspace),
+            new ConstructionStartupService(), new BackupCoordinator(
+                new FullBackupService(settings.AppDataDirectory, files.NotesDirectory),
+                new ShutdownFlushCoordinator(), () => files.NotesDirectory), (_, _) => { });
+        try
+        {
+            Directory.CreateDirectory(files.NotesDirectory);
+            var first = Path.Combine(files.NotesDirectory, "first.md");
+            var second = Path.Combine(files.NotesDirectory, "second.md");
+            File.WriteAllText(first, "first");
+            File.WriteAllText(second, "second");
+            Assert.IsTrue(editor.OpenNote(first));
+            Assert.IsTrue(editor.OpenNote(second));
+            Assert.IsTrue(editor.HandleNavigationShortcut(Key.Oem5, ModifierKeys.Control));
+            var primary = editor.Workspace.ActiveDocument;
+            var secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
+
+            Assert.IsTrue(KeyboardTestInput.Press(secondary, Key.N, ModifierKeys.Control).Handled);
+
+            Assert.AreSame(primary, editor.Workspace.ActiveDocument);
+            Assert.IsNotNull(editor.Workspace.SecondaryDocument);
+            Assert.AreNotEqual(first, editor.Workspace.SecondaryDocument.FilePath);
+            Assert.IsTrue(secondary.IsKeyboardFocused);
+            Assert.AreEqual(secondary.Text.Length, secondary.CaretIndex);
         }
         finally
         {
