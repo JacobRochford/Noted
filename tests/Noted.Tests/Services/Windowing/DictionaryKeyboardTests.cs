@@ -42,6 +42,33 @@ public sealed class DictionaryKeyboardTests
     });
 
     [TestMethod]
+    public void HeaderActionFinishesNewEntryAndSavesEstablishedDraft() => WithWindow((window, model, service) =>
+    {
+        var existing = model.Items[0];
+        var existingButton = Control<Button>(window, existing, "EditDefinitionButton");
+        var created = Create(window, model);
+        var createdButton = Control<Button>(window, created, "EditDefinitionButton");
+        Assert.IsTrue(existingButton.IsVisible);
+        Assert.AreEqual("Finish entry", createdButton.ToolTip);
+        Assert.AreEqual("Done", ((StackPanel)createdButton.Content).Children.OfType<TextBlock>().Last().Text);
+
+        Control<TextBox>(window, created, "WordTextBox").Text = "new word";
+        Click(createdButton);
+        Assert.IsFalse(created.IsEditing || created.IsExpanded);
+        Assert.AreEqual("new word", service.Load().Last().Word);
+
+        Edit(window, existing);
+        existingButton = Control<Button>(window, existing, "EditDefinitionButton");
+        Assert.AreEqual("Save changes", existingButton.ToolTip);
+        Assert.AreEqual("Save", ((StackPanel)existingButton.Content).Children.OfType<TextBlock>().Last().Text);
+        Control<TextBox>(window, existing, "WordTextBox").Text = "saved word";
+        Click(existingButton);
+        Assert.IsFalse(existing.IsEditing);
+        Assert.IsTrue(existing.IsExpanded);
+        Assert.AreEqual("saved word", service.Load()[0].Word);
+    });
+
+    [TestMethod]
     [DataRow(Key.Escape, "", "", true)]
     [DataRow(Key.Enter, "", "", true)]
     [DataRow(Key.Escape, " \t", "\r\n ", true)]
@@ -385,13 +412,12 @@ public sealed class DictionaryKeyboardTests
     });
 
     [TestMethod]
-    public void ItemOwnedControlsDoNotPrematurelyFinishCreation() => WithWindow((window, model, service) =>
+    public void DefinitionAndContextMenuDoNotPrematurelyFinishCreation() => WithWindow((window, model, service) =>
     {
         var item = Create(window, model);
         var definition = Control<TextBox>(window, item, "DefinitionBox");
         PreviewClick(definition);
         definition.Focus();
-        Click(Control<Button>(window, item, "EditDefinitionButton"));
         Pump();
         Assert.IsTrue(item.IsAutoSaving && item.IsEditing && item.IsExpanded);
         Assert.IsFalse(item.ShowEditActions);

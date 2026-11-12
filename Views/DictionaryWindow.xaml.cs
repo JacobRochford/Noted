@@ -651,6 +651,12 @@ public partial class DictionaryWindow : OverlayWindow
     private void EditDefinitionButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: DictionaryItem item }) return;
+        if (item.IsEditing)
+        {
+            SaveEntry(item);
+            return;
+        }
+
         item.BeginEdit();
         Dispatcher.BeginInvoke(
             System.Windows.Threading.DispatcherPriority.Input,

@@ -231,8 +231,57 @@
                                                                Foreground="{DynamicResource NotedWarningBrush}"
                                                                Visibility="{Binding HasPendingEdit, Converter={StaticResource BoolToVisibility}}"
                                                                ToolTip="Unsaved draft. Use Save (Ctrl+Enter) or Cancel."/>
-                                                    <Button x:Name="EditDefinitionButton" Grid.Column="2" Style="{StaticResource DetailsButtonStyle}"
-                                                            Tag="{Binding}" Click="EditDefinitionButton_Click" ToolTip="Edit word and definition"/>
+                                                    <Button x:Name="EditDefinitionButton" Grid.Column="2"
+                                                            Click="EditDefinitionButton_Click">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource DetailsButtonStyle}">
+                                                                <Setter Property="ToolTip" Value="Edit word and definition"/>
+                                                                <Setter Property="AutomationProperties.Name" Value="Edit word and definition"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                                        <Setter Property="Width" Value="Auto"/>
+                                                                        <Setter Property="Padding" Value="6,0"/>
+                                                                        <Setter Property="ToolTip" Value="Save changes"/>
+                                                                        <Setter Property="AutomationProperties.Name" Value="Save changes"/>
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsAutoSaving}" Value="True">
+                                                                        <Setter Property="ToolTip" Value="Finish entry"/>
+                                                                        <Setter Property="AutomationProperties.Name" Value="Finish entry"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                        <StackPanel Orientation="Horizontal" IsHitTestVisible="False">
+                                                            <TextBlock FontFamily="Segoe MDL2 Assets">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Text" Value="&#xE70F;"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                                                <Setter Property="Text" Value="&#xE73E;"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                            <TextBlock Margin="5,0,0,0" FontFamily="Segoe UI">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                                                <Setter Property="Text" Value="Save"/>
+                                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding IsAutoSaving}" Value="True">
+                                                                                <Setter Property="Text" Value="Done"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </StackPanel>
+                                                    </Button>
                                                 </Grid>
 
                                                 <Border Grid.Row="1" Margin="5,0,5,7" Padding="10,8"
