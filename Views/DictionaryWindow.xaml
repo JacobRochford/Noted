@@ -198,7 +198,7 @@
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="Auto"/>
-                                                        <ColumnDefinition Width="30"/>
+                                                        <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
                                                     <Grid Grid.Column="0">
                                                         <Button x:Name="WordHeaderButton" Content="{Binding Word}" Click="ViewDefinition_Click" MouseDoubleClick="WordHeader_MouseDoubleClick" ToolTip="Click or press Enter or Space to expand or collapse; double-click to edit"

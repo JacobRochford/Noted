@@ -69,6 +69,23 @@ public sealed class DictionaryKeyboardTests
     });
 
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void HeaderActionFitsAtMinimumWindowWidth(bool creating) => WithWindow((window, model, _) =>
+    {
+        window.Width = window.MinWidth;
+        var item = creating ? Create(window, model) : model.Items[0];
+        if (!creating) Edit(window, item);
+        var root = Control<Border>(window, item, "DictionaryItemRoot");
+        var button = Control<Button>(window, item, "EditDefinitionButton");
+        window.UpdateLayout();
+
+        var bounds = button.TransformToAncestor(root).TransformBounds(new Rect(button.RenderSize));
+        Assert.IsTrue(button.ActualWidth > 30, "The action must grow to fit its label.");
+        Assert.IsTrue(bounds.Right <= root.ActualWidth + 0.5, "The action must stay inside the item row.");
+    });
+
+    [TestMethod]
     [DataRow(Key.Escape, "", "", true)]
     [DataRow(Key.Enter, "", "", true)]
     [DataRow(Key.Escape, " \t", "\r\n ", true)]

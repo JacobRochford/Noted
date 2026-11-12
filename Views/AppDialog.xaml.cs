@@ -106,6 +106,8 @@ public partial class AppDialog : Window
 
     private static void ShowDialogCore(AppDialog dialog, Window? owner)
     {
+        dialog.Topmost = Application.Current?.Windows.OfType<Window>()
+            .Any(window => window.IsVisible && window.Topmost) == true;
         var resolvedOwner = owner?.IsVisible == true
             ? owner
             : Application.Current?.MainWindow is { IsVisible: true } mainWindow
