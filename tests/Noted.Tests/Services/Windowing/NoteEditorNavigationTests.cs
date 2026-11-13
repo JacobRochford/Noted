@@ -317,6 +317,17 @@ public sealed class NoteEditorNavigationTests
         return args;
     });
 
+    private static MouseButtonEventArgs TabMouseUp(UIElement target, ModifierKeys modifiers = ModifierKeys.None) =>
+        WithMouseModifiers(modifiers, () =>
+        {
+            var args = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
+            {
+                RoutedEvent = Mouse.PreviewMouseUpEvent
+            };
+            target.RaiseEvent(args);
+            return args;
+        });
+
     private static ListBoxItem TabItem(NoteEditorWindow editor, int index)
     {
         editor.UpdateLayout();
@@ -448,22 +459,121 @@ public sealed class NoteEditorNavigationTests
     [DataRow(ModifierKeys.Shift)]
     [DataRow(ModifierKeys.Alt | ModifierKeys.Control)]
     [DataRow(ModifierKeys.Alt | ModifierKeys.Shift)]
-    public void OtherTabModifiersKeepOrdinarySelectionAndDragPreparation(ModifierKeys modifiers) => WithEditor((editor, _, _, files) =>
+    public void OtherTabModifiersActivateOnlyOnMouseUp(ModifierKeys modifiers) => WithEditor((editor, _, _, files) =>
     {
         editor.OpenNote(CreateNote(files, "a.txt", "a"));
         editor.OpenNote(CreateNote(files, "b.txt", "b"));
         var target = TabItem(editor, 0);
+        var current = editor.Workspace.ActiveDocument;
         var args = TabMouseDown(target, modifiers);
-        Assert.IsFalse(args.Handled);
+        Assert.IsTrue(args.Handled);
         Assert.IsNull(editor.Workspace.SecondaryDocument);
+        Assert.AreSame(current, editor.Workspace.ActiveDocument);
         Assert.AreSame(editor.Workspace.Documents[0],
             typeof(NoteEditorWindow).GetField("_draggedDocument", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(editor));
-        if (modifiers == ModifierKeys.None)
+        Assert.IsTrue(TabMouseUp(target, modifiers).Handled);
+        Assert.AreSame(editor.Workspace.Documents[0], editor.Workspace.ActiveDocument);
+        Assert.AreSame(editor.Workspace.ActiveDocument, ((ListBox)editor.FindName("OpenTabsList")).SelectedItem);
+    });
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void NormalTabClickChangesOnlyTheFocusedPaneAfterMouseUp(bool split) => WithEditor((editor, _, _, files) =>
+    {
+        foreach (var name in new[] { "a.txt", "b.txt", "c.txt" })
+            editor.OpenNote(CreateNote(files, name, name));
+        if (split)
+            editor.HandleNavigationShortcut(Key.Oem5, ModifierKeys.Control);
+
+        var active = editor.Workspace.ActiveDocument;
+        var secondary = editor.Workspace.SecondaryDocument;
+        var target = TabItem(editor, 0);
+        Assert.IsTrue(TabMouseDown(target, ModifierKeys.None).Handled);
+        Assert.AreSame(active, editor.Workspace.ActiveDocument);
+        Assert.AreSame(secondary, editor.Workspace.SecondaryDocument);
+        Assert.AreSame(editor.Workspace.CurrentDocument, ((ListBox)editor.FindName("OpenTabsList")).SelectedItem);
+
+        Assert.IsTrue(TabMouseUp(target).Handled);
+        Assert.AreSame(editor.Workspace.Documents[0], editor.Workspace.CurrentDocument);
+        if (split)
         {
-            args.RoutedEvent = Mouse.MouseDownEvent;
-            target.RaiseEvent(args);
-            Assert.AreSame(editor.Workspace.Documents[0], editor.Workspace.ActiveDocument);
+            Assert.AreSame(active, editor.Workspace.ActiveDocument);
+            Assert.AreSame(editor.Workspace.Documents[0], editor.Workspace.SecondaryDocument);
         }
+        else
+        {
+            Assert.AreSame(editor.Workspace.Documents[0], editor.Workspace.ActiveDocument);
+            Assert.IsNull(editor.Workspace.SecondaryDocument);
+        }
+    });
+
+    [TestMethod]
+    public void TabReleaseElsewhereOrAfterLostCaptureDoesNotActivate() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "a.txt", "a"));
+        editor.OpenNote(CreateNote(files, "b.txt", "b"));
+        var tabs = (ListBox)editor.FindName("OpenTabsList");
+        var target = TabItem(editor, 0);
+        var current = editor.Workspace.ActiveDocument;
+
+        TabMouseDown(target, ModifierKeys.None);
+        Assert.IsTrue(TabMouseUp(TabItem(editor, 1)).Handled);
+        Assert.AreSame(current, editor.Workspace.ActiveDocument);
+
+        TabMouseDown(target, ModifierKeys.None);
+        Assert.IsTrue(TabMouseUp(tabs).Handled);
+        Assert.AreSame(current, editor.Workspace.ActiveDocument);
+        Assert.IsFalse(TabMouseUp(target).Handled);
+
+        TabMouseDown(target, ModifierKeys.None);
+        tabs.RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 0)
+        {
+            RoutedEvent = Mouse.LostMouseCaptureEvent
+        });
+        Assert.IsFalse(TabMouseUp(target).Handled);
+        Assert.AreSame(current, editor.Workspace.ActiveDocument);
+        if (Mouse.Captured == tabs)
+            tabs.ReleaseMouseCapture();
+    });
+
+    [TestMethod]
+    public void KeyboardAndProgrammaticTabSelectionRemainImmediate() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "a.txt", "a"));
+        editor.OpenNote(CreateNote(files, "b.txt", "b"));
+        var tabs = (ListBox)editor.FindName("OpenTabsList");
+        var currentTab = TabItem(editor, 1);
+        TabMouseDown(currentTab, ModifierKeys.None);
+        TabMouseUp(currentTab);
+        Assert.IsTrue(currentTab.IsKeyboardFocused);
+
+        KeyboardTestInput.Press(currentTab, Key.Up, ModifierKeys.None);
+        Assert.AreSame(editor.Workspace.Documents[0], editor.Workspace.ActiveDocument);
+        Assert.AreSame(editor.Workspace.ActiveDocument, tabs.SelectedItem);
+
+        tabs.SelectedItem = editor.Workspace.Documents[1];
+        Assert.AreSame(editor.Workspace.Documents[1], editor.Workspace.ActiveDocument);
+    });
+
+    [TestMethod]
+    public void ClickingTheCurrentTabDoesNotReselectOrReloadIt() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "a.txt", "a"));
+        var tabs = (ListBox)editor.FindName("OpenTabsList");
+        var selectionChanges = 0;
+        tabs.SelectionChanged += (_, _) => selectionChanges++;
+        var primary = (TextBox)editor.FindName("EditorTextBox");
+        primary.Select(primary.Text.Length, 0);
+        primary.SelectedText = " edited";
+        var target = TabItem(editor, 0);
+
+        TabMouseDown(target, ModifierKeys.None);
+        TabMouseUp(target);
+
+        Assert.AreEqual(0, selectionChanges);
+        Assert.AreEqual("a edited", primary.Text);
+        Assert.IsTrue(primary.CanUndo);
     });
 
     [TestMethod]
@@ -791,8 +901,9 @@ public sealed class NoteEditorNavigationTests
         };
         typeof(NoteEditorWindow).GetMethod("OpenTabsList_PreviewMouseLeftButtonDown", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(editor, [tabs, mouseDown]);
-        tabs.SelectedItem = dragged;
-        Assert.AreSame(dragged, editor.Workspace.ActiveDocument);
+        Assert.IsTrue(mouseDown.Handled);
+        Assert.AreSame(previous, editor.Workspace.ActiveDocument);
+        Assert.AreSame(previous, tabs.SelectedItem);
 
         typeof(NoteEditorWindow).GetMethod("ShowSecondaryDocument", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(editor, [dragged, true, true, true]);

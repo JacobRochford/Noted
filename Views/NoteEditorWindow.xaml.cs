@@ -44,6 +44,7 @@ public partial class NoteEditorWindow : Window
     private OpenNoteDocument? _primaryBeforeTabDrag;
     private OpenNoteDocument? _middlePressedDocument;
     private Point _tabDragStart;
+    private bool _isTabDragInProgress;
     private bool _isLoading;
     private bool _isLoadingSecondary;
     private bool _isSelectingTab;
@@ -2129,15 +2130,63 @@ public partial class NoteEditorWindow : Window
             return;
         }
 
+        _draggedDocument = null;
+        _primaryBeforeTabDrag = null;
+        if (document is null || VisualTreeHelpers.FindAncestor<ButtonBase>(source) is not null)
+            return;
+
         _primaryBeforeTabDrag = _activeDocument;
         _tabDragStart = e.GetPosition(OpenTabsList);
         _draggedDocument = document;
+        e.Handled = true;
+        Mouse.Capture(OpenTabsList, CaptureMode.SubTree);
+    }
+
+    private void OpenTabsList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        var pressedDocument = _draggedDocument;
+        if (pressedDocument is null)
+            return;
+
+        var source = e.OriginalSource as DependencyObject;
+        var releasedDocument = FindDocumentFromElement(source);
+        _draggedDocument = null;
+        _primaryBeforeTabDrag = null;
+        if (Mouse.Captured == OpenTabsList)
+            OpenTabsList.ReleaseMouseCapture();
+
+        e.Handled = true;
+        if (!ReferenceEquals(pressedDocument, releasedDocument) ||
+            VisualTreeHelpers.FindAncestor<ButtonBase>(source) is not null)
+        {
+            return;
+        }
+
+        OpenTabsList.SelectedItem = pressedDocument;
+        VisualTreeHelpers.FindAncestor<ListBoxItem>(source)?.Focus();
+    }
+
+    private void OpenTabsList_LostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (_isTabDragInProgress || !ReferenceEquals(e.Source, OpenTabsList))
+            return;
+
+        _draggedDocument = null;
+        _primaryBeforeTabDrag = null;
     }
 
     private void OpenTabsList_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || _draggedDocument is null)
+        if (_draggedDocument is null)
             return;
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            _draggedDocument = null;
+            _primaryBeforeTabDrag = null;
+            if (Mouse.Captured == OpenTabsList)
+                OpenTabsList.ReleaseMouseCapture();
+            return;
+        }
 
         var position = e.GetPosition(OpenTabsList);
         if (Math.Abs(position.X - _tabDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
@@ -2146,6 +2195,9 @@ public partial class NoteEditorWindow : Window
             return;
         }
 
+        _isTabDragInProgress = true;
+        if (Mouse.Captured == OpenTabsList)
+            OpenTabsList.ReleaseMouseCapture();
         SideBySideDropTarget.Visibility = Visibility.Visible;
         try
         {
@@ -2156,6 +2208,7 @@ public partial class NoteEditorWindow : Window
             SideBySideDropTarget.Visibility = Visibility.Collapsed;
             _draggedDocument = null;
             _primaryBeforeTabDrag = null;
+            _isTabDragInProgress = false;
         }
     }
 
