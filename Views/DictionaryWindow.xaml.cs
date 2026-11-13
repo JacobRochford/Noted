@@ -607,8 +607,11 @@ public partial class DictionaryWindow : OverlayWindow
         if (canScroll)
             return;
 
-        // Bypass the inner viewer, which otherwise consumes wheel input at its boundaries.
         e.Handled = true;
+        if (scroll.ScrollableHeight > 0)
+            return;
+
+        // let the list scroll when the entire definition fits.
         ItemsScrollViewer.RaiseEvent(new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
         {
             RoutedEvent = Mouse.MouseWheelEvent
