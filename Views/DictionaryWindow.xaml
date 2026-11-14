@@ -201,7 +201,7 @@
                                                         <ColumnDefinition Width="Auto"/>
                                                     </Grid.ColumnDefinitions>
                                                     <Grid Grid.Column="0">
-                                                        <Button x:Name="WordHeaderButton" Content="{Binding Word}" Click="ViewDefinition_Click" MouseDoubleClick="WordHeader_MouseDoubleClick" ToolTip="Click or press Enter or Space to expand or collapse; double-click to edit"
+                                                        <Button x:Name="WordHeaderButton" Content="{Binding Word}" Click="ViewDefinition_Click" MouseDoubleClick="WordHeader_MouseDoubleClick" ToolTip="Click or press Enter or Space to expand or collapse"
                                                                 HorizontalContentAlignment="Left" Padding="5,4"
                                                                 Background="Transparent" BorderThickness="0"
                                                                 Foreground="{DynamicResource NotedTextBrush}" FontWeight="SemiBold">
