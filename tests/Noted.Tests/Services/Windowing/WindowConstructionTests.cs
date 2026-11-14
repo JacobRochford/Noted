@@ -145,6 +145,7 @@ public sealed class WindowConstructionTests
             var secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
 
             Assert.IsTrue(KeyboardTestInput.Press(secondary, Key.N, ModifierKeys.Control).Handled);
+            secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
 
             Assert.AreSame(primary, editor.Workspace.ActiveDocument);
             Assert.IsNotNull(editor.Workspace.SecondaryDocument);

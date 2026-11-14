@@ -174,6 +174,7 @@ public sealed class NoteEditorNavigationTests
         editor.OpenNote(CreateNote(files, "zoom-b.txt", "second note"));
         editor.OpenNote(Path.Combine(files.NotesDirectory, "zoom-a.txt"));
         editor.HandleNavigationShortcut(Key.Oem5, ModifierKeys.Control);
+        secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
         editor.UpdateLayout();
         primary.Select(1, 3);
         secondary.Select(0, 0);
@@ -432,9 +433,11 @@ public sealed class NoteEditorNavigationTests
         Assert.IsTrue(outgoing.IsDirty);
         Assert.AreEqual(3, outgoing.CaretIndex);
         Assert.AreEqual("a.txt", File.ReadAllText(outgoing.FilePath));
+        secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
         Assert.AreEqual("b.txt", secondary.Text);
         Assert.IsTrue(secondary.IsKeyboardFocused);
         TabMouseDown(TabItem(editor, 0), ModifierKeys.Alt);
+        secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
         Assert.AreEqual("unsaved a.txt", secondary.Text);
         Assert.AreEqual(3, secondary.CaretIndex);
         Assert.AreSame(primary, editor.Workspace.ActiveDocument);
@@ -788,12 +791,14 @@ public sealed class NoteEditorNavigationTests
         KeyboardTestInput.Press(primary, Key.Oem5, ModifierKeys.Control);
         Assert.IsNull(editor.Workspace.SecondaryDocument);
         editor.OpenNote(CreateNote(files, "second.md", "second"));
+        primary = (TextBox)editor.FindName("EditorTextBox");
         primary.Text = "dirty primary";
         primary.Select(1, 3);
         var primaryDocument = editor.Workspace.ActiveDocument!;
         KeyboardTestInput.Press(primary, Key.Oem5, ModifierKeys.Control);
         var secondaryDocument = editor.Workspace.SecondaryDocument!;
         Assert.IsNotNull(secondaryDocument);
+        secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
         secondary.Text = "dirty secondary";
         secondary.Select(2, 4);
         KeyboardTestInput.Press(secondary, Key.D1, ModifierKeys.Control);
@@ -857,6 +862,7 @@ public sealed class NoteEditorNavigationTests
         editor.NewNoteRequested += (_, _) => editor.OpenNote(CreateNote(files, "new.md", ""));
 
         KeyboardTestInput.Press(secondary, Key.N, ModifierKeys.Control);
+        secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
 
         Assert.AreSame(primary, editor.Workspace.ActiveDocument);
         Assert.AreEqual("new.md", Path.GetFileName(editor.Workspace.SecondaryDocument!.FilePath));
@@ -941,14 +947,17 @@ public sealed class NoteEditorNavigationTests
         KeyboardTestInput.Press(primary, Key.Oem5, ModifierKeys.Control);
         var primaryDocument = editor.Workspace.ActiveDocument;
         Assert.AreEqual("a.md", Path.GetFileName(editor.OpenFilePath));
+        secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
         secondary.Text = "keep this unsaved";
         var originalSecondary = editor.Workspace.SecondaryDocument!;
         KeyboardTestInput.Press(secondary, Key.Tab, ModifierKeys.Control);
         Assert.AreEqual("b.md", Path.GetFileName(editor.OpenFilePath));
         Assert.AreSame(primaryDocument, editor.Workspace.ActiveDocument);
         Assert.AreEqual("keep this unsaved", originalSecondary.Content);
+        secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
         KeyboardTestInput.Press(secondary, Key.Tab, ModifierKeys.Control | ModifierKeys.Shift);
         Assert.AreSame(originalSecondary, editor.Workspace.SecondaryDocument);
+        secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
         Assert.AreEqual("keep this unsaved", secondary.Text);
     });
 

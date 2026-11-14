@@ -66,8 +66,8 @@ public partial class NoteEditorWindow : Window
     private string? _sessionPersistenceError;
     private string? _noteSaveWarning;
     private readonly TextSearchSession _findSession = new();
-    private readonly TextBoxSearchPresenter _primaryFindPresenter;
-    private readonly TextBoxSearchPresenter _secondaryFindPresenter;
+    private TextBoxSearchPresenter _primaryFindPresenter;
+    private TextBoxSearchPresenter _secondaryFindPresenter;
     private TextBoxSearchPresenter? _activeFindPresenter;
     private TextBox? _activeFindEditor;
     private OpenNoteDocument? _activeFindDocument;
@@ -101,15 +101,12 @@ public partial class NoteEditorWindow : Window
         _workspace.DocumentPathsChanged += Workspace_DocumentPathsChanged;
 
         InitializeComponent();
+        InitializeDocumentEditors();
         AttachReopenShortcut(this);
         _primaryPreview = new MarkdownPreviewPresenter(EditorTextBox, PrimaryTextEditor, MarkdownPreview, PrimaryPreviewLayout);
         _secondaryPreview = new MarkdownPreviewPresenter(SecondaryEditorTextBox, SecondaryTextEditor, SecondaryMarkdownPreview, SecondaryPreviewLayout);
         AddMarkdownPreviewMenu(HeaderMarkdownMenuItem, () => CurrentDocument);
-        AddMarkdownPreviewMenu(ContextMarkdownMenuItem, () => _activeDocument);
         AddMarkdownPreviewMenu(PreviewMarkdownMenuItem, () => _activeDocument);
-        var secondaryMenu = new MenuItem { Header = "Markdown Preview" };
-        SecondaryEditorTextBox.ContextMenu.Items.Add(secondaryMenu);
-        AddMarkdownPreviewMenu(secondaryMenu, () => _secondaryDocument);
         SecondaryMarkdownPreview.ContextMenu = new ContextMenu { Style = EditorTextBox.ContextMenu.Style };
         var secondaryPreviewMenu = new MenuItem { Header = "Markdown Preview" };
         SecondaryMarkdownPreview.ContextMenu.Items.Add(secondaryPreviewMenu);
@@ -117,18 +114,8 @@ public partial class NoteEditorWindow : Window
         MarkdownPreview.GotKeyboardFocus += (_, _) => { _workspace.Focus(_activeDocument); UpdateEditorState(); };
         SecondaryMarkdownPreview.GotKeyboardFocus += (_, _) => { _workspace.Focus(_secondaryDocument); UpdateEditorState(); };
         WindowManager.ConfigureEditorActivation(this);
-        EditorIndentation.Attach(EditorTextBox, () => _activeDocument?.Indentation);
-        EditorTextWrapping.Attach(EditorTextBox);
-        EditorIndentation.Attach(SecondaryEditorTextBox, () => _secondaryDocument?.Indentation);
-        EditorTextWrapping.Attach(SecondaryEditorTextBox);
-        EditorJsonFormatting.Attach(EditorTextBox, () => EditorTextBox.IsVisible ? _activeDocument?.Indentation : null);
-        EditorJsonFormatting.Attach(SecondaryEditorTextBox, () => SecondaryEditorTextBox.IsVisible ? _secondaryDocument?.Indentation : null);
         EditorJsonFormatting.AddMenuItems(EditMenu, () => CurrentEditorTextBox);
-        EditorTextTransformations.Attach(EditorTextBox);
-        EditorTextTransformations.Attach(SecondaryEditorTextBox);
         EditorTextTransformations.AddMenuItems(EditMenu, () => CurrentEditorTextBox);
-        EditorNavigation.Attach(EditorTextBox, () => SetWordWrapEnabled(EditorTextBox.TextWrapping != TextWrapping.Wrap));
-        EditorNavigation.Attach(SecondaryEditorTextBox, () => SetWordWrapEnabled(SecondaryEditorTextBox.TextWrapping != TextWrapping.Wrap));
         EditorNavigation.AddMenuItem(EditMenu, () => CurrentEditorTextBox);
         EditMenu.SubmenuOpened += (_, _) =>
         {
@@ -143,10 +130,6 @@ public partial class NoteEditorWindow : Window
             SaveEditorSession();
             UpdateDocumentFooter();
         }, () => CurrentEditorTextBox);
-        PlainTextPaste.Attach(EditorTextBox, _settingsService.LoadNormalizePastedText);
-        PlainTextPaste.Attach(SecondaryEditorTextBox, _settingsService.LoadNormalizePastedText);
-        EditorLineCommands.Attach(EditorTextBox);
-        EditorLineCommands.Attach(SecondaryEditorTextBox);
         _primaryFindPresenter = new TextBoxSearchPresenter(EditorTextBox);
         _secondaryFindPresenter = new TextBoxSearchPresenter(SecondaryEditorTextBox);
         _findSession.QueryOrOptionsChanged += _primaryFindPresenter.ClearPendingManualNavigationAnchor;
@@ -715,10 +698,7 @@ public partial class NoteEditorWindow : Window
     private void LoadActiveDocument(OpenNoteDocument document, bool focusEditor = true)
     {
         _isLoading = true;
-        EditorTextBox.Text = document.Content;
-        EditorTextBox.CaretIndex = Math.Clamp(document.CaretIndex, 0, document.Content.Length);
-        EditorTextBox.ScrollToVerticalOffset(Math.Max(0, document.VerticalOffset));
-        ResetUndoHistory();
+        ShowDocumentEditor(document, secondary: false);
         _isLoading = false;
 
         SelectTab(document);
@@ -937,6 +917,7 @@ public partial class NoteEditorWindow : Window
         _unsavedRecoveredPaths.Remove(document.FilePath);
         _documentTimeText.Remove(document.FilePath);
         var closeResult = _workspace.Close(document, rememberClosed && !_isPreparedForApplicationClose);
+        ReleaseDocumentEditor(document);
         if (closeResult.SecondaryDocumentClosed)
         {
             ClearSecondaryPaneSurface();
@@ -968,8 +949,7 @@ public partial class NoteEditorWindow : Window
         CloseFind(focusEditor: false);
         RefreshScheduledRecoveryDrafts();
         _isLoading = true;
-        EditorTextBox.Clear();
-        ResetUndoHistory();
+        SetPaneEditor(_emptyPrimaryEditor, secondary: false);
         _isLoading = false;
         SelectTab(null);
         SetMarkdownPreviewEnabled(false, saveSession: false);
@@ -988,18 +968,6 @@ public partial class NoteEditorWindow : Window
             ExceptionDiagnostics.Record(ex);
             return null;
         }
-    }
-
-    private void ResetUndoHistory()
-    {
-        EditorTextBox.IsUndoEnabled = false;
-        EditorTextBox.IsUndoEnabled = true;
-    }
-
-    private void ResetSecondaryUndoHistory()
-    {
-        SecondaryEditorTextBox.IsUndoEnabled = false;
-        SecondaryEditorTextBox.IsUndoEnabled = true;
     }
 
     private MessageBoxResult ShowSavePrompt(string noteName)
@@ -2267,10 +2235,7 @@ public partial class NoteEditorWindow : Window
         _workspace.ShowSecondary(document, focusPane);
         _lastSecondaryDocumentId = document.DocumentId;
         _isLoadingSecondary = true;
-        SecondaryEditorTextBox.Text = document.Content;
-        SecondaryEditorTextBox.CaretIndex = Math.Clamp(document.CaretIndex, 0, document.Content.Length);
-        SecondaryEditorTextBox.ScrollToVerticalOffset(Math.Max(0, document.VerticalOffset));
-        ResetSecondaryUndoHistory();
+        ShowDocumentEditor(document, secondary: true);
         SecondaryDocumentTitle.Text = document.TabLabel;
         _isLoadingSecondary = false;
         _secondaryPreview.SetMode(EffectivePreviewMode(document));
@@ -2325,8 +2290,7 @@ public partial class NoteEditorWindow : Window
     private void ClearSecondaryPaneSurface()
     {
         _isLoadingSecondary = true;
-        SecondaryEditorTextBox.Clear();
-        ResetSecondaryUndoHistory();
+        SetPaneEditor(_emptySecondaryEditor, secondary: true);
         SecondaryDocumentTitle.Text = string.Empty;
         _isLoadingSecondary = false;
         EditorSplitterColumn.Width = new GridLength(0);
@@ -2426,6 +2390,8 @@ public partial class NoteEditorWindow : Window
             var fontSize = Math.Clamp(EditorTextBox.FontSize + e.Delta / 120.0, 8, 48);
             EditorTextBox.FontSize = fontSize;
             SecondaryEditorTextBox.FontSize = fontSize;
+            foreach (var state in AllDocumentEditors())
+                state.Editor.FontSize = fontSize;
             e.Handled = true;
             return;
         }
@@ -2460,7 +2426,12 @@ public partial class NoteEditorWindow : Window
             ? ScrollBarVisibility.Disabled
             : ScrollBarVisibility.Auto;
         HeaderWordWrapMenuItem.IsChecked = enabled;
-        ContextWordWrapMenuItem.IsChecked = enabled;
+        foreach (var state in AllDocumentEditors())
+        {
+            state.Editor.TextWrapping = EditorTextBox.TextWrapping;
+            state.Editor.HorizontalScrollBarVisibility = EditorTextBox.HorizontalScrollBarVisibility;
+            state.WordWrapMenu.IsChecked = enabled;
+        }
     }
 
     private void TabsPanelMenuItem_Click(object sender, RoutedEventArgs e)
@@ -2843,6 +2814,8 @@ public partial class NoteEditorWindow : Window
         _secondaryPreview.Dispose();
         _primaryFindPresenter.Dispose();
         _secondaryFindPresenter.Dispose();
+        _documentEditors.Clear();
+        _previewMenus.Clear();
         Closed -= Window_Closed;
     }
 

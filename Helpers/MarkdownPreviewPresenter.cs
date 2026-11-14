@@ -10,7 +10,7 @@ namespace Noted.Helpers;
 // Owns presentation only. The source TextBox remains the owner of editing and undo.
 internal sealed class MarkdownPreviewPresenter : IDisposable
 {
-    private readonly TextBox _editor;
+    private TextBox _editor;
     private readonly FrameworkElement _source;
     private readonly FlowDocumentScrollViewer _preview;
     private readonly Grid _layout;
@@ -30,15 +30,43 @@ internal sealed class MarkdownPreviewPresenter : IDisposable
             Interval = TimeSpan.FromMilliseconds(200)
         };
         _timer.Tick += Timer_Tick;
-        editor.TextChanged += Editor_TextChanged;
-        editor.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(Editor_ScrollChanged));
+        AttachEditor();
         preview.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(Preview_ScrollChanged));
-        editor.PreviewMouseDown += Source_Input;
-        editor.PreviewMouseWheel += Source_Input;
-        editor.PreviewKeyDown += Source_Input;
         preview.PreviewMouseDown += Preview_Input;
         preview.PreviewMouseWheel += Preview_Input;
         preview.PreviewKeyDown += Preview_Input;
+    }
+
+    internal void SetEditor(TextBox editor)
+    {
+        ArgumentNullException.ThrowIfNull(editor);
+        if (ReferenceEquals(_editor, editor))
+            return;
+
+        _timer.Stop();
+        DetachEditor();
+        _editor = editor;
+        AttachEditor();
+        _renderedText = null;
+        SetMode(Mode);
+    }
+
+    private void AttachEditor()
+    {
+        _editor.TextChanged += Editor_TextChanged;
+        _editor.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(Editor_ScrollChanged));
+        _editor.PreviewMouseDown += Source_Input;
+        _editor.PreviewMouseWheel += Source_Input;
+        _editor.PreviewKeyDown += Source_Input;
+    }
+
+    private void DetachEditor()
+    {
+        _editor.TextChanged -= Editor_TextChanged;
+        _editor.RemoveHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(Editor_ScrollChanged));
+        _editor.PreviewMouseDown -= Source_Input;
+        _editor.PreviewMouseWheel -= Source_Input;
+        _editor.PreviewKeyDown -= Source_Input;
     }
 
     internal MarkdownPreviewMode Mode { get; private set; }
@@ -138,12 +166,8 @@ internal sealed class MarkdownPreviewPresenter : IDisposable
     {
         _timer.Stop();
         _timer.Tick -= Timer_Tick;
-        _editor.TextChanged -= Editor_TextChanged;
-        _editor.RemoveHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(Editor_ScrollChanged));
+        DetachEditor();
         _preview.RemoveHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(Preview_ScrollChanged));
-        _editor.PreviewMouseDown -= Source_Input;
-        _editor.PreviewMouseWheel -= Source_Input;
-        _editor.PreviewKeyDown -= Source_Input;
         _preview.PreviewMouseDown -= Preview_Input;
         _preview.PreviewMouseWheel -= Preview_Input;
         _preview.PreviewKeyDown -= Preview_Input;

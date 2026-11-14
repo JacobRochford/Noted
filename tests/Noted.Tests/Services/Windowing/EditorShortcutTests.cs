@@ -83,12 +83,14 @@ public sealed class EditorShortcutTests
             var primary = (TextBox)editor.FindName("EditorTextBox");
             Assert.IsTrue(KeyboardTestInput.Press(primary, Key.Tab, ModifierKeys.Control).Handled);
             Assert.AreEqual(firstPath, editor.Workspace.CurrentDocument!.FilePath);
+            primary = (TextBox)editor.FindName("EditorTextBox");
             Assert.IsTrue(KeyboardTestInput.Press(primary, Key.Tab, ModifierKeys.Control | ModifierKeys.Shift).Handled);
             Assert.AreEqual(secondPath, editor.Workspace.CurrentDocument!.FilePath);
 
             var second = editor.Workspace.FindByPath(secondPath)!;
             typeof(NoteEditorWindow).GetMethod("ShowSecondaryDocument", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(editor, [second, true, true, true]);
+            primary = (TextBox)editor.FindName("EditorTextBox");
             var secondary = (TextBox)editor.FindName("SecondaryEditorTextBox");
             var tabs = (MenuItem)editor.FindName("TabsPanelMenuItem");
             Assert.AreEqual("Ctrl+Shift+B", tabs.InputGestureText);

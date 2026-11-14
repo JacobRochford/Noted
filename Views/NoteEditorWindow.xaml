@@ -16,6 +16,57 @@
         Loaded="Window_Loaded"
         PreviewKeyDown="Window_PreviewKeyDown">
     <Window.Resources>
+        <DataTemplate x:Key="DocumentEditorTemplate">
+                        <TextBox x:Name="DocumentTextBox" Grid.Column="1" PreviewMouseWheel="Editor_PreviewMouseWheel"
+                             Padding="12"
+                             AcceptsReturn="True"
+                             AcceptsTab="True"
+                             Style="{StaticResource NotedEditorTextBox}"
+                             BorderThickness="0"
+                             CaretBrush="{DynamicResource NotedTextBrush}"
+                             Foreground="{DynamicResource NotedTextBrush}"
+                             HorizontalScrollBarVisibility="Disabled"
+                             IsInactiveSelectionHighlightEnabled="True"
+                             SelectionBrush="{DynamicResource NotedSelectionBrush}"
+                             SpellCheck.IsEnabled="True"
+                             GotKeyboardFocus="DocumentEditor_GotKeyboardFocus"
+                             PreviewMouseDoubleClick="EditorTextBox_PreviewMouseDoubleClick"
+                             SelectionChanged="DocumentEditor_SelectionChanged"
+                             TextChanged="DocumentEditor_TextChanged"
+                             TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto">
+                        <TextBox.ContextMenu>
+                            <ContextMenu Style="{StaticResource NotedContextMenu}">
+                                <ContextMenu.Resources>
+                                    <Style TargetType="MenuItem"
+                                           BasedOn="{StaticResource NotedContextMenuItem}"/>
+                                </ContextMenu.Resources>
+                                <MenuItem Header="Undo" Command="ApplicationCommands.Undo"/>
+                                <MenuItem Header="Redo" Command="ApplicationCommands.Redo"/>
+                                <Separator/>
+                                <MenuItem Header="Cut" Command="ApplicationCommands.Cut"/>
+                                <MenuItem Header="Copy" Command="ApplicationCommands.Copy"/>
+                                <MenuItem Header="Paste" Command="ApplicationCommands.Paste"/>
+                                <Separator/>
+                                <MenuItem Header="Select All" Command="ApplicationCommands.SelectAll"/>
+                                <Separator/>
+                                <MenuItem x:Name="ContextWordWrapMenuItem"
+                                          Header="Word Wrap"
+                                          InputGestureText="Alt+Z"
+                                          IsChecked="True"
+                                          IsCheckable="True"
+                                          Click="WordWrapMenuItem_Click"/>
+                                <MenuItem x:Name="ContextMarkdownMenuItem"
+                                          Header="Markdown Preview"
+                                          InputGestureText="Ctrl+Shift+V"/>
+                                <Separator/>
+                                <MenuItem Header="Delete Note..."
+                                          Foreground="{DynamicResource NotedDangerBrush}"
+                                          Click="DeleteActiveNoteMenuItem_Click"/>
+                            </ContextMenu>
+                        </TextBox.ContextMenu>
+                    </TextBox>
+        </DataTemplate>
         <Style TargetType="ScrollBar" BasedOn="{StaticResource NotedScrollBar}"/>
 
         <Style x:Key="EditorButton" TargetType="Button" BasedOn="{StaticResource NotedPrimaryButton}">
@@ -548,59 +599,10 @@
                     <Grid x:Name="PrimaryTextEditor">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                         <Border Background="{DynamicResource NotedEditorBackgroundBrush}">
-                            <h:LineNumberGutter x:Name="PrimaryLineNumbers" Editor="{Binding ElementName=EditorTextBox}"
+                            <h:LineNumberGutter x:Name="PrimaryLineNumbers"
                                                 Foreground="{DynamicResource NotedSecondaryTextBrush}"/>
                         </Border>
-                        <TextBox x:Name="EditorTextBox" Grid.Column="1" PreviewMouseWheel="Editor_PreviewMouseWheel"
-                             Padding="12"
-                             AcceptsReturn="True"
-                             AcceptsTab="True"
-                             Style="{StaticResource NotedEditorTextBox}"
-                             BorderThickness="0"
-                             CaretBrush="{DynamicResource NotedTextBrush}"
-                             Foreground="{DynamicResource NotedTextBrush}"
-                             HorizontalScrollBarVisibility="Disabled"
-                             IsEnabled="False"
-                             IsInactiveSelectionHighlightEnabled="True"
-                             SelectionBrush="{DynamicResource NotedSelectionBrush}"
-                             SpellCheck.IsEnabled="True"
-                             GotKeyboardFocus="EditorTextBox_GotKeyboardFocus"
-                             PreviewMouseDoubleClick="EditorTextBox_PreviewMouseDoubleClick"
-                             SelectionChanged="EditorTextBox_SelectionChanged"
-                             TextChanged="EditorTextBox_TextChanged"
-                             TextWrapping="Wrap"
-                             VerticalScrollBarVisibility="Auto">
-                        <TextBox.ContextMenu>
-                            <ContextMenu Style="{StaticResource NotedContextMenu}">
-                                <ContextMenu.Resources>
-                                    <Style TargetType="MenuItem"
-                                           BasedOn="{StaticResource NotedContextMenuItem}"/>
-                                </ContextMenu.Resources>
-                                <MenuItem Header="Undo" Command="ApplicationCommands.Undo"/>
-                                <MenuItem Header="Redo" Command="ApplicationCommands.Redo"/>
-                                <Separator/>
-                                <MenuItem Header="Cut" Command="ApplicationCommands.Cut"/>
-                                <MenuItem Header="Copy" Command="ApplicationCommands.Copy"/>
-                                <MenuItem Header="Paste" Command="ApplicationCommands.Paste"/>
-                                <Separator/>
-                                <MenuItem Header="Select All" Command="ApplicationCommands.SelectAll"/>
-                                <Separator/>
-                                <MenuItem x:Name="ContextWordWrapMenuItem"
-                                          Header="Word Wrap"
-                                          InputGestureText="Alt+Z"
-                                          IsChecked="True"
-                                          IsCheckable="True"
-                                          Click="WordWrapMenuItem_Click"/>
-                                <MenuItem x:Name="ContextMarkdownMenuItem"
-                                          Header="Markdown Preview"
-                                          InputGestureText="Ctrl+Shift+V"/>
-                                <Separator/>
-                                <MenuItem Header="Delete Note..."
-                                          Foreground="{DynamicResource NotedDangerBrush}"
-                                          Click="DeleteActiveNoteMenuItem_Click"/>
-                            </ContextMenu>
-                        </TextBox.ContextMenu>
-                    </TextBox>
+                        <ContentControl x:Name="PrimaryEditorHost" Grid.Column="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
                     </Grid>
 
                     <FlowDocumentScrollViewer x:Name="MarkdownPreview"
@@ -793,48 +795,10 @@
                             <Grid x:Name="SecondaryTextEditor">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                         <Border Background="{DynamicResource NotedEditorBackgroundBrush}">
-                            <h:LineNumberGutter x:Name="SecondaryLineNumbers" Editor="{Binding ElementName=SecondaryEditorTextBox}"
+                            <h:LineNumberGutter x:Name="SecondaryLineNumbers"
                                                 Foreground="{DynamicResource NotedSecondaryTextBrush}"/>
                         </Border>
-                        <TextBox x:Name="SecondaryEditorTextBox" Grid.Column="1" PreviewMouseWheel="Editor_PreviewMouseWheel"
-                                     Padding="12"
-                                     AcceptsReturn="True"
-                                     AcceptsTab="True"
-                                     Style="{StaticResource NotedEditorTextBox}"
-                                     BorderThickness="0"
-                                     CaretBrush="{DynamicResource NotedTextBrush}"
-                                     Foreground="{DynamicResource NotedTextBrush}"
-                                     HorizontalScrollBarVisibility="Disabled"
-                                     IsInactiveSelectionHighlightEnabled="True"
-                                     SelectionBrush="{DynamicResource NotedSelectionBrush}"
-                                     SpellCheck.IsEnabled="True"
-                                     GotKeyboardFocus="SecondaryEditorTextBox_GotKeyboardFocus"
-                                     PreviewMouseDoubleClick="EditorTextBox_PreviewMouseDoubleClick"
-                                     SelectionChanged="SecondaryEditorTextBox_SelectionChanged"
-                                     TextChanged="SecondaryEditorTextBox_TextChanged"
-                                     TextWrapping="Wrap"
-                                     VerticalScrollBarVisibility="Auto">
-                                <TextBox.ContextMenu>
-                                    <ContextMenu Style="{StaticResource NotedContextMenu}">
-                                        <ContextMenu.Resources>
-                                            <Style TargetType="MenuItem"
-                                                   BasedOn="{StaticResource NotedContextMenuItem}"/>
-                                        </ContextMenu.Resources>
-                                        <MenuItem Header="Undo" Command="ApplicationCommands.Undo"/>
-                                        <MenuItem Header="Redo" Command="ApplicationCommands.Redo"/>
-                                        <Separator/>
-                                        <MenuItem Header="Cut" Command="ApplicationCommands.Cut"/>
-                                        <MenuItem Header="Copy" Command="ApplicationCommands.Copy"/>
-                                        <MenuItem Header="Paste" Command="ApplicationCommands.Paste"/>
-                                        <Separator/>
-                                        <MenuItem Header="Select All" Command="ApplicationCommands.SelectAll"/>
-                                        <Separator/>
-                                        <MenuItem Header="Delete Note..."
-                                                  Foreground="{DynamicResource NotedDangerBrush}"
-                                                  Click="DeleteActiveNoteMenuItem_Click"/>
-                                    </ContextMenu>
-                                </TextBox.ContextMenu>
-                            </TextBox>
+                        <ContentControl x:Name="SecondaryEditorHost" Grid.Column="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
                     </Grid>
                             <FlowDocumentScrollViewer x:Name="SecondaryMarkdownPreview" Grid.Column="1"
                                                       IsToolBarVisible="False" BorderThickness="0"
