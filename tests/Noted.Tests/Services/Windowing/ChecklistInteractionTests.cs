@@ -1031,7 +1031,8 @@ public sealed class ChecklistInteractionTests
         internal RecordingService(string directory)
         {
             _store = new ChecklistContentService(directory);
-            _store.SaveItems([new ChecklistItemState { Text = "alpha" }, new ChecklistItemState { Text = "bravo" }]);
+            _store.SaveItems([new ChecklistItemState { Id = Guid.NewGuid(), Text = "alpha" },
+                new ChecklistItemState { Id = Guid.NewGuid(), Text = "bravo" }]);
         }
 
         internal IReadOnlyList<ChecklistItemState> Load() => _store.LoadItems().Items;

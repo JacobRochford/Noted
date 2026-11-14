@@ -5,6 +5,19 @@ using System.Windows.Media;
 
 namespace Noted.Helpers;
 
+public sealed class ChecklistReminderTextConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values[0] is not DateTimeOffset reminder) return "Remind me...";
+        var sent = values.Length > 1 && values[1] is DateTimeOffset;
+        return $"{(sent ? "Submitted" : "Remind me")} {reminder.ToLocalTime().ToString("g", culture)}";
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 public sealed class DueDateToTextConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)

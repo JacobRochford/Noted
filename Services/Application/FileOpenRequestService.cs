@@ -48,13 +48,13 @@ internal sealed class FileOpenRequestService : IDisposable, IAsyncDisposable
         }
     }
 
-    internal static bool TrySend(string filePath, int timeoutMilliseconds = 1500)
+    internal static bool TrySend(string filePath, int timeoutMilliseconds = 1500, string? pipeName = null)
     {
         try
         {
             using var client = new NamedPipeClientStream(
                 ".",
-                PipeName,
+                pipeName ?? PipeName,
                 PipeDirection.Out,
                 PipeOptions.None);
             client.Connect(timeoutMilliseconds);

@@ -21,6 +21,7 @@
         <h:DueDateToColorConverter x:Key="DueDateToColor"/>
         <h:NullToVisibilityConverter x:Key="NullToVisibility"/>
         <h:ChecklistNotesVisibilityConverter x:Key="NotesToVisibility"/>
+        <h:ChecklistReminderTextConverter x:Key="ReminderText"/>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
 
         <SolidColorBrush x:Key="ChecklistHighPriorityBrush" Color="#FF0000"/>
@@ -485,6 +486,17 @@
                                                 <MenuItem Header="Move to bottom" Tag="ManualReorder"
                                                           Style="{StaticResource NotedContextMenuItem}" Click="MoveToBottom_Click"/>
                                                 <Separator/>
+                                                <MenuItem Header="Remind me..." Click="ReminderMenuItem_Click">
+                                                    <MenuItem.Style>
+                                                        <Style TargetType="MenuItem" BasedOn="{StaticResource NotedContextMenuItem}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsChecked}" Value="True">
+                                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </MenuItem.Style>
+                                                </MenuItem>
                                                 <MenuItem Header="Duplicate item"
                                                           Style="{StaticResource NotedContextMenuItem}" Click="DuplicateItemMenuItem_Click"/>
                                                 <MenuItem Header="Delete item" Foreground="{DynamicResource NotedDangerBrush}"
@@ -570,6 +582,10 @@
                                                            Foreground="{DynamicResource NotedAccentTextBrush}" FontSize="10" FontWeight="SemiBold"/>
                                             </Border>
                                             <Grid Grid.Column="5" MinWidth="12">
+                                                <TextBlock Text="&#xE823;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                                           Foreground="{DynamicResource NotedSecondaryTextBrush}"
+                                                           VerticalAlignment="Center" IsHitTestVisible="False"
+                                                           Visibility="{Binding HasActiveReminder, Converter={StaticResource BoolToVisibility}}"/>
                                                 <Ellipse Width="6" Height="6" Margin="0,1,1,0"
                                                          HorizontalAlignment="Right" VerticalAlignment="Top"
                                                          Fill="{DynamicResource NotedAccentBrush}"
@@ -653,6 +669,25 @@
                                                            Visibility="Collapsed" TextWrapping="Wrap" Margin="0,5,0,0"
                                                            Foreground="{DynamicResource NotedDangerBrush}" FontSize="11"
                                                            AutomationProperties.LiveSetting="Assertive"/>
+                                                <Button x:Name="ItemReminderButton" Margin="0,10,0,0" Padding="8,5"
+                                                        HorizontalAlignment="Left" FontSize="11" IsTabStop="False"
+                                                        AutomationProperties.Name="Edit reminder" Click="ReminderButton_Click">
+                                                    <Button.Content>
+                                                        <MultiBinding Converter="{StaticResource ReminderText}">
+                                                            <Binding Path="ReminderAtUtc"/>
+                                                            <Binding Path="ReminderHandledAtUtc"/>
+                                                        </MultiBinding>
+                                                    </Button.Content>
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource NotedSecondaryButton}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsChecked}" Value="True">
+                                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
                                             </StackPanel>
                                         </Border>
                                     </Grid>

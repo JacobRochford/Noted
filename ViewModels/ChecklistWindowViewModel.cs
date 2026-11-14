@@ -38,6 +38,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
     internal event EventHandler<CancelEventArgs>? ViewChanging;
     internal event EventHandler? ViewRefreshing;
     internal event EventHandler? ViewRefreshed;
+    internal event EventHandler? ReminderStateChanged;
 
     // Source collection in saved order
     public ObservableCollection<ChecklistItem> Items { get; } = new();
@@ -173,24 +174,61 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         _checklistTabs = new ChecklistTabs(loadResult.Tabs, TrySaveTabsSnapshot);
         _checklistTabs.SelectionChanged += ChecklistTabs_SelectionChanged;
         var customTabsById = CustomTabs.ToDictionary(tab => tab.Id, StringComparer.OrdinalIgnoreCase);
+        var reservedIds = loadResult.Items.Select(item => item.Id).Where(id => id != Guid.Empty).ToHashSet();
+        var seenIds = new HashSet<Guid>();
+        var repairedItems = false;
         foreach (var d in loadResult.Items)
         {
+            var id = d.Id;
+            var duplicate = id != Guid.Empty && !seenIds.Add(id);
+            if (id == Guid.Empty || duplicate)
+            {
+                do
+                {
+                    id = Guid.NewGuid();
+                }
+                while (!reservedIds.Add(id));
+                repairedItems = true;
+            }
             customTabsById.TryGetValue(d.TabId ?? "", out var assignedTab);
             var item = new ChecklistItem
             {
+                Id        = id,
                 Text      = d.Text ?? "",
                 IsChecked = d.IsChecked,
                 Priority  = d.Priority,
                 TabId     = assignedTab?.Id,
                 DueDate   = d.DueDate,
+                ReminderAtUtc = duplicate ? null : d.ReminderAtUtc,
+                ReminderHandledAtUtc = duplicate ? null : d.ReminderHandledAtUtc,
                 Notes     = d.Notes ?? "",
                 CreatedAt = d.CreatedAt == default ? DateTime.Now : d.CreatedAt
             };
+            repairedItems |= item.ReminderAtUtc != d.ReminderAtUtc ||
+                             item.ReminderHandledAtUtc != d.ReminderHandledAtUtc;
             item.PropertyChanged += Item_PropertyChanged;
             Items.Add(item);
         }
 
         Items.CollectionChanged += Items_CollectionChanged;
+        RefreshFilteredItems();
+        if (repairedItems) SaveItems();
+    }
+
+    internal void ResetPresentation(bool ghostModeEnabled, string? selectedTabId)
+    {
+        _deferContentRefresh = false;
+        foreach (var item in Items)
+        {
+            item.IsExpanded = false;
+            item.IsEditingTitle = false;
+        }
+        SearchQuery = "";
+        SortMode = ChecklistSortMode.Manual;
+        IsSearchVisible = false;
+        GhostModeEnabled = ghostModeEnabled;
+        var selected = selectedTabId is null ? null : FindTab(selectedTabId);
+        SelectTab(selected?.IsVisible == true ? selected : VisibleTabs.FirstOrDefault());
         RefreshFilteredItems();
     }
 
@@ -211,6 +249,18 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
     public ChecklistTab? FindTab(string id) =>
         _checklistTabs.Find(id);
+
+    internal bool RevealItem(Guid id, out ChecklistItem? item)
+    {
+        item = Items.FirstOrDefault(candidate => candidate.Id == id && !candidate.IsChecked);
+        if (item is null || !CanChangeView()) return false;
+        var tab = item.TabId is { } tabId ? FindTab(tabId) : FindTab(ChecklistTab.AllId);
+        if (tab is null) return false;
+        if (!tab.IsVisible && !SetDefaultTabVisibility(tab.Id, true)) return false;
+        SearchQuery = "";
+        SelectTab(tab);
+        return FilteredItems.Contains(item);
+    }
 
     public bool SetDefaultTabVisibility(string id, bool isVisible)
     {
@@ -276,25 +326,33 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
         if (e.OldItems != null)
             foreach (ChecklistItem item in e.OldItems)
+            {
                 item.PropertyChanged -= Item_PropertyChanged;
+                if (e.Action != NotifyCollectionChangedAction.Move)
+                    item.CancelReminder();
+            }
 
         if (_isBulkUpdating) return;
 
         NotifyProgress();
         SaveItems();
         RefreshFilteredItems();
+        ReminderStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void Item_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (_isRefreshing ||
             _isBulkUpdating ||
-            e.PropertyName is nameof(ChecklistItem.IsExpanded) or nameof(ChecklistItem.IsEditingTitle)) return;
+            e.PropertyName is nameof(ChecklistItem.IsExpanded) or nameof(ChecklistItem.IsEditingTitle) or nameof(ChecklistItem.HasActiveReminder)) return;
 
         NotifyProgress();
         SaveItems();
         if (!_isUpdatingItemText)
             RefreshFilteredItems();
+        if (e.PropertyName is nameof(ChecklistItem.ReminderAtUtc) or
+            nameof(ChecklistItem.ReminderHandledAtUtc) or nameof(ChecklistItem.IsChecked))
+            ReminderStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     internal void DeferContentRefresh(bool defer)
@@ -472,6 +530,39 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         Items.Insert(idx >= 0 ? idx + 1 : Items.Count, dup);
     }
 
+    internal bool TrySetReminder(ChecklistItem item, DateTimeOffset? reminder, out string? error)
+    {
+        error = null;
+        if (!Items.Contains(item) || (item.IsChecked && reminder is not null))
+        {
+            error = "Choose an incomplete task to set a reminder.";
+            return false;
+        }
+        if (reminder <= DateTimeOffset.UtcNow)
+        {
+            error = "Choose a reminder time in the future.";
+            return false;
+        }
+        item.ReminderAtUtc = reminder;
+        item.ReminderHandledAtUtc = null;
+        return TrySaveItems(null, out error);
+    }
+
+    internal bool TryMarkRemindersHandled(IReadOnlyList<ChecklistReminder> reminders, DateTimeOffset handledAt, out string? error)
+    {
+        var itemsById = Items.ToDictionary(item => item.Id);
+        RunBulkUpdate(() =>
+        {
+            foreach (var reminder in reminders)
+            {
+                if (itemsById.TryGetValue(reminder.TaskId, out var item) && !item.IsChecked &&
+                    item.ReminderAtUtc == reminder.ReminderAtUtc && item.ReminderHandledAtUtc is null)
+                    item.ReminderHandledAtUtc = handledAt;
+            }
+        });
+        return TryFlushPendingItems(out error);
+    }
+
     // Bulk operations
 
     public void ClearCompleted()
@@ -524,6 +615,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         NotifyProgress();
         SaveItems();
         RefreshFilteredItems();
+        ReminderStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // Reorder
@@ -625,11 +717,14 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
     {
         return Items.Where(item => !ReferenceEquals(item, excludedItem)).Select(i => new ChecklistItemState
         {
+            Id        = i.Id,
             Text      = i.Text,
             IsChecked = i.IsChecked,
             Priority  = i.Priority,
             TabId     = i.TabId,
             DueDate   = i.DueDate,
+            ReminderAtUtc = i.ReminderAtUtc,
+            ReminderHandledAtUtc = i.ReminderHandledAtUtc,
             Notes     = i.Notes,
             CreatedAt = i.CreatedAt
         }).ToList();

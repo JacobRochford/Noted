@@ -15,11 +15,14 @@ public sealed class ChecklistItem : ObservableObject
     private ChecklistPriority _priority = ChecklistPriority.None;
     private string? _tabId;
     private DateTime? _dueDate;
+    private DateTimeOffset? _reminderAtUtc;
+    private DateTimeOffset? _reminderHandledAtUtc;
     private string _notes = "";
     private bool _isExpanded;
     private bool _isEditingTitle;
 
     public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public Guid Id { get; init; } = Guid.NewGuid();
 
     public string Text
     {
@@ -30,7 +33,13 @@ public sealed class ChecklistItem : ObservableObject
     public bool IsChecked
     {
         get => _isChecked;
-        set => SetProperty(ref _isChecked, value);
+        set
+        {
+            if (_isChecked == value) return;
+            _isChecked = value;
+            if (value) CancelReminder();
+            OnPropertyChanged();
+        }
     }
 
     public ChecklistPriority Priority
@@ -50,6 +59,35 @@ public sealed class ChecklistItem : ObservableObject
         get => _dueDate;
         set => SetProperty(ref _dueDate, value);
     }
+
+    public DateTimeOffset? ReminderAtUtc
+    {
+        get => _reminderAtUtc;
+        set
+        {
+            var reminder = _isChecked ? null : value?.ToUniversalTime();
+            if (_reminderAtUtc == reminder) return;
+            _reminderAtUtc = reminder;
+            ReminderHandledAtUtc = null;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasActiveReminder));
+        }
+    }
+
+    public DateTimeOffset? ReminderHandledAtUtc
+    {
+        get => _reminderHandledAtUtc;
+        set
+        {
+            if (SetProperty(ref _reminderHandledAtUtc,
+                _reminderAtUtc.HasValue && !_isChecked ? value?.ToUniversalTime() : null))
+                OnPropertyChanged(nameof(HasActiveReminder));
+        }
+    }
+
+    public bool HasActiveReminder => !_isChecked && _reminderAtUtc.HasValue && _reminderHandledAtUtc is null;
+
+    internal void CancelReminder() => ReminderAtUtc = null;
 
     public string Notes
     {

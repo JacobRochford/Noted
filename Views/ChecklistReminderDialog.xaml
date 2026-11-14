@@ -1,0 +1,34 @@
+<Window x:Class="Noted.ChecklistReminderDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Remind me" Width="340" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource NotedSurfaceBrush}" Foreground="{DynamicResource NotedTextBrush}">
+    <StackPanel Margin="18">
+        <TextBlock Text="Remind me" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,14"/>
+        <TextBlock Text="Date" Margin="0,0,0,4"/>
+        <DatePicker x:Name="ReminderDate" AutomationProperties.Name="Reminder date"
+                    Background="{DynamicResource NotedInputBackgroundBrush}"
+                    Foreground="{DynamicResource NotedTextBrush}" BorderBrush="{DynamicResource NotedBorderBrush}">
+            <DatePicker.Resources>
+                <Style TargetType="DatePickerTextBox">
+                    <Setter Property="Background" Value="{DynamicResource NotedInputBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
+                    <Setter Property="CaretBrush" Value="{DynamicResource NotedTextBrush}"/>
+                </Style>
+            </DatePicker.Resources>
+        </DatePicker>
+        <TextBlock Text="Time (24-hour, local)" Margin="0,12,0,4"/>
+        <TextBox x:Name="ReminderTime" Padding="6" MaxLength="5" AutomationProperties.Name="Reminder time"/>
+        <TextBlock x:Name="ErrorText" Visibility="Collapsed" TextWrapping="Wrap" Margin="0,10,0,0"
+                   Foreground="{DynamicResource NotedDangerBrush}" AutomationProperties.LiveSetting="Assertive"/>
+        <WrapPanel HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="RemoveButton" Content="Remove" Margin="0,0,8,0" Padding="10,5"
+                    Style="{StaticResource NotedSecondaryButton}" Click="Remove_Click"/>
+            <Button Content="Cancel" IsCancel="True" Margin="0,0,8,0" Padding="10,5"
+                    Style="{StaticResource NotedSecondaryButton}"/>
+            <Button x:Name="ApplyButton" Content="Apply" IsDefault="True" Padding="10,5"
+                    Style="{StaticResource NotedSecondaryButton}" Click="Apply_Click"/>
+        </WrapPanel>
+    </StackPanel>
+</Window>

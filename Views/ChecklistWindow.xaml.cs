@@ -17,6 +17,7 @@ public partial class ChecklistWindow : OverlayWindow
 {
     private readonly IAppSettingsService _settingsService;
     private readonly ChecklistWindowViewModel _viewModel;
+    private readonly bool _ownsViewModel;
     private Point _dragStartPoint;
     private ChecklistItem? _pendingDragItem;
     private ListBoxItem? _pendingDragContainer;
@@ -42,6 +43,8 @@ public partial class ChecklistWindow : OverlayWindow
     private bool _headerClickEditsTitle;
     private bool _ignoreHeaderClick;
     private bool _isClosed;
+    private ChecklistReminderActivation? _pendingReminderActivation;
+    private ContextMenu? _reminderTaskMenu;
     private int _interactionVersion;
 
     private sealed record FocusTarget(
@@ -50,6 +53,19 @@ public partial class ChecklistWindow : OverlayWindow
     public ChecklistWindow(
         IAppSettingsService settingsService,
         IChecklistContentService contentService)
+        : this(settingsService, null, contentService)
+    {
+    }
+
+    internal ChecklistWindow(IAppSettingsService settingsService, ChecklistWindowViewModel viewModel)
+        : this(settingsService, viewModel, null)
+    {
+    }
+
+    private ChecklistWindow(
+        IAppSettingsService settingsService,
+        ChecklistWindowViewModel? viewModel,
+        IChecklistContentService? contentService)
     {
         InitializeComponent();
 
@@ -62,13 +78,13 @@ public partial class ChecklistWindow : OverlayWindow
         if (state.IsMaximized)
             WindowState = WindowState.Maximized;
 
-        _viewModel = new ChecklistWindowViewModel(
-            contentService,
+        _ownsViewModel = viewModel is null;
+        _viewModel = viewModel ?? new ChecklistWindowViewModel(
+            contentService!,
             Dispatcher,
             action => Dispatcher.Invoke(action),
             state.GhostModeEnabled);
-        if (state.SelectedTabId is { } selectedTabId)
-            _viewModel.SelectTab(_viewModel.FindTab(selectedTabId));
+        _viewModel.ResetPresentation(state.GhostModeEnabled, state.SelectedTabId);
         DataContext = _viewModel;
         InitializeOverlay(state.GhostModeEnabled, state.GhostModeOpacity, state.Opacity);
         _viewModel.ViewChanging += ViewModel_ViewChanging;
@@ -76,32 +92,34 @@ public partial class ChecklistWindow : OverlayWindow
         _viewModel.ViewRefreshed += ViewModel_ViewRefreshed;
         _viewModel.Items.CollectionChanged += Items_CollectionChanged;
 
-        _viewModel.PropertyChanged += (s, e) =>
+        _viewModel.PropertyChanged += ViewModel_PropertyChanged;
+        IsVisibleChanged += ChecklistWindow_IsVisibleChanged;
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ChecklistWindowViewModel.GhostModeEnabled))
         {
-            if (e.PropertyName == nameof(ChecklistWindowViewModel.GhostModeEnabled))
+            ApplyGhostMode(_viewModel.GhostModeEnabled);
+            SaveWindowState();
+        }
+        else if (e.PropertyName == nameof(ChecklistWindowViewModel.SelectedTab))
+        {
+            try
             {
-                ApplyGhostMode(_viewModel.GhostModeEnabled);
                 SaveWindowState();
             }
-            else if (e.PropertyName == nameof(ChecklistWindowViewModel.SelectedTab))
+            catch (SettingsPersistenceException ex)
             {
-                try
-                {
-                    SaveWindowState();
-                }
-                catch (SettingsPersistenceException ex)
-                {
-                    ExceptionDiagnostics.Record(ex);
-                    ShowPersistenceWarningOnce(ex.Message);
-                }
+                ExceptionDiagnostics.Record(ex);
+                ShowPersistenceWarningOnce(ex.Message);
             }
-            else if (e.PropertyName == nameof(ChecklistWindowViewModel.PersistenceError) &&
-                     !_viewModel.HasPersistenceError)
-            {
-                _lastPersistenceWarning = null;
-            }
-        };
-        IsVisibleChanged += ChecklistWindow_IsVisibleChanged;
+        }
+        else if (e.PropertyName == nameof(ChecklistWindowViewModel.PersistenceError) &&
+                 !_viewModel.HasPersistenceError)
+        {
+            _lastPersistenceWarning = null;
+        }
     }
 
     internal bool TryFlushPendingContent(out string? error)
@@ -114,6 +132,95 @@ public partial class ChecklistWindow : OverlayWindow
 
     internal string? BackupBlockingIssue => _viewModel.PersistenceError;
     internal bool RecoveryBlocksBackup => _viewModel.RecoveryIssuesFoundThisRun;
+
+    internal void OpenReminder(ChecklistReminderActivation activation)
+    {
+        _pendingReminderActivation = activation;
+        TryOpenPendingReminder();
+    }
+
+    private void TryOpenPendingReminder()
+    {
+        if (_isClosed || _pendingReminderActivation is not { } activation || _completingItem) return;
+        var active = _creatingItem ?? _editingItem;
+        if (active is not null && !TryFinishItem(active, keepEmpty: false, focusList: false)) return;
+        _pendingReminderActivation = null;
+        if (activation.TaskId is { } id)
+        {
+            NavigateToReminder(id);
+            return;
+        }
+        var tasks = _viewModel.Items.Where(item => !item.IsChecked &&
+            item.ReminderHandledAtUtc == activation.BatchUtc).ToArray();
+        if (tasks.Length == 0)
+        {
+            AppDialog.Show("These reminders are no longer available.", "Checklist reminders", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var menu = new ContextMenu
+        {
+            PlacementTarget = ItemsList,
+            Placement = PlacementMode.Relative,
+            MaxHeight = 360,
+            Style = (Style)FindResource("NotedContextMenu")
+        };
+        if (_reminderTaskMenu is not null) _reminderTaskMenu.IsOpen = false;
+        _reminderTaskMenu = menu;
+        menu.Closed += (_, _) => { if (ReferenceEquals(_reminderTaskMenu, menu)) _reminderTaskMenu = null; };
+        foreach (var task in tasks)
+        {
+            var taskId = task.Id;
+            var entry = new MenuItem
+            {
+                Header = string.IsNullOrWhiteSpace(task.Text) ? "Untitled task" : task.Text,
+                Style = (Style)FindResource("NotedContextMenuItem")
+            };
+            entry.Click += (_, _) => OpenReminder(new ChecklistReminderActivation(taskId, null));
+            menu.Items.Add(entry);
+        }
+        menu.IsOpen = true;
+    }
+
+    internal bool NavigateToReminder(Guid id)
+    {
+        var active = _creatingItem ?? _editingItem;
+        if (active is not null && !TryFinishItem(active, keepEmpty: false, focusList: false))
+        {
+            _pendingReminderActivation = new(id, null);
+            return false;
+        }
+        _interactionVersion++;
+        if (!_viewModel.RevealItem(id, out var item))
+        {
+            AppDialog.Show("This task is completed or no longer available.", "Checklist reminder", MessageBoxButton.OK, MessageBoxImage.Information);
+            return false;
+        }
+        Activate();
+        FocusRow(item!);
+        return true;
+    }
+
+    private void ReminderButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetItemFromSender(sender) is not { IsChecked: false } item) return;
+        EditReminder(item);
+    }
+
+    private void ReminderMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetItemFromContextMenu(sender as MenuItem) is { IsChecked: false } item)
+            EditReminder(item);
+    }
+
+    private void EditReminder(ChecklistItem item)
+    {
+        var active = _creatingItem ?? _editingItem;
+        if (active is not null && !TryFinishItem(active, keepEmpty: true, focusList: false, collapse: false)) return;
+        var dialog = new ChecklistReminderDialog(item.ReminderAtUtc, item.DueDate) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+        if (!_viewModel.TrySetReminder(item, dialog.ReminderAtUtc, out var error))
+            ShowPersistenceWarningOnce(error);
+    }
 
     protected override void OnClosing(CancelEventArgs e)
     {
@@ -140,6 +247,8 @@ public partial class ChecklistWindow : OverlayWindow
     protected override void OnClosed(EventArgs e)
     {
         _isClosed = true;
+        if (_reminderTaskMenu is not null) _reminderTaskMenu.IsOpen = false;
+        _pendingReminderActivation = null;
         if (_editingItem is not null) _editingItem.IsEditingTitle = false;
         _creatingItem = null;
         _editingItem = null;
@@ -148,7 +257,9 @@ public partial class ChecklistWindow : OverlayWindow
         _viewModel.ViewRefreshing -= ViewModel_ViewRefreshing;
         _viewModel.ViewRefreshed -= ViewModel_ViewRefreshed;
         _viewModel.Items.CollectionChanged -= Items_CollectionChanged;
-        _viewModel.Dispose();
+        _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        if (_ownsViewModel)
+            _viewModel.Dispose();
         base.OnClosed(e);
     }
 
@@ -254,6 +365,7 @@ public partial class ChecklistWindow : OverlayWindow
 
         if (!IsVisible)
         {
+            if (_reminderTaskMenu is not null) _reminderTaskMenu.IsOpen = false;
             if (!TryFlushPendingContent(out var error))
                 ShowPersistenceWarningOnce(error);
             else
@@ -824,7 +936,7 @@ public partial class ChecklistWindow : OverlayWindow
     private bool IsEmptyCreation(ChecklistItem item) =>
         ReferenceEquals(item, _creatingItem) &&
         string.IsNullOrWhiteSpace(item.Text) && string.IsNullOrWhiteSpace(item.Notes) &&
-        item.DueDate is null && !item.IsChecked &&
+        item.DueDate is null && item.ReminderAtUtc is null && !item.IsChecked &&
         item.Priority == _creationPriority && item.TabId == _creationTabId;
 
     private bool TryFinishItem(ChecklistItem item, bool keepEmpty, bool focusList, bool collapse = true)
@@ -832,6 +944,7 @@ public partial class ChecklistWindow : OverlayWindow
         if (_completingItem) return false;
         // warning dialogs can dispatch focus changes before this completion has returned.
         _completingItem = true;
+        var finished = false;
         try
         {
             var destination = CaptureFocus();
@@ -849,6 +962,7 @@ public partial class ChecklistWindow : OverlayWindow
                 if (ReferenceEquals(_editingItem, item)) _editingItem = null;
                 item.IsEditingTitle = false;
                 _viewModel.DeferContentRefresh(false);
+                finished = true;
                 return true;
             }
 
@@ -896,9 +1010,15 @@ public partial class ChecklistWindow : OverlayWindow
                 _viewModel.DeferContentRefresh(true);
                 _lastEditorFocus = CaptureFocus();
             }
+            finished = true;
             return true;
         }
-        finally { _completingItem = false; }
+        finally
+        {
+            _completingItem = false;
+            if (finished && _pendingReminderActivation is not null)
+                Dispatcher.BeginInvoke(TryOpenPendingReminder, System.Windows.Threading.DispatcherPriority.Background);
+        }
     }
 
     private void NavigateItem(ChecklistItem item, UIElement? source, bool backward)

@@ -150,6 +150,25 @@ public sealed class FileOpenRequestServiceTests
         }
     }
 
+    [TestMethod]
+    public async Task ReminderPipeDoesNotInterfereWithFileOpening()
+    {
+        var filePipe = NewPipeName();
+        var reminderPipe = NewPipeName();
+        var file = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reminder = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var files = new FileOpenRequestService(value => file.TrySetResult(value), action => action(), filePipe);
+        await using var reminders = new FileOpenRequestService(value => reminder.TrySetResult(value), action => action(), reminderPipe);
+        _ = files.Start();
+        _ = reminders.Start();
+        var request = new ChecklistReminderActivation(Guid.NewGuid(), null);
+        Assert.IsTrue(await Task.Run(() => FileOpenRequestService.TrySend(request.Serialize(), 5000, reminderPipe)));
+        Assert.AreEqual(request, ChecklistReminderActivation.Deserialize(await reminder.Task.WaitAsync(TestTimeout)));
+        Assert.IsFalse(file.Task.IsCompleted);
+        Assert.IsTrue(await Task.Run(() => FileOpenRequestService.TrySend(@"C:\notes\one.txt", 5000, filePipe)));
+        Assert.AreEqual(@"C:\notes\one.txt", await file.Task.WaitAsync(TestTimeout));
+    }
+
     private static string NewPipeName() => $"Noted.Tests.FileOpen.{Guid.NewGuid():N}";
 
     private static async Task SendAsync(string pipeName, string path)

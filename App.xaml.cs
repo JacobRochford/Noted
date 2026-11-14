@@ -24,10 +24,16 @@ public partial class App : Application
     private AppSettingsService? _settingsService;
     private AppThemeManager? _themeManager;
     private FileOpenRequestService? _fileOpenRequestService;
+    private FileOpenRequestService? _reminderActivationRequests;
+    private ChecklistNotifications? _checklistNotifications;
+    private readonly Queue<ChecklistReminderActivation> _pendingReminderActivations = new();
+    private bool _reminderActivationReady;
     private NoteFileService? _fileService;
     private readonly ShutdownFlushCoordinator _shutdownFlushCoordinator = new();
     private readonly ApplicationShutdownSequence _shutdownSequence;
     private IDisposable? _checklistBackupRegistration;
+    private ChecklistWindowViewModel? _checklistViewModel;
+    private ChecklistReminderScheduler? _checklistReminderScheduler;
     private IDisposable? _dictionaryBackupRegistration;
     private IDisposable? _jotsBackupRegistration;
     private IDisposable? _jotCaptureBackupRegistration;
@@ -39,9 +45,15 @@ public partial class App : Application
     private bool _isShuttingDown;
     private string? _lastShutdownWarning;
     private int _fatalErrorShown;
+    private readonly string? _appDataDirectory;
 
-    public App()
+    public App() : this(null)
     {
+    }
+
+    internal App(string? appDataDirectory)
+    {
+        _appDataDirectory = appDataDirectory;
         _shutdownSequence = new ApplicationShutdownSequence(_shutdownFlushCoordinator);
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
@@ -57,6 +69,13 @@ public partial class App : Application
 
             if (!isNewInstance)
             {
+                if (ChecklistReminderActivation.IsNotificationLaunch(e.Args))
+                {
+                    _singleInstanceMutex.Dispose();
+                    _singleInstanceMutex = null;
+                    ForwardReminderActivation();
+                    return;
+                }
                 var requestedFile = e.Args.FirstOrDefault();
                 if (!string.IsNullOrWhiteSpace(requestedFile) &&
                     FileOpenRequestService.TrySend(requestedFile))
@@ -96,7 +115,11 @@ public partial class App : Application
 
         try
         {
-            var appDataDirectory = PersistencePaths.DefaultAppDataDirectory;
+            _checklistNotifications = new ChecklistNotifications(request =>
+                Dispatcher.BeginInvoke(() => QueueReminderActivation(request)));
+            if (_checklistNotifications.TryRegister())
+                _checklistNotifications.ReadStartupActivation();
+            var appDataDirectory = _appDataDirectory ?? PersistencePaths.DefaultAppDataDirectory;
             var fullBackupService = new FullBackupService(
                 appDataDirectory,
                 appDataDirectory);
@@ -113,9 +136,9 @@ public partial class App : Application
             MiniPadRecoveryMigration.Migrate(appDataDirectory);
 
             base.OnStartup(e);
-            TryCreateDesktopShortcut();
+            if (_appDataDirectory is null) TryCreateDesktopShortcut();
 
-            var settings = new AppSettingsService();
+            var settings = new AppSettingsService(appDataDirectory);
             WindowAppearance.Initialize(settings);
             settings.PersistenceWarning += Settings_PersistenceWarning;
             _settingsService = settings;
@@ -181,9 +204,17 @@ public partial class App : Application
                     Dispatcher.BeginInvoke(action);
             });
             ObserveBackgroundTask(_fileOpenRequestService.Start());
+            // keep reminder activation on its own channel without changing the file-opening protocol.
+            _reminderActivationRequests = new FileOpenRequestService(
+                payload =>
+                {
+                    if (ChecklistReminderActivation.Deserialize(payload) is { } request)
+                        QueueReminderActivation(request);
+                }, action => Dispatcher.BeginInvoke(action), ChecklistReminderActivation.PipeName);
+            ObserveBackgroundTask(_reminderActivationRequests.Start());
 
             mainWindow.Show();
-            foreach (var requestedFile in e.Args.Where(path => !string.IsNullOrWhiteSpace(path)))
+            foreach (var requestedFile in ChecklistReminderActivation.FileArguments(e.Args).Where(path => !string.IsNullOrWhiteSpace(path)))
                 noteEditor.OpenNote(requestedFile);
             if (pendingRestoreResult.Status == FullBackupStatus.Restored)
             {
@@ -221,7 +252,10 @@ public partial class App : Application
             if (noteEditor.RecoveryBlocksBackup)
                 backupCoordinator.RecordRunRecoveryIssue("Note editor recovery was used or reported a problem during this application run.");
             RestoreMiniPadWindow();
-            ObserveBackgroundTask(UpdateService.CheckForUpdatesAsync());
+            if (_appDataDirectory is null) ObserveBackgroundTask(UpdateService.CheckForUpdatesAsync());
+            Dispatcher.BeginInvoke(StartChecklistReminders, DispatcherPriority.ContextIdle);
+            _reminderActivationReady = true;
+            DrainReminderActivations();
         }
         catch (Exception ex)
         {
@@ -238,6 +272,11 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _isShuttingDown = true;
+        _reminderActivationReady = false;
+        _checklistReminderScheduler?.Dispose();
+        _checklistReminderScheduler = null;
+        _checklistNotifications?.Dispose();
+        _checklistNotifications = null;
         WindowManager.Main?.SuspendHotkeyCallbacks(true);
 
         try
@@ -277,6 +316,8 @@ public partial class App : Application
 
             _checklistBackupRegistration?.Dispose();
             _checklistBackupRegistration = null;
+            _checklistViewModel?.Dispose();
+            _checklistViewModel = null;
             _dictionaryBackupRegistration?.Dispose();
             _dictionaryBackupRegistration = null;
             _jotsBackupRegistration?.Dispose();
@@ -298,6 +339,8 @@ public partial class App : Application
             _themeManager = null;
             _fileOpenRequestService?.Dispose();
             _fileOpenRequestService = null;
+            _reminderActivationRequests?.Dispose();
+            _reminderActivationRequests = null;
             try { _fileService?.Dispose(); } catch (Exception ex) { ExceptionDiagnostics.Record(ex); }
             WindowManager.ClearAll();
 
@@ -351,28 +394,87 @@ public partial class App : Application
 
         var settings = _settingsService
             ?? throw new InvalidOperationException("Application settings are not initialized.");
-        var window = new ChecklistWindow(
-            settings,
-            new ChecklistContentService(settings.AppDataDirectory));
+        var window = new ChecklistWindow(settings, GetOrCreateChecklistViewModel());
+        window.Closed += ChecklistWindow_Closed;
+        WindowManager.Checklist = window;
+        return window;
+    }
+
+    internal ChecklistWindowViewModel GetOrCreateChecklistViewModel()
+    {
+        Dispatcher.VerifyAccess();
+        if (_checklistViewModel is not null)
+            return _checklistViewModel;
+        if (_isShuttingDown)
+            throw new InvalidOperationException("The application is shutting down.");
+        var settings = _settingsService
+            ?? throw new InvalidOperationException("Application settings are not initialized.");
         var backupCoordinator = _backupCoordinator
             ?? throw new InvalidOperationException("Backup coordination is not initialized.");
+        var viewModel = new ChecklistWindowViewModel(
+            new ChecklistContentService(settings.AppDataDirectory),
+            Dispatcher,
+            action => Dispatcher.Invoke(action),
+            settings.LoadChecklistWindowState().GhostModeEnabled);
         _checklistBackupRegistration = backupCoordinator.RegisterPreparationParticipant(
             "Checklist",
             BackupPreparationPhase.SharedFlush,
             () =>
             {
-                var success = window.TryFlushPendingContent(out var error);
+                var success = viewModel.TryFlushPendingItems(out var error);
                 return success
                     ? PersistenceSaveResult.Succeeded()
                     : PersistenceSaveResult.Failed(
                         error ?? "Checklist content could not be saved before shutdown.");
             },
-            () => window.BackupBlockingIssue,
-            () => window.RecoveryBlocksBackup,
+            () => viewModel.PersistenceError,
+            () => viewModel.RecoveryIssuesFoundThisRun,
             "Checklist recovery reported a problem during this application run.");
-        window.Closed += ChecklistWindow_Closed;
-        WindowManager.Checklist = window;
-        return window;
+        _checklistViewModel = viewModel;
+        return viewModel;
+    }
+
+    private void StartChecklistReminders()
+    {
+        if (_isShuttingDown || _checklistReminderScheduler is not null) return;
+        _checklistReminderScheduler = new ChecklistReminderScheduler(
+            GetOrCreateChecklistViewModel(), Dispatcher, reminders => _checklistNotifications?.TrySubmit(reminders) == true);
+    }
+
+    private void QueueReminderActivation(ChecklistReminderActivation request)
+    {
+        if (Dispatcher.HasShutdownStarted) return;
+        _pendingReminderActivations.Enqueue(request);
+        DrainReminderActivations();
+    }
+
+    private void DrainReminderActivations()
+    {
+        if (!_reminderActivationReady || _isShuttingDown) return;
+        while (_pendingReminderActivations.TryDequeue(out var request))
+        {
+            WindowManager.ShowChecklist();
+            WindowManager.Checklist?.OpenReminder(request);
+        }
+    }
+
+    private void ForwardReminderActivation()
+    {
+        var forwarded = 0;
+        _checklistNotifications = new ChecklistNotifications(request =>
+        {
+            if (Interlocked.Exchange(ref forwarded, 1) != 0) return;
+            ObserveBackgroundTask(Task.Run(() =>
+            {
+                var sent = FileOpenRequestService.TrySend(request.Serialize(), 10000, ChecklistReminderActivation.PipeName);
+                Dispatcher.BeginInvoke(() => Shutdown(sent ? 0 : 1));
+            }));
+        });
+        if (!_checklistNotifications.TryRegister()) { Shutdown(1); return; }
+        _checklistNotifications.ReadStartupActivation();
+        var timeout = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        timeout.Tick += (_, _) => { timeout.Stop(); if (!_isShuttingDown) Shutdown(1); };
+        timeout.Start();
     }
 
     private DictionaryWindow? GetOrCreateDictionaryWindow()
@@ -527,8 +629,6 @@ public partial class App : Application
         if (!ReferenceEquals(WindowManager.Checklist, window))
             return;
 
-        _checklistBackupRegistration?.Dispose();
-        _checklistBackupRegistration = null;
         WindowManager.Checklist = null;
     }
 
@@ -732,6 +832,7 @@ public partial class App : Application
     {
         var wasShuttingDown = _isShuttingDown;
         _isShuttingDown = true;
+        _checklistReminderScheduler?.SetSuspended(true);
         WindowManager.Main?.SuspendHotkeyCallbacks(true);
         try
         {
@@ -805,6 +906,10 @@ public partial class App : Application
             {
                 _isShuttingDown = wasShuttingDown;
                 WindowManager.Main?.SuspendHotkeyCallbacks(wasShuttingDown);
+                _checklistReminderScheduler?.SetSuspended(wasShuttingDown);
+                if (!wasShuttingDown && _checklistReminderScheduler is null)
+                    Dispatcher.BeginInvoke(StartChecklistReminders, DispatcherPriority.ContextIdle);
+                if (!wasShuttingDown) Dispatcher.BeginInvoke(DrainReminderActivations);
             }
         }
     }
