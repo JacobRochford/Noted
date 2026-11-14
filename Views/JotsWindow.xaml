@@ -356,7 +356,7 @@
                                 Click="BackButton_Click"/>
 
                         <Grid Grid.Row="1">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ScrollViewer x:Name="JotDetailScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                 <ScrollViewer.Style>
                                     <Style TargetType="ScrollViewer">
                                         <Setter Property="Visibility" Value="Visible"/>
@@ -397,6 +397,7 @@
 
                                     <h:MarkdownView Source="{Binding SelectedItem.Details, Mode=OneWay}"
                                                     BorderThickness="0" Background="Transparent"
+                                                    PreviewMouseWheel="JotDetail_PreviewMouseWheel"
                                                     VerticalScrollBarVisibility="Disabled"/>
                                 </StackPanel>
                             </ScrollViewer>

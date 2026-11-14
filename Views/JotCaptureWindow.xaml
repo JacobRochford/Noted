@@ -4,6 +4,9 @@
         Title="Jot" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize"
         Width="480" SizeToContent="Height" MaxHeight="560">
+    <Window.Resources>
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource NotedScrollBar}"/>
+    </Window.Resources>
     <Border Background="{DynamicResource NotedSurfaceBrush}" BorderBrush="{DynamicResource NotedBorderBrush}"
             BorderThickness="1" CornerRadius="10" Padding="14">
         <StackPanel>

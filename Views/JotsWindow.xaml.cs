@@ -25,6 +25,18 @@ public partial class JotsWindow : OverlayWindow
     private bool _reopenOnStartup;
     private bool _preserveOpenStateOnClose;
 
+    private void JotDetail_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (e.Handled)
+            return;
+
+        e.Handled = true;
+        JotDetailScrollViewer.RaiseEvent(new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+        {
+            RoutedEvent = Mouse.MouseWheelEvent
+        });
+    }
+
     public JotsWindow(IAppSettingsService settingsService, IJotsContentService contentService)
         : this(settingsService, new JotsWorkspace(contentService, System.Windows.Threading.Dispatcher.CurrentDispatcher))
     {
