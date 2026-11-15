@@ -314,8 +314,22 @@ public sealed class NoteEditorNavigationTests
         {
             RoutedEvent = Mouse.PreviewMouseDownEvent
         };
-        target.RaiseEvent(args);
-        return args;
+        var window = Window.GetWindow(target);
+        MouseEventHandler ignoreNativeMove = (_, e) =>
+        {
+            // routed presses do not hold the native button down; capture can generate a native move synchronously.
+            if (e.Timestamp != 0) e.Handled = true;
+        };
+        if (window is not null) window.PreviewMouseMove += ignoreNativeMove;
+        try
+        {
+            target.RaiseEvent(args);
+            return args;
+        }
+        finally
+        {
+            if (window is not null) window.PreviewMouseMove -= ignoreNativeMove;
+        }
     });
 
     private static MouseButtonEventArgs TabMouseUp(UIElement target, ModifierKeys modifiers = ModifierKeys.None) =>
@@ -454,6 +468,43 @@ public sealed class NoteEditorNavigationTests
         Assert.IsTrue(primary.IsKeyboardFocused);
         Assert.AreEqual(1, primary.SelectionStart);
         Assert.AreEqual(2, primary.SelectionLength);
+    });
+
+    [TestMethod]
+    public void RoutedTabPressDoesNotConsumeNativeMovementAsPartOfTheSyntheticClick() => WithEditor((editor, _, _, files) =>
+    {
+        editor.OpenNote(CreateNote(files, "a.txt", "a"));
+        editor.OpenNote(CreateNote(files, "b.txt", "b"));
+        var target = TabItem(editor, 0);
+        var observed = false;
+        MouseButtonEventHandler duringPress = (_, _) =>
+        {
+            observed = true;
+            var nativeMove = new MouseEventArgs(Mouse.PrimaryDevice, 1)
+            {
+                RoutedEvent = Mouse.PreviewMouseMoveEvent
+            };
+            target.RaiseEvent(nativeMove);
+            Assert.AreSame(editor.Workspace.Documents[1], editor.Workspace.ActiveDocument);
+        };
+        target.AddHandler(Mouse.PreviewMouseDownEvent, duringPress, true);
+        try
+        {
+            Assert.IsTrue(TabMouseDown(target, ModifierKeys.None).Handled);
+            Assert.IsTrue(observed);
+            Assert.IsTrue(TabMouseUp(target).Handled);
+            Assert.AreSame(editor.Workspace.Documents[0], editor.Workspace.ActiveDocument);
+        }
+        finally { target.RemoveHandler(Mouse.PreviewMouseDownEvent, duringPress); }
+
+        // once dispatch ends, released-button movement must still cancel a pending click.
+        TabMouseDown(TabItem(editor, 1), ModifierKeys.None);
+        ((ListBox)editor.FindName("OpenTabsList")).RaiseEvent(new MouseEventArgs(Mouse.PrimaryDevice, 1)
+        {
+            RoutedEvent = Mouse.PreviewMouseMoveEvent
+        });
+        Assert.IsFalse(TabMouseUp(TabItem(editor, 1)).Handled);
+        Assert.AreSame(editor.Workspace.Documents[0], editor.Workspace.ActiveDocument);
     });
 
     [TestMethod]
