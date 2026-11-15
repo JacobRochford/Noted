@@ -67,6 +67,8 @@ internal sealed class ChecklistNotifications : IDisposable
     {
         try
         {
+            // additional styles are enabled only when their delivery implementation is available.
+            if (reminders.Any(reminder => reminder.Style != Models.ChecklistNotificationStyle.Standard)) return false;
             var content = ChecklistNotificationContent.Create(reminders);
             if (_testSubmit is not null) return _testSubmit(content);
             if (!TryRegister() || _manager!.Setting != AppNotificationSetting.Enabled) return false;

@@ -5,7 +5,9 @@ using Noted.ViewModels;
 
 namespace Noted.Services;
 
-internal sealed record ChecklistReminder(Guid TaskId, DateTimeOffset ReminderAtUtc, string Text, DateTimeOffset BatchUtc = default);
+internal sealed record ChecklistReminder(Guid TaskId, DateTimeOffset ReminderAtUtc, string Text, DateTimeOffset BatchUtc = default,
+    ChecklistNotificationStyle Style = ChecklistNotificationStyle.Standard,
+    ChecklistReminderOccurrence? Occurrence = null, string Notes = "");
 
 internal sealed class ChecklistReminderScheduler : IDisposable
 {
@@ -16,6 +18,8 @@ internal sealed class ChecklistReminderScheduler : IDisposable
     private readonly DispatcherTimer _timer;
     private readonly Func<IReadOnlyList<ChecklistReminder>, bool> _submit;
     private readonly TimeProvider _clock;
+    private readonly Func<IReadOnlyList<ChecklistReminder>, bool>? _submitUrgent;
+    private readonly HashSet<(Guid TaskId, Guid OccurrenceId)> _presentedUrgent = [];
     private long? _failureTimestamp;
     private bool _needsHandledFlush;
     private bool _checking;
@@ -26,12 +30,14 @@ internal sealed class ChecklistReminderScheduler : IDisposable
         ChecklistWindowViewModel model,
         Dispatcher dispatcher,
         Func<IReadOnlyList<ChecklistReminder>, bool> submit,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        Func<IReadOnlyList<ChecklistReminder>, bool>? submitUrgent = null)
     {
         _model = model;
         _dispatcher = dispatcher;
         _submit = submit;
         _clock = clock ?? TimeProvider.System;
+        _submitUrgent = submitUrgent;
         _timer = new DispatcherTimer(DispatcherPriority.Background, dispatcher);
         _timer.Tick += Timer_Tick;
         _model.ReminderStateChanged += ReminderStateChanged;
@@ -83,31 +89,56 @@ internal sealed class ChecklistReminderScheduler : IDisposable
                 batchUtc = batchUtc.AddTicks(1);
             var reminders = _model.Items.Where(item => IsDue(item, now))
                 .OrderBy(item => item.ReminderAtUtc)
-                .Select(item => new ChecklistReminder(item.Id, item.ReminderAtUtc!.Value, item.Text, batchUtc))
+                .Select(item => new ChecklistReminder(item.Id, item.ReminderAtUtc!.Value, item.Text, batchUtc,
+                    item.NotificationStyle, item.ReminderOccurrence, item.Notes))
                 .ToArray();
             if (reminders.Length == 0) return;
 
-            bool submitted;
-            try
+            var failed = false;
+            foreach (var group in reminders.GroupBy(reminder => reminder.Style))
             {
-                submitted = _submit(reminders);
+                if (_disposed || _suspended) return;
+                // an earlier delivery callback may cancel or replace another style's occurrence.
+                var currentItems = _model.Items.ToDictionary(item => item.Id);
+                var request = group.Where(reminder => currentItems.TryGetValue(reminder.TaskId, out var item) &&
+                    IsDue(item, _clock.GetUtcNow()) && item.ReminderAtUtc == reminder.ReminderAtUtc &&
+                    item.NotificationStyle == reminder.Style && item.ReminderOccurrence?.Id == reminder.Occurrence?.Id)
+                    .Select(reminder => reminder with
+                    {
+                        Text = currentItems[reminder.TaskId].Text,
+                        Notes = currentItems[reminder.TaskId].Notes,
+                        Occurrence = currentItems[reminder.TaskId].ReminderOccurrence
+                    }).ToArray();
+                if (request.Length == 0) continue;
+                bool submitted;
+                try
+                {
+                    submitted = group.Key == ChecklistNotificationStyle.Urgent
+                        ? _submitUrgent?.Invoke(request) == true : _submit(request);
+                }
+                catch (Exception exception)
+                {
+                    ExceptionDiagnostics.Record(exception, "Checklist reminder submission");
+                    submitted = false;
+                }
+                if (_disposed) return;
+                if (!submitted)
+                {
+                    Fail("Checklist reminders could not be submitted.");
+                    failed = true;
+                    continue;
+                }
+                // suspension stops subsequent delivery, but acceptance must still be persisted.
+                foreach (var reminder in request)
+                    if (reminder.Occurrence is { } occurrence) _presentedUrgent.Add((reminder.TaskId, occurrence.Id));
+                if (!_model.TryMarkRemindersHandled(request, batchUtc, out error))
+                {
+                    _needsHandledFlush = true;
+                    Fail(error);
+                    failed = true;
+                }
             }
-            catch (Exception exception)
-            {
-                ExceptionDiagnostics.Record(exception, "Checklist reminder submission");
-                submitted = false;
-            }
-            if (!submitted)
-            {
-                Fail("Checklist reminders could not be submitted.");
-                return;
-            }
-            if (_disposed) return;
-
-            _needsHandledFlush = !_model.TryMarkRemindersHandled(reminders, batchUtc, out error);
-            if (_needsHandledFlush)
-                Fail(error);
-            else
+            if (!failed)
             {
                 _failureTimestamp = null;
                 LastError = null;
@@ -128,8 +159,11 @@ internal sealed class ChecklistReminderScheduler : IDisposable
         else CheckNow();
     }
 
-    private static bool IsDue(ChecklistItem item, DateTimeOffset now) =>
-        !item.IsChecked && item.ReminderHandledAtUtc is null && item.ReminderAtUtc <= now;
+    private bool IsDue(ChecklistItem item, DateTimeOffset now) =>
+        !item.IsChecked && item.ReminderAtUtc <= now &&
+        (item.NotificationStyle == ChecklistNotificationStyle.Urgent
+            ? item.ReminderOccurrence is { AcknowledgedAtUtc: null } occurrence && !_presentedUrgent.Contains((item.Id, occurrence.Id))
+            : item.ReminderHandledAtUtc is null);
 
     private void Fail(string? error)
     {
@@ -145,7 +179,10 @@ internal sealed class ChecklistReminderScheduler : IDisposable
     {
         _timer.Stop();
         if (_disposed || _suspended) return;
-        var next = _model.Items.Where(item => !item.IsChecked && item.ReminderHandledAtUtc is null)
+        var next = _model.Items.Where(item => !item.IsChecked &&
+            (item.NotificationStyle == ChecklistNotificationStyle.Urgent
+                ? item.ReminderOccurrence is { AcknowledgedAtUtc: null } occurrence && !_presentedUrgent.Contains((item.Id, occurrence.Id))
+                : item.ReminderHandledAtUtc is null))
             .Select(item => item.ReminderAtUtc).Min();
         if (next is null && !_needsHandledFlush) return;
         var delay = next is { } due ? due - _clock.GetUtcNow() : s_retryDelay;

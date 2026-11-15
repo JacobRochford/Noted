@@ -199,11 +199,18 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
                 Priority  = d.Priority,
                 TabId     = assignedTab?.Id,
                 DueDate   = d.DueDate,
+                NotificationStyle = d.NotificationStyle,
                 ReminderAtUtc = duplicate ? null : d.ReminderAtUtc,
                 ReminderHandledAtUtc = duplicate ? null : d.ReminderHandledAtUtc,
                 Notes     = d.Notes ?? "",
                 CreatedAt = d.CreatedAt == default ? DateTime.Now : d.CreatedAt
             };
+            if (!duplicate && item.NotificationStyle == ChecklistNotificationStyle.Urgent && item.ReminderAtUtc.HasValue)
+                item.ReminderOccurrence = d.ReminderOccurrence is { IsValid: true } occurrence && occurrence.ScheduledAtUtc == item.ReminderAtUtc
+                    ? occurrence with { ScheduledAtUtc = occurrence.ScheduledAtUtc.ToUniversalTime(), AcknowledgedAtUtc = occurrence.AcknowledgedAtUtc?.ToUniversalTime(),
+                        SilencedAtUtc = occurrence.SilencedAtUtc?.ToUniversalTime() }
+                    : ChecklistReminderOccurrence.Create(item.ReminderAtUtc.Value);
+            repairedItems |= item.NotificationStyle != d.NotificationStyle || item.ReminderOccurrence != d.ReminderOccurrence;
             repairedItems |= item.ReminderAtUtc != d.ReminderAtUtc ||
                              item.ReminderHandledAtUtc != d.ReminderHandledAtUtc;
             item.PropertyChanged += Item_PropertyChanged;
@@ -351,7 +358,8 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         if (!_isUpdatingItemText)
             RefreshFilteredItems();
         if (e.PropertyName is nameof(ChecklistItem.ReminderAtUtc) or
-            nameof(ChecklistItem.ReminderHandledAtUtc) or nameof(ChecklistItem.IsChecked))
+            nameof(ChecklistItem.ReminderHandledAtUtc) or nameof(ChecklistItem.ReminderOccurrence) or
+            nameof(ChecklistItem.NotificationStyle) or nameof(ChecklistItem.IsChecked))
             ReminderStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -543,9 +551,36 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             error = "Choose a reminder time in the future.";
             return false;
         }
+        if (reminder.HasValue && item.ReminderAtUtc == reminder && item.NotificationStyle == ChecklistNotificationStyle.Urgent)
+            item.ReminderOccurrence = ChecklistReminderOccurrence.Create(reminder.Value, item.ReminderOccurrence?.ConfirmationCode);
         item.ReminderAtUtc = reminder;
         item.ReminderHandledAtUtc = null;
         return TrySaveItems(null, out error);
+    }
+
+    internal bool TryAcknowledgeUrgentReminder(Guid taskId, Guid occurrenceId, DateTimeOffset now, out string? error) =>
+        TryUpdateUrgentReminder(taskId, occurrenceId, now, acknowledge: true, out error);
+
+    internal bool TrySilenceUrgentReminder(Guid taskId, Guid occurrenceId, DateTimeOffset now, out string? error) =>
+        TryUpdateUrgentReminder(taskId, occurrenceId, now, acknowledge: false, out error);
+
+    private bool TryUpdateUrgentReminder(Guid taskId, Guid occurrenceId, DateTimeOffset now, bool acknowledge, out string? error)
+    {
+        var item = Items.FirstOrDefault(item => item.Id == taskId);
+        if (item is null || item.IsChecked || item.NotificationStyle != ChecklistNotificationStyle.Urgent ||
+            item.ReminderAtUtc is not { } due || due > now ||
+            item.ReminderOccurrence is not { } occurrence || occurrence.Id != occurrenceId)
+        {
+            error = "This reminder occurrence is no longer available.";
+            return false;
+        }
+        var updated = acknowledge ? occurrence with { ScheduledAtUtc = occurrence.ScheduledAtUtc.ToUniversalTime(), AcknowledgedAtUtc = occurrence.AcknowledgedAtUtc ?? now.ToUniversalTime() }
+            : occurrence with { SilencedAtUtc = occurrence.SilencedAtUtc ?? now.ToUniversalTime() };
+        item.ReminderOccurrence = updated;
+        if (TrySaveItems(null, out error)) return true;
+        // a failed acknowledgment must remain visible; do not overwrite a replacement occurrence.
+        if (item.ReminderOccurrence == updated) item.ReminderOccurrence = occurrence;
+        return false;
     }
 
     internal bool TryMarkRemindersHandled(IReadOnlyList<ChecklistReminder> reminders, DateTimeOffset handledAt, out string? error)
@@ -556,7 +591,9 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             foreach (var reminder in reminders)
             {
                 if (itemsById.TryGetValue(reminder.TaskId, out var item) && !item.IsChecked &&
-                    item.ReminderAtUtc == reminder.ReminderAtUtc && item.ReminderHandledAtUtc is null)
+                    item.ReminderAtUtc == reminder.ReminderAtUtc && item.NotificationStyle == reminder.Style &&
+                    item.ReminderHandledAtUtc is null &&
+                    (reminder.Occurrence is null || item.ReminderOccurrence?.Id == reminder.Occurrence.Id))
                     item.ReminderHandledAtUtc = handledAt;
             }
         });
@@ -725,6 +762,8 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             DueDate   = i.DueDate,
             ReminderAtUtc = i.ReminderAtUtc,
             ReminderHandledAtUtc = i.ReminderHandledAtUtc,
+            NotificationStyle = i.NotificationStyle,
+            ReminderOccurrence = i.ReminderOccurrence,
             Notes     = i.Notes,
             CreatedAt = i.CreatedAt
         }).ToList();
