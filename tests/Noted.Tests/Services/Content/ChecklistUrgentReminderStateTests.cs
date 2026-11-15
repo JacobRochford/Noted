@@ -232,11 +232,11 @@ public sealed class ChecklistUrgentReminderStateTests
     });
 
     [TestMethod]
-    public void WindowsAdapterDoesNotDowngradeUnsupportedStyles()
+    public void WindowsAdapterDoesNotDowngradeUrgentOrUnknownStyles()
     {
         int submissions = 0;
         using var adapter = new ChecklistNotifications(_ => { }, _ => { submissions++; return true; });
-        foreach (var style in new[] { ChecklistNotificationStyle.Persistent, ChecklistNotificationStyle.Urgent })
+        foreach (var style in new[] { ChecklistNotificationStyle.Urgent, (ChecklistNotificationStyle)99 })
             Assert.IsFalse(adapter.TrySubmit([new ChecklistReminder(Guid.NewGuid(), s_now, "task", Style: style)]));
         Assert.AreEqual(0, submissions);
     }

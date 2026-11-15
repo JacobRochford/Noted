@@ -85,8 +85,6 @@ internal sealed class ChecklistReminderScheduler : IDisposable
             now = _clock.GetUtcNow();
             // the persisted submission time also identifies a grouped notification after restart.
             var batchUtc = now;
-            while (_model.Items.Any(item => item.ReminderHandledAtUtc == batchUtc))
-                batchUtc = batchUtc.AddTicks(1);
             var reminders = _model.Items.Where(item => IsDue(item, now))
                 .OrderBy(item => item.ReminderAtUtc)
                 .Select(item => new ChecklistReminder(item.Id, item.ReminderAtUtc!.Value, item.Text, batchUtc,
@@ -98,6 +96,9 @@ internal sealed class ChecklistReminderScheduler : IDisposable
             foreach (var group in reminders.GroupBy(reminder => reminder.Style))
             {
                 if (_disposed || _suspended) return;
+                // grouped activation must identify only this style's accepted delivery.
+                while (_model.Items.Any(item => item.ReminderHandledAtUtc == batchUtc))
+                    batchUtc = batchUtc.AddTicks(1);
                 // an earlier delivery callback may cancel or replace another style's occurrence.
                 var currentItems = _model.Items.ToDictionary(item => item.Id);
                 var request = group.Where(reminder => currentItems.TryGetValue(reminder.TaskId, out var item) &&
@@ -105,6 +106,7 @@ internal sealed class ChecklistReminderScheduler : IDisposable
                     item.NotificationStyle == reminder.Style && item.ReminderOccurrence?.Id == reminder.Occurrence?.Id)
                     .Select(reminder => reminder with
                     {
+                        BatchUtc = batchUtc,
                         Text = currentItems[reminder.TaskId].Text,
                         Notes = currentItems[reminder.TaskId].Notes,
                         Occurrence = currentItems[reminder.TaskId].ReminderOccurrence
