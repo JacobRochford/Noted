@@ -102,6 +102,8 @@ public partial class NoteEditorWindow : Window
 
         InitializeComponent();
         InitializeDocumentEditors();
+        PreviewDragLeave += Window_DragLeave;
+        PreviewDragOver += Window_DragOver;
         AttachReopenShortcut(this);
         _primaryPreview = new MarkdownPreviewPresenter(EditorTextBox, PrimaryTextEditor, MarkdownPreview, PrimaryPreviewLayout);
         _secondaryPreview = new MarkdownPreviewPresenter(SecondaryEditorTextBox, SecondaryTextEditor, SecondaryMarkdownPreview, SecondaryPreviewLayout);
@@ -2043,6 +2045,24 @@ public partial class NoteEditorWindow : Window
 
     private void OpenTabsList_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (Keyboard.Modifiers == ModifierKeys.None &&
+            e.Key is Key.Up or Key.Down or Key.Home or Key.End && _documents.Count > 0)
+        {
+            var current = OpenTabsList.SelectedIndex;
+            var index = e.Key switch
+            {
+                Key.Home => 0,
+                Key.End => _documents.Count - 1,
+                Key.Up => Math.Max(0, current - 1),
+                _ => Math.Min(_documents.Count - 1, current + 1)
+            };
+            OpenTabsList.SelectedIndex = index;
+            OpenTabsList.ScrollIntoView(_documents[index]);
+            OpenTabsList.UpdateLayout();
+            ((ListBoxItem?)OpenTabsList.ItemContainerGenerator.ContainerFromIndex(index))?.Focus();
+            e.Handled = true;
+            return;
+        }
         if (e.Key != Key.Delete ||
             OpenTabsList.SelectedItem is not OpenNoteDocument document)
         {
@@ -2055,6 +2075,13 @@ public partial class NoteEditorWindow : Window
 
     private void OpenTabsList_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (e.ChangedButton == MouseButton.Right &&
+            FindDocumentFromElement(e.OriginalSource as DependencyObject) is not null)
+        {
+            // leave selection alone; the unhandled right-button release opens the row's menu.
+            e.Handled = true;
+            return;
+        }
         if (e.ChangedButton != MouseButton.Middle)
             return;
 
@@ -2166,46 +2193,18 @@ public partial class NoteEditorWindow : Window
         _isTabDragInProgress = true;
         if (Mouse.Captured == OpenTabsList)
             OpenTabsList.ReleaseMouseCapture();
-        SideBySideDropTarget.Visibility = Visibility.Visible;
+        BeginTabDragFeedback();
         try
         {
             DragDrop.DoDragDrop(OpenTabsList, _draggedDocument, DragDropEffects.Move);
         }
         finally
         {
-            SideBySideDropTarget.Visibility = Visibility.Collapsed;
+            EndTabDragFeedback();
             _draggedDocument = null;
             _primaryBeforeTabDrag = null;
             _isTabDragInProgress = false;
         }
-    }
-
-    private void SideBySideDropTarget_DragOver(object sender, DragEventArgs e)
-    {
-        e.Effects = e.Data.GetDataPresent(typeof(OpenNoteDocument))
-            ? DragDropEffects.Move
-            : DragDropEffects.None;
-        e.Handled = true;
-    }
-
-    private void SideBySideDropTarget_Drop(object sender, DragEventArgs e)
-    {
-        if (e.Data.GetDataPresent(typeof(OpenNoteDocument)) &&
-            e.Data.GetData(typeof(OpenNoteDocument)) is OpenNoteDocument document)
-        {
-            ShowSecondaryDocument(
-                document,
-                focusPane: true,
-                focusEditor: true,
-                saveSession: true);
-            e.Effects = DragDropEffects.Move;
-        }
-        else
-        {
-            e.Effects = DragDropEffects.None;
-        }
-
-        e.Handled = true;
     }
 
     private void ShowSecondaryDocument(
@@ -2297,24 +2296,6 @@ public partial class NoteEditorWindow : Window
         SecondaryEditorColumn.Width = new GridLength(0);
         EditorSplitter.Visibility = Visibility.Collapsed;
         SecondaryEditorPane.Visibility = Visibility.Collapsed;
-    }
-
-    private void OpenTabsList_Drop(object sender, DragEventArgs e)
-    {
-        if (!e.Data.GetDataPresent(typeof(OpenNoteDocument)) ||
-            e.Data.GetData(typeof(OpenNoteDocument)) is not OpenNoteDocument source)
-        {
-            return;
-        }
-
-        var target = FindDocumentFromElement(e.OriginalSource as DependencyObject);
-        if (target is null || ReferenceEquals(source, target))
-            return;
-
-        var targetIndex = _documents.IndexOf(target);
-        _workspace.Move(source, targetIndex);
-        SelectTab(CurrentDocument);
-        SaveEditorSession();
     }
 
     private OpenNoteDocument? FindDocumentFromElement(DependencyObject? element)
@@ -2807,6 +2788,7 @@ public partial class NoteEditorWindow : Window
 
     private void Window_Closed(object? sender, EventArgs e)
     {
+        EndTabDragFeedback();
         _recoverySaveScheduler.StateChanged -= RecoverySaveScheduler_StateChanged;
         _workspace.DocumentPathsChanged -= Workspace_DocumentPathsChanged;
         _recoverySaveScheduler.Dispose();

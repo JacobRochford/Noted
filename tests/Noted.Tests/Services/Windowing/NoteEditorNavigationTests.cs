@@ -642,7 +642,9 @@ public sealed class NoteEditorNavigationTests
         Assert.IsNotNull(content);
         Assert.IsFalse(TabMouseDown(content, ModifierKeys.Alt).Handled);
         Assert.IsNull(editor.Workspace.SecondaryDocument);
-        Assert.IsFalse(TabMouseDown(target, ModifierKeys.Alt, MouseButton.Right).Handled);
+        var current = editor.Workspace.ActiveDocument;
+        Assert.IsTrue(TabMouseDown(target, ModifierKeys.Alt, MouseButton.Right).Handled);
+        Assert.AreSame(current, editor.Workspace.ActiveDocument);
         Assert.IsNull(editor.Workspace.SecondaryDocument);
         close.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.AreEqual(1, editor.Workspace.Documents.Count);

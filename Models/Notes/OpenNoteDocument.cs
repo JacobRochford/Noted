@@ -8,6 +8,9 @@ public sealed class OpenNoteDocument : ObservableObject
     private string _filePath;
     private bool _isDirty;
     private bool _isMissing;
+    private string _content = "";
+    private bool _usesGeneratedName;
+    private string? _initialFileContent;
 
     public OpenNoteDocument(
         string filePath,
@@ -47,7 +50,24 @@ public sealed class OpenNoteDocument : ObservableObject
         keepExtensionForCustomName: false);
     public string TabLabel =>
         $"{(_isDirty ? "•  " : string.Empty)}{DisplayName}{(_isMissing ? "  (missing)" : string.Empty)}";
-    public string Content { get; internal set; }
+    public string SidebarLabel
+    {
+        get
+        {
+            var label = UsesGeneratedName && InitialFileContent is not null
+                ? NoteSidebarLabel.GetContentLabel(Content, InitialFileContent) : string.Empty;
+            if (label.Length == 0) label = DisplayName;
+            return $"{(_isDirty ? "•  " : string.Empty)}{label}{(_isMissing ? "  (missing)" : string.Empty)}";
+        }
+    }
+    public string Content
+    {
+        get => _content;
+        internal set
+        {
+            if (SetProperty(ref _content, value)) OnPropertyChanged(nameof(SidebarLabel));
+        }
+    }
     public string SavedContent { get; internal set; }
     public TextFileEncoding Encoding { get; internal set; }
     public TextFileEncoding SavedEncoding { get; internal set; }
@@ -59,9 +79,23 @@ public sealed class OpenNoteDocument : ObservableObject
         get => MarkdownPreviewMode != MarkdownPreviewMode.Off;
         internal set => MarkdownPreviewMode = value ? MarkdownPreviewMode.Preview : MarkdownPreviewMode.Off;
     }
-    public bool UsesGeneratedName { get; internal set; }
+    public bool UsesGeneratedName
+    {
+        get => _usesGeneratedName;
+        internal set
+        {
+            if (SetProperty(ref _usesGeneratedName, value)) OnPropertyChanged(nameof(SidebarLabel));
+        }
+    }
     // Non-null only for a file created by this app that has not been explicitly saved yet.
-    public string? InitialFileContent { get; internal set; }
+    public string? InitialFileContent
+    {
+        get => _initialFileContent;
+        internal set
+        {
+            if (SetProperty(ref _initialFileContent, value)) OnPropertyChanged(nameof(SidebarLabel));
+        }
+    }
 
     public bool IsDirty
     {
@@ -69,7 +103,10 @@ public sealed class OpenNoteDocument : ObservableObject
         internal set
         {
             if (SetProperty(ref _isDirty, value))
+            {
                 OnPropertyChanged(nameof(TabLabel));
+                OnPropertyChanged(nameof(SidebarLabel));
+            }
         }
     }
 
@@ -79,7 +116,10 @@ public sealed class OpenNoteDocument : ObservableObject
         internal set
         {
             if (SetProperty(ref _isMissing, value))
+            {
                 OnPropertyChanged(nameof(TabLabel));
+                OnPropertyChanged(nameof(SidebarLabel));
+            }
         }
     }
 
@@ -93,6 +133,7 @@ public sealed class OpenNoteDocument : ObservableObject
         OnPropertyChanged(nameof(FilePath));
         OnPropertyChanged(nameof(DisplayName));
         OnPropertyChanged(nameof(TabLabel));
+        OnPropertyChanged(nameof(SidebarLabel));
     }
 
 }

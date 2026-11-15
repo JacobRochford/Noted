@@ -426,7 +426,8 @@
                                  AllowDrop="True"
                                  Background="Transparent"
                                  BorderThickness="0"
-                                 Drop="OpenTabsList_Drop"
+                                 PreviewDragOver="OpenTabsList_DragOver"
+                                 PreviewDrop="OpenTabsList_Drop"
                                  HorizontalContentAlignment="Stretch"
                                  PreviewMouseDown="OpenTabsList_PreviewMouseDown"
                                  PreviewMouseUp="OpenTabsList_PreviewMouseUp"
@@ -478,11 +479,13 @@
                                 <DataTemplate>
                                     <Grid>
                                         <Grid.ContextMenu>
-                                            <ContextMenu Style="{StaticResource NotedContextMenu}">
+                                            <ContextMenu Style="{StaticResource NotedContextMenu}" Opened="TabContextMenu_Opened">
                                                 <ContextMenu.Resources>
                                                     <Style TargetType="MenuItem"
                                                            BasedOn="{StaticResource NotedContextMenuItem}"/>
                                                 </ContextMenu.Resources>
+                                                <MenuItem Header="Open Side by Side" Click="OpenSideBySide_Click"/>
+                                                <Separator/>
                                                 <MenuItem Header="Close Tab"
                                                           Click="CloseTabButton_Click"/>
                                                 <MenuItem Header="Rename..."
@@ -501,7 +504,7 @@
                                         <TextBlock VerticalAlignment="Center"
                                                    Foreground="{DynamicResource NotedTextBrush}"
                                                    FontSize="12"
-                                                   Text="{Binding TabLabel}"
+                                                   Text="{Binding SidebarLabel}"
                                                    TextTrimming="CharacterEllipsis"/>
                                         <Button Grid.Column="1"
                                                 Margin="7,0,0,0"
@@ -527,7 +530,9 @@
 
                 <Grid x:Name="EditorWorkspace"
                       Grid.Column="2"
-                      AllowDrop="True">
+                      AllowDrop="True"
+                      PreviewDragOver="EditorWorkspace_DragOver"
+                      PreviewDrop="EditorWorkspace_Drop">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition x:Name="EditorSplitterColumn" Width="0"/>
@@ -807,36 +812,7 @@
                         </DockPanel>
                     </Border>
 
-                    <Border x:Name="SideBySideDropTarget"
-                            Panel.ZIndex="20"
-                            Width="190"
-                            Margin="10"
-                            Padding="12"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Stretch"
-                            AllowDrop="True"
-                            Background="{DynamicResource NotedAccentSoftBrush}"
-                            BorderBrush="{DynamicResource NotedAccentBrush}"
-                            BorderThickness="2"
-                            CornerRadius="8"
-                            DragOver="SideBySideDropTarget_DragOver"
-                            Drop="SideBySideDropTarget_Drop"
-                            Visibility="Collapsed">
-                        <StackPanel HorizontalAlignment="Center"
-                                    VerticalAlignment="Center">
-                            <TextBlock HorizontalAlignment="Center"
-                                       Foreground="{DynamicResource NotedAccentBrush}"
-                                       FontFamily="Segoe MDL2 Assets"
-                                       FontSize="22"
-                                       Text="&#xE71D;"/>
-                            <TextBlock Margin="0,7,0,0"
-                                       HorizontalAlignment="Center"
-                                       Foreground="{DynamicResource NotedTextBrush}"
-                                       FontSize="12"
-                                       FontWeight="SemiBold"
-                                       Text="Open side by side"/>
-                        </StackPanel>
-                    </Border>
+
                 </Grid>
             </Grid>
         </Border>
