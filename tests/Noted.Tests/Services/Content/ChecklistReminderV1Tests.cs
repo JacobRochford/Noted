@@ -16,6 +16,15 @@ namespace Noted.Tests.Services;
 public sealed class ChecklistReminderV1Tests
 {
     [TestMethod]
+    public void ReminderDefaultUsesExplicitDueTimeIncludingMidnight()
+    {
+        var now = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
+        var date = new DateTime(2026, 6, 3);
+        Assert.AreEqual(date, ChecklistReminderTime.DefaultLocalTime(date, now, TimeZoneInfo.Utc, TimeSpan.Zero));
+        Assert.AreEqual(date.AddHours(15), ChecklistReminderTime.DefaultLocalTime(date, now, TimeZoneInfo.Utc, TimeSpan.FromHours(15)));
+    }
+
+    [TestMethod]
     public void ReminderDefaultsUseFutureDueDateOrOneHourFromNow()
     {
         var now = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);

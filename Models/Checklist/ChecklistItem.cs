@@ -15,6 +15,7 @@ public sealed class ChecklistItem : ObservableObject
     private ChecklistPriority _priority = ChecklistPriority.None;
     private string? _tabId;
     private DateTime? _dueDate;
+    private TimeSpan? _dueTime;
     private DateTimeOffset? _reminderAtUtc;
     private DateTimeOffset? _reminderHandledAtUtc;
     private ChecklistNotificationStyle _notificationStyle;
@@ -60,8 +61,25 @@ public sealed class ChecklistItem : ObservableObject
     public DateTime? DueDate
     {
         get => _dueDate;
-        set => SetProperty(ref _dueDate, value);
+        set
+        {
+            if (!SetProperty(ref _dueDate, value)) return;
+            if (value is null) DueTime = null;
+            OnPropertyChanged(nameof(DueAtLocal));
+        }
     }
+
+    public TimeSpan? DueTime
+    {
+        get => _dueTime;
+        set
+        {
+            var time = _dueDate.HasValue && value >= TimeSpan.Zero && value < TimeSpan.FromDays(1) ? value : null;
+            if (SetProperty(ref _dueTime, time)) OnPropertyChanged(nameof(DueAtLocal));
+        }
+    }
+
+    public DateTime? DueAtLocal => DueDate?.Date.Add(DueTime ?? TimeSpan.Zero);
 
     public DateTimeOffset? ReminderAtUtc
     {

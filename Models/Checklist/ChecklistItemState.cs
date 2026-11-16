@@ -8,6 +8,7 @@ public sealed record ChecklistItemState
     public ChecklistPriority Priority { get; init; } = ChecklistPriority.None;
     public string? TabId { get; init; }
     public DateTime? DueDate { get; init; }
+    public TimeSpan? DueTime { get; init; }
     public DateTimeOffset? ReminderAtUtc { get; init; }
     public DateTimeOffset? ReminderHandledAtUtc { get; init; }
     public ChecklistNotificationOptions? NotificationOptions { get; init; }

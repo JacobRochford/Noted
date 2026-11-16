@@ -24,6 +24,7 @@ public sealed class ChecklistReminderStateTests
             var item = model.Items.Single();
             id = item.Id;
             Assert.AreNotEqual(Guid.Empty, id);
+            Assert.IsNull(item.DueTime);
             Assert.IsNull(item.ReminderAtUtc);
             Assert.IsNull(item.ReminderHandledAtUtc);
             Assert.AreEqual("old task", item.Text);
@@ -162,6 +163,48 @@ public sealed class ChecklistReminderStateTests
         Assert.IsTrue(model.TryFlushPendingItems(out _));
         Assert.IsNull(service.Items[0].ReminderAtUtc);
     });
+
+    [TestMethod]
+    public void OptionalDueTimeSurvivesSaveReopenDuplicationAndBackupRecovery() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var service = new ChecklistContentService(directory.Path);
+        service.SaveItems([new() { Text = "timed", DueDate = new DateTime(2027, 1, 2), DueTime = TimeSpan.Zero }]);
+        using (var model = Create(service))
+        {
+            var item = model.Items.Single();
+            Assert.AreEqual(TimeSpan.Zero, item.DueTime);
+            model.DuplicateItem(item);
+            Assert.AreEqual(TimeSpan.Zero, model.Items[1].DueTime);
+            item.DueTime = new TimeSpan(14, 35, 0);
+            Assert.IsTrue(model.TryFlushPendingItems(out var error), error);
+        }
+        using (var model = Create(new ChecklistContentService(directory.Path)))
+        {
+            Assert.AreEqual(new TimeSpan(14, 35, 0), model.Items[0].DueTime);
+            model.Items[0].DueDate = null;
+            Assert.IsNull(model.Items[0].DueTime);
+            Assert.IsTrue(model.TryFlushPendingItems(out var error), error);
+        }
+        File.WriteAllText(directory.File("checklist.json"), "invalid json");
+        using var recovered = Create(new ChecklistContentService(directory.Path));
+        Assert.AreEqual(new TimeSpan(14, 35, 0), recovered.Items[0].DueTime);
+        Assert.AreEqual(TimeSpan.Zero, recovered.Items[1].DueTime);
+    });
+
+    [TestMethod]
+    public void DueTimeRejectsInvalidValuesAndRequiresADate()
+    {
+        var item = new ChecklistItem { DueTime = TimeSpan.FromHours(9) };
+        Assert.IsNull(item.DueTime);
+        item.DueDate = new DateTime(2027, 1, 2);
+        item.DueTime = TimeSpan.FromDays(1);
+        Assert.IsNull(item.DueTime);
+        item.DueTime = TimeSpan.FromMinutes(-1);
+        Assert.IsNull(item.DueTime);
+        item.DueTime = TimeSpan.Zero;
+        Assert.AreEqual(TimeSpan.Zero, item.DueTime);
+    }
 
     private static ChecklistWindowViewModel Create(IChecklistContentService service) =>
         new(service, Dispatcher.CurrentDispatcher, action => action(), false);

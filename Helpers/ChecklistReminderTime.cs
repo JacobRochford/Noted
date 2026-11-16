@@ -4,10 +4,10 @@ namespace Noted.Helpers;
 
 internal static class ChecklistReminderTime
 {
-    internal static DateTime DefaultLocalTime(DateTime? dueDate, DateTimeOffset now, TimeZoneInfo zone)
+    internal static DateTime DefaultLocalTime(DateTime? dueDate, DateTimeOffset now, TimeZoneInfo zone, TimeSpan? dueTime = null)
     {
         var localNow = TimeZoneInfo.ConvertTime(now, zone).DateTime;
-        var candidate = dueDate?.Date.AddHours(9);
+        var candidate = dueDate?.Date.Add(dueTime ?? TimeSpan.FromHours(9));
         if (candidate is { } due && due > localNow && !zone.IsInvalidTime(due) && !zone.IsAmbiguousTime(due))
             return due;
         return TimeZoneInfo.ConvertTime(now.AddHours(1), zone).DateTime;

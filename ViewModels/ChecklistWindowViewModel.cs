@@ -199,6 +199,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
                 Priority  = d.Priority,
                 TabId     = assignedTab?.Id,
                 DueDate   = d.DueDate,
+                DueTime   = d.DueTime,
                 NotificationStyle = d.NotificationStyle,
                 NotificationOptions = d.NotificationOptions,
                 ReminderAtUtc = duplicate ? null : d.ReminderAtUtc,
@@ -352,7 +353,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
     {
         if (_isRefreshing ||
             _isBulkUpdating ||
-            e.PropertyName is nameof(ChecklistItem.IsExpanded) or nameof(ChecklistItem.IsEditingTitle) or nameof(ChecklistItem.HasActiveReminder)) return;
+            e.PropertyName is nameof(ChecklistItem.IsExpanded) or nameof(ChecklistItem.IsEditingTitle) or nameof(ChecklistItem.HasActiveReminder) or nameof(ChecklistItem.DueAtLocal)) return;
 
         NotifyProgress();
         SaveItems();
@@ -428,7 +429,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             {
                 ChecklistSortMode.Priority    => source.OrderByDescending(i => (int)i.Priority),
                 ChecklistSortMode.DueDate     => source.OrderBy(i => i.DueDate.HasValue ? 0 : 1)
-                                                    .ThenBy(i => i.DueDate ?? DateTime.MaxValue),
+                                                    .ThenBy(i => i.DueAtLocal ?? DateTime.MaxValue),
                 ChecklistSortMode.Alphabetical => source.OrderBy(i => i.Text, StringComparer.OrdinalIgnoreCase),
                 _                              => source
             };
@@ -533,6 +534,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             Priority  = item.Priority,
             TabId     = item.TabId,
             DueDate   = item.DueDate,
+            DueTime   = item.DueTime,
             Notes     = item.Notes,
             CreatedAt = DateTime.Now
         };
@@ -778,6 +780,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             Priority  = i.Priority,
             TabId     = i.TabId,
             DueDate   = i.DueDate,
+            DueTime   = i.DueTime,
             ReminderAtUtc = i.ReminderAtUtc,
             ReminderHandledAtUtc = i.ReminderHandledAtUtc,
             NotificationStyle = i.NotificationStyle,
