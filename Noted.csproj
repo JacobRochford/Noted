@@ -27,5 +27,6 @@
 
   <ItemGroup>
     <Resource Include="Resources/notes.ico" />
+    <Resource Include="Resources/ReminderAlarm.wav" />
   </ItemGroup>
 </Project>

@@ -16,6 +16,7 @@ public sealed record ChecklistReminderOccurrence
     public Guid Id { get; init; }
     public DateTimeOffset ScheduledAtUtc { get; init; }
     public string ConfirmationCode { get; init; } = "";
+    public ChecklistNotificationOptions? Options { get; init; }
     public DateTimeOffset? AcknowledgedAtUtc { get; init; }
     public DateTimeOffset? SilencedAtUtc { get; init; }
 

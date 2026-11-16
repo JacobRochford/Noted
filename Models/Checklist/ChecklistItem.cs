@@ -18,6 +18,7 @@ public sealed class ChecklistItem : ObservableObject
     private DateTimeOffset? _reminderAtUtc;
     private DateTimeOffset? _reminderHandledAtUtc;
     private ChecklistNotificationStyle _notificationStyle;
+    private ChecklistNotificationOptions? _notificationOptions;
     private ChecklistReminderOccurrence? _reminderOccurrence;
     private string _notes = "";
     private bool _isExpanded;
@@ -87,6 +88,12 @@ public sealed class ChecklistItem : ObservableObject
                 _reminderAtUtc.HasValue && !_isChecked ? value?.ToUniversalTime() : null))
                 OnPropertyChanged(nameof(HasActiveReminder));
         }
+    }
+
+    public ChecklistNotificationOptions? NotificationOptions
+    {
+        get => _notificationOptions;
+        set => SetProperty(ref _notificationOptions, value?.Normalize());
     }
 
     public ChecklistNotificationStyle NotificationStyle

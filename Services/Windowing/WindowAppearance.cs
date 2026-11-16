@@ -94,6 +94,7 @@ public static class WindowAppearance
         [typeof(AppDialog)] = PersistenceKeys.AppDialog,
         [typeof(BackupPreviewDialog)] = PersistenceKeys.BackupPreviewDialog,
         [typeof(ChecklistPriorityColorsDialog)] = PersistenceKeys.ChecklistPriorityColorsDialog,
+        [typeof(ChecklistNotificationOptionsDialog)] = PersistenceKeys.ChecklistNotificationOptionsDialog,
         [typeof(NewNoteNameDialog)] = PersistenceKeys.NewNoteNameDialog
     };
 
@@ -104,6 +105,18 @@ public static class WindowAppearance
     private static void RefreshAll()
     {
         foreach (var window in s_targets.Keys.ToArray()) Refresh(window);
+    }
+
+    internal static void ApplyNotificationContrast(Window window, bool highContrast)
+    {
+        foreach (var key in new[] { "NotedSurfaceBrush", "NotedInputBackgroundBrush", "NotedSubtleSurfaceBrush", "NotedAccentSoftBrush", "NotedAccentSoftHoverBrush" })
+            if (highContrast) window.Resources[key] = SystemColors.WindowBrush; else window.Resources.Remove(key);
+        foreach (var key in new[] { "NotedTextBrush", "NotedSecondaryTextBrush", "NotedMutedTextBrush", "NotedBorderBrush", "NotedDangerBrush" })
+            if (highContrast) window.Resources[key] = SystemColors.WindowTextBrush; else window.Resources.Remove(key);
+        foreach (var key in new[] { "NotedAccentBrush", "NotedAccentHoverBrush", "NotedAccentPressedBrush" })
+            if (highContrast) window.Resources[key] = SystemColors.HighlightBrush; else window.Resources.Remove(key);
+        if (highContrast) window.Resources["NotedAccentTextBrush"] = SystemColors.HighlightTextBrush;
+        else window.Resources.Remove("NotedAccentTextBrush");
     }
 
     internal static void Refresh(Window window)

@@ -216,9 +216,10 @@ public partial class ChecklistWindow : OverlayWindow
     {
         var active = _creatingItem ?? _editingItem;
         if (active is not null && !TryFinishItem(active, keepEmpty: true, focusList: false, collapse: false)) return;
-        var dialog = new ChecklistReminderDialog(item.ReminderAtUtc, item.DueDate) { Owner = this };
+        var dialog = new ChecklistReminderDialog(item.ReminderAtUtc, item.DueDate, item.NotificationStyle, item.NotificationOptions,
+            _settingsService.LoadChecklistNotificationOptions()) { Owner = this };
         if (dialog.ShowDialog() != true) return;
-        if (!_viewModel.TrySetReminder(item, dialog.ReminderAtUtc, out var error))
+        if (!_viewModel.TrySetReminder(item, dialog.ReminderAtUtc, dialog.NotificationStyle, dialog.NotificationOptions, out var error))
             ShowPersistenceWarningOnce(error);
     }
 

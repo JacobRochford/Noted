@@ -80,11 +80,7 @@ public sealed class ChecklistPersistentNotificationTests
         var original = new AppNotificationBuilder().AddText(content.Title).AddText(content.Text);
         foreach (var argument in content.Arguments) original.AddArgument(argument.Key, argument.Value);
         var baseline = original.BuildNotification().Payload;
-        foreach (var sound in Enum.GetValues<ChecklistWindowsNotificationSound>())
-        {
-            var configured = content with { Sound = sound };
-            Assert.AreEqual(baseline, configured.BuildNotification().Payload);
-        }
+        Assert.AreEqual(baseline, content.BuildNotification().Payload);
     }
 
     [TestMethod]
@@ -226,6 +222,39 @@ public sealed class ChecklistPersistentNotificationTests
         Assert.IsNotNull(model.Items[1].ReminderHandledAtUtc);
         Assert.IsNull(model.Items[1].ReminderOccurrence);
     });
+
+    [TestMethod]
+    [DataRow(ChecklistNotificationStyle.Standard)]
+    [DataRow(ChecklistNotificationStyle.Persistent)]
+    public void WindowsPreviewCannotBecomeARealTaskActivation(ChecklistNotificationStyle style)
+    {
+        var content = ChecklistNotificationContent.CreatePreview(style, new());
+        var toast = XElement.Parse(content.BuildNotification().Payload);
+        Assert.IsFalse(ChecklistReminderActivation.TryParse(content.Arguments, out _));
+        Assert.IsFalse(content.Arguments.ContainsKey("taskId"));
+        Assert.IsTrue(toast.Descendants("text").Any(text => text.Value.StartsWith("[Preview]")));
+        if (style == ChecklistNotificationStyle.Persistent)
+            Assert.AreEqual((string?)toast.Attribute("launch"), (string?)toast.Descendants("action").Single().Attribute("arguments"));
+    }
+
+    [TestMethod]
+    public void ExplicitStandardSoundOverrideDoesNotChangeDefaultBehavior()
+    {
+        var defaultToast = XElement.Parse(ChecklistNotificationContent.Create([Reminder(ChecklistNotificationStyle.Standard)]).BuildNotification().Payload);
+        Assert.IsNull(defaultToast.Element("audio"));
+        var silent = XElement.Parse(ChecklistNotificationContent.Create([Reminder(ChecklistNotificationStyle.Standard)], ChecklistWindowsNotificationSound.Silent).BuildNotification().Payload);
+        Assert.AreEqual("true", (string?)silent.Element("audio")!.Attribute("silent"));
+    }
+
+    [TestMethod]
+    public void PreviewSessionsHaveDistinctNativeIdentities()
+    {
+        var first = ChecklistNotifications.BuildPreviewNotification(ChecklistNotificationStyle.Persistent, new());
+        var second = ChecklistNotifications.BuildPreviewNotification(ChecklistNotificationStyle.Persistent, new());
+        Assert.AreNotEqual(first.Tag, second.Tag);
+        Assert.AreEqual(first.Group, second.Group);
+        Assert.AreEqual(16, first.Tag.Length);
+    }
 
     private static ChecklistReminder Reminder(ChecklistNotificationStyle style) =>
         new(Guid.NewGuid(), s_now, "task", s_now, style);

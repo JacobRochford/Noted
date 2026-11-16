@@ -24,6 +24,7 @@ internal static class PersistenceKeys
     internal const string AppDialog = "AppDialog";
     internal const string BackupPreviewDialog = "BackupPreviewDialog";
     internal const string ChecklistPriorityColorsDialog = "ChecklistPriorityColorsDialog";
+    internal const string ChecklistNotificationOptionsDialog = "ChecklistNotificationOptionsDialog";
     internal const string NewNoteNameDialog = "NewNoteNameDialog";
 
     private static readonly IReadOnlyDictionary<HotkeyFeature, string> s_hotkeys =

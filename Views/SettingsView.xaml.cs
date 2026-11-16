@@ -97,6 +97,17 @@ public partial class SettingsView : UserControl
     private void TimestampLineTextBox_LostFocus(object sender, RoutedEventArgs e) =>
         ViewModel?.CommitTimestampLine();
 
+    private void NotificationDefaults_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not { } model) return;
+        var settings = model.NotificationSettings;
+        var dialog = new ChecklistNotificationOptionsDialog(settings.LoadChecklistNotificationOptions()) { Owner = Window.GetWindow(this) };
+        if (dialog.ShowDialog() != true) return;
+        try { settings.SaveChecklistNotificationOptions(dialog.Options); }
+        catch (SettingsPersistenceException exception)
+        { AppDialog.Show(exception.Message, "Notification settings", MessageBoxButton.OK, MessageBoxImage.Warning); }
+    }
+
     private void EditHotkeyButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string featureText } button

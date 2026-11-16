@@ -11,6 +11,7 @@ internal sealed record AppSettingsDocument
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     public long Revision { get; init; }
     public DateTimeOffset? SavedUtc { get; init; }
+    public ChecklistNotificationOptions? ChecklistNotificationDefaults { get; init; }
     public string? NotesDirectory { get; init; }
     public NoteTimestampPlacement TimestampPlacement { get; init; } = NoteTimestampPlacement.None;
     public int TimestampLine { get; init; } = 1;

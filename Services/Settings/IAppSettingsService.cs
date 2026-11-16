@@ -5,6 +5,8 @@ namespace Noted.Services;
 public interface IAppSettingsService {
     bool LoadIncludeEntireNotesFolderInBackups();
     void SaveIncludeEntireNotesFolderInBackups(bool include);
+    ChecklistNotificationOptions LoadChecklistNotificationOptions() => new();
+    void SaveChecklistNotificationOptions(ChecklistNotificationOptions options) => throw new NotSupportedException();
     string AppDataDirectory { get; }
     IReadOnlyList<string> LoadHiddenUtilities();
     void SaveHiddenUtilities(IReadOnlyList<string> hiddenUtilities);

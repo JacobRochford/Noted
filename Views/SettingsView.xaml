@@ -22,10 +22,16 @@
                                 <ComboBoxItem Content="Utilities &amp; Shortcuts" Tag="Utilities"/>
                                 <ComboBoxItem Content="Storage &amp; Backups" Tag="Storage"/>
                                 <ComboBoxItem Content="Windows Integration" Tag="Integration"/>
+                                <ComboBoxItem Content="Notifications" Tag="Notifications"/>
                             </ComboBox>
                             <ScrollViewer x:Name="SettingsScrollViewer"
                                           VerticalScrollBarVisibility="Auto">
                             <StackPanel x:Name="SettingsSections">
+                                <StackPanel Tag="Notifications" Margin="12">
+                                    <TextBlock Text="Checklist notifications" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                                    <TextBlock Text="Set default alert appearance, sounds and acknowledgment. Individual reminders can override these options. Active urgent reminders keep their acknowledgment requirements." TextWrapping="Wrap" Margin="0,0,0,12"/>
+                                    <Button Content="Customize notification defaults..." Click="NotificationDefaults_Click" Padding="12,8" HorizontalAlignment="Left"/>
+                                </StackPanel>
 
                             <Border Tag="Appearance" Background="Transparent"
                                     BorderBrush="{DynamicResource NotedBorderBrush}"

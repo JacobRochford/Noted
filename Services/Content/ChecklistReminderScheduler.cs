@@ -7,7 +7,7 @@ namespace Noted.Services;
 
 internal sealed record ChecklistReminder(Guid TaskId, DateTimeOffset ReminderAtUtc, string Text, DateTimeOffset BatchUtc = default,
     ChecklistNotificationStyle Style = ChecklistNotificationStyle.Standard,
-    ChecklistReminderOccurrence? Occurrence = null, string Notes = "");
+    ChecklistReminderOccurrence? Occurrence = null, string Notes = "", ChecklistNotificationOptions? Options = null);
 
 internal sealed class ChecklistReminderScheduler : IDisposable
 {
@@ -18,6 +18,7 @@ internal sealed class ChecklistReminderScheduler : IDisposable
     private readonly DispatcherTimer _timer;
     private readonly Func<IReadOnlyList<ChecklistReminder>, bool> _submit;
     private readonly TimeProvider _clock;
+    private readonly Func<ChecklistNotificationOptions>? _notificationDefaults;
     private readonly Func<IReadOnlyList<ChecklistReminder>, bool>? _submitUrgent;
     private readonly HashSet<(Guid TaskId, Guid OccurrenceId)> _presentedUrgent = [];
     private long? _failureTimestamp;
@@ -31,13 +32,15 @@ internal sealed class ChecklistReminderScheduler : IDisposable
         Dispatcher dispatcher,
         Func<IReadOnlyList<ChecklistReminder>, bool> submit,
         TimeProvider? clock = null,
-        Func<IReadOnlyList<ChecklistReminder>, bool>? submitUrgent = null)
+        Func<IReadOnlyList<ChecklistReminder>, bool>? submitUrgent = null,
+        Func<ChecklistNotificationOptions>? notificationDefaults = null)
     {
         _model = model;
         _dispatcher = dispatcher;
         _submit = submit;
         _clock = clock ?? TimeProvider.System;
         _submitUrgent = submitUrgent;
+        _notificationDefaults = notificationDefaults;
         _timer = new DispatcherTimer(DispatcherPriority.Background, dispatcher);
         _timer.Tick += Timer_Tick;
         _model.ReminderStateChanged += ReminderStateChanged;
@@ -85,10 +88,12 @@ internal sealed class ChecklistReminderScheduler : IDisposable
             now = _clock.GetUtcNow();
             // the persisted submission time also identifies a grouped notification after restart.
             var batchUtc = now;
+            var defaults = _notificationDefaults?.Invoke() ?? new ChecklistNotificationOptions();
             var reminders = _model.Items.Where(item => IsDue(item, now))
                 .OrderBy(item => item.ReminderAtUtc)
                 .Select(item => new ChecklistReminder(item.Id, item.ReminderAtUtc!.Value, item.Text, batchUtc,
-                    item.NotificationStyle, item.ReminderOccurrence, item.Notes))
+                    item.NotificationStyle, item.ReminderOccurrence, item.Notes,
+                    (item.ReminderOccurrence?.Options ?? item.NotificationOptions ?? defaults).Normalize()))
                 .ToArray();
             if (reminders.Length == 0) return;
 

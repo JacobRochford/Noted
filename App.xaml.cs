@@ -437,6 +437,13 @@ public partial class App : Application
         return viewModel;
     }
 
+    internal uint PreviewChecklistWindowsNotification(ChecklistNotificationStyle style, ChecklistNotificationOptions options) =>
+        _checklistNotifications?.TryPreview(style, options) ?? 0;
+    internal void StopChecklistNotificationPreview(uint notificationId)
+    {
+        if (_checklistNotifications is not null) ObserveBackgroundTask(_checklistNotifications.StopPreviewAsync(notificationId));
+    }
+
     private void StartChecklistReminders()
     {
         if (_isShuttingDown || _checklistReminderScheduler is not null) return;
@@ -444,8 +451,11 @@ public partial class App : Application
         _urgentReminderPresenter ??= new ChecklistUrgentReminderPresenter(owner, Dispatcher,
             taskId => QueueReminderActivation(new(taskId, null)));
         _checklistReminderScheduler = new ChecklistReminderScheduler(
-            owner, Dispatcher, reminders => _checklistNotifications?.TrySubmit(reminders) == true,
-            submitUrgent: _urgentReminderPresenter.TrySubmit);
+            owner, Dispatcher, reminders => _checklistNotifications?.TrySubmit(reminders,
+                reminders[0].Style == ChecklistNotificationStyle.Standard
+                    ? reminders[0].Options?.StandardSound : reminders[0].Options?.PersistentSound) == true,
+            submitUrgent: _urgentReminderPresenter.TrySubmit,
+            notificationDefaults: () => _settingsService!.LoadChecklistNotificationOptions());
     }
 
     private void QueueReminderActivation(ChecklistReminderActivation request)

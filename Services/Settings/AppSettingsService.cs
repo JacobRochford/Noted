@@ -473,6 +473,12 @@ public sealed class AppSettingsService : IAppSettingsService {
         });
     }
 
+    public ChecklistNotificationOptions LoadChecklistNotificationOptions() =>
+        LoadSetting(s => (s.ChecklistNotificationDefaults ?? new()).Normalize());
+
+    public void SaveChecklistNotificationOptions(ChecklistNotificationOptions options) =>
+        SaveSetting(s => s with { ChecklistNotificationDefaults = options.Normalize() });
+
     public bool LoadNotedButtonOnLeft() => LoadSetting(s => s.NotedButtonOnLeft);
 
     public void SaveNotedButtonOnLeft(bool onLeft) =>

@@ -200,6 +200,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
                 TabId     = assignedTab?.Id,
                 DueDate   = d.DueDate,
                 NotificationStyle = d.NotificationStyle,
+                NotificationOptions = d.NotificationOptions,
                 ReminderAtUtc = duplicate ? null : d.ReminderAtUtc,
                 ReminderHandledAtUtc = duplicate ? null : d.ReminderHandledAtUtc,
                 Notes     = d.Notes ?? "",
@@ -207,7 +208,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             };
             if (!duplicate && item.NotificationStyle == ChecklistNotificationStyle.Urgent && item.ReminderAtUtc.HasValue)
                 item.ReminderOccurrence = d.ReminderOccurrence is { IsValid: true } occurrence && occurrence.ScheduledAtUtc == item.ReminderAtUtc
-                    ? occurrence with { ScheduledAtUtc = occurrence.ScheduledAtUtc.ToUniversalTime(), AcknowledgedAtUtc = occurrence.AcknowledgedAtUtc?.ToUniversalTime(),
+                    ? occurrence with { Options = occurrence.Options?.Normalize(), ScheduledAtUtc = occurrence.ScheduledAtUtc.ToUniversalTime(), AcknowledgedAtUtc = occurrence.AcknowledgedAtUtc?.ToUniversalTime(),
                         SilencedAtUtc = occurrence.SilencedAtUtc?.ToUniversalTime() }
                     : ChecklistReminderOccurrence.Create(item.ReminderAtUtc.Value);
             repairedItems |= item.NotificationStyle != d.NotificationStyle || item.ReminderOccurrence != d.ReminderOccurrence;
@@ -538,7 +539,11 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         Items.Insert(idx >= 0 ? idx + 1 : Items.Count, dup);
     }
 
-    internal bool TrySetReminder(ChecklistItem item, DateTimeOffset? reminder, out string? error)
+    internal bool TrySetReminder(ChecklistItem item, DateTimeOffset? reminder, out string? error) =>
+        TrySetReminder(item, reminder, item.NotificationStyle, item.NotificationOptions, out error);
+
+    internal bool TrySetReminder(ChecklistItem item, DateTimeOffset? reminder, ChecklistNotificationStyle style,
+        ChecklistNotificationOptions? options, out string? error)
     {
         error = null;
         if (!Items.Contains(item) || (item.IsChecked && reminder is not null))
@@ -551,10 +556,23 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             error = "Choose a reminder time in the future.";
             return false;
         }
+        item.NotificationStyle = style;
+        item.NotificationOptions = options;
         if (reminder.HasValue && item.ReminderAtUtc == reminder && item.NotificationStyle == ChecklistNotificationStyle.Urgent)
             item.ReminderOccurrence = ChecklistReminderOccurrence.Create(reminder.Value, item.ReminderOccurrence?.ConfirmationCode);
         item.ReminderAtUtc = reminder;
         item.ReminderHandledAtUtc = null;
+        return TrySaveItems(null, out error);
+    }
+
+    internal bool TryCaptureUrgentOptions(IReadOnlyList<ChecklistReminder> reminders, out string? error)
+    {
+        var items = Items.ToDictionary(item => item.Id);
+        foreach (var reminder in reminders)
+            if (reminder.Style == ChecklistNotificationStyle.Urgent && items.TryGetValue(reminder.TaskId, out var item) &&
+                item.ReminderOccurrence is { Options: null } occurrence && occurrence.Id == reminder.Occurrence?.Id)
+                item.ReminderOccurrence = occurrence with { Options = (reminder.Options ?? item.NotificationOptions ?? new()).Normalize() };
+        // persist the snapshot before any new acknowledgment controls or sounds are presented.
         return TrySaveItems(null, out error);
     }
 
@@ -574,7 +592,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             error = "This reminder occurrence is no longer available.";
             return false;
         }
-        var updated = acknowledge ? occurrence with { ScheduledAtUtc = occurrence.ScheduledAtUtc.ToUniversalTime(), AcknowledgedAtUtc = occurrence.AcknowledgedAtUtc ?? now.ToUniversalTime() }
+        var updated = acknowledge ? occurrence with { Options = occurrence.Options?.Normalize(), ScheduledAtUtc = occurrence.ScheduledAtUtc.ToUniversalTime(), AcknowledgedAtUtc = occurrence.AcknowledgedAtUtc ?? now.ToUniversalTime() }
             : occurrence with { SilencedAtUtc = occurrence.SilencedAtUtc ?? now.ToUniversalTime() };
         item.ReminderOccurrence = updated;
         if (TrySaveItems(null, out error)) return true;
@@ -763,6 +781,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             ReminderAtUtc = i.ReminderAtUtc,
             ReminderHandledAtUtc = i.ReminderHandledAtUtc,
             NotificationStyle = i.NotificationStyle,
+            NotificationOptions = i.NotificationOptions,
             ReminderOccurrence = i.ReminderOccurrence,
             Notes     = i.Notes,
             CreatedAt = i.CreatedAt

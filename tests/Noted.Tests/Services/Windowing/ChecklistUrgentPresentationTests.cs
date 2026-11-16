@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Windows.Input;
 using System.IO;
 using System.Reflection;
 using System.Windows;
@@ -170,6 +172,7 @@ public sealed class ChecklistUrgentPresentationTests
         using var scheduler = new ChecklistReminderScheduler(owner, Dispatcher.CurrentDispatcher, _ => false,
             new Clock(), presentation.TryAccept);
         Assert.AreEqual(1, presentation.Entries.Count, "An already delivered urgent occurrence must survive a clock rollback.");
+        presentation.Entries.Single().ConfirmationInput = item.ReminderOccurrence!.ConfirmationCode;
         Assert.IsTrue(presentation.TryAcknowledge(presentation.Entries.Single()));
         Assert.IsFalse(item.IsChecked);
     });
@@ -203,6 +206,48 @@ public sealed class ChecklistUrgentPresentationTests
         finally { window.CloseForShutdown(); }
     });
 
+    [TestMethod]
+    [TestCategory("DesktopInteraction")]
+    public void SwitchingHoldControlsRetainsNewHoldAndRejectsMismatchedRelease() => WpfTestHost.Invoke(() =>
+    {
+        using var owner = Owner(new Store());
+        foreach (var title in new[] { "first", "second" })
+        {
+            var item = TaskItem(); item.Text = title;
+            item.ReminderOccurrence = item.ReminderOccurrence! with
+            { Options = new() { Acknowledgment = ChecklistAcknowledgment.Hold, Size = ChecklistAlertSize.Percentage, ScreenPercent = 30, UrgentSound = ChecklistUrgentSound.Silent } };
+            owner.Items.Add(item);
+        }
+        using var model = new ChecklistUrgentRemindersViewModel(owner, Dispatcher.CurrentDispatcher, new Clock(), isPreview: true);
+        model.TryAccept(owner.Items.Select(Request).ToArray());
+        var window = new ChecklistUrgentReminderWindow(model);
+        try
+        {
+            window.ShowAlert(); window.UpdateLayout();
+            var buttons = Descendants(window).OfType<Button>()
+                .Where(button => button.Content is string text && text.StartsWith("Hold for", StringComparison.Ordinal)).ToArray();
+            Assert.AreEqual(2, buttons.Length);
+            var begin = typeof(ChecklistUrgentReminderWindow).GetMethod("BeginHold", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var holding = typeof(ChecklistUrgentReminderWindow).GetField("_holding", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            begin.Invoke(window, [buttons[0], false]);
+            begin.Invoke(window, [buttons[1], false]);
+            Assert.AreSame(buttons[1], Keyboard.FocusedElement);
+            Assert.AreSame(model.Entries[1], holding.GetValue(window));
+            Assert.IsTrue(model.Entries[1].HoldStarted.HasValue);
+            begin.Invoke(window, [buttons[1], true]);
+            model.Entries[1].HoldStarted = Stopwatch.GetTimestamp() - Stopwatch.Frequency * 3;
+            var keyUp = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window)!, Environment.TickCount, Key.Space) { RoutedEvent = Keyboard.PreviewKeyUpEvent };
+            typeof(ChecklistUrgentReminderWindow).GetMethod("HoldKeyUp", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [buttons[1], keyUp]);
+            Assert.IsNull(owner.Items[1].ReminderOccurrence!.AcknowledgedAtUtc);
+            Assert.AreSame(model.Entries[1], holding.GetValue(window));
+            begin.Invoke(window, [buttons[1], false]);
+            var mouseUp = new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left) { RoutedEvent = UIElement.PreviewMouseLeftButtonUpEvent };
+            typeof(ChecklistUrgentReminderWindow).GetMethod("HoldMouseUp", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [buttons[1], mouseUp]);
+            Assert.AreSame(model.Entries[1], holding.GetValue(window));
+        }
+        finally { window.CloseForShutdown(); }
+    });
+
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
     {
         yield return root;
@@ -210,8 +255,12 @@ public sealed class ChecklistUrgentPresentationTests
             foreach (var child in Descendants(VisualTreeHelper.GetChild(root, index))) yield return child;
     }
 
-    private static ChecklistItem TaskItem() => new() { Text = "task", NotificationStyle = ChecklistNotificationStyle.Urgent,
-        ReminderAtUtc = s_now.AddMinutes(-1) };
+    private static ChecklistItem TaskItem()
+    {
+        var item = new ChecklistItem { Text = "task", NotificationStyle = ChecklistNotificationStyle.Urgent, ReminderAtUtc = s_now.AddMinutes(-1) };
+        item.ReminderOccurrence = item.ReminderOccurrence! with { Options = new() { Acknowledgment = ChecklistAcknowledgment.Button } };
+        return item;
+    }
     private static ChecklistReminder Request(ChecklistItem item) => new(item.Id, item.ReminderAtUtc!.Value, item.Text,
         Style: ChecklistNotificationStyle.Urgent, Occurrence: item.ReminderOccurrence, Notes: item.Notes);
     private static ChecklistWindowViewModel Owner(Store store) => new(store, Dispatcher.CurrentDispatcher, action => action(), false);

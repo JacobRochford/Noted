@@ -4,8 +4,12 @@
         Title="Urgent Checklist reminders" Width="900" Height="650"
         WindowStyle="None" ResizeMode="NoResize" Topmost="True" ShowInTaskbar="True"
         Background="{DynamicResource NotedSurfaceBrush}" Foreground="{DynamicResource NotedTextBrush}">
+
+    <Window.Resources><BooleanToVisibilityConverter x:Key="BoolVisibility"/></Window.Resources>
     <Border BorderBrush="{DynamicResource NotedAccentBrush}" BorderThickness="4" Padding="24">
         <Grid>
+            <Border x:Name="PulseAccent" BorderBrush="{DynamicResource NotedAccentBrush}" BorderThickness="4"
+                    Margin="-24" Panel.ZIndex="10" IsHitTestVisible="False"/>
             <Grid x:Name="DetailsPanel">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -13,6 +17,9 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <DockPanel Margin="0,0,0,20">
+                    <Button DockPanel.Dock="Right" Content="Stop preview" Padding="14,7" Margin="16,0,0,0"
+                            Visibility="{Binding IsPreview, Converter={StaticResource BoolVisibility}}"
+                            Style="{StaticResource NotedSecondaryButton}" Click="StopPreview_Click"/>
                     <Button DockPanel.Dock="Right" Content="Show smaller" Padding="14,7" Margin="16,0,0,0"
                             Style="{StaticResource NotedSecondaryButton}" Click="ShowSmaller_Click"/>
                     <TextBlock x:Name="Heading" Text="{Binding Summary}" FontSize="30" FontWeight="SemiBold"
@@ -22,9 +29,10 @@
                     <ItemsControl ItemsSource="{Binding Entries}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,16">
+
+    <Border BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,16">
                                     <StackPanel>
-                                        <TextBlock Text="{Binding Title}" FontSize="28" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Title}" FontSize="{Binding Options.TextSize}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                                         <TextBlock Text="{Binding Tab.Name}" Margin="0,8,0,0"/>
                                         <TextBlock Text="{Binding ScheduledText}" Margin="0,4,0,0"/>
                                         <TextBlock Text="{Binding OverdueText}" FontWeight="SemiBold" Margin="0,4,0,8"/>
@@ -45,7 +53,21 @@
                                                     </Style>
                                                 </Button.Style>
                                             </Button>
-                                            <Button Content="Acknowledge" Padding="14,8" Margin="0,0,0,8"
+                                            <StackPanel Visibility="{Binding UsesCode, Converter={StaticResource BoolVisibility}}" Margin="0,0,10,8">
+                                                <TextBlock Text="{Binding ConfirmationPrompt}" TextWrapping="Wrap" Margin="0,0,0,5"/>
+                                                <TextBox Text="{Binding ConfirmationInput, UpdateSourceTrigger=PropertyChanged}" MaxLength="4"
+                                                         MinWidth="120" Padding="8" AutomationProperties.Name="{Binding ConfirmationPrompt}"/>
+                                                <Button Content="Confirm code" Padding="14,8" Margin="0,5,0,0"
+                                                        Style="{StaticResource NotedPrimaryButton}" Click="Acknowledge_Click"/>
+                                            </StackPanel>
+                                            <StackPanel Visibility="{Binding UsesHold, Converter={StaticResource BoolVisibility}}" Margin="0,0,10,8">
+                                                <Button Content="{Binding HoldText}" Padding="14,8" Style="{StaticResource NotedPrimaryButton}"
+                                                        PreviewMouseLeftButtonDown="HoldMouseDown" PreviewMouseLeftButtonUp="HoldMouseUp"
+                                                        PreviewKeyDown="HoldKeyDown" PreviewKeyUp="HoldKeyUp" LostMouseCapture="HoldCaptureLost" LostKeyboardFocus="HoldFocusLost"/>
+                                                <ProgressBar Maximum="1" Value="{Binding HoldProgress, Mode=OneWay}" Height="5" Margin="0,6,0,0"
+                                                             AutomationProperties.Name="Acknowledgment hold progress"/>
+                                            </StackPanel>
+                                            <Button Content="Acknowledge" Visibility="{Binding UsesButton, Converter={StaticResource BoolVisibility}}" Padding="14,8" Margin="0,0,0,8"
                                                     Style="{StaticResource NotedPrimaryButton}" Click="Acknowledge_Click"
                                                     AutomationProperties.HelpText="Acknowledges this reminder without completing the task."/>
                                         </WrapPanel>
@@ -64,6 +86,8 @@
             <StackPanel x:Name="CompactPanel" Visibility="Collapsed">
                 <TextBlock Text="{Binding Summary}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"/>
                 <TextBlock Text="These reminders still need acknowledgment." TextWrapping="Wrap" Margin="0,8"/>
+                <Button Content="Stop preview" Visibility="{Binding IsPreview, Converter={StaticResource BoolVisibility}}"
+                        Click="StopPreview_Click" Style="{StaticResource NotedSecondaryButton}" Margin="0,0,0,8"/>
                 <Button Content="Return to alert" Style="{StaticResource NotedPrimaryButton}" Padding="12,8"
                         HorizontalAlignment="Left" Click="ReturnToAlert_Click"/>
             </StackPanel>

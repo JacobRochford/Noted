@@ -14,6 +14,7 @@ internal sealed record DisplayOption(string? DeviceName, string Label);
 internal sealed class SettingsViewModel : ObservableObject
 {
     private readonly IAppSettingsService _settings;
+    internal IAppSettingsService NotificationSettings => _settings;
     private readonly INoteFileService _files;
     private readonly IRunOnStartupService _startup;
     private readonly HotkeyConfiguration _hotkeys;

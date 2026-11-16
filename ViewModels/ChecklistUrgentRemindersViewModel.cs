@@ -24,6 +24,17 @@ public sealed class ChecklistUrgentReminderEntry : ObservableObject, IDisposable
     public ChecklistTab? Tab => _owner.Tabs.FirstOrDefault(tab => tab.Id == (Item.TabId ?? ChecklistTab.AllId));
     public string ScheduledText => $"Scheduled {ScheduledAtUtc.ToLocalTime():g}";
     public bool IsSilenced => Item.ReminderOccurrence?.SilencedAtUtc is not null;
+    public ChecklistNotificationOptions Options => (Item.ReminderOccurrence?.Options ?? new()).Normalize();
+    public bool UsesCode => Options.Acknowledgment == ChecklistAcknowledgment.Code;
+    public bool UsesHold => Options.Acknowledgment == ChecklistAcknowledgment.Hold;
+    public bool UsesButton => Options.Acknowledgment == ChecklistAcknowledgment.Button;
+    public string ConfirmationPrompt => $"Enter code {Item.ReminderOccurrence?.ConfirmationCode} to acknowledge";
+    private string _confirmationInput = "";
+    public string ConfirmationInput { get => _confirmationInput; set => SetProperty(ref _confirmationInput, value); }
+    internal long? HoldStarted { get; set; }
+    private double _holdProgress;
+    public double HoldProgress { get => _holdProgress; internal set => SetProperty(ref _holdProgress, value); }
+    public string HoldText => $"Hold for {Options.HoldSeconds} seconds, then release";
     public string SilenceText => IsSilenced ? "Silenced" : "Silence";
     private string _overdueText = "";
     public string OverdueText { get => _overdueText; private set => SetProperty(ref _overdueText, value); }
@@ -43,6 +54,9 @@ public sealed class ChecklistUrgentReminderEntry : ObservableObject, IDisposable
         if (e.PropertyName == nameof(ChecklistItem.TabId)) OnPropertyChanged(nameof(Tab));
         if (e.PropertyName == nameof(ChecklistItem.ReminderOccurrence))
         {
+            OnPropertyChanged(nameof(Options));
+            OnPropertyChanged(nameof(UsesCode)); OnPropertyChanged(nameof(UsesHold)); OnPropertyChanged(nameof(UsesButton));
+            OnPropertyChanged(nameof(ConfirmationPrompt));
             OnPropertyChanged(nameof(IsSilenced));
             OnPropertyChanged(nameof(SilenceText));
         }
@@ -61,14 +75,16 @@ public sealed class ChecklistUrgentRemindersViewModel : ObservableObject, IDispo
     private bool _disposed;
     private string? _statusMessage;
 
-    internal ChecklistUrgentRemindersViewModel(ChecklistWindowViewModel owner, Dispatcher dispatcher, TimeProvider? clock = null)
+    internal ChecklistUrgentRemindersViewModel(ChecklistWindowViewModel owner, Dispatcher dispatcher, TimeProvider? clock = null, bool isPreview = false)
     {
         _owner = owner;
+        IsPreview = isPreview;
         _dispatcher = dispatcher;
         _clock = clock ?? TimeProvider.System;
         Entries = new(_entries);
         owner.ReminderStateChanged += OwnerChanged;
     }
+    public bool IsPreview { get; }
     public ReadOnlyObservableCollection<ChecklistUrgentReminderEntry> Entries { get; }
     public string Summary => Entries.Count == 1 ? "1 urgent reminder" : $"{Entries.Count} urgent reminders";
     public string? StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
@@ -94,7 +110,34 @@ public sealed class ChecklistUrgentRemindersViewModel : ObservableObject, IDispo
         return _entries.Count > 0;
     }
 
-    internal bool TryAcknowledge(ChecklistUrgentReminderEntry entry) => UpdateAction(entry, acknowledge: true);
+    internal bool TryAcknowledge(ChecklistUrgentReminderEntry entry)
+    {
+        if (entry.UsesHold) { StatusMessage = "Hold the acknowledgment control, then release."; return false; }
+        if (entry.UsesCode && !string.Equals(entry.ConfirmationInput, entry.Item.ReminderOccurrence?.ConfirmationCode, StringComparison.Ordinal))
+        { StatusMessage = "Enter the four-digit code shown for this reminder."; return false; }
+        return UpdateAction(entry, acknowledge: true);
+    }
+    internal void BeginHold(ChecklistUrgentReminderEntry entry)
+    {
+        CancelHolds();
+        if (_entries.Contains(entry) && entry.UsesHold) entry.HoldStarted = _clock.GetTimestamp();
+    }
+    internal void UpdateHold(ChecklistUrgentReminderEntry entry)
+    {
+        if (entry.HoldStarted is { } started)
+            entry.HoldProgress = Math.Clamp(_clock.GetElapsedTime(started).TotalSeconds / entry.Options.HoldSeconds, 0, 1);
+    }
+    internal bool FinishHold(ChecklistUrgentReminderEntry entry)
+    {
+        UpdateHold(entry);
+        var ready = entry.HoldStarted.HasValue && entry.HoldProgress >= 1;
+        CancelHolds();
+        return ready && UpdateAction(entry, acknowledge: true);
+    }
+    internal void CancelHolds()
+    {
+        foreach (var entry in _entries) { entry.HoldStarted = null; entry.HoldProgress = 0; }
+    }
     internal bool TrySilence(ChecklistUrgentReminderEntry entry) => UpdateAction(entry, acknowledge: false);
     private bool UpdateAction(ChecklistUrgentReminderEntry entry, bool acknowledge)
     {

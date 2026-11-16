@@ -20,6 +20,14 @@
         </DatePicker>
         <TextBlock Text="Time (24-hour, local)" Margin="0,12,0,4"/>
         <TextBox x:Name="ReminderTime" Padding="6" MaxLength="5" AutomationProperties.Name="Reminder time"/>
+        <TextBlock Text="Notification style" Margin="0,12,0,4"/>
+        <ComboBox x:Name="StyleChoice" SelectedIndex="0" Style="{StaticResource NotedComboBox}" AutomationProperties.Name="Notification style">
+            <ComboBoxItem Content="Standard Windows"/><ComboBoxItem Content="Persistent Windows"/><ComboBoxItem Content="Urgent Noted"/>
+        </ComboBox>
+        <CheckBox x:Name="CustomOptions" Content="Use custom options for this reminder" Style="{StaticResource NotedCheckBox}" Margin="0,12,0,8"/>
+        <WrapPanel><Button Content="Customize..." Click="Customize_Click" Style="{StaticResource NotedSecondaryButton}" Padding="10,5" Margin="0,0,8,0"/>
+            <Button Content="Preview" Click="Preview_Click" Style="{StaticResource NotedSecondaryButton}" Padding="10,5" Margin="0,0,8,0"/>
+            <Button Content="Stop preview" Click="StopPreview_Click" Style="{StaticResource NotedSecondaryButton}" Padding="10,5"/></WrapPanel>
         <TextBlock x:Name="ErrorText" Visibility="Collapsed" TextWrapping="Wrap" Margin="0,10,0,0"
                    Foreground="{DynamicResource NotedDangerBrush}" AutomationProperties.LiveSetting="Assertive"/>
         <WrapPanel HorizontalAlignment="Right" Margin="0,16,0,0">
