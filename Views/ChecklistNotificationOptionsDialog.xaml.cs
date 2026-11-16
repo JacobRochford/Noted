@@ -15,6 +15,7 @@ public partial class ChecklistNotificationOptionsDialog : Window
     internal ChecklistNotificationOptionsDialog(ChecklistNotificationOptions options, ChecklistNotificationStyle style = ChecklistNotificationStyle.Urgent)
     {
         InitializeComponent();
+        SourceInitialized += (_, _) => AppThemeManager.ApplyTitleBar(this);
         MaxHeight = Math.Max(300, SystemParameters.WorkArea.Height - 32);
         MinHeight = Math.Min(MinHeight, MaxHeight);
         Options = options.Normalize();

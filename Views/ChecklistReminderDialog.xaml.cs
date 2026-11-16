@@ -21,6 +21,7 @@ public partial class ChecklistReminderDialog : Window
         ChecklistNotificationOptions? defaults = null)
     {
         InitializeComponent();
+        SourceInitialized += (_, _) => AppThemeManager.ApplyTitleBar(this);
         _defaults = (defaults ?? new()).Normalize(); _custom = options?.Normalize();
         StyleChoice.SelectedIndex = (int)style; CustomOptions.IsChecked = options is not null;
         Closed += (_, _) => { _preview?.Dispose(); _preview = null; };
