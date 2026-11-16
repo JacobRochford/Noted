@@ -34,6 +34,7 @@ public partial class App : Application
     private IDisposable? _checklistBackupRegistration;
     private ChecklistWindowViewModel? _checklistViewModel;
     private ChecklistReminderScheduler? _checklistReminderScheduler;
+    private ChecklistUrgentReminderPresenter? _urgentReminderPresenter;
     private IDisposable? _dictionaryBackupRegistration;
     private IDisposable? _jotsBackupRegistration;
     private IDisposable? _jotCaptureBackupRegistration;
@@ -275,6 +276,8 @@ public partial class App : Application
         _reminderActivationReady = false;
         _checklistReminderScheduler?.Dispose();
         _checklistReminderScheduler = null;
+        _urgentReminderPresenter?.Dispose();
+        _urgentReminderPresenter = null;
         _checklistNotifications?.Dispose();
         _checklistNotifications = null;
         WindowManager.Main?.SuspendHotkeyCallbacks(true);
@@ -437,8 +440,12 @@ public partial class App : Application
     private void StartChecklistReminders()
     {
         if (_isShuttingDown || _checklistReminderScheduler is not null) return;
+        var owner = GetOrCreateChecklistViewModel();
+        _urgentReminderPresenter ??= new ChecklistUrgentReminderPresenter(owner, Dispatcher,
+            taskId => QueueReminderActivation(new(taskId, null)));
         _checklistReminderScheduler = new ChecklistReminderScheduler(
-            GetOrCreateChecklistViewModel(), Dispatcher, reminders => _checklistNotifications?.TrySubmit(reminders) == true);
+            owner, Dispatcher, reminders => _checklistNotifications?.TrySubmit(reminders) == true,
+            submitUrgent: _urgentReminderPresenter.TrySubmit);
     }
 
     private void QueueReminderActivation(ChecklistReminderActivation request)
@@ -833,6 +840,7 @@ public partial class App : Application
         var wasShuttingDown = _isShuttingDown;
         _isShuttingDown = true;
         _checklistReminderScheduler?.SetSuspended(true);
+        _urgentReminderPresenter?.SetSuspended(true);
         WindowManager.Main?.SuspendHotkeyCallbacks(true);
         try
         {
@@ -907,6 +915,7 @@ public partial class App : Application
                 _isShuttingDown = wasShuttingDown;
                 WindowManager.Main?.SuspendHotkeyCallbacks(wasShuttingDown);
                 _checklistReminderScheduler?.SetSuspended(wasShuttingDown);
+                _urgentReminderPresenter?.SetSuspended(wasShuttingDown);
                 if (!wasShuttingDown && _checklistReminderScheduler is null)
                     Dispatcher.BeginInvoke(StartChecklistReminders, DispatcherPriority.ContextIdle);
                 if (!wasShuttingDown) Dispatcher.BeginInvoke(DrainReminderActivations);

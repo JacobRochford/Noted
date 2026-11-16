@@ -30,7 +30,9 @@ public static class WindowAppearance
 
     private static void WindowLoaded(object sender, RoutedEventArgs e)
     {
-        if (sender is not Window window || !ReferenceEquals(e.OriginalSource, window) || s_targets.ContainsKey(window)) return;
+        // urgent alerts must remain opaque and independent of ordinary window appearance settings.
+        if (sender is not Window window || window is ChecklistUrgentReminderWindow ||
+            !ReferenceEquals(e.OriginalSource, window) || s_targets.ContainsKey(window)) return;
         var target = window is MainWindow ? window.FindName("NotesPanel") as FrameworkElement : window;
         if (target is null) return;
         window.SetCurrentValue(AlwaysVisibleProperty, s_settings?.LoadWindowAlwaysVisible(GetSettingsKey(window)) == true);

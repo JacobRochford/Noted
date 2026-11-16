@@ -161,11 +161,18 @@ internal sealed class ChecklistReminderScheduler : IDisposable
         else CheckNow();
     }
 
-    private bool IsDue(ChecklistItem item, DateTimeOffset now) =>
-        !item.IsChecked && item.ReminderAtUtc <= now &&
-        (item.NotificationStyle == ChecklistNotificationStyle.Urgent
-            ? item.ReminderOccurrence is { AcknowledgedAtUtc: null } occurrence && !_presentedUrgent.Contains((item.Id, occurrence.Id))
-            : item.ReminderHandledAtUtc is null);
+    private bool IsDue(ChecklistItem item, DateTimeOffset now) => PendingAtUtc(item, now) <= now;
+
+    private DateTimeOffset? PendingAtUtc(ChecklistItem item, DateTimeOffset now)
+    {
+        if (item.IsChecked || item.ReminderAtUtc is not { } scheduled) return null;
+        if (item.NotificationStyle != ChecklistNotificationStyle.Urgent)
+            return item.ReminderHandledAtUtc is null ? scheduled : null;
+        if (item.ReminderOccurrence is not { AcknowledgedAtUtc: null } occurrence ||
+            _presentedUrgent.Contains((item.Id, occurrence.Id))) return null;
+        // a clock rollback must not turn an already delivered urgent alert into a future reminder.
+        return item.ReminderHandledAtUtc is not null ? now : scheduled;
+    }
 
     private void Fail(string? error)
     {
@@ -181,11 +188,8 @@ internal sealed class ChecklistReminderScheduler : IDisposable
     {
         _timer.Stop();
         if (_disposed || _suspended) return;
-        var next = _model.Items.Where(item => !item.IsChecked &&
-            (item.NotificationStyle == ChecklistNotificationStyle.Urgent
-                ? item.ReminderOccurrence is { AcknowledgedAtUtc: null } occurrence && !_presentedUrgent.Contains((item.Id, occurrence.Id))
-                : item.ReminderHandledAtUtc is null))
-            .Select(item => item.ReminderAtUtc).Min();
+        var now = _clock.GetUtcNow();
+        var next = _model.Items.Select(item => PendingAtUtc(item, now)).Min();
         if (next is null && !_needsHandledFlush) return;
         var delay = next is { } due ? due - _clock.GetUtcNow() : s_retryDelay;
         var retry = RetryRemaining();

@@ -568,7 +568,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
     {
         var item = Items.FirstOrDefault(item => item.Id == taskId);
         if (item is null || item.IsChecked || item.NotificationStyle != ChecklistNotificationStyle.Urgent ||
-            item.ReminderAtUtc is not { } due || due > now ||
+            item.ReminderAtUtc is not { } due || (due > now && item.ReminderHandledAtUtc is null) ||
             item.ReminderOccurrence is not { } occurrence || occurrence.Id != occurrenceId)
         {
             error = "This reminder occurrence is no longer available.";
