@@ -38,6 +38,8 @@ public partial class ChecklistUrgentReminderWindow : Window
         SystemParameters.StaticPropertyChanged += SystemPreferenceChanged;
         InitializeComponent();
         DataContext = viewModel;
+        Resources["UrgentReminderTitleSize"] = 32d;
+        SizeChanged += (_, _) => Resources["UrgentReminderTitleSize"] = Math.Clamp(ActualWidth / 28, 28, 56);
         UpdateEffects();
     }
     internal IntPtr TargetMonitor => _monitor;
@@ -147,6 +149,14 @@ public partial class ChecklistUrgentReminderWindow : Window
     {
         if (IsInputReady && Entry(sender) is { } entry) _viewModel.TrySilence(entry);
     }
+    private void Confirmation_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Handled || e.Key != Key.Enter) return;
+        e.Handled = true;
+        if (e.IsRepeat || e.KeyboardDevice.Modifiers != ModifierKeys.None || !IsInputReady || Entry(sender) is not { UsesCode: true }) return;
+        Acknowledge_Click(sender, e);
+    }
+
     private void Acknowledge_Click(object sender, RoutedEventArgs e)
     {
         if (!IsInputReady || Entry(sender) is not { } entry) return;
@@ -166,7 +176,7 @@ public partial class ChecklistUrgentReminderWindow : Window
         WindowAppearance.ApplyNotificationContrast(this, SystemParameters.HighContrast);
         PulseAccent.BeginAnimation(OpacityProperty, null);
         PulseAccent.Opacity = 1;
-        if (_options.PulseAccent && SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
+        if (SystemParameters.ClientAreaAnimation && !SystemParameters.HighContrast)
             PulseAccent.BeginAnimation(OpacityProperty, new DoubleAnimation(0.4, 1, TimeSpan.FromSeconds(2.5))
                 { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
     }

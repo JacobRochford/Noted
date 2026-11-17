@@ -79,7 +79,7 @@ internal sealed class ChecklistUrgentReminderAudio : IDisposable
                 _clipSeconds = ValidateWav(options.CustomSoundPath!);
                 _player = new SoundPlayer(options.CustomSoundPath!);
             }
-            else LoadBuiltIn();
+            else LoadBuiltIn(options.UrgentSound);
             _player!.Load(); _player.Play();
             return true;
         }
@@ -99,10 +99,17 @@ internal sealed class ChecklistUrgentReminderAudio : IDisposable
             }
         }
     }
-    private void LoadBuiltIn()
+    private void LoadBuiltIn(ChecklistUrgentSound sound = ChecklistUrgentSound.Alarm)
     {
-        _clipSeconds = 1;
-        _stream = Application.GetResourceStream(new Uri("/Noted;component/Resources/ReminderAlarm.wav", UriKind.Relative))!.Stream;
+        var resource = sound switch
+        {
+            ChecklistUrgentSound.Chime => "ReminderChime.wav",
+            ChecklistUrgentSound.Digital => "ReminderDigital.wav",
+            ChecklistUrgentSound.Bell => "ReminderBell.wav",
+            _ => "ReminderAlarm.wav"
+        };
+        _clipSeconds = sound is ChecklistUrgentSound.Chime or ChecklistUrgentSound.Digital or ChecklistUrgentSound.Bell ? 1.3 : 1;
+        _stream = Application.GetResourceStream(new Uri("/Noted;component/Resources/" + resource, UriKind.Relative))!.Stream;
         _player = new SoundPlayer(_stream);
     }
     internal static double ValidateWav(string path)

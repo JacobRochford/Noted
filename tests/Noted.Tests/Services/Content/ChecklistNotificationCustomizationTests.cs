@@ -18,7 +18,8 @@ public sealed class ChecklistNotificationCustomizationTests
     {
         var options = new ChecklistNotificationOptions();
         Assert.AreEqual(ChecklistAlertSize.FullScreen, options.Size);
-        Assert.AreEqual(ChecklistAlertMonitor.Foreground, options.Monitor);
+        Assert.AreEqual(ChecklistAlertMonitor.Primary, options.Monitor);
+        Assert.AreEqual(ChecklistAlertMonitor.Primary, (options with { Monitor = (ChecklistAlertMonitor)999 }).Normalize().Monitor);
         Assert.IsTrue(options.PulseAccent); Assert.IsTrue(options.RepeatSound);
         Assert.AreEqual(10, options.RepeatSeconds); Assert.AreEqual(ChecklistAcknowledgment.Code, options.Acknowledgment);
         Assert.AreEqual(ChecklistUrgentSound.Alarm, options.UrgentSound);

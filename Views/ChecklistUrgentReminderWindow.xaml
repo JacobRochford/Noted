@@ -5,12 +5,16 @@
         WindowStyle="None" ResizeMode="NoResize" Topmost="True" ShowInTaskbar="True"
         Background="{DynamicResource NotedSurfaceBrush}" Foreground="{DynamicResource NotedTextBrush}">
 
-    <Window.Resources><BooleanToVisibilityConverter x:Key="BoolVisibility"/></Window.Resources>
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolVisibility"/>
+        <Style TargetType="TextBox" BasedOn="{StaticResource NotedTextInput}"/>
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource NotedScrollBar}"/>
+    </Window.Resources>
     <Border BorderBrush="{DynamicResource NotedAccentBrush}" BorderThickness="4" Padding="24">
         <Grid>
             <Border x:Name="PulseAccent" BorderBrush="{DynamicResource NotedAccentBrush}" BorderThickness="4"
                     Margin="-24" Panel.ZIndex="10" IsHitTestVisible="False"/>
-            <Grid x:Name="DetailsPanel">
+            <Grid x:Name="DetailsPanel" MaxWidth="1040" MaxHeight="900" VerticalAlignment="Center">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -32,17 +36,17 @@
 
     <Border BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,16">
                                     <StackPanel>
-                                        <TextBlock Text="{Binding Title}" FontSize="{Binding Options.TextSize}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Title}" FontSize="{DynamicResource UrgentReminderTitleSize}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                                         <TextBlock Text="{Binding Tab.Name}" Margin="0,8,0,0"/>
                                         <TextBlock Text="{Binding ScheduledText}" Margin="0,4,0,0"/>
                                         <TextBlock Text="{Binding OverdueText}" FontWeight="SemiBold" Margin="0,4,0,8"/>
                                         <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
                                             <TextBlock Text="{Binding Item.Notes}" FontSize="17" TextWrapping="Wrap"/>
                                         </ScrollViewer>
-                                        <WrapPanel Margin="0,16,0,0">
-                                            <Button Content="Open task" Padding="14,8" Margin="0,0,10,8"
+                                        <WrapPanel Margin="0,20,0,0">
+                                            <Button Content="Open task" Padding="14,8" VerticalAlignment="Top" Margin="0,0,10,8"
                                                     Style="{StaticResource NotedSecondaryButton}" Click="OpenTask_Click"/>
-                                            <Button Content="{Binding SilenceText}" Padding="14,8" Margin="0,0,10,8" Click="Silence_Click">
+                                            <Button Content="{Binding SilenceText}" Padding="14,8" VerticalAlignment="Top" Margin="0,0,10,8" Click="Silence_Click">
                                                 <Button.Style>
                                                     <Style TargetType="Button" BasedOn="{StaticResource NotedSecondaryButton}">
                                                         <Style.Triggers>
@@ -53,9 +57,9 @@
                                                     </Style>
                                                 </Button.Style>
                                             </Button>
-                                            <StackPanel Visibility="{Binding UsesCode, Converter={StaticResource BoolVisibility}}" Margin="0,0,10,8">
+                                            <StackPanel Width="260" Visibility="{Binding UsesCode, Converter={StaticResource BoolVisibility}}" Margin="0,0,10,8">
                                                 <TextBlock Text="{Binding ConfirmationPrompt}" TextWrapping="Wrap" Margin="0,0,0,5"/>
-                                                <TextBox Text="{Binding ConfirmationInput, UpdateSourceTrigger=PropertyChanged}" MaxLength="4"
+                                                <TextBox Text="{Binding ConfirmationInput, UpdateSourceTrigger=PropertyChanged}" MaxLength="4" KeyDown="Confirmation_KeyDown"
                                                          MinWidth="120" Padding="8" AutomationProperties.Name="{Binding ConfirmationPrompt}"/>
                                                 <Button Content="Confirm code" Padding="14,8" Margin="0,5,0,0"
                                                         Style="{StaticResource NotedPrimaryButton}" Click="Acknowledge_Click"/>

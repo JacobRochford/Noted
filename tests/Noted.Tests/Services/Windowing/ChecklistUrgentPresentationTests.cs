@@ -255,6 +255,43 @@ public sealed class ChecklistUrgentPresentationTests
             foreach (var child in Descendants(VisualTreeHelper.GetChild(root, index))) yield return child;
     }
 
+    [TestMethod]
+    public void EnterInCodeFieldConfirmsOnlyThatReminderAndRejectsWrongCodeModifiersAndRepeats() => WpfTestHost.Invoke(() =>
+    {
+        using var owner = Owner(new Store());
+        var first = TaskItem(); var second = TaskItem();
+        foreach (var item in new[] { first, second })
+        {
+            item.ReminderOccurrence = item.ReminderOccurrence! with { Options = new() { Acknowledgment = ChecklistAcknowledgment.Code } };
+            owner.Items.Add(item);
+        }
+        using var presentation = new ChecklistUrgentRemindersViewModel(owner, Dispatcher.CurrentDispatcher, new Clock(), isPreview: true);
+        presentation.TryAccept([Request(first), Request(second)]);
+        var window = new ChecklistUrgentReminderWindow(presentation);
+        try
+        {
+            var content = (FrameworkElement)window.Content;
+            content.Measure(new Size(1000, 700)); content.Arrange(new Rect(0, 0, 1000, 700)); content.UpdateLayout();
+            var input = Descendants(content).OfType<TextBox>().Single(control => control.DataContext is ChecklistUrgentReminderEntry entry && entry.Item.Id == first.Id);
+            input.Text = "bad";
+            KeyboardTestInput.Press(input, Key.Enter, ModifierKeys.None);
+            Assert.IsNull(first.ReminderOccurrence!.AcknowledgedAtUtc);
+            input.Text = first.ReminderOccurrence.ConfirmationCode;
+            KeyboardTestInput.Press(input, Key.Enter, ModifierKeys.Control);
+            Assert.IsNull(first.ReminderOccurrence.AcknowledgedAtUtc);
+            var repeated = KeyboardTestInput.Press(input, Key.Enter, ModifierKeys.None, previewOnly: true);
+            typeof(KeyEventArgs).GetMethod("SetRepeat", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(repeated, [true]);
+            repeated.RoutedEvent = Keyboard.KeyDownEvent;
+            input.RaiseEvent(repeated);
+            Assert.IsNull(first.ReminderOccurrence.AcknowledgedAtUtc);
+            Assert.IsTrue(KeyboardTestInput.Press(input, Key.Enter, ModifierKeys.None).Handled);
+            Assert.IsNotNull(first.ReminderOccurrence.AcknowledgedAtUtc);
+            Assert.IsNull(second.ReminderOccurrence!.AcknowledgedAtUtc);
+            Assert.IsFalse(first.IsChecked);
+        }
+        finally { window.CloseForShutdown(); }
+    });
+
     private static ChecklistItem TaskItem()
     {
         var item = new ChecklistItem { Text = "task", NotificationStyle = ChecklistNotificationStyle.Urgent, ReminderAtUtc = s_now.AddMinutes(-1) };
