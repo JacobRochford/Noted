@@ -121,6 +121,12 @@ public partial class AppDialog : Window
         dialog.ShowDialog();
     }
 
+    protected override void OnContentRendered(EventArgs e)
+    {
+        base.OnContentRendered(e);
+        ButtonsPanel.Children.OfType<Button>().First(button => button.IsDefault).Focus();
+    }
+
     private void ConfigureIcon(MessageBoxImage image)
     {
         (IconText.Text, IconText.Foreground) = image switch

@@ -69,6 +69,8 @@
                             <MenuItem Header="Reset size" Style="{StaticResource NotedContextMenuItem}"
                                       Click="ResetSizeMenuItem_Click"/>
                             <Separator/>
+                            <MenuItem Header="Save" InputGestureText="Ctrl+S"
+                                      Style="{StaticResource NotedContextMenuItem}" Click="SaveMenuItem_Click"/>
                             <MenuItem Header="Find..." InputGestureText="Ctrl+F"
                                       Style="{StaticResource NotedContextMenuItem}" Click="FindMenuItem_Click"/>
                         </ContextMenu>
@@ -230,7 +232,7 @@
                                                                VerticalAlignment="Center" FontSize="10"
                                                                Foreground="{DynamicResource NotedWarningBrush}"
                                                                Visibility="{Binding HasPendingEdit, Converter={StaticResource BoolToVisibility}}"
-                                                               ToolTip="Unsaved draft. Use Save (Ctrl+Enter) or Cancel."/>
+                                                               ToolTip="Unsaved draft. Use Save (Ctrl+S or Ctrl+Enter) or Cancel."/>
                                                     <Button x:Name="EditDefinitionButton" Grid.Column="2"
                                                             Click="EditDefinitionButton_Click">
                                                         <Button.Style>
@@ -345,7 +347,7 @@
                                                         </Grid>
                                                         <StackPanel x:Name="EditActionsPanel" Orientation="Horizontal" Margin="0,8,0,0"
                                                                     Visibility="{Binding ShowEditActions, Converter={StaticResource BoolToVisibility}}">
-                                                            <Button Content="Save" ToolTip="Save entry (Ctrl+Enter)" Click="SaveEntry_Click" Style="{StaticResource NotedPrimaryButton}"/>
+                                                            <Button Content="Save" ToolTip="Save entry (Ctrl+S or Ctrl+Enter)" Click="SaveEntry_Click" Style="{StaticResource NotedPrimaryButton}"/>
                                                             <Button Content="Cancel" Click="CancelEntry_Click" Margin="6,0,0,0" Style="{StaticResource NotedSecondaryButton}"/>
                                                         </StackPanel>
                                                         <Thumb x:Name="DefinitionResizeGrip" Width="16" Height="16"

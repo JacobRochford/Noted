@@ -128,7 +128,12 @@ public partial class DictionaryWindow : OverlayWindow
             base.OnPreviewKeyDown(e);
             return;
         }
-        if (e.Key == Key.N && modifiers == ModifierKeys.Control)
+        if (e.Key == Key.S && modifiers == ModifierKeys.Control)
+        {
+            if (!e.IsRepeat) SaveCurrentEntry(item);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.N && modifiers == ModifierKeys.Control)
         {
             if (!e.IsRepeat) AddEntry();
             e.Handled = true;
@@ -692,6 +697,20 @@ public partial class DictionaryWindow : OverlayWindow
     {
         if (item.IsAutoSaving) TryFinishCreations([item], focusList: true);
         else TrySaveEntry(item, collapse: false);
+    }
+
+    private void SaveMenuItem_Click(object sender, RoutedEventArgs e) => SaveCurrentEntry();
+
+    private void SaveCurrentEntry(DictionaryItem? item = null)
+    {
+        if (_completingEntry) return;
+        if (item?.IsEditing != true)
+            item = _viewModel.Items.FirstOrDefault(entry => entry.IsEditing);
+
+        if (item is not null)
+            SaveEntry(item);
+        else if (!TryFlushPendingContent(out var error))
+            ShowPersistenceWarningOnce(error);
     }
 
     private void CancelEntry_Click(object sender, RoutedEventArgs e)

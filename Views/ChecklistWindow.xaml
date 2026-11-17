@@ -242,6 +242,8 @@
                                         <MenuItem Header="Priority colors..." Style="{StaticResource NotedContextMenuItem}"
                                                   Click="PriorityColorsMenuItem_Click"/>
                                         <Separator/>
+                                        <MenuItem Header="Save" InputGestureText="Ctrl+S"
+                                                  Style="{StaticResource NotedContextMenuItem}" Click="SaveMenuItem_Click"/>
                                         <MenuItem Header="Find..." InputGestureText="Ctrl+F"
                                                   Style="{StaticResource NotedContextMenuItem}" Click="FindMenuItem_Click"/>
                                     </ContextMenu>

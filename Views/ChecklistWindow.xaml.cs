@@ -431,6 +431,14 @@ public partial class ChecklistWindow : OverlayWindow
     private void FindMenuItem_Click(object sender, RoutedEventArgs e) =>
         HandleSearchShortcut(Key.F, ModifierKeys.Control);
 
+    private void SaveMenuItem_Click(object sender, RoutedEventArgs e) => SaveItems();
+
+    private void SaveItems()
+    {
+        if (!_viewModel.TrySaveItems(null, out var error))
+            ShowPersistenceWarningOnce(error);
+    }
+
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
         _headerClickItem = null;
@@ -442,7 +450,12 @@ public partial class ChecklistWindow : OverlayWindow
             e.Handled = true;
         if (!e.Handled && !TabNamePopup.IsOpen && (popupItem is null || !IsItemPopupOpen(popupItem)))
         {
-            if (e.Key == Key.N && modifiers == ModifierKeys.Control)
+            if (e.Key == Key.S && modifiers == ModifierKeys.Control)
+            {
+                if (!e.IsRepeat) SaveItems();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.N && modifiers == ModifierKeys.Control)
             {
                 if (!e.IsRepeat) BeginNewItem();
                 e.Handled = true;
