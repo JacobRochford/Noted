@@ -10,10 +10,12 @@ internal static class ExceptionDiagnostics
     private const long MaximumLogBytes = 1024 * 1024;
     private static readonly object s_lock = new();
 
+    internal static string LogPath { get; set; } = Path.Combine(
+        PersistencePaths.DefaultAppDataDirectory, "logs", "exceptions.log");
+
     internal static void Record(Exception exception, [CallerMemberName] string context = "")
     {
-        Write(exception, Path.Combine(
-            PersistencePaths.DefaultAppDataDirectory, "logs", "exceptions.log"), context);
+        Write(exception, LogPath, context);
     }
 
     internal static void Write(Exception exception, string logPath, string context)

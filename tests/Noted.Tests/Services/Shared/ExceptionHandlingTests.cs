@@ -9,6 +9,21 @@ namespace Noted.Tests.Services;
 [TestClass]
 public sealed class ExceptionHandlingTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
+    [TestMethod]
+    public void RecordedExceptionsUseTheTestRunDirectory()
+    {
+        var expectedPath = Path.Combine(
+            TestContext.TestRunDirectory!, "Noted", "logs", "exceptions.log");
+        Assert.AreEqual(expectedPath, ExceptionDiagnostics.LogPath);
+        var message = $"test diagnostic {Guid.NewGuid():N}";
+
+        ExceptionDiagnostics.Record(new IOException(message));
+
+        StringAssert.Contains(File.ReadAllText(expectedPath), message);
+    }
+
     [TestMethod]
     public void DiagnosticsRetainStackAndInnerExceptionsAndRotateTheLog()
     {
