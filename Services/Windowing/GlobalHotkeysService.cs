@@ -46,6 +46,7 @@ internal sealed record HotkeyReplacementResult(
 
 public sealed class GlobalHotkeysService : IDisposable, IHotkeyRegistrationService
 {
+    private const int WM_DESTROY = 0x0002;
     private const int WM_HOTKEY = 0x0312;
     private const uint MOD_ALT = 0x0001;
     private const uint MOD_CONTROL = 0x0002;
@@ -393,6 +394,8 @@ public sealed class GlobalHotkeysService : IDisposable, IHotkeyRegistrationServi
         IntPtr lParam,
         ref bool handled)
     {
+        if (message == WM_DESTROY)
+            Dispose();
         if (message == WM_HOTKEY && DispatchHotkey(wParam.ToInt32()))
             handled = true;
         return IntPtr.Zero;

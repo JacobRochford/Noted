@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Noted.Services;
@@ -8,6 +9,73 @@ namespace Noted.Tests.Services;
 [TestClass]
 public sealed class GlobalHotkeysServiceTests
 {
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindow(IntPtr hWnd);
+
+    [TestMethod]
+    public void ClosingOwnerReleasesHotkeysBeforeHandleDestructionAndLaterDisposalDoesNotRepeat() => WpfTestHost.Invoke(() =>
+    {
+        var window = new Window();
+        var handle = new WindowInteropHelper(window).EnsureHandle();
+        var releases = new List<int>();
+        using var service = new GlobalHotkeysService(window, (_, _, _) => true, id =>
+        {
+            Assert.IsTrue(IsWindow(handle));
+            releases.Add(id);
+            return true;
+        });
+        try
+        {
+            var first = service.Register("Noted", "Alt", "N", () => { }).Registration!;
+            var second = service.Register("Tasks", "Alt", "C", () => { }).Registration!;
+
+            window.Close();
+            service.Dispose();
+
+            CollectionAssert.AreEquivalent(new[] { first.Id, second.Id }, releases);
+            Assert.IsFalse(IsWindow(handle));
+            Assert.IsFalse(service.DispatchHotkey(first.Id));
+            Assert.IsFalse(service.DispatchHotkey(second.Id));
+        }
+        finally { window.Close(); }
+    });
+
+    [TestMethod]
+    public void CancelingOwnerCloseKeepsHotkeysActive() => WpfTestHost.Invoke(() =>
+    {
+        var window = new Window();
+        var handle = new WindowInteropHelper(window).EnsureHandle();
+        var cancelClose = true;
+        window.Closing += (_, e) => e.Cancel = cancelClose;
+        var releases = new List<int>();
+        var callbacks = 0;
+        using var service = new GlobalHotkeysService(window, (_, _, _) => true, id =>
+        {
+            releases.Add(id);
+            return true;
+        });
+        try
+        {
+            var registration = service.Register("Noted", "Alt", "N", () => callbacks++).Registration!;
+
+            window.Close();
+
+            Assert.IsTrue(IsWindow(handle));
+            Assert.AreEqual(0, releases.Count);
+            Assert.IsTrue(service.DispatchHotkey(registration.Id));
+            Assert.AreEqual(1, callbacks);
+            cancelClose = false;
+            window.Close();
+            CollectionAssert.AreEqual(new[] { registration.Id }, releases);
+        }
+        finally
+        {
+            cancelClose = false;
+            window.Close();
+        }
+    });
+
     [TestMethod]
     public void RegistrationUsesNoRepeatAndNormalizedDuplicatesNeverReachWindows() => WpfTestHost.Invoke(() =>
     {
