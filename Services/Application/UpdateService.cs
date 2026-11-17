@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
 using System.ComponentModel;
@@ -34,6 +35,10 @@ public static class UpdateService
             release = await httpClient
                 .GetFromJsonAsync<GitHubRelease>(LatestReleaseApiUrl)
                 .ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return;
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException)
         {
