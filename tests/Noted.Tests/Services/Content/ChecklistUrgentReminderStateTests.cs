@@ -52,7 +52,7 @@ public sealed class ChecklistUrgentReminderStateTests
         item.Text = "edited"; item.Notes = "details";
         Assert.AreEqual(next, item.ReminderOccurrence);
         Assert.IsTrue(model.TrySetReminder(item, item.ReminderAtUtc, out _));
-        Assert.AreNotEqual(next.Id, item.ReminderOccurrence!.Id);
+        Assert.AreEqual(next.Id, item.ReminderOccurrence!.Id);
     });
 
     [TestMethod]
@@ -217,16 +217,18 @@ public sealed class ChecklistUrgentReminderStateTests
     });
 
     [TestMethod]
-    public void DuplicationBulkCompletionAndStyleChangesCannotRetainAcknowledgment() => WpfTestHost.Invoke(() =>
+    public void DuplicationAndCompletionCancelRemindersButStyleChangesPreserveAcknowledgment() => WpfTestHost.Invoke(() =>
     {
         using var model = Model(new Store()); var item = Urgent(); model.Items.Add(item);
         Assert.IsTrue(model.TryAcknowledgeUrgentReminder(item.Id, item.ReminderOccurrence!.Id, s_now, out _));
         model.DuplicateItem(item);
         Assert.IsNull(model.Items[1].ReminderOccurrence); Assert.IsNull(model.Items[1].ReminderAtUtc);
+        var occurrence = item.ReminderOccurrence;
         item.NotificationStyle = ChecklistNotificationStyle.Standard;
-        Assert.IsNull(item.ReminderOccurrence);
+        Assert.AreEqual(occurrence, item.ReminderOccurrence);
         item.NotificationStyle = ChecklistNotificationStyle.Urgent;
-        Assert.IsNull(item.ReminderOccurrence!.AcknowledgedAtUtc);
+        Assert.AreEqual(occurrence, item.ReminderOccurrence);
+        Assert.IsNotNull(item.ReminderOccurrence!.AcknowledgedAtUtc);
         model.CheckAll(); model.UncheckAll();
         Assert.IsTrue(model.Items.All(task => task.ReminderOccurrence is null && task.ReminderAtUtc is null));
     });

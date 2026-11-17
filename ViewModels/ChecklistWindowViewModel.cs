@@ -207,11 +207,18 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
                 Notes     = d.Notes ?? "",
                 CreatedAt = d.CreatedAt == default ? DateTime.Now : d.CreatedAt
             };
-            if (!duplicate && item.NotificationStyle == ChecklistNotificationStyle.Urgent && item.ReminderAtUtc.HasValue)
-                item.ReminderOccurrence = d.ReminderOccurrence is { IsValid: true } occurrence && occurrence.ScheduledAtUtc == item.ReminderAtUtc
-                    ? occurrence with { Options = occurrence.Options?.Normalize(), ScheduledAtUtc = occurrence.ScheduledAtUtc.ToUniversalTime(), AcknowledgedAtUtc = occurrence.AcknowledgedAtUtc?.ToUniversalTime(),
-                        SilencedAtUtc = occurrence.SilencedAtUtc?.ToUniversalTime() }
-                    : ChecklistReminderOccurrence.Create(item.ReminderAtUtc.Value);
+            if (!duplicate && item.ReminderAtUtc.HasValue)
+            {
+                if (d.ReminderOccurrence is { IsValid: true } occurrence && occurrence.ScheduledAtUtc == item.ReminderAtUtc)
+                    item.ReminderOccurrence = occurrence with
+                    {
+                        Options = occurrence.Options?.Normalize(), ScheduledAtUtc = occurrence.ScheduledAtUtc.ToUniversalTime(),
+                        AcknowledgedAtUtc = occurrence.AcknowledgedAtUtc?.ToUniversalTime(),
+                        SilencedAtUtc = occurrence.SilencedAtUtc?.ToUniversalTime()
+                    };
+                else if (item.NotificationStyle == ChecklistNotificationStyle.Urgent)
+                    item.ReminderOccurrence = ChecklistReminderOccurrence.Create(item.ReminderAtUtc.Value);
+            }
             repairedItems |= item.NotificationStyle != d.NotificationStyle || item.ReminderOccurrence != d.ReminderOccurrence;
             repairedItems |= item.ReminderAtUtc != d.ReminderAtUtc ||
                              item.ReminderHandledAtUtc != d.ReminderHandledAtUtc;
@@ -547,24 +554,40 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
     internal bool TrySetReminder(ChecklistItem item, DateTimeOffset? reminder, ChecklistNotificationStyle style,
         ChecklistNotificationOptions? options, out string? error)
     {
+        if (!TryValidateReminderChange(item, reminder, style, out error)) return false;
+        RunBulkUpdate(() => ApplyReminderPreferences(item, reminder, style, options));
+        return TryFlushPendingItems(out error);
+    }
+
+    private bool TryValidateReminderChange(ChecklistItem item, DateTimeOffset? reminder, ChecklistNotificationStyle style, out string? error)
+    {
         error = null;
-        if (!Items.Contains(item) || (item.IsChecked && reminder is not null))
+        if (!Items.Contains(item) || item.IsChecked && reminder.HasValue)
         {
-            error = "Choose an incomplete task to set a reminder.";
+            error = "Choose an incomplete task to set a notification.";
             return false;
         }
-        if (reminder <= DateTimeOffset.UtcNow)
+        var rescheduled = reminder != item.ReminderAtUtc;
+        if (rescheduled && reminder <= DateTimeOffset.UtcNow)
         {
-            error = "Choose a reminder time in the future.";
+            error = "Choose a notification time in the future, or turn the notification off.";
             return false;
         }
+        if (!rescheduled && reminder.HasValue && style != item.NotificationStyle &&
+            (item.ReminderHandledAtUtc.HasValue || item.ReminderOccurrence?.Options is not null))
+        {
+            error = "Notification delivery has started. Reschedule it or turn it off before changing its style.";
+            return false;
+        }
+        return true;
+    }
+
+    private static void ApplyReminderPreferences(ChecklistItem item, DateTimeOffset? reminder, ChecklistNotificationStyle style,
+        ChecklistNotificationOptions? options)
+    {
         item.NotificationStyle = style;
         item.NotificationOptions = options;
-        if (reminder.HasValue && item.ReminderAtUtc == reminder && item.NotificationStyle == ChecklistNotificationStyle.Urgent)
-            item.ReminderOccurrence = ChecklistReminderOccurrence.Create(reminder.Value, item.ReminderOccurrence?.ConfirmationCode);
         item.ReminderAtUtc = reminder;
-        item.ReminderHandledAtUtc = null;
-        return TrySaveItems(null, out error);
     }
 
     internal bool TryCaptureUrgentOptions(IReadOnlyList<ChecklistReminder> reminders, out string? error)
