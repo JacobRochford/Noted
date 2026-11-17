@@ -5,21 +5,42 @@ using System.Windows.Media;
 
 namespace Noted.Helpers;
 
-public sealed class ChecklistReminderTextConverter : IMultiValueConverter
+public sealed class ChecklistScheduleTextConverter : IMultiValueConverter
 {
     public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
     {
-        if (values[0] is not DateTimeOffset reminder) return "Remind me...";
-        var sent = values.Length > 1 && values[1] is DateTimeOffset;
-        return $"{(sent ? "Submitted" : "Remind me")} {reminder.ToLocalTime().ToString("g", culture)}";
+        var parts = new List<string>();
+        if (values[0] is DateTime date)
+        {
+            var due = values[1] is TimeSpan time ? date.Date.Add(time).ToString("g", culture) : date.ToString("d", culture);
+            parts.Add($"Due {due}");
+        }
+        if (values[2] is DateTimeOffset reminder)
+        {
+            var when = values[3] is true ? "at due time" : reminder.ToLocalTime().ToString("g", culture);
+            var style = values[4] is Noted.Models.ChecklistNotificationStyle.Urgent ? "Urgent reminder"
+                : values.Length > 5 && values[5] is DateTimeOffset ? "Submitted" : "Reminder";
+            parts.Add($"{style} {when}");
+        }
+        return parts.Count == 0 ? "Schedule..." : string.Join(" · ", parts);
     }
-
     public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
 
-public sealed class DueDateToTextConverter : IValueConverter
+public sealed class DueDateToTextConverter : IValueConverter, IMultiValueConverter
 {
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        var label = Convert(values[0], targetType, parameter, culture);
+        if (values[0] is not DateTime date || values[1] is not TimeSpan time) return label;
+        if (date.Date == DateTime.Today && date.Date.Add(time) < DateTime.Now) label = "Overdue today";
+        return $"{label} {new TimeOnly(time.Ticks).ToString("t", culture)}";
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is not DateTime date) return "";
@@ -34,8 +55,18 @@ public sealed class DueDateToTextConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
-public sealed class DueDateToColorConverter : IValueConverter
+public sealed class DueDateToColorConverter : IValueConverter, IMultiValueConverter
 {
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values[0] is DateTime date && values[1] is TimeSpan time && date.Date.Add(time) < DateTime.Now)
+            return new SolidColorBrush(Color.FromRgb(190, 82, 82));
+        return Convert(values[0], targetType, parameter, culture);
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is not DateTime date) return new SolidColorBrush(Colors.Transparent);

@@ -203,6 +203,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
                 NotificationStyle = d.NotificationStyle,
                 NotificationOptions = d.NotificationOptions,
                 ReminderAtUtc = duplicate ? null : d.ReminderAtUtc,
+                ReminderAtDueTime = !duplicate && d.ReminderAtDueTime,
                 ReminderHandledAtUtc = duplicate ? null : d.ReminderHandledAtUtc,
                 Notes     = d.Notes ?? "",
                 CreatedAt = d.CreatedAt == default ? DateTime.Now : d.CreatedAt
@@ -590,6 +591,34 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         item.ReminderAtUtc = reminder;
     }
 
+    internal bool TrySetSchedule(ChecklistItem item, DateTime? dueDate, TimeSpan? dueTime, DateTimeOffset? reminder,
+        bool atDueTime, ChecklistNotificationStyle style, ChecklistNotificationOptions? options, out string? error)
+    {
+        error = null;
+        if (!Items.Contains(item) || item.IsChecked || dueTime.HasValue && !dueDate.HasValue)
+        { error = "Choose an incomplete task and a date for its time."; return false; }
+        if (dueTime < TimeSpan.Zero || dueTime >= TimeSpan.FromDays(1))
+        { error = "Choose a valid task time."; return false; }
+        if (atDueTime)
+        {
+            if (dueDate is null || dueTime is null || reminder is null)
+            { error = "A due-time notification needs a task date and time."; return false; }
+            if (item.ReminderAtDueTime && dueDate == item.DueDate && dueTime == item.DueTime)
+                reminder = item.ReminderAtUtc;
+            else if (!Noted.Helpers.ChecklistReminderTime.TryGetUtc(dueDate, dueTime, DateTimeOffset.MinValue,
+                TimeZoneInfo.Local, out reminder, out error)) return false;
+        }
+        if (!TryValidateReminderChange(item, reminder, style, out error)) return false;
+        RunBulkUpdate(() =>
+        {
+            item.DueDate = dueDate;
+            item.DueTime = dueTime;
+            ApplyReminderPreferences(item, reminder, style, options);
+            item.ReminderAtDueTime = atDueTime;
+        });
+        return TryFlushPendingItems(out error);
+    }
+
     internal bool TryCaptureUrgentOptions(IReadOnlyList<ChecklistReminder> reminders, out string? error)
     {
         var items = Items.ToDictionary(item => item.Id);
@@ -805,6 +834,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             DueDate   = i.DueDate,
             DueTime   = i.DueTime,
             ReminderAtUtc = i.ReminderAtUtc,
+            ReminderAtDueTime = i.ReminderAtDueTime,
             ReminderHandledAtUtc = i.ReminderHandledAtUtc,
             NotificationStyle = i.NotificationStyle,
             NotificationOptions = i.NotificationOptions,

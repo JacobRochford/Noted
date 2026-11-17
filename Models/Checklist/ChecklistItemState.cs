@@ -10,6 +10,7 @@ public sealed record ChecklistItemState
     public DateTime? DueDate { get; init; }
     public TimeSpan? DueTime { get; init; }
     public DateTimeOffset? ReminderAtUtc { get; init; }
+    public bool ReminderAtDueTime { get; init; }
     public DateTimeOffset? ReminderHandledAtUtc { get; init; }
     public ChecklistNotificationOptions? NotificationOptions { get; init; }
     public ChecklistNotificationStyle NotificationStyle { get; init; }

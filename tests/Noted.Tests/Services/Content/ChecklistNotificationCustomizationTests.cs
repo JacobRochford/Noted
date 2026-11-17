@@ -14,7 +14,7 @@ public sealed class ChecklistNotificationCustomizationTests
 {
     private static readonly DateTimeOffset s_now = new(2030, 1, 1, 12, 0, 0, TimeSpan.Zero);
     [TestMethod]
-    public void ApprovedDefaultsAndMalformedSettingsUseSafeValues()
+    public void NotificationOptionsUseDefaultsAndNormalizeInvalidValues()
     {
         var options = new ChecklistNotificationOptions();
         Assert.AreEqual(ChecklistAlertSize.FullScreen, options.Size);
@@ -116,16 +116,18 @@ public sealed class ChecklistNotificationCustomizationTests
         File.WriteAllText(path, "invalid WAV"); Assert.ThrowsExactly<IOException>(() => ChecklistUrgentReminderAudio.ValidateWav(path));
     });
     [TestMethod]
-    public void ReminderDialogKeepsStandardDefaultAndOffersOverridesWithoutSaving() => WpfTestHost.Invoke(() =>
+    public void ReminderDialogUsesStandardStyleAndOptionalOverrides() => WpfTestHost.Invoke(() =>
     {
         var dialog = new ChecklistReminderDialog(null, null);
         try
         {
             Assert.AreEqual(ChecklistNotificationStyle.Standard, dialog.NotificationStyle); Assert.IsNull(dialog.NotificationOptions);
             ((ComboBox)dialog.FindName("StyleChoice")).SelectedIndex = 2;
-            ((CheckBox)dialog.FindName("CustomOptions")).IsChecked = true;
             Assert.AreEqual(ChecklistNotificationStyle.Urgent, dialog.NotificationStyle);
-            Assert.AreEqual(ChecklistAcknowledgment.Code, dialog.NotificationOptions!.Acknowledgment);
+            Assert.IsNull(dialog.NotificationOptions);
+            var custom = new ChecklistReminderDialog(null, null, options: new());
+            Assert.AreEqual(ChecklistAcknowledgment.Code, custom.NotificationOptions!.Acknowledgment);
+            custom.Close();
         }
         finally { dialog.Close(); }
     });

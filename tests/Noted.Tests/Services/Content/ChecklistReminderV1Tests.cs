@@ -16,6 +16,23 @@ namespace Noted.Tests.Services;
 public sealed class ChecklistReminderV1Tests
 {
     [TestMethod]
+    public void TypedTimeValidationRejectsMissingOrOutOfRangeClockValues()
+    {
+        var now = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
+        Assert.IsFalse(ChecklistReminderTime.TryGetUtc(new DateTime(2026, 6, 2), (TimeSpan?)null, now, TimeZoneInfo.Utc, out _, out _));
+        Assert.IsFalse(ChecklistReminderTime.TryGetUtc(new DateTime(2026, 6, 2), TimeSpan.FromDays(1), now, TimeZoneInfo.Utc, out _, out _));
+        Assert.IsTrue(ChecklistReminderTime.TryGetUtc(new DateTime(2026, 6, 2), TimeSpan.FromHours(9), now, TimeZoneInfo.Utc, out var utc, out _));
+        Assert.AreEqual(new DateTimeOffset(2026, 6, 2, 9, 0, 0, TimeSpan.Zero), utc);
+    }
+
+    [TestMethod]
+    public void SuggestedTimeCarriesItsDateAcrossMidnight()
+    {
+        var now = new DateTimeOffset(2026, 6, 1, 23, 50, 0, TimeSpan.Zero);
+        Assert.AreEqual(new DateTime(2026, 6, 2), ChecklistReminderTime.DefaultLocalTime(null, now, TimeZoneInfo.Utc));
+    }
+
+    [TestMethod]
     public void ReminderDefaultUsesExplicitDueTimeIncludingMidnight()
     {
         var now = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
@@ -25,13 +42,13 @@ public sealed class ChecklistReminderV1Tests
     }
 
     [TestMethod]
-    public void ReminderDefaultsUseFutureDueDateOrOneHourFromNow()
+    public void ReminderDefaultsUseFutureDueTimeOrNextHalfHour()
     {
         var now = new DateTimeOffset(2026, 6, 1, 12, 0, 0, TimeSpan.Zero);
         Assert.AreEqual(new DateTime(2026, 6, 3, 9, 0, 0),
             ChecklistReminderTime.DefaultLocalTime(new DateTime(2026, 6, 3), now, TimeZoneInfo.Utc));
-        Assert.AreEqual(new DateTime(2026, 6, 1, 13, 0, 0), ChecklistReminderTime.DefaultLocalTime(null, now, TimeZoneInfo.Utc));
-        Assert.AreEqual(new DateTime(2026, 6, 1, 13, 0, 0),
+        Assert.AreEqual(new DateTime(2026, 6, 1, 12, 30, 0), ChecklistReminderTime.DefaultLocalTime(null, now, TimeZoneInfo.Utc));
+        Assert.AreEqual(new DateTime(2026, 6, 1, 12, 30, 0),
             ChecklistReminderTime.DefaultLocalTime(new DateTime(2026, 5, 31), now, TimeZoneInfo.Utc));
     }
 
@@ -171,8 +188,8 @@ public sealed class ChecklistReminderV1Tests
     [TestMethod]
     public void SubmittedTextDoesNotClaimTheNotificationWasSeen()
     {
-        var converter = new ChecklistReminderTextConverter();
-        var text = (string)converter.Convert([DateTimeOffset.UtcNow, DateTimeOffset.UtcNow], typeof(string), null!, CultureInfo.InvariantCulture);
+        var converter = new ChecklistScheduleTextConverter();
+        var text = (string)converter.Convert([null!, null!, DateTimeOffset.UtcNow, false, ChecklistNotificationStyle.Standard, DateTimeOffset.UtcNow], typeof(string), null!, CultureInfo.InvariantCulture);
         StringAssert.Contains(text, "Submitted");
     }
 
@@ -205,13 +222,15 @@ public sealed class ChecklistReminderV1Tests
             try
             {
                 var date = (DatePicker)dialog.FindName("ReminderDate");
-                var time = (TextBox)dialog.FindName("ReminderTime");
+                var time = (ChecklistTimePicker)dialog.FindName("ReminderTime");
                 var apply = (Button)dialog.FindName("ApplyButton");
+                ((CheckBox)dialog.FindName("EnableReminder")).IsChecked = true;
+                ((ComboBox)dialog.FindName("ReminderMode")).SelectedIndex = 1;
                 date.SelectedDate = DateTime.Today.AddDays(-1);
                 apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.AreEqual(Visibility.Visible, ((TextBlock)dialog.FindName("ErrorText")).Visibility);
                 date.SelectedDate = DateTime.Today.AddDays(2);
-                time.Text = "14:30";
+                time.SelectedTime = new TimeSpan(14, 30, 0);
                 apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             }
             catch (Exception exception) { failure = exception; dialog.Close(); }
@@ -220,7 +239,11 @@ public sealed class ChecklistReminderV1Tests
         if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
         Assert.IsNotNull(dialog.ReminderAtUtc);
         var remove = new ChecklistReminderDialog(dialog.ReminderAtUtc, null);
-        remove.Loaded += (_, _) => ((Button)remove.FindName("RemoveButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        remove.Loaded += (_, _) =>
+        {
+            ((CheckBox)remove.FindName("EnableReminder")).IsChecked = false;
+            ((Button)remove.FindName("ApplyButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        };
         Assert.AreEqual(true, remove.ShowDialog());
         Assert.IsNull(remove.ReminderAtUtc);
     });
@@ -255,7 +278,7 @@ public sealed class ChecklistReminderV1Tests
     });
 
     [TestMethod]
-    public void ActivationWaitsForAnInvalidDueDateToBeCorrected() => WpfTestHost.Invoke(() =>
+    public void ActivationWaitsForTheScheduleEditorToClose() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
         using var model = Model(new ChecklistContentService(directory.Path));
@@ -264,23 +287,26 @@ public sealed class ChecklistReminderV1Tests
         var target = model.AddItem()!;
         target.Text = "target";
         var window = new ChecklistWindow(new AppSettingsService(directory.Path), model);
+        Exception? failure = null;
         try
         {
             window.Show();
-            editing.IsExpanded = true;
-            window.UpdateLayout();
-            var list = (ListBox)window.FindName("ItemsList");
-            var row = (System.Windows.DependencyObject)list.ItemContainerGenerator.ContainerFromItem(editing);
-            var picker = VisualTreeHelpers.FindDescendant<DatePicker>(row, "ItemDueDatePicker")!;
-            var editor = VisualTreeHelpers.FindDescendant<DatePickerTextBox>(picker)!;
-            Assert.IsTrue(editor.Focus());
-            editor.Text = "not a date";
-            window.OpenReminder(new(target.Id, null));
-            Assert.AreNotSame(target, list.SelectedItem);
-            editor.Text = "";
-            model.SortMode = ChecklistSortMode.Priority;
+            window.Dispatcher.BeginInvoke(() =>
+            {
+                var dialog = window.OwnedWindows.OfType<ChecklistReminderDialog>().Single();
+                try
+                {
+                    window.OpenReminder(new(target.Id, null));
+                    Assert.AreNotSame(target, ((ListBox)window.FindName("ItemsList")).SelectedItem);
+                }
+                catch (Exception exception) { failure = exception; }
+                finally { dialog.Close(); }
+            }, DispatcherPriority.ApplicationIdle);
+            typeof(ChecklistWindow).GetMethod("EditReminder", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(window, [editing]);
             window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-            Assert.AreSame(target, list.SelectedItem);
+            if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+            Assert.AreSame(target, ((ListBox)window.FindName("ItemsList")).SelectedItem);
         }
         finally { window.Close(); }
     });

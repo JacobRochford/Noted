@@ -141,7 +141,7 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void TryOpenPendingReminder()
     {
-        if (_isClosed || _pendingReminderActivation is not { } activation || _completingItem) return;
+        if (_isClosed || _scheduleDialog is not null || _pendingReminderActivation is not { } activation || _completingItem) return;
         var active = _creatingItem ?? _editingItem;
         if (active is not null && !TryFinishItem(active, keepEmpty: false, focusList: false)) return;
         _pendingReminderActivation = null;
@@ -183,6 +183,11 @@ public partial class ChecklistWindow : OverlayWindow
 
     internal bool NavigateToReminder(Guid id)
     {
+        if (_scheduleDialog is not null)
+        {
+            _pendingReminderActivation = new(id, null);
+            return false;
+        }
         var active = _creatingItem ?? _editingItem;
         if (active is not null && !TryFinishItem(active, keepEmpty: false, focusList: false))
         {
@@ -212,26 +217,30 @@ public partial class ChecklistWindow : OverlayWindow
             EditReminder(item);
     }
 
+    private ChecklistReminderDialog? _scheduleDialog;
+
     private void EditReminder(ChecklistItem item)
     {
         var active = _creatingItem ?? _editingItem;
         if (active is not null && !TryFinishItem(active, keepEmpty: true, focusList: false, collapse: false)) return;
         var dialog = new ChecklistReminderDialog(item.ReminderAtUtc, item.DueDate, item.NotificationStyle, item.NotificationOptions,
-            _settingsService.LoadChecklistNotificationOptions()) { Owner = this };
-        if (dialog.ShowDialog() != true) return;
-        if (!_viewModel.TrySetReminder(item, dialog.ReminderAtUtc, dialog.NotificationStyle, dialog.NotificationOptions, out var error))
+            _settingsService.LoadChecklistNotificationOptions(), item.DueTime, item.ReminderAtDueTime) { Owner = this };
+        _scheduleDialog = dialog;
+        bool? accepted;
+        try { accepted = dialog.ShowDialog(); }
+        finally
+        {
+            _scheduleDialog = null;
+            if (_pendingReminderActivation is not null) Dispatcher.BeginInvoke(TryOpenPendingReminder);
+        }
+        if (accepted != true) return;
+        if (!_viewModel.TrySetSchedule(item, dialog.ScheduledDueDate, dialog.ScheduledDueTime, dialog.ReminderAtUtc,
+            dialog.ReminderAtDueTime, dialog.NotificationStyle, dialog.NotificationOptions, out var error))
             ShowPersistenceWarningOnce(error);
     }
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        var active = _creatingItem ?? _editingItem;
-        if (active is not null && !TryCommitDueDate(active))
-        {
-            e.Cancel = true;
-            FocusDate(active);
-            return;
-        }
         if (!TryFlushPendingContent(out var error))
         {
             e.Cancel = true;
@@ -269,16 +278,6 @@ public partial class ChecklistWindow : OverlayWindow
         _headerClickItem = null;
         _interactionVersion++;
         var target = e.OriginalSource as DependencyObject;
-        var picker = VisualTreeHelpers.FindAncestor<DatePicker>(target);
-        if (e.ChangedButton == MouseButton.Left && picker is not null &&
-            VisualTreeHelpers.FindAncestor<Button>(target) is not null &&
-            GetItem(picker) is ChecklistItem datedItem && !TryCommitDueDate(datedItem))
-        {
-            e.Handled = true;
-            FocusDate(datedItem);
-            base.OnPreviewMouseDown(e);
-            return;
-        }
         var current = _creatingItem ?? _editingItem;
         if (e.ChangedButton == MouseButton.Left &&
             !IsWithin(target, TitleBar) && !IsWithin(target, AddItemButton) &&
@@ -409,17 +408,6 @@ public partial class ChecklistWindow : OverlayWindow
         var popupItem = item ?? _creatingItem ?? _editingItem;
         if (!e.Handled && e.Key == Key.Escape && e.IsRepeat)
             e.Handled = true;
-        if (!e.Handled && e.Key == Key.Escape && modifiers == ModifierKeys.None &&
-            !TabNamePopup.IsOpen && popupItem is not null)
-        {
-            var picker = FindItemControl<DatePicker>(popupItem, "ItemDueDatePicker");
-            if (picker?.IsDropDownOpen == true)
-            {
-                picker.SetCurrentValue(DatePicker.IsDropDownOpenProperty, false);
-                FocusDate(popupItem);
-                e.Handled = true;
-            }
-        }
         if (!e.Handled && !TabNamePopup.IsOpen && (popupItem is null || !IsItemPopupOpen(popupItem)))
         {
             if (e.Key == Key.N && modifiers == ModifierKeys.Control)
@@ -743,65 +731,15 @@ public partial class ChecklistWindow : OverlayWindow
     private void DueDateChip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         var item = GetItemFromSender(sender);
-        if (item != null) item.IsExpanded = true;
+        if (item is { IsChecked: false }) EditReminder(item);
         e.Handled = true;
     }
 
-    // Due date
-
-    private void ClearDueDate_Click(object sender, RoutedEventArgs e)
+    private void ScheduleChip_KeyDown(object sender, KeyEventArgs e)
     {
-        var item = GetItemFromSender(sender);
-        if (item is null) return;
-        var picker = FindItemControl<DatePicker>(item, "ItemDueDatePicker");
-        if (picker is not null) picker.SetCurrentValue(DatePicker.TextProperty, "");
-        item.DueDate = null;
-        SetDateError(item, false);
-    }
-
-    private bool TryCommitDueDate(ChecklistItem item)
-    {
-        var picker = FindItemControl<DatePicker>(item, "ItemDueDatePicker");
-        var editor = VisualTreeHelpers.FindDescendant<DatePickerTextBox>(picker);
-        if (picker is null || editor is null || !picker.IsVisible) return true;
-        DateTime? date = null;
-        if (!string.IsNullOrWhiteSpace(editor.Text))
-        {
-            if (!DateTime.TryParse(editor.Text, picker.Language.GetSpecificCulture(), DateTimeStyles.None, out var parsed))
-            {
-                SetDateError(item, true);
-                return false;
-            }
-            date = parsed.Date;
-        }
-        picker.SetCurrentValue(DatePicker.SelectedDateProperty, date);
-        picker.GetBindingExpression(DatePicker.SelectedDateProperty)?.UpdateSource();
-        SetDateError(item, false);
-        return true;
-    }
-
-    private void SetDateError(ChecklistItem item, bool invalid)
-    {
-        var message = FindItemControl<TextBlock>(item, "DueDateErrorText");
-        if (message is not null) message.Visibility = invalid ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void DueDateTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (!e.Handled && e.Key == Key.Space && e.KeyboardDevice.Modifiers == ModifierKeys.None &&
-            sender is DatePickerTextBox editor &&
-            (string.IsNullOrWhiteSpace(editor.Text) || editor.SelectionLength == editor.Text.Length))
-        {
-            e.Handled = true;
-            if (!e.IsRepeat && GetItem(editor) is ChecklistItem datedItem && TryCommitDueDate(datedItem))
-                VisualTreeHelpers.FindAncestor<DatePicker>(editor)?.SetCurrentValue(DatePicker.IsDropDownOpenProperty, true);
-            return;
-        }
-        var opensCalendar = e.Key == Key.System && e.SystemKey == Key.Down &&
-            e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Alt);
-        if ((e.Key == Key.Enter || opensCalendar) &&
-            GetItem(sender as DependencyObject) is { } item && !TryCommitDueDate(item))
-            e.Handled = true;
+        if (e.Key is not (Key.Enter or Key.Space)) return;
+        if (!e.IsRepeat && GetItemFromSender(sender) is { IsChecked: false } item) EditReminder(item);
+        e.Handled = true;
     }
 
     // Priority
@@ -967,12 +905,6 @@ public partial class ChecklistWindow : OverlayWindow
                 return true;
             }
 
-            if (!TryCommitDueDate(item))
-            {
-                FocusDate(item);
-                return false;
-            }
-
             var remove = !keepEmpty && IsEmptyCreation(item);
             if (!_viewModel.TrySaveItems(remove ? item : null, out var error))
             {
@@ -1067,17 +999,10 @@ public partial class ChecklistWindow : OverlayWindow
     {
         var controls = new List<UIElement>();
         if (ItemsList.ItemContainerGenerator.ContainerFromItem(item) is ListBoxItem row) controls.Add(row);
-        foreach (var name in new[] { "ItemDetailsButton", "ItemCompletionCheckBox", "ItemTitleTextBox", "NotesTextBox", "ItemDueDatePicker", "ClearItemDueDateButton" })
+        foreach (var name in new[] { "ItemDetailsButton", "ItemCompletionCheckBox", "ItemTitleTextBox", "NotesTextBox", "ItemReminderButton", "ItemDueDateChip", "ItemNotificationButton" })
         {
             var control = FindItemControl<UIElement>(item, name);
-            if (control is DatePicker picker)
-            {
-                var editor = VisualTreeHelpers.FindDescendant<DatePickerTextBox>(picker);
-                var button = VisualTreeHelpers.FindDescendant<Button>(picker, "PART_Button");
-                if (editor is { IsVisible: true, IsEnabled: true, Focusable: true }) controls.Add(editor);
-                if (button is { IsVisible: true, IsEnabled: true, Focusable: true }) controls.Add(button);
-            }
-            else if (control is { IsVisible: true, IsEnabled: true, Focusable: true }) controls.Add(control);
+            if (control is { IsVisible: true, IsEnabled: true, Focusable: true }) controls.Add(control);
         }
         return controls;
     }
@@ -1112,8 +1037,7 @@ public partial class ChecklistWindow : OverlayWindow
     }
 
     private static bool IsEditor(DependencyObject? element) =>
-        element is TextBox { Name: "ItemTitleTextBox" or "NotesTextBox" } ||
-        VisualTreeHelpers.FindAncestor<DatePicker>(element) is not null;
+        element is TextBox { Name: "ItemTitleTextBox" or "NotesTextBox" };
 
     private void Item_PreviewGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
@@ -1141,7 +1065,6 @@ public partial class ChecklistWindow : OverlayWindow
     {
         if (_completingItem || GetItem(e.OldFocus as DependencyObject) is not ChecklistItem item) return;
         if (IsEditor(e.OldFocus as DependencyObject)) _lastEditorFocus = CaptureFocus(e.OldFocus as FrameworkElement);
-        if (e.OldFocus is DatePickerTextBox && !TryCommitDueDate(item)) e.Handled = true;
     }
 
     private void Item_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
@@ -1186,14 +1109,6 @@ public partial class ChecklistWindow : OverlayWindow
             editor.CaretIndex = index >= 0 ? index : editor.Text.Length;
         }
         else editor.CaretIndex = editor.Text.Length;
-    }
-
-    private void FocusDate(ChecklistItem item)
-    {
-        item.IsExpanded = true;
-        ItemsList.ScrollIntoView(item);
-        ItemsList.UpdateLayout();
-        VisualTreeHelpers.FindDescendant<DatePickerTextBox>(FindItemControl<DatePicker>(item, "ItemDueDatePicker"))?.Focus();
     }
 
     private void RestoreEditorFocus(ChecklistItem item)
@@ -1244,7 +1159,7 @@ public partial class ChecklistWindow : OverlayWindow
         if (element is null) return null;
         var item = GetItem(element);
         return new FocusTarget(element, item,
-            VisualTreeHelpers.FindAncestor<DatePicker>(element) is not null ? "ItemDueDatePicker" : element.Name,
+            element.Name,
             item is null ? -1 : _viewModel.FilteredItems.IndexOf(item),
             (element as TextBox)?.SelectionStart ?? 0, (element as TextBox)?.SelectionLength ?? 0);
     }
@@ -1270,7 +1185,6 @@ public partial class ChecklistWindow : OverlayWindow
         var control = target.Element is ListBoxItem ?
             ItemsList.ItemContainerGenerator.ContainerFromItem(target.Item) as FrameworkElement :
             FindItemControl<FrameworkElement>(target.Item, target.Name);
-        if (control is DatePicker picker) control = VisualTreeHelpers.FindDescendant<DatePickerTextBox>(picker);
         if (control?.IsVisible == true && control.Focus())
         {
             if (control is TextBox editor) RestoreSelection(editor, target.Start, target.Length);
@@ -1340,7 +1254,6 @@ public partial class ChecklistWindow : OverlayWindow
     }
 
     private bool IsItemPopupOpen(ChecklistItem item) =>
-        FindItemControl<DatePicker>(item, "ItemDueDatePicker")?.IsDropDownOpen == true ||
         FindItemControl<Grid>(item, "ChecklistItemRoot")?.ContextMenu?.IsOpen == true;
 
     private static ChecklistItem? GetItem(DependencyObject? target)

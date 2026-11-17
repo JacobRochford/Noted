@@ -179,18 +179,18 @@ public sealed class ChecklistKeyboardTests
     });
 
     [TestMethod]
-    public void TabTraversesDateAndChevronWithoutActivatingThem() => WithWindow((window, model, _) =>
+    public void TabTraversesScheduleAndChevronWithoutActivatingThem() => WithWindow((window, model, _) =>
     {
         var item = Create(window, model);
         var title = Control<TextBox>(window, item, "ItemTitleTextBox");
         Press(title, Key.Tab);
         var notes = Control<TextBox>(window, item, "NotesTextBox");
         var details = Control<Button>(window, item, "ItemDetailsButton");
-        var picker = Control<DatePicker>(window, item, "ItemDueDatePicker");
+        var schedule = Control<Button>(window, item, "ItemReminderButton");
         var clicks = 0;
         details.Click += (_, _) => clicks++;
         Press(notes, Key.Tab);
-        Assert.IsTrue(picker.IsKeyboardFocusWithin);
+        Assert.IsTrue(schedule.IsKeyboardFocused);
         for (var index = 0; index < 6 && !details.IsKeyboardFocused; index++)
             Press((UIElement)Keyboard.FocusedElement, Key.Tab, ModifierKeys.Shift);
         Assert.IsTrue(details.IsKeyboardFocused);
@@ -209,10 +209,9 @@ public sealed class ChecklistKeyboardTests
         model.SortMode = ChecklistSortMode.Alphabetical;
         var item = Create(window, model);
         Press((UIElement)Keyboard.FocusedElement, Key.Tab);
-        var picker = Control<DatePicker>(window, item, "ItemDueDatePicker");
-        var dateEditor = VisualTreeHelpers.FindDescendant<TextBox>(picker)!;
-        dateEditor.Focus();
-        Press(dateEditor, Key.Tab);
+        var schedule = Control<Button>(window, item, "ItemReminderButton");
+        schedule.Focus();
+        Press(schedule, Key.Tab);
         Assert.IsFalse(model.Items.Contains(item));
         Assert.IsFalse(((ListBox)window.FindName("ItemsList")).IsKeyboardFocusWithin);
         Press((UIElement)Keyboard.FocusedElement, Key.Enter, ModifierKeys.Control);
@@ -388,17 +387,6 @@ public sealed class ChecklistKeyboardTests
     {
         var item = Create(window, model);
         Press((UIElement)Keyboard.FocusedElement, Key.Tab);
-        var picker = Control<DatePicker>(window, item, "ItemDueDatePicker");
-        picker.IsDropDownOpen = true;
-        Pump();
-        Assert.IsTrue(picker.IsDropDownOpen);
-        Press((UIElement)Keyboard.FocusedElement, Key.N, ModifierKeys.Control);
-        Assert.HasCount(3, model.Items);
-        PreviewClick(picker);
-        Assert.IsTrue(model.Items.Contains(item));
-        Assert.IsTrue(item.IsExpanded);
-        picker.IsDropDownOpen = false;
-
         var root = Control<Grid>(window, item, "ChecklistItemRoot");
         root.ContextMenu.PlacementTarget = root;
         root.ContextMenu.IsOpen = true;

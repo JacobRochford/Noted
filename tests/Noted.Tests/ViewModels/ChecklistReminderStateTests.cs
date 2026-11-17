@@ -206,6 +206,110 @@ public sealed class ChecklistReminderStateTests
         Assert.AreEqual(TimeSpan.Zero, item.DueTime);
     }
 
+    [TestMethod]
+    public void LinkedScheduleRoundTripsFollowsEditsAndDoesNotRearmAnUnchangedOccurrence() => WpfTestHost.Invoke(() =>
+    {
+        var service = new RecordingService { Items = [new() { Text = "linked" }] };
+        var due = DateTime.Today.AddDays(2);
+        var time = TimeSpan.FromHours(14);
+        var reminder = new DateTimeOffset(due.Add(time)).ToUniversalTime();
+        Guid occurrence;
+        using (var model = Create(service))
+        {
+            var item = model.Items.Single();
+            Assert.IsTrue(model.TrySetSchedule(item, due, time, reminder, true, ChecklistNotificationStyle.Urgent, null, out var error), error);
+            item.ReminderHandledAtUtc = DateTimeOffset.UtcNow;
+            occurrence = item.ReminderOccurrence!.Id;
+            Assert.IsTrue(model.TrySetSchedule(item, due, time, reminder, true, item.NotificationStyle, null, out error), error);
+            Assert.AreEqual(occurrence, item.ReminderOccurrence.Id);
+            Assert.IsNotNull(item.ReminderHandledAtUtc);
+        }
+        using var reopened = Create(service);
+        var restored = reopened.Items.Single();
+        Assert.IsTrue(restored.ReminderAtDueTime);
+        Assert.AreEqual(occurrence, restored.ReminderOccurrence!.Id);
+        Assert.IsTrue(reopened.TrySetSchedule(restored, due.AddDays(1), time, reminder.AddDays(1), true,
+            restored.NotificationStyle, null, out var saveError), saveError);
+        Assert.AreNotEqual(occurrence, restored.ReminderOccurrence!.Id);
+        Assert.IsNull(restored.ReminderHandledAtUtc);
+        reopened.DuplicateItem(restored);
+        Assert.IsFalse(reopened.Items[1].ReminderAtDueTime);
+        restored.IsChecked = true;
+        Assert.IsFalse(restored.ReminderAtDueTime);
+        Assert.IsNull(restored.ReminderAtUtc);
+    });
+
+    [TestMethod]
+    public void CustomizationPreservesDeliveredUrgentStateAndStyleRequiresRescheduling() => WpfTestHost.Invoke(() =>
+    {
+        var service = new RecordingService();
+        using var model = Create(service);
+        var item = new ChecklistItem { NotificationStyle = ChecklistNotificationStyle.Urgent, ReminderAtUtc = DateTimeOffset.UtcNow.AddMinutes(-10) };
+        model.Items.Add(item);
+        var handled = DateTimeOffset.UtcNow.AddMinutes(-9);
+        item.ReminderHandledAtUtc = handled;
+        item.ReminderOccurrence = item.ReminderOccurrence! with { Options = new(), SilencedAtUtc = handled, AcknowledgedAtUtc = handled };
+        var occurrence = item.ReminderOccurrence;
+        Assert.IsTrue(model.TrySetSchedule(item, DateTime.Today.AddDays(2), null, item.ReminderAtUtc, false,
+            item.NotificationStyle, new() { UrgentSound = ChecklistUrgentSound.Bell }, out var error), error);
+        Assert.AreEqual(occurrence, item.ReminderOccurrence);
+        Assert.AreEqual(handled, item.ReminderHandledAtUtc);
+        Assert.IsFalse(model.TrySetSchedule(item, item.DueDate, null, item.ReminderAtUtc, false,
+            ChecklistNotificationStyle.Standard, item.NotificationOptions, out error));
+        Assert.AreEqual(occurrence, item.ReminderOccurrence);
+        Assert.AreEqual(ChecklistNotificationStyle.Urgent, item.NotificationStyle);
+    });
+
+    [TestMethod]
+    public void PendingStyleChangesPreserveOccurrenceAcrossSaveAndReload() => WpfTestHost.Invoke(() =>
+    {
+        var service = new RecordingService();
+        Guid id;
+        using (var model = Create(service))
+        {
+            var item = new ChecklistItem { NotificationStyle = ChecklistNotificationStyle.Urgent, ReminderAtUtc = DateTimeOffset.UtcNow.AddDays(2) };
+            model.Items.Add(item);
+            id = item.ReminderOccurrence!.Id;
+            Assert.IsTrue(model.TrySetSchedule(item, null, null, item.ReminderAtUtc, false,
+                ChecklistNotificationStyle.Standard, null, out var error), error);
+            Assert.AreEqual(id, item.ReminderOccurrence!.Id);
+        }
+        using var restored = Create(service);
+        var task = restored.Items.Single();
+        Assert.AreEqual(id, task.ReminderOccurrence!.Id);
+        Assert.IsTrue(restored.TrySetSchedule(task, null, null, task.ReminderAtUtc, false,
+            ChecklistNotificationStyle.Urgent, null, out var saveError), saveError);
+        Assert.AreEqual(id, task.ReminderOccurrence!.Id);
+    });
+
+    [TestMethod]
+    public void ExpiredNewNotificationIsRejectedButExistingOverdueSaveIsAllowed() => WpfTestHost.Invoke(() =>
+    {
+        using var model = Create(new RecordingService());
+        var item = new ChecklistItem(); model.Items.Add(item);
+        var past = DateTimeOffset.UtcNow.AddMinutes(-1);
+        Assert.IsFalse(model.TrySetSchedule(item, null, null, past, false, item.NotificationStyle, null, out _));
+        Assert.IsNull(item.ReminderAtUtc);
+        item.ReminderAtUtc = past;
+        item.ReminderHandledAtUtc = DateTimeOffset.UtcNow;
+        Assert.IsTrue(model.TrySetSchedule(item, null, null, past, false, item.NotificationStyle, null, out var error), error);
+        Assert.IsNotNull(item.ReminderHandledAtUtc);
+    });
+
+    [TestMethod]
+    public void CapturedOptionsKeepStyleStableEvenWhenSubmissionHasNotBeenRecorded() => WpfTestHost.Invoke(() =>
+    {
+        using var model = Create(new RecordingService());
+        var item = new ChecklistItem { NotificationStyle = ChecklistNotificationStyle.Urgent, ReminderAtUtc = DateTimeOffset.UtcNow.AddDays(2) };
+        model.Items.Add(item);
+        item.ReminderOccurrence = item.ReminderOccurrence! with { Options = new() };
+        var captured = item.ReminderOccurrence;
+        Assert.IsFalse(model.TrySetSchedule(item, null, null, item.ReminderAtUtc, false,
+            ChecklistNotificationStyle.Standard, null, out _));
+        Assert.AreEqual(captured, item.ReminderOccurrence);
+        Assert.IsNull(item.ReminderHandledAtUtc);
+    });
+
     private static ChecklistWindowViewModel Create(IChecklistContentService service) =>
         new(service, Dispatcher.CurrentDispatcher, action => action(), false);
 

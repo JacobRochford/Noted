@@ -17,6 +17,7 @@ public sealed class ChecklistItem : ObservableObject
     private DateTime? _dueDate;
     private TimeSpan? _dueTime;
     private DateTimeOffset? _reminderAtUtc;
+    private bool _reminderAtDueTime;
     private DateTimeOffset? _reminderHandledAtUtc;
     private ChecklistNotificationStyle _notificationStyle;
     private ChecklistNotificationOptions? _notificationOptions;
@@ -89,12 +90,19 @@ public sealed class ChecklistItem : ObservableObject
             var reminder = _isChecked ? null : value?.ToUniversalTime();
             if (_reminderAtUtc == reminder) return;
             _reminderAtUtc = reminder;
+            ReminderAtDueTime = false;
             ReminderHandledAtUtc = null;
             ReminderOccurrence = reminder.HasValue && NotificationStyle == ChecklistNotificationStyle.Urgent
                 ? ChecklistReminderOccurrence.Create(reminder.Value, _reminderOccurrence?.ConfirmationCode) : null;
             OnPropertyChanged();
             OnPropertyChanged(nameof(HasActiveReminder));
         }
+    }
+
+    public bool ReminderAtDueTime
+    {
+        get => _reminderAtDueTime;
+        set => SetProperty(ref _reminderAtDueTime, !_isChecked && _reminderAtUtc.HasValue && value);
     }
 
     public DateTimeOffset? ReminderHandledAtUtc
