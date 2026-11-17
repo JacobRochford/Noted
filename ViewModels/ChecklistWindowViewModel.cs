@@ -802,7 +802,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         // a notification during the write may have queued newer content.
         if (!snapshot.SequenceEqual(CreateItemsSnapshot(excludedItem)))
         {
-            error = "Checklist content changed while saving. Finish the item again to save the latest changes.";
+            error = "Task content changed while saving. Finish the item again to save the latest changes.";
             return false;
         }
         return true;
@@ -858,7 +858,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         catch (Exception ex) when (IsExpectedPersistenceException(ex))
         {
             ExceptionDiagnostics.Record(ex);
-            _tabSaveError = "Checklist tabs could not be saved.";
+            _tabSaveError = "Task tabs could not be saved.";
             _tabSaveWarning = null;
             RefreshPersistenceError();
             return false;
@@ -879,7 +879,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         catch (Exception ex) when (IsExpectedPersistenceException(ex))
         {
             ExceptionDiagnostics.Record(ex);
-            _itemSaveError = "Checklist content could not be saved.";
+            _itemSaveError = "Task content could not be saved.";
             _itemSaveWarning = null;
             RefreshPersistenceError();
             return PersistenceSaveResult.Failed(_itemSaveError);

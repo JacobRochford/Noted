@@ -246,7 +246,7 @@ internal sealed class HotkeyConfiguration : IDisposable
     internal static string GetHotkeyFeatureName(HotkeyFeature feature) => feature switch
     {
         HotkeyFeature.Notes => "Noted",
-        HotkeyFeature.Checklist => "Checklist",
+        HotkeyFeature.Checklist => "Tasks",
         HotkeyFeature.Dictionary => "Dictionary",
         HotkeyFeature.MiniPad => "MiniPad",
         HotkeyFeature.NoteEditor => "Note Editor",

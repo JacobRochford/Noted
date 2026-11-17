@@ -28,7 +28,7 @@
                                           VerticalScrollBarVisibility="Auto">
                             <StackPanel x:Name="SettingsSections">
                                 <StackPanel Tag="Notifications" Margin="12">
-                                    <TextBlock Text="Checklist notifications" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                                    <TextBlock Text="Task notifications" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12"/>
                                     <TextBlock Text="Set default alert appearance, sounds and acknowledgment. Individual reminders can override these options. Active urgent reminders keep their acknowledgment requirements." TextWrapping="Wrap" Margin="0,0,0,12"/>
                                     <Button Content="Customize notification defaults..." Click="NotificationDefaults_Click" Padding="12,8" HorizontalAlignment="Left"/>
                                 </StackPanel>
@@ -548,7 +548,7 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="30"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Checklist"
+                                        <TextBlock Text="Tasks"
                                                    Foreground="{DynamicResource NotedTextBrush}"
                                                    VerticalAlignment="Center"/>
                                         <TextBlock x:Name="CurrentChecklistHotkeyDisplay" ToolTip="{Binding ChecklistHotkeyTooltip}" Text="{Binding ChecklistHotkey}"
@@ -563,8 +563,8 @@
                                                 Tag="Checklist"
                                                 Click="EditHotkeyButton_Click"
                                                 Style="{DynamicResource HeaderChromeButtonStyle}"
-                                                ToolTip="Change Checklist hotkey"
-                                                AutomationProperties.Name="Change Checklist hotkey">
+                                                ToolTip="Change Tasks hotkey"
+                                                AutomationProperties.Name="Change Tasks hotkey">
                                             <TextBlock Text="✎" FontSize="13"/>
                                         </Button>
                                     </Grid>

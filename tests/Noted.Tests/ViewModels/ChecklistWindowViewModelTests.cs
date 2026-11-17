@@ -88,7 +88,7 @@ public sealed class ChecklistWindowViewModelTests
             service.ItemError = null;
             Assert.IsTrue(viewModel.TryFlushPendingItems(out _));
             Assert.IsNotNull(viewModel.PersistenceError);
-            Assert.AreEqual("Checklist tabs could not be saved.", viewModel.PersistenceError);
+            Assert.AreEqual("Task tabs could not be saved.", viewModel.PersistenceError);
             return Task.CompletedTask;
         });
     }
@@ -123,7 +123,7 @@ public sealed class ChecklistWindowViewModelTests
             }
 
             Assert.IsNotNull(viewModel.PersistenceError);
-            Assert.AreEqual(itemFails ? "Checklist content could not be saved." : "Checklist tabs could not be saved.", viewModel.PersistenceError);
+            Assert.AreEqual(itemFails ? "Task content could not be saved." : "Task tabs could not be saved.", viewModel.PersistenceError);
             return Task.CompletedTask;
         });
     }

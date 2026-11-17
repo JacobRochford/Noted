@@ -27,14 +27,14 @@ internal sealed record ChecklistNotificationContent(string Title, string Text, I
             arguments["taskId"] = reminders[0].TaskId.ToString("D");
         else
             arguments["batchUtc"] = reminders[0].BatchUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
-        return new(reminders.Count == 1 ? "Checklist reminder" : $"{reminders.Count} Checklist reminders",
-            reminders.Count == 1 ? Trim(reminders[0].Text) : "Open Checklist to choose a reminded task.", arguments, style, sound ?? (style == ChecklistNotificationStyle.Standard
+        return new(reminders.Count == 1 ? "Task reminder" : $"{reminders.Count} task reminders",
+            reminders.Count == 1 ? Trim(reminders[0].Text) : "Open Tasks to choose a reminded task.", arguments, style, sound ?? (style == ChecklistNotificationStyle.Standard
                 ? ChecklistWindowsNotificationSound.Default : ChecklistWindowsNotificationSound.Reminder));
     }
 
     internal static ChecklistNotificationContent CreatePreview(ChecklistNotificationStyle style, ChecklistNotificationOptions options)
     {
-        var content = Create([new(Guid.NewGuid(), DateTimeOffset.UtcNow, "[Preview] Checklist reminder", Style: style)],
+        var content = Create([new(Guid.NewGuid(), DateTimeOffset.UtcNow, "[Preview] Task reminder", Style: style)],
             style == ChecklistNotificationStyle.Standard ? options.StandardSound : options.PersistentSound);
         return content with { Arguments = new Dictionary<string, string> { ["action"] = "checklistReminderPreview" } };
     }
@@ -46,7 +46,7 @@ internal sealed record ChecklistNotificationContent(string Title, string Text, I
         if (Style == ChecklistNotificationStyle.Persistent)
         {
             builder.SetScenario(AppNotificationScenario.Reminder);
-            var open = new AppNotificationButton(Arguments.ContainsKey("taskId") ? "Open task" : "Open Checklist");
+            var open = new AppNotificationButton(Arguments.ContainsKey("taskId") ? "Open task" : "Open Tasks");
             foreach (var argument in Arguments) open.AddArgument(argument.Key, argument.Value);
             builder.AddButton(open);
         }

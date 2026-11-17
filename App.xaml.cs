@@ -428,11 +428,11 @@ public partial class App : Application
                 return success
                     ? PersistenceSaveResult.Succeeded()
                     : PersistenceSaveResult.Failed(
-                        error ?? "Checklist content could not be saved before shutdown.");
+                        error ?? "Task content could not be saved before shutdown.");
             },
             () => viewModel.PersistenceError,
             () => viewModel.RecoveryIssuesFoundThisRun,
-            "Checklist recovery reported a problem during this application run.");
+            "Task recovery reported a problem during this application run.");
         _checklistViewModel = viewModel;
         return viewModel;
     }

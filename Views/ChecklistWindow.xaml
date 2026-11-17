@@ -5,7 +5,7 @@
         xmlns:noted="clr-namespace:Noted"
         xmlns:h="clr-namespace:Noted.Helpers"
         xmlns:m="clr-namespace:Noted.Models"
-        Title="Checklist"
+        Title="Tasks"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -224,7 +224,7 @@
                                     VerticalAlignment="Center" IsHitTestVisible="False">
                             <TextBlock Text="✓" Margin="0,0,7,0" Foreground="{DynamicResource NotedAccentBrush}"
                                        FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
-                            <TextBlock Text="Checklist" Foreground="{DynamicResource NotedTextBrush}"
+                            <TextBlock Text="Tasks" Foreground="{DynamicResource NotedTextBrush}"
                                        FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
                             <TextBlock Text="⚠" Margin="8,0,0,0" Foreground="{DynamicResource NotedWarningBrush}"
                                        FontSize="12" VerticalAlignment="Center"

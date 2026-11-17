@@ -161,7 +161,7 @@ public partial class ChecklistWindow : OverlayWindow
             item.ReminderHandledAtUtc == activation.BatchUtc).ToArray();
         if (tasks.Length == 0)
         {
-            AppDialog.Show("These reminders are no longer available.", "Checklist reminders", MessageBoxButton.OK, MessageBoxImage.Information);
+            AppDialog.Show("These reminders are no longer available.", "Task notifications", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         var menu = new ContextMenu
@@ -204,7 +204,7 @@ public partial class ChecklistWindow : OverlayWindow
         _interactionVersion++;
         if (!_viewModel.RevealItem(id, out var item))
         {
-            AppDialog.Show("This task is completed or no longer available.", "Checklist reminder", MessageBoxButton.OK, MessageBoxImage.Information);
+            AppDialog.Show("This task is completed or no longer available.", "Task notification", MessageBoxButton.OK, MessageBoxImage.Information);
             return false;
         }
         Activate();
@@ -413,7 +413,7 @@ public partial class ChecklistWindow : OverlayWindow
         _lastPersistenceWarning = error;
         AppDialog.Show(
             error,
-            "Checklist Save Warning",
+            "Task save warning",
             MessageBoxButton.OK,
             MessageBoxImage.Warning);
     }
@@ -574,7 +574,7 @@ public partial class ChecklistWindow : OverlayWindow
         var result = AppDialog.Show(
             this,
             $"Delete the '{tab.Name}' tab? Its tasks will remain available in All.",
-            "Delete Checklist Tab",
+            "Delete task tab",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
         if (result != MessageBoxResult.Yes) return;

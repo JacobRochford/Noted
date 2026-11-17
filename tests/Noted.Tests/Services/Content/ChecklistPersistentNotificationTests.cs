@@ -108,7 +108,7 @@ public sealed class ChecklistPersistentNotificationTests
         var content = ChecklistNotificationContent.Create(reminders);
         var toast = XElement.Parse(content.BuildNotification().Payload);
         var button = toast.Element("actions")!.Elements("action").Single();
-        Assert.AreEqual("Open Checklist", (string?)button.Attribute("content"));
+        Assert.AreEqual("Open Tasks", (string?)button.Attribute("content"));
         Assert.AreEqual((string?)toast.Attribute("launch"), (string?)button.Attribute("arguments"));
         Assert.IsTrue(ChecklistReminderActivation.TryParse(content.Arguments, out var activation));
         Assert.AreEqual(s_now, activation!.BatchUtc); Assert.IsNull(activation.TaskId);
