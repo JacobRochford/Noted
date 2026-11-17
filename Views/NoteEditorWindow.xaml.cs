@@ -1978,8 +1978,12 @@ public partial class NoteEditorWindow : Window
 
     private void RenameTabNoteMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not MenuItem { DataContext: OpenNoteDocument document })
-            return;
+        if (sender is MenuItem { DataContext: OpenNoteDocument document })
+            RenameTabNote(document);
+    }
+
+    private void RenameTabNote(OpenNoteDocument document)
+    {
         if (_draftStorage.IsDraftPath(document.FilePath))
         {
             TrySaveNoteAs(document, firstSave: true);
@@ -2045,6 +2049,13 @@ public partial class NoteEditorWindow : Window
 
     private void OpenTabsList_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (!e.Handled && e.Key == Key.F2 && e.KeyboardDevice.Modifiers == ModifierKeys.None &&
+            OpenTabsList.SelectedItem is OpenNoteDocument selected)
+        {
+            if (!e.IsRepeat) RenameTabNote(selected);
+            e.Handled = true;
+            return;
+        }
         if (Keyboard.Modifiers == ModifierKeys.None &&
             e.Key is Key.Up or Key.Down or Key.Home or Key.End && _documents.Count > 0)
         {

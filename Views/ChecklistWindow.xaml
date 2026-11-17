@@ -305,7 +305,7 @@
                                             <RadioButton.ContextMenu>
                                                 <ContextMenu Style="{StaticResource NotedContextMenu}"
                                                              Opened="TabContextMenu_Opened">
-                                                    <MenuItem Header="Rename tab"
+                                                    <MenuItem Header="Rename tab" InputGestureText="F2"
                                                               Tag="Rename"
                                                               Style="{StaticResource NotedContextMenuItem}"
                                                               Click="RenameTab_Click"/>

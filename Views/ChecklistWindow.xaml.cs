@@ -472,6 +472,19 @@ public partial class ChecklistWindow : OverlayWindow
                 NavigateItem(item, e.OriginalSource as UIElement, modifiers == ModifierKeys.Shift);
                 e.Handled = true;
             }
+            else if (e.Key == Key.F2 && modifiers == ModifierKeys.None &&
+                     e.OriginalSource is DependencyObject source &&
+                     VisualTreeHelpers.FindAncestor<RadioButton>(source) is RadioButton tabButton &&
+                     tabButton.DataContext is ChecklistTab tab && tab.CanDelete)
+            {
+                if (!e.IsRepeat) OpenTabNamePopup(tab, tabButton);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.F2 && modifiers == ModifierKeys.None && item is not null)
+            {
+                if (!e.IsRepeat && !item.IsEditingTitle) BeginTitleEditing(item);
+                e.Handled = true;
+            }
             else if (e.OriginalSource is ListBox or ListBoxItem)
             {
                 var selected = item ?? ItemsList.SelectedItem as ChecklistItem;

@@ -237,7 +237,7 @@
                                                             Click="EditDefinitionButton_Click">
                                                         <Button.Style>
                                                             <Style TargetType="Button" BasedOn="{StaticResource DetailsButtonStyle}">
-                                                                <Setter Property="ToolTip" Value="Edit word and definition"/>
+                                                                <Setter Property="ToolTip" Value="Edit word and definition (F2)"/>
                                                                 <Setter Property="AutomationProperties.Name" Value="Edit word and definition"/>
                                                                 <Style.Triggers>
                                                                     <DataTrigger Binding="{Binding IsEditing}" Value="True">

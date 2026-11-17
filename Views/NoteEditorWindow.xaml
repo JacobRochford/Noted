@@ -488,7 +488,7 @@
                                                 <Separator/>
                                                 <MenuItem Header="Close Tab"
                                                           Click="CloseTabButton_Click"/>
-                                                <MenuItem Header="Rename..."
+                                                <MenuItem Header="Rename..." InputGestureText="F2"
                                                           Click="RenameTabNoteMenuItem_Click"/>
                                                 <MenuItem Header="Reveal in File Explorer"
                                                           Click="RevealTabInFileExplorerMenuItem_Click"/>

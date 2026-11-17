@@ -133,6 +133,11 @@ public partial class DictionaryWindow : OverlayWindow
             if (!e.IsRepeat) SaveCurrentEntry(item);
             e.Handled = true;
         }
+        else if (e.Key == Key.F2 && modifiers == ModifierKeys.None && item is not null)
+        {
+            if (!e.IsRepeat && !item.IsEditing) BeginEntryEditing(item);
+            e.Handled = true;
+        }
         else if (e.Key == Key.N && modifiers == ModifierKeys.Control)
         {
             if (!e.IsRepeat) AddEntry();
@@ -665,6 +670,11 @@ public partial class DictionaryWindow : OverlayWindow
             return;
         }
 
+        BeginEntryEditing(item);
+    }
+
+    private void BeginEntryEditing(DictionaryItem item)
+    {
         item.BeginEdit();
         Dispatcher.BeginInvoke(
             System.Windows.Threading.DispatcherPriority.Input,
