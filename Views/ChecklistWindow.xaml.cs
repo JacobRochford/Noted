@@ -43,6 +43,8 @@ public partial class ChecklistWindow : OverlayWindow
     private bool _headerClickEditsTitle;
     private bool _ignoreHeaderClick;
     private bool _isClosed;
+    private readonly System.Windows.Threading.DispatcherTimer _dueStatusTimer = new(System.Windows.Threading.DispatcherPriority.Background)
+    { Interval = TimeSpan.FromMinutes(1) };
     private ChecklistReminderActivation? _pendingReminderActivation;
     private ContextMenu? _reminderTaskMenu;
     private int _interactionVersion;
@@ -94,10 +96,15 @@ public partial class ChecklistWindow : OverlayWindow
 
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         IsVisibleChanged += ChecklistWindow_IsVisibleChanged;
+        _dueStatusTimer.Tick += RefreshDueIndicators;
+        Microsoft.Win32.SystemEvents.TimeChanged += DueClockChanged;
+        Microsoft.Win32.SystemEvents.PowerModeChanged += DueClockChanged;
+        Activated += RefreshDueIndicators;
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(ChecklistWindowViewModel.TotalCount)) UpdateDueStatusTimer();
         if (e.PropertyName == nameof(ChecklistWindowViewModel.GhostModeEnabled))
         {
             ApplyGhostMode(_viewModel.GhostModeEnabled);
@@ -263,6 +270,11 @@ public partial class ChecklistWindow : OverlayWindow
         _creatingItem = null;
         _editingItem = null;
         IsVisibleChanged -= ChecklistWindow_IsVisibleChanged;
+        _dueStatusTimer.Stop();
+        _dueStatusTimer.Tick -= RefreshDueIndicators;
+        Microsoft.Win32.SystemEvents.TimeChanged -= DueClockChanged;
+        Microsoft.Win32.SystemEvents.PowerModeChanged -= DueClockChanged;
+        Activated -= RefreshDueIndicators;
         _viewModel.ViewChanging -= ViewModel_ViewChanging;
         _viewModel.ViewRefreshing -= ViewModel_ViewRefreshing;
         _viewModel.ViewRefreshed -= ViewModel_ViewRefreshed;
@@ -353,10 +365,30 @@ public partial class ChecklistWindow : OverlayWindow
         return true;
     }
 
+    private void DueClockChanged(object? sender, EventArgs e)
+    {
+        if (!_isClosed && !Dispatcher.HasShutdownStarted)
+            Dispatcher.BeginInvoke(() => RefreshDueIndicators(this, EventArgs.Empty));
+    }
+
+    private void UpdateDueStatusTimer()
+    {
+        if (!_isClosed && IsVisible && _viewModel.Items.Any(item => item.DueDate.HasValue)) _dueStatusTimer.Start();
+        else _dueStatusTimer.Stop();
+    }
+
+    private void RefreshDueIndicators(object? sender, EventArgs e)
+    {
+        UpdateDueStatusTimer();
+        if (_isClosed || !IsVisible) return;
+        foreach (var item in _viewModel.Items.Where(item => item.DueDate.HasValue)) item.RefreshDueStatus();
+    }
+
     private void ChecklistWindow_IsVisibleChanged(
         object sender,
         DependencyPropertyChangedEventArgs e)
     {
+        RefreshDueIndicators(this, EventArgs.Empty);
         if (!_preserveOpenStateOnClose && !IsChangingGroupVisibility)
         {
             _reopenOnStartup = IsWindowVisible;

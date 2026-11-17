@@ -297,6 +297,20 @@ public sealed class ChecklistReminderStateTests
     });
 
     [TestMethod]
+    public void DueStatusRefreshDoesNotSaveOrChangeReminderState() => WpfTestHost.Invoke(() =>
+    {
+        var service = new RecordingService(); using var model = Create(service);
+        var item = new ChecklistItem { DueDate = DateTime.Today }; model.Items.Add(item);
+        Assert.IsTrue(model.TryFlushPendingItems(out _));
+        var saved = service.Items;
+        var names = new List<string?>();
+        item.PropertyChanged += (_, e) => names.Add(e.PropertyName);
+        item.RefreshDueStatus();
+        Assert.AreSame(saved, service.Items);
+        CollectionAssert.AreEqual(new[] { nameof(ChecklistItem.DueAtLocal) }, names.ToArray());
+    });
+
+    [TestMethod]
     public void CapturedOptionsKeepStyleStableEvenWhenSubmissionHasNotBeenRecorded() => WpfTestHost.Invoke(() =>
     {
         using var model = Create(new RecordingService());

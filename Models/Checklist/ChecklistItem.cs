@@ -82,6 +82,8 @@ public sealed class ChecklistItem : ObservableObject
 
     public DateTime? DueAtLocal => DueDate?.Date.Add(DueTime ?? TimeSpan.Zero);
 
+    internal void RefreshDueStatus() => OnPropertyChanged(nameof(DueAtLocal));
+
     public DateTimeOffset? ReminderAtUtc
     {
         get => _reminderAtUtc;
