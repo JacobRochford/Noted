@@ -37,7 +37,7 @@ public sealed class GroupVisibilityTests
     });
 
     [TestMethod]
-    public void ChecklistSaveFailureDoesNotBlockSafeDictionaryCreationOrRecordTheChecklistAsHidden() => WithWindows(context =>
+    public void ChecklistSaveFailureDoesNotBlockAnExplicitlySavedDictionaryEntry() => WithWindows(context =>
     {
         var list = (ListBox)context.Checklist.FindName("ItemsList");
         KeyboardTestInput.Press(list, System.Windows.Input.Key.N, System.Windows.Input.ModifierKeys.Control);
@@ -47,14 +47,15 @@ public sealed class GroupVisibilityTests
         creation.Text = "pending checklist";
         creation.IsExpanded = true;
         context.ChecklistService.FailSave = true;
-        var entry = context.DictionaryModel.AddItem(beginEdit: true, autoSave: true);
+        var entry = context.DictionaryModel.AddItem(beginEdit: true);
         entry.DraftDefinition = "definition only";
+        Assert.IsTrue(context.DictionaryModel.TrySaveEntry(entry, out var error), error);
         WithWarningsDismissed(WindowManager.HideAll);
         Assert.IsTrue(context.Checklist.IsWindowVisible);
         Assert.IsFalse(context.Checklist.IsHiddenTogether);
         Assert.IsTrue(creation.IsEditingTitle && creation.IsExpanded);
         Assert.IsTrue(context.Dictionary.IsHiddenTogether);
-        Assert.IsFalse(entry.IsAutoSaving || entry.IsEditing || entry.IsExpanded);
+        Assert.IsFalse(entry.IsEditing);
         Assert.AreEqual("definition only", context.DictionaryService.Load().Last().Description);
         WindowManager.ToggleNotedWindows();
         Assert.IsTrue(context.Dictionary.IsWindowVisible);
@@ -113,25 +114,24 @@ public sealed class GroupVisibilityTests
     });
 
     [TestMethod]
-    public void DictionaryFailedSaveKeepsCreationAndGroupRestoresOnlyTheSuccessfulHides() => WithWindows(context =>
+    public void NewDictionaryDraftBlocksGroupHideUntilExplicitSave() => WithWindows(context =>
     {
-        var entry = context.DictionaryModel.AddItem(beginEdit: true, autoSave: true);
+        var entry = context.DictionaryModel.AddItem(beginEdit: true);
         entry.DraftDefinition = "pending";
-        context.DictionaryService.FailSave = true;
         WithWarningsDismissed(WindowManager.HideAll);
         Assert.IsTrue(context.Dictionary.IsWindowVisible);
         Assert.IsFalse(context.Dictionary.IsHiddenTogether);
-        Assert.IsTrue(entry.IsAutoSaving && entry.IsEditing && entry.IsExpanded);
+        Assert.IsTrue(entry.IsNew && entry.IsEditing && entry.IsExpanded);
         Assert.IsTrue(context.Checklist.IsHiddenTogether);
         WindowManager.ToggleNotedWindows();
         Assert.IsTrue(context.Checklist.IsWindowVisible);
         Assert.IsTrue(context.Dictionary.IsWindowVisible);
-        context.DictionaryService.FailSave = false;
+        Assert.IsTrue(context.DictionaryModel.TrySaveEntry(entry, out var error), error);
         WindowManager.HideAll();
         Assert.IsFalse(context.Dictionary.IsWindowVisible);
         WindowManager.ToggleNotedWindows();
         Assert.IsTrue(context.Dictionary.IsWindowVisible);
-        Assert.IsFalse(entry.IsAutoSaving || entry.IsEditing || entry.IsExpanded);
+        Assert.IsFalse(entry.IsEditing);
     });
 
     [TestMethod]

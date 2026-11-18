@@ -29,7 +29,7 @@ public sealed class DictionaryKeyboardTests
         Press(definition, Key.Enter);
         definition.SelectedText = "second line";
         StringAssert.Contains(definition.Text, Environment.NewLine);
-        Assert.IsTrue(item.IsAutoSaving && item.IsEditing && item.IsExpanded);
+        Assert.IsTrue(item.IsNew && item.IsEditing && item.IsExpanded);
         Press(definition, Key.Tab, ModifierKeys.Shift);
         Assert.AreSame(word, Keyboard.FocusedElement);
         Assert.AreEqual(1, word.SelectionStart);
@@ -42,19 +42,19 @@ public sealed class DictionaryKeyboardTests
     });
 
     [TestMethod]
-    public void HeaderActionFinishesNewEntryAndSavesEstablishedDraft() => WithWindow((window, model, service) =>
+    public void HeaderActionSavesNewAndEstablishedDrafts() => WithWindow((window, model, service) =>
     {
         var existing = model.Items[0];
         var existingButton = Control<Button>(window, existing, "EditDefinitionButton");
         var created = Create(window, model);
         var createdButton = Control<Button>(window, created, "EditDefinitionButton");
         Assert.IsTrue(existingButton.IsVisible);
-        Assert.AreEqual("Finish entry", createdButton.ToolTip);
-        Assert.AreEqual("Done", ((StackPanel)createdButton.Content).Children.OfType<TextBlock>().Last().Text);
+        Assert.AreEqual("Save changes", createdButton.ToolTip);
+        Assert.AreEqual("Save", ((StackPanel)createdButton.Content).Children.OfType<TextBlock>().Last().Text);
 
         Control<TextBox>(window, created, "WordTextBox").Text = "new word";
         Click(createdButton);
-        Assert.IsFalse(created.IsEditing || created.IsExpanded);
+        Assert.IsFalse(created.IsEditing);
         Assert.AreEqual("new word", service.Load().Last().Word);
 
         Edit(window, existing);
@@ -86,17 +86,11 @@ public sealed class DictionaryKeyboardTests
     });
 
     [TestMethod]
-    [DataRow(Key.Escape, "", "", true)]
-    [DataRow(Key.Enter, "", "", true)]
-    [DataRow(Key.Escape, " \t", "\r\n ", true)]
-    [DataRow(Key.Enter, " \t", "\r\n ", true)]
-    [DataRow(Key.Escape, "word", "", false)]
-    [DataRow(Key.Enter, "word", "", false)]
-    [DataRow(Key.Escape, "", "definition only", false)]
-    [DataRow(Key.Enter, "", "definition only", false)]
-    [DataRow(Key.Escape, "word", "definition", false)]
-    [DataRow(Key.Enter, "word", "definition", false)]
-    public void CompletionChecksBothFieldsAndNeverCreatesAnotherEntry(Key key, string wordText, string definitionText, bool empty) => WithWindow((window, model, service) =>
+    [DataRow(Key.Escape, "", "")]
+    [DataRow(Key.Escape, "word", "definition")]
+    [DataRow(Key.Enter, "", "definition only")]
+    [DataRow(Key.Enter, "word", "definition")]
+    public void NewEntryKeyboardCommandsSaveOrDiscardExplicitly(Key key, string wordText, string definitionText) => WithWindow((window, model, service) =>
     {
         var item = Create(window, model);
         Control<TextBox>(window, item, "WordTextBox").SelectedText = wordText;
@@ -104,12 +98,13 @@ public sealed class DictionaryKeyboardTests
         var definition = Control<TextBox>(window, item, "DefinitionBox");
         definition.SelectedText = definitionText;
         Press(definition, key, key == Key.Enter ? ModifierKeys.Control : ModifierKeys.None);
-        Assert.AreEqual(!empty, model.Items.Contains(item));
-        Assert.HasCount(empty ? 1 : 2, model.Items);
-        Assert.HasCount(empty ? 1 : 2, service.Load());
-        Assert.IsFalse(item.IsAutoSaving || item.IsEditing || item.IsExpanded);
+        var saved = key == Key.Enter;
+        Assert.AreEqual(saved, model.Items.Contains(item));
+        Assert.HasCount(saved ? 2 : 1, model.Items);
+        Assert.HasCount(saved ? 2 : 1, service.Load());
+        Assert.IsFalse(item.IsEditing);
         Assert.IsTrue(window.IsVisible);
-        if (!empty)
+        if (saved)
         {
             Assert.AreEqual(wordText, service.Load().Last().Word);
             Assert.AreEqual(definitionText, service.Load().Last().Description);
@@ -117,14 +112,7 @@ public sealed class DictionaryKeyboardTests
     });
 
     [TestMethod]
-    [DataRow("ctrl enter")]
-    [DataRow("escape")]
-    [DataRow("hide")]
-    [DataRow("shortcut")]
-    [DataRow("x")]
-    [DataRow("outside")]
-    [DataRow("add")]
-    public void FailedCreationCompletionKeepsItsEditorAndRetryUsesLatestText(string action) => WithWindow((window, model, service) =>
+    public void FailedNewEntrySaveKeepsItsEditorAndRetryUsesLatestText() => WithWindow((window, model, service) =>
     {
         var item = Create(window, model);
         Control<TextBox>(window, item, "WordTextBox").SelectedText = "word";
@@ -133,32 +121,9 @@ public sealed class DictionaryKeyboardTests
         definition.SelectedText = "definition";
         definition.Select(1, 3);
         service.FailSave = true;
-        WithWarningDismissed(window, () =>
-        {
-            switch (action)
-            {
-                case "ctrl enter": Press(definition, Key.Enter, ModifierKeys.Control); break;
-                case "escape": Press(definition, Key.Escape); break;
-                case "hide": Assert.IsFalse(window.TryHide()); break;
-                case "shortcut": WindowManager.Dictionary = window; WindowManager.HideDictionary(); break;
-                case "x":
-                    var hide = (Button)window.FindName("HideDictionaryButton");
-                    PreviewClick(hide);
-                    Assert.IsTrue(item.IsAutoSaving);
-                    Click(hide);
-                    break;
-                case "outside":
-                    var search = (TextBox)window.FindName("SearchTextBox");
-                    PreviewClick(search);
-                    search.Focus();
-                    PreviewRelease(search);
-                    Pump();
-                    break;
-                case "add": Click((Button)window.FindName("AddEntryButton")); break;
-            }
-        });
+        Press(definition, Key.Enter, ModifierKeys.Control);
         Assert.IsTrue(window.IsVisible);
-        Assert.IsTrue(item.IsAutoSaving && item.IsEditing && item.IsExpanded);
+        Assert.IsTrue(item.IsNew && item.IsEditing && item.IsExpanded);
         Assert.HasCount(2, model.Items);
         Assert.AreSame(Control<TextBox>(window, item, "DefinitionBox"), Keyboard.FocusedElement);
         Assert.AreEqual(1, definition.SelectionStart);
@@ -168,20 +133,6 @@ public sealed class DictionaryKeyboardTests
         Press(definition, Key.Enter, ModifierKeys.Control);
         Assert.IsFalse(item.IsEditing || item.IsAutoSaving || item.IsExpanded);
         Assert.AreEqual(item.Definition, service.Load().Last().Description);
-    });
-
-    [TestMethod]
-    public void FailedEmptyCreationCleanupDoesNotRemoveTheEditor() => WithWindow((window, model, service) =>
-    {
-        var item = Create(window, model);
-        service.FailSave = true;
-        WithWarningDismissed(window, () => Press((UIElement)Keyboard.FocusedElement, Key.Escape));
-        Assert.IsTrue(model.Items.Contains(item));
-        Assert.IsTrue(item.IsAutoSaving && item.IsEditing && item.IsExpanded);
-        service.FailSave = false;
-        Press((UIElement)Keyboard.FocusedElement, Key.Escape);
-        Assert.IsFalse(model.Items.Contains(item));
-        Assert.HasCount(1, service.Load());
     });
 
     [TestMethod]
@@ -263,7 +214,7 @@ public sealed class DictionaryKeyboardTests
         Edit(window, established);
         established.DraftDefinition = "unsaved draft";
         var creation = Create(window, model);
-        creation.DraftDefinition = "autosaved creation";
+        creation.DraftDefinition = "unsaved creation";
         WithWarningDismissed(window, () =>
         {
             if (route == "x")
@@ -280,15 +231,11 @@ public sealed class DictionaryKeyboardTests
         });
         Assert.IsTrue(window.IsVisible);
         Assert.IsTrue(established.HasPendingEdit);
-        Assert.IsTrue(creation.IsAutoSaving && creation.IsEditing && creation.IsExpanded);
-        established.CancelEdit();
-        Assert.IsTrue(window.TryHide());
-        Assert.IsFalse(creation.IsAutoSaving || creation.IsEditing || creation.IsExpanded);
-        window.ShowWindow();
-        Pump();
-        Assert.IsFalse(Keyboard.FocusedElement is TextBox { Name: "WordTextBox" or "DefinitionBox" });
-        Assert.AreEqual("saved definition", service.Load()[0].Description);
-        Assert.AreEqual("autosaved creation", service.Load()[1].Description);
+        Assert.IsTrue(creation.IsNew && creation.IsEditing && creation.IsExpanded);
+        Assert.IsTrue(model.TryCancelEntry(established, out _));
+        WithWarningDismissed(window, () => Assert.IsFalse(window.TryHide()));
+        Assert.IsTrue(creation.IsEditing && creation.IsExpanded);
+        Assert.AreEqual("saved definition", service.Load().Single().Description);
     });
 
     [TestMethod]
@@ -302,24 +249,24 @@ public sealed class DictionaryKeyboardTests
         var definition = Control<TextBox>(window, item, "DefinitionBox");
         service.BeforeSave = () => item.DraftDefinition = "arrived during save";
         WithWarningDismissed(window, () => Press(definition, Key.Enter, ModifierKeys.Control));
-        Assert.IsTrue(item.IsAutoSaving && item.IsEditing && item.IsExpanded);
+        Assert.IsTrue(item.IsEditing && item.IsExpanded);
         Assert.IsTrue(model.Items.Contains(item));
         Assert.AreSame(definition, Keyboard.FocusedElement);
-        Press(definition, Key.Escape);
+        Press(definition, Key.Enter, ModifierKeys.Control);
         Assert.IsTrue(model.Items.Contains(item));
         Assert.AreEqual("arrived during save", service.Load().Last().Description);
     });
 
     [TestMethod]
-    public void BackupPreparationRetainsItsExistingCreationCompletionAndExpandedDetails() => WithWindow((window, model, service) =>
+    public void BackupPreparationPreservesCreationWithoutCommittingIt() => WithWindow((window, model, service) =>
     {
         var item = Create(window, model);
         item.DraftDefinition = "definition only";
         Assert.IsTrue(window.TryFlushPendingContent(out var error), error);
-        Assert.IsFalse(item.IsAutoSaving || item.IsEditing);
+        Assert.IsTrue(item.IsNew && item.IsEditing);
         Assert.IsTrue(item.IsExpanded);
-        Assert.AreEqual("", service.Load().Last().Word);
-        Assert.AreEqual("definition only", service.Load().Last().Description);
+        Assert.AreEqual("original", service.Load().Single().Word);
+        Assert.AreEqual("saved definition", service.Load().Single().Description);
     });
 
     [TestMethod]
@@ -331,7 +278,7 @@ public sealed class DictionaryKeyboardTests
         search.Text = "missing";
         Press(search, Key.Escape);
         Assert.AreEqual("", model.SearchText);
-        Assert.IsTrue(item.IsAutoSaving && window.IsVisible);
+        Assert.IsTrue(item.IsNew && window.IsVisible);
         var root = Control<Border>(window, item, "DictionaryItemRoot");
         root.ContextMenu.PlacementTarget = root;
         root.ContextMenu.IsOpen = true;
@@ -370,24 +317,6 @@ public sealed class DictionaryKeyboardTests
     });
 
     [TestMethod]
-    public void ANewEstablishedDraftDuringHideFlushBlocksHideBeforeCreationFinishes() => WithWindow((window, model, service) =>
-    {
-        var established = model.Items[0];
-        Edit(window, established);
-        var creation = Create(window, model);
-        creation.DraftDefinition = "accepted creation";
-        service.BeforeSave = () => established.DraftDefinition = "arrived during hide";
-        WithWarningDismissed(window, () => Assert.IsFalse(window.TryHide()));
-        Assert.IsTrue(window.IsVisible);
-        Assert.IsTrue(established.HasPendingEdit);
-        Assert.AreEqual("arrived during hide", established.DraftDefinition);
-        Assert.IsTrue(creation.IsAutoSaving && creation.IsEditing && creation.IsExpanded);
-        Assert.AreEqual("saved definition", service.Load()[0].Description);
-        established.CancelEdit();
-        Assert.IsTrue(window.TryHide());
-    });
-
-    [TestMethod]
     public void LaterEstablishedDraftChangesStayEditableAfterTheRequestedValuesWereSaved() => WithWindow((window, model, service) =>
     {
         var item = model.Items[0];
@@ -409,7 +338,7 @@ public sealed class DictionaryKeyboardTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public void OutsideClickFinishesOnlyCreationAndPreservesTheClickedHeader(bool populated) => WithWindow((window, model, service) =>
+    public void OutsideClickPreservesCreationAndTheClickedHeader(bool populated) => WithWindow((window, model, service) =>
     {
         var original = model.Items[0];
         var creation = Create(window, model);
@@ -422,10 +351,10 @@ public sealed class DictionaryKeyboardTests
         Pump();
         Assert.IsTrue(original.IsExpanded);
         Assert.IsFalse(original.IsEditing);
-        Assert.AreEqual(populated, model.Items.Contains(creation));
-        Assert.IsFalse(creation.IsAutoSaving || creation.IsExpanded);
+        Assert.IsTrue(model.Items.Contains(creation));
+        Assert.IsTrue(creation.IsEditing && creation.IsExpanded);
         Assert.AreSame(Control<Button>(window, original, "WordHeaderButton"), Keyboard.FocusedElement);
-        Assert.HasCount(populated ? 2 : 1, service.Load());
+        Assert.HasCount(1, service.Load());
     });
 
     [TestMethod]
@@ -436,15 +365,15 @@ public sealed class DictionaryKeyboardTests
         PreviewClick(definition);
         definition.Focus();
         Pump();
-        Assert.IsTrue(item.IsAutoSaving && item.IsEditing && item.IsExpanded);
-        Assert.IsFalse(item.ShowEditActions);
+        Assert.IsTrue(item.IsNew && item.IsEditing && item.IsExpanded);
+        Assert.IsTrue(item.ShowEditActions);
         var root = Control<Border>(window, item, "DictionaryItemRoot");
         root.ContextMenu.PlacementTarget = root;
         root.ContextMenu.IsOpen = true;
         Pump();
         var escape = KeyboardTestInput.Press((ItemsControl)window.FindName("ItemsList"), Key.Escape, ModifierKeys.None);
         Assert.IsFalse(escape.Handled, "The window must leave Escape to the open context menu.");
-        Assert.IsTrue(item.IsAutoSaving && item.IsEditing && item.IsExpanded);
+        Assert.IsTrue(item.IsNew && item.IsEditing && item.IsExpanded);
         Assert.IsTrue(window.IsVisible);
         root.ContextMenu.IsOpen = false;
     });
@@ -452,7 +381,7 @@ public sealed class DictionaryKeyboardTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public void CtrlNFinishesPreviousCreationWithoutPublishingAnEstablishedDraft(bool populated) => WithWindow((window, model, service) =>
+    public void CtrlNPreservesPreviousCreationAndAnEstablishedDraft(bool populated) => WithWindow((window, model, service) =>
     {
         var established = model.Items[0];
         Edit(window, established);
@@ -461,11 +390,11 @@ public sealed class DictionaryKeyboardTests
         if (populated) previous.DraftDefinition = "definition only";
         var next = Create(window, model);
         Assert.AreNotSame(previous, next);
-        Assert.IsTrue(next.IsEditing && next.IsAutoSaving && next.IsExpanded);
+        Assert.IsTrue(next.IsEditing && next.IsNew && next.IsExpanded);
         Assert.AreSame(Control<TextBox>(window, next, "WordTextBox"), Keyboard.FocusedElement);
-        Assert.AreEqual(populated, model.Items.Contains(previous));
-        Assert.HasCount(populated ? 3 : 2, model.Items);
-        Assert.HasCount(populated ? 2 : 1, service.Load());
+        Assert.IsTrue(model.Items.Contains(previous));
+        Assert.HasCount(3, model.Items);
+        Assert.HasCount(1, service.Load());
         Assert.IsTrue(established.HasPendingEdit);
         Assert.AreEqual("saved definition", service.Load()[0].Description);
     });
@@ -474,7 +403,7 @@ public sealed class DictionaryKeyboardTests
     [DataRow("header")]
     [DataRow("edit")]
     [DataRow("save")]
-    public void OutsideCompletionWaitsForMouseUpAndPreservesTheIntendedButtonAction(string action) => WithWindow((window, model, service) =>
+    public void ReferenceClicksPreserveCreationAndTheIntendedButtonAction(string action) => WithWindow((window, model, service) =>
     {
         var established = model.Items[0];
         if (action == "save")
@@ -492,7 +421,7 @@ public sealed class DictionaryKeyboardTests
         PreviewClick(button);
         button.Focus();
         Pump();
-        Assert.IsTrue(creation.IsAutoSaving && creation.IsExpanded);
+        Assert.IsTrue(creation.IsNew && creation.IsExpanded);
         Assert.IsTrue(button.IsVisible);
         Assert.IsTrue(button.IsDescendantOf(window));
         Assert.AreEqual(0, clicks);
@@ -501,73 +430,15 @@ public sealed class DictionaryKeyboardTests
         Assert.AreEqual(1, clicks);
         Pump();
         Assert.AreEqual(1, clicks);
-        Assert.IsFalse(creation.IsAutoSaving || creation.IsEditing || creation.IsExpanded);
+        Assert.IsTrue(creation.IsEditing && creation.IsExpanded);
         Assert.IsTrue(established.IsExpanded);
         Assert.AreEqual(action == "edit", established.IsEditing);
         if (action == "save") Assert.AreEqual("explicitly saved", service.Load()[0].Description);
-        Assert.AreEqual("creation", service.Load().Last().Description);
-    });
-
-    [TestMethod]
-    public void ReturningToTheCreationBeforeQueuedCompletionDoesNotInterruptTheNextGesture() => WithWindow((window, model, service) =>
-    {
-        var creation = Create(window, model);
-        creation.DraftDefinition = "keep editing";
-        var header = Control<Button>(window, model.Items[0], "WordHeaderButton");
-        PreviewClick(header);
-        PreviewRelease(header);
-        Click(header);
-        var definition = Control<TextBox>(window, creation, "DefinitionBox");
-        PreviewClick(definition);
-        definition.Focus();
-        Pump();
-        Assert.IsTrue(creation.IsAutoSaving && creation.IsExpanded);
-        Assert.AreSame(definition, Keyboard.FocusedElement);
-        PreviewRelease(definition);
-        Pump();
-        Assert.IsTrue(creation.IsAutoSaving && creation.IsExpanded);
-        Assert.AreSame(definition, Keyboard.FocusedElement);
-    });
-
-    [TestMethod]
-    [DataRow(false, false)]
-    [DataRow(false, true)]
-    [DataRow(true, false)]
-    [DataRow(true, true)]
-    public void EmptyCreationHideDoesNotAttemptAnotherWriteAfterTheVerifiedSnapshot(bool group, bool previouslyAutosaved) => WithWindow((window, model, service) =>
-    {
-        var creation = Create(window, model);
-        if (previouslyAutosaved)
-        {
-            creation.DraftDefinition = "temporarily populated";
-            Assert.IsTrue(model.TryFlushPendingItems(out _));
-        }
-        creation.DraftDefinition = " \t";
-        var before = service.SaveCount;
-        service.FailAfterSaveCount = before + 1;
-        WithWarningDismissed(window, () =>
-        {
-            if (group)
-            {
-                WindowManager.Dictionary = window;
-                WindowManager.HideAll();
-            }
-            else Assert.IsTrue(window.TryHide());
-        });
-        Assert.IsTrue(model.TryFlushPendingItems(out var error), error);
-        Assert.AreEqual(before + 1, service.SaveCount);
-        Assert.IsFalse(model.HasPersistenceError);
-        Assert.IsFalse(window.IsVisible || model.Items.Contains(creation));
         Assert.HasCount(1, service.Load());
-        if (group)
-        {
-            WindowManager.ToggleNotedWindows();
-            Assert.IsTrue(window.IsVisible);
-        }
     });
 
     [TestMethod]
-    public void EmptyCleanupStillSchedulesContentChangedDuringCollectionRemoval() => WithWindow((window, model, service) =>
+    public void CancelStillSchedulesContentChangedDuringCollectionRemoval() => WithWindow((window, model, service) =>
     {
         var creation = Create(window, model);
         var established = model.Items[0];
@@ -576,9 +447,9 @@ public sealed class DictionaryKeyboardTests
             if (e.OldItems?.Contains(creation) == true) established.Definition = "newer accepted content";
         };
         var before = service.SaveCount;
-        Press((UIElement)Keyboard.FocusedElement, Key.Enter, ModifierKeys.Control);
+        Press((UIElement)Keyboard.FocusedElement, Key.Escape);
         Assert.IsTrue(model.TryFlushPendingItems(out var error), error);
-        Assert.AreEqual(before + 2, service.SaveCount);
+        Assert.AreEqual(before + 1, service.SaveCount);
         Assert.AreEqual("newer accepted content", service.Load()[0].Description);
     });
 

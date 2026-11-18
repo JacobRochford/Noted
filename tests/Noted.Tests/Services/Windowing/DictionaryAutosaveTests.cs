@@ -56,7 +56,7 @@ public sealed class DictionaryAutosaveTests
 
     [TestMethod]
     [TestCategory("DesktopInteraction")]
-    public void OutsideClickFinishesNewEntriesRemovesBlankAndFlushes() => WpfTestHost.Invoke(() =>
+    public void OutsideClickKeepsNewAndBlankDraftsOpen() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
         var service = new RecordingContentService();
@@ -65,9 +65,9 @@ public sealed class DictionaryAutosaveTests
         try
         {
             window.Show();
-            var item = model.AddItem(beginEdit: true, autoSave: true);
+            var item = model.AddItem(beginEdit: true);
             item.DraftWord = "new word";
-            var blank = model.AddItem(beginEdit: true, autoSave: true);
+            var blank = model.AddItem(beginEdit: true);
             var mouse = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left)
             {
                 RoutedEvent = Mouse.PreviewMouseDownEvent,
@@ -80,11 +80,11 @@ public sealed class DictionaryAutosaveTests
                 Source = window
             });
             window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-            Assert.IsFalse(item.IsEditing);
-            Assert.IsFalse(item.IsAutoSaving);
-            Assert.IsFalse(model.Items.Contains(blank));
-            Assert.AreEqual(1, service.SaveCount);
-            Assert.AreEqual("new word", service.Saved.Last().Word);
+            Assert.IsTrue(item.IsEditing && item.IsNew);
+            Assert.IsTrue(model.Items.Contains(blank));
+            Assert.IsTrue(window.TryFlushPendingContent(out var error), error);
+            Assert.HasCount(1, service.Saved);
+            Assert.AreEqual("existing", service.Saved.Single().Word);
         }
         finally { window.Close(); }
     });
@@ -157,7 +157,7 @@ public sealed class DictionaryAutosaveTests
             Assert.IsTrue(item.HasPendingEdit);
             Assert.IsTrue(model.HasPersistenceError);
             Assert.IsFalse(window.TryFlushPendingContent(out var pendingError));
-            StringAssert.Contains(pendingError!, "Save or cancel");
+            StringAssert.Contains(pendingError!, "Simulated save failure");
             service.FailSave = false;
             Invoke(window, "SaveEntry", item);
             Assert.IsFalse(item.IsEditing);
@@ -219,7 +219,7 @@ public sealed class DictionaryAutosaveTests
     });
 
     [TestMethod]
-    public void AddEntryFinishesAndFlushesInitialEntriesWithoutPublishingExistingDrafts() => WpfTestHost.Invoke(() =>
+    public void AddEntryLeavesAllPreviousDraftsOpenAndCloseRecoversThem() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
         var service = new RecordingContentService();
@@ -230,24 +230,31 @@ public sealed class DictionaryAutosaveTests
             var existing = model.Items.Single();
             existing.BeginEdit();
             existing.DraftDefinition = "unsaved existing edit";
-            var previous = model.AddItem(beginEdit: true, autoSave: true);
+            var previous = model.AddItem(beginEdit: true);
             previous.DraftWord = "previous new word";
-            var blank = model.AddItem(beginEdit: true, autoSave: true);
+            var blank = model.AddItem(beginEdit: true);
             Invoke(window, "AddEntry");
-            Assert.IsFalse(previous.IsEditing);
-            Assert.IsFalse(model.Items.Contains(blank));
-            Assert.AreEqual(1, service.SaveCount);
-            Assert.AreEqual("previous new word", service.Saved.Last().Word);
-            Assert.AreEqual("saved definition", service.Saved.First().Description);
+            Assert.IsTrue(previous.IsEditing);
+            Assert.IsTrue(model.Items.Contains(blank));
             Assert.IsTrue(existing.IsEditing && existing.HasPendingEdit);
             var added = model.Items.Last();
             Assert.AreNotSame(previous, added);
-            Assert.IsTrue(added.IsEditing && added.IsAutoSaving && added.IsExpanded);
+            Assert.IsTrue(added.IsEditing && added.IsNew && added.IsExpanded && added.ShowEditActions);
             Assert.AreEqual("", added.DraftWord);
+            window.Close();
+            Assert.AreEqual("saved definition", service.Saved.Single().Description);
+            var recovered = new DictionaryWindow(new AppSettingsService(directory.Path), service);
+            try
+            {
+                var drafts = ((DictionaryWindowViewModel)recovered.DataContext).Items;
+                Assert.HasCount(4, drafts);
+                Assert.IsTrue(drafts.All(item => item.IsEditing));
+                Assert.AreEqual("previous new word", drafts.Single(item => item.Id == previous.Id).DraftWord);
+            }
+            finally { recovered.Close(); }
         }
         finally
         {
-            foreach (var item in model.Items.Where(item => item.HasPendingEdit)) item.CancelEdit();
             window.Close();
         }
     });
@@ -262,7 +269,7 @@ public sealed class DictionaryAutosaveTests
         public IReadOnlyList<DictionaryItemState> Saved { get; private set; } = [];
 
         public DictionaryContentLoadResult LoadItems() => new(
-            [new DictionaryItemState { Word = "existing", Description = "saved definition" }], []);
+            Saved.Count > 0 ? Saved : [new DictionaryItemState { Word = "existing", Description = "saved definition" }], []);
 
         public DictionaryContentSaveResult SaveItems(IReadOnlyList<DictionaryItemState> items)
         {

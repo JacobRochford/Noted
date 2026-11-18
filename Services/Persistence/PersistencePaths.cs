@@ -11,6 +11,7 @@ internal static class PersistencePaths
     internal const string ChecklistFile = "checklist.json";
     internal const string ChecklistTabsFile = "checklist-tabs.json";
     internal const string DictionaryFile = "dictionary.json";
+    internal const string DictionaryDraftsFile = "dictionary-drafts.json";
     internal const string JotsFile = "jots.json";
     internal const string JotCaptureDraftFile = "jot-capture-draft.json";
     internal const string JotCaptureConflictsDirectory = "quick-jot-conflicts";

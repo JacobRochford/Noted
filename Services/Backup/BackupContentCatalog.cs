@@ -134,6 +134,8 @@ internal sealed class BackupContentCatalog
                 return new BackupContentDetails(ValidateCollection<List<ChecklistTabState>>(bytes).Count, null);
             case FixedBackupContent.Dictionary:
                 return new BackupContentDetails(ValidateCollection<List<DictionaryItemState>>(bytes).Count, null);
+            case FixedBackupContent.DictionaryDrafts:
+                return new BackupContentDetails(DictionaryDraftStore.ReadBackup(bytes).Count(draft => !draft.IsRetired), null);
             case FixedBackupContent.Jots:
                 return new BackupContentDetails(ValidateCollection<List<JotItemState>>(bytes).Count, null);
             case FixedBackupContent.JotCapture:

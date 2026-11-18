@@ -27,8 +27,6 @@ public partial class DictionaryWindow : OverlayWindow
     private DictionaryItem? _wordSelectionItem;
     private int _wordSelectionStart;
     private int _wordSelectionLength;
-    private DictionaryItem[] _outsideClickEntries = [];
-    private int _mouseInteractionVersion;
 
     private sealed record FocusTarget(
         FrameworkElement Element, DictionaryItem? Item, string Name, int Start, int Length);
@@ -54,7 +52,8 @@ public partial class DictionaryWindow : OverlayWindow
             contentService,
             Dispatcher,
             action => Dispatcher.Invoke(action),
-            windowState.GhostModeEnabled);
+            windowState.GhostModeEnabled,
+            new DictionaryDraftStore(settingsService.AppDataDirectory));
         DataContext = _viewModel;
         InitializeOverlay(windowState.GhostModeEnabled, windowState.GhostModeOpacity, windowState.Opacity);
 
@@ -74,45 +73,9 @@ public partial class DictionaryWindow : OverlayWindow
         IsVisibleChanged += DictionaryWindow_IsVisibleChanged;
     }
 
-    protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
-    {
-        if (e.ChangedButton == MouseButton.Left)
-        {
-            _outsideClickEntries = [];
-            _mouseInteractionVersion++;
-        }
-        var target = e.OriginalSource as DependencyObject;
-        if (!_completingEntry && e.ChangedButton == MouseButton.Left &&
-            !IsWithin(target, TitleBar) && !IsWithin(target, AddEntryButton))
-        {
-            var clickedItem = GetItem(target);
-            _outsideClickEntries = _viewModel.Items.Where(item => item.IsAutoSaving &&
-                !ReferenceEquals(item, clickedItem) && !IsEntryPopupOpen(item)).ToArray();
-        }
-        base.OnPreviewMouseDown(e);
-    }
-
-    protected override void OnPreviewMouseUp(MouseButtonEventArgs e)
-    {
-        if (e.ChangedButton == MouseButton.Left)
-        {
-            var entries = _outsideClickEntries;
-            var interactionVersion = _mouseInteractionVersion;
-            _outsideClickEntries = [];
-            if (entries.Length > 0)
-                Dispatcher.BeginInvoke(() =>
-                {
-                    if (!_isClosed && IsVisible && !_completingEntry &&
-                        interactionVersion == _mouseInteractionVersion && Mouse.LeftButton != MouseButtonState.Pressed)
-                        TryFinishCreations(entries);
-                }, System.Windows.Threading.DispatcherPriority.Input);
-        }
-        base.OnPreviewMouseUp(e);
-    }
-
     protected override void OnDeactivated(EventArgs e)
     {
-        if (!_completingEntry && _viewModel.Items.Any(item => item.IsAutoSaving))
+        if (!_completingEntry)
             _viewModel.TryFlushPendingItems(out _);
 
         base.OnDeactivated(e);
@@ -145,14 +108,7 @@ public partial class DictionaryWindow : OverlayWindow
         }
         else if (e.Key == Key.Enter && modifiers == ModifierKeys.Control && item?.IsEditing == true)
         {
-            if (item.IsAutoSaving)
-            {
-                TryFinishCreations([item], focusList: true);
-            }
-            else
-            {
-                TrySaveEntry(item, collapse: true);
-            }
+            TrySaveEntry(item, collapse: true);
             e.Handled = true;
         }
         else if (e.Key == Key.Tab && item?.IsEditing == true &&
@@ -199,12 +155,9 @@ public partial class DictionaryWindow : OverlayWindow
             !_viewModel.Items.Any(IsEntryPopupOpen) && !_completingEntry)
         {
             var item = GetItem(e.OriginalSource as DependencyObject);
-            if (item?.IsEditing != true) item = _viewModel.Items.LastOrDefault(entry => entry.IsAutoSaving);
-            if (item?.IsAutoSaving == true) TryFinishCreations([item], focusList: true);
-            else if (item?.IsEditing == true)
+            if (item?.IsEditing == true)
             {
-                CancelEntry(item);
-                FocusEntry(item);
+                if (CancelEntry(item)) FocusEntry(item);
             }
             else RequestHide();
             e.Handled = true;
@@ -265,12 +218,6 @@ public partial class DictionaryWindow : OverlayWindow
 
     internal bool TryFlushPendingContent(out string? error)
     {
-        FinishNewEntries();
-        if (_viewModel.Items.Any(item => item.HasPendingEdit))
-        {
-            error = "Save or cancel the dictionary entry being edited first.";
-            return false;
-        }
         var success = _viewModel.TryFlushPendingItems(out error);
         if (success && !_viewModel.HasPersistenceError)
             _lastPersistenceWarning = null;
@@ -307,25 +254,7 @@ public partial class DictionaryWindow : OverlayWindow
 
     private void AddEntry()
     {
-        if (!TryFinishCreations(_viewModel.Items.Where(item => item.IsAutoSaving).ToArray())) return;
-
-        var item = _viewModel.AddItem(beginEdit: true, autoSave: true);
-        Dispatcher.BeginInvoke(
-            System.Windows.Threading.DispatcherPriority.Input,
-            new Action(() =>
-            {
-                if (_isClosed || !IsVisible || !item.IsAutoSaving || !_viewModel.Items.Contains(item)) return;
-                ItemsList.UpdateLayout();
-                if (ItemsList.ItemContainerGenerator.ContainerFromItem(item) is not DependencyObject container)
-                    return;
-
-                var wordBox = VisualTreeHelpers.FindDescendant<TextBox>(container, "WordTextBox");
-                wordBox?.BringIntoView();
-                wordBox?.Focus();
-                wordBox?.SelectAll();
-                ItemsList.UpdateLayout();
-                (container as FrameworkElement)?.BringIntoView();
-            }));
+        BeginEntryEditing(_viewModel.AddItem(beginEdit: true));
     }
 
     private void HideButton_Click(object sender, RoutedEventArgs e) => RequestHide();
@@ -374,14 +303,12 @@ public partial class DictionaryWindow : OverlayWindow
     internal bool TryHide()
     {
         if (_completingEntry || !CheckHideDrafts()) return false;
-        if (!TryFinishCreations(_viewModel.Items.Where(item => item.IsAutoSaving).ToArray(), hiding: true))
-            return false;
-        if (!CheckHideDrafts()) return false;
-        foreach (var item in _viewModel.Items.Where(item => item.IsEditing))
+        if (!TryFlushPendingContent(out var error))
         {
-            item.CancelEdit();
-            item.IsExpanded = false;
+            ShowPersistenceWarningOnce(error);
+            return false;
         }
+        if (!CheckHideDrafts()) return false;
         ItemsList.Focus();
         ShowPersistenceWarningOnce(_viewModel.PersistenceError);
         HideWindow();
@@ -436,6 +363,7 @@ public partial class DictionaryWindow : OverlayWindow
     {
         if (sender is FrameworkElement fe && fe.DataContext is DictionaryItem item)
         {
+            if (item.IsEditing && !CancelEntry(item)) return;
             _definitionHeights.Remove(item);
             _viewModel.RemoveItem(item);
         }
@@ -449,57 +377,6 @@ public partial class DictionaryWindow : OverlayWindow
         contextMenu.PlacementTarget = itemRoot;
         contextMenu.IsOpen = true;
         e.Handled = true;
-    }
-
-    private bool FinishNewEntries(DictionaryItem? except = null)
-    {
-        var finished = false;
-        foreach (var item in _viewModel.Items.Where(item => item.IsAutoSaving && !ReferenceEquals(item, except)).ToList())
-        {
-            var empty = item.IsEmpty;
-            item.FinishAutoSave();
-            finished = true;
-            if (empty) _viewModel.RemoveItem(item);
-        }
-        return finished;
-    }
-
-    private bool TryFinishCreations(IReadOnlyList<DictionaryItem> candidates, bool focusList = false, bool hiding = false)
-    {
-        if (_completingEntry) return false;
-        var entries = candidates.Where(item => item.IsAutoSaving && _viewModel.Items.Contains(item)).ToArray();
-        if (entries.Length == 0 && !hiding) return true;
-        _completingEntry = true;
-        try
-        {
-            var destination = CaptureFocus();
-            RememberEditorFocus();
-            if (!_viewModel.TryFlushCurrentItems(out var error))
-            {
-                ShowPersistenceWarningOnce(error);
-                var active = entries.FirstOrDefault(item => ReferenceEquals(item, _lastEditorFocus?.Item)) ?? entries.FirstOrDefault();
-                if (active is not null) RestoreEditorFocus(active);
-                return false;
-            }
-            if (hiding && !CheckHideDrafts()) return false;
-            foreach (var item in entries)
-            {
-                var empty = item.IsEmpty;
-                if (empty)
-                {
-                    _definitionHeights.Remove(item);
-                    _viewModel.RemoveSavedEmptyCreation(item);
-                }
-                item.FinishAutoSave();
-                item.IsExpanded = false;
-            }
-            if (entries.Length > 0) _viewModel.FilteredItems.Refresh();
-            if (focusList) FocusEntry(entries.FirstOrDefault());
-            else if (destination is not null && !entries.Contains(destination.Item)) RestoreFocus(destination);
-            else if (entries.Length > 0) FocusEntry(entries[0]);
-            return true;
-        }
-        finally { _completingEntry = false; }
     }
 
     private bool TrySaveEntry(DictionaryItem item, bool collapse)
@@ -531,9 +408,6 @@ public partial class DictionaryWindow : OverlayWindow
         }
         return null;
     }
-
-    private static bool IsWithin(DependencyObject? target, Visual ancestor) =>
-        ReferenceEquals(target, ancestor) || target is Visual visual && ancestor.IsAncestorOf(visual);
 
     private T? FindEntryControl<T>(DictionaryItem item, string name) where T : DependencyObject =>
         VisualTreeHelpers.FindDescendant<T>(ItemsList.ItemContainerGenerator.ContainerFromItem(item), name);
@@ -705,8 +579,7 @@ public partial class DictionaryWindow : OverlayWindow
 
     private void SaveEntry(DictionaryItem item)
     {
-        if (item.IsAutoSaving) TryFinishCreations([item], focusList: true);
-        else TrySaveEntry(item, collapse: false);
+        TrySaveEntry(item, collapse: false);
     }
 
     private void SaveMenuItem_Click(object sender, RoutedEventArgs e) => SaveCurrentEntry();
@@ -729,14 +602,16 @@ public partial class DictionaryWindow : OverlayWindow
         CancelEntry(item);
     }
 
-    private void CancelEntry(DictionaryItem item)
+    private bool CancelEntry(DictionaryItem item)
     {
-        item.CancelEdit();
-        if (item.IsNew)
+        if (!_viewModel.TryCancelEntry(item, out var error))
         {
-            _definitionHeights.Remove(item);
-            _viewModel.RemoveItem(item);
+            ShowPersistenceWarningOnce(error);
+            RestoreEditorFocus(item);
+            return false;
         }
+        if (item.IsNew) _definitionHeights.Remove(item);
+        return true;
     }
 
     private void WordTextBox_LostFocus(object sender, RoutedEventArgs e)

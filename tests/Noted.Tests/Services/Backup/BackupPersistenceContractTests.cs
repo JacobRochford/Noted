@@ -31,7 +31,11 @@ public sealed class BackupPersistenceContractTests
         WriteSource(directory);
         var entries = new BackupContentCatalog(directory.File("app"), directory.File("notes"), directory.File("app", "full-snapshots")).Collect();
         Assert.HasCount(8, entries);
-        Assert.HasCount(8, BackupContentDefinitions.FixedFiles);
+        Assert.HasCount(9, BackupContentDefinitions.FixedFiles);
+        var drafts = BackupContentDefinitions.Find("app/dictionary-drafts.json")!;
+        Assert.AreEqual("Dictionary drafts", drafts.Category);
+        Assert.IsTrue(drafts.ProtectMissing);
+        Assert.IsFalse(drafts.ProtectEmptyCollection);
         foreach (var historical in s_files)
         {
             var logicalPath = "app/" + historical.Path;

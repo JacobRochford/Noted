@@ -1,6 +1,7 @@
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Noted.Models;
 using static Noted.Services.BackupFormat;
 
 namespace Noted.Services;
@@ -102,12 +103,18 @@ internal sealed class BackupRestore
                 if (KeepLocalQuickJotDraft(ValidateDestination(entry.LogicalPath, manifest), bytes))
                     retainedDrafts.Add(entry.LogicalPath);
             }
+            MergeDictionaryDrafts(manifest, filesDirectory);
             var restoredCount = 0;
             foreach (var entry in manifest.Entries
                          .OrderBy(entry => entry.LogicalPath, StringComparer.OrdinalIgnoreCase))
             {
                 if (retainedDrafts.Contains(entry.LogicalPath))
                     continue;
+                if (BackupContentDefinitions.Find(NormalizeLogicalPath(entry.LogicalPath))?.Content == FixedBackupContent.DictionaryDrafts)
+                {
+                    restoredCount++;
+                    continue;
+                }
                 var sourcePath = GetContainedPath(filesDirectory, entry.LogicalPath);
                 var destinationPath = ValidateDestination(entry.LogicalPath, manifest);
                 if (BackupContentDefinitions.Find(NormalizeLogicalPath(entry.LogicalPath))?.Content != FixedBackupContent.JotCapture)
@@ -209,6 +216,40 @@ internal sealed class BackupRestore
                 null,
                 "The backup restore did not finish. The backup and restore request were left unchanged so Noted can retry.");
         }
+    }
+
+    private void MergeDictionaryDrafts(FullBackupManifest manifest, string filesDirectory)
+    {
+        var dictionary = BackupContentDefinitions.FixedFiles.Single(file => file.Content == FixedBackupContent.Dictionary);
+        var drafts = BackupContentDefinitions.FixedFiles.Single(file => file.Content == FixedBackupContent.DictionaryDrafts);
+        var incoming = manifest.Entries.FirstOrDefault(entry => StringComparer.OrdinalIgnoreCase.Equals(entry.LogicalPath, drafts.LogicalPath));
+        if (incoming is null && !manifest.Entries.Any(entry => StringComparer.OrdinalIgnoreCase.Equals(entry.LogicalPath, dictionary.LogicalPath)))
+            return;
+
+        var dictionaryPath = ValidateDestination(dictionary.LogicalPath, manifest);
+        var draftPath = ValidateDestination(drafts.LogicalPath, manifest);
+        FileSystemLinkValidator.ValidatePath(draftPath + ".bak");
+        var hasLocalDrafts = FileSystemLinkValidator.GetAttributes(draftPath) is not null ||
+            FileSystemLinkValidator.GetAttributes(draftPath + ".bak") is not null;
+        if (!hasLocalDrafts && incoming is null) return;
+        byte[]? bytes = null;
+        if (incoming is not null)
+        {
+            bytes = BackupArchiveReader.ReadFileBytes(GetContainedPath(filesDirectory, incoming.LogicalPath));
+            BackupArchiveReader.VerifyFileBytes(bytes, incoming.Length, incoming.Sha256, incoming.LogicalPath);
+        }
+
+        // retire completed local drafts before replacing the content file that carries their receipts.
+        var receipts = new HashSet<Guid>();
+        if (hasLocalDrafts)
+        {
+            var committed = JsonFileStore.Read<List<DictionaryItemState>>(dictionaryPath);
+            if (committed.Status is JsonFileReadStatus.Corrupt or JsonFileReadStatus.Unavailable ||
+                committed.Value?.Any(item => item is null) == true)
+                throw new IOException("The local Dictionary could not be read safely before restoring its drafts.");
+            receipts.UnionWith((committed.Value ?? []).Select(item => item.SavedDraftRevisionId).OfType<Guid>());
+        }
+        new DictionaryDraftStore(Path.GetDirectoryName(draftPath)!).MergeBackup(bytes, receipts);
     }
 
     private bool KeepLocalQuickJotDraft(string destinationPath, byte[] bytes)
