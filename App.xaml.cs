@@ -241,9 +241,9 @@ public partial class App : Application
             }
 
             if (settings.LoadChecklistWindowState().ReopenOnStartup)
-                WindowManager.ShowChecklist();
+                WindowManager.ShowChecklist(activate: false);
             if (settings.LoadDictionaryWindowState().ReopenOnStartup)
-                WindowManager.ShowDictionary();
+                WindowManager.ShowDictionary(activate: false);
             if (settings.LoadJotsWindowState().ReopenOnStartup)
                 WindowManager.ShowJots();
             if (settings.LoadScratchpadWindowState().ReopenOnStartup)

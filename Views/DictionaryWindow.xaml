@@ -223,6 +223,7 @@
                                                             <Button.ContentTemplate><DataTemplate><TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"/></DataTemplate></Button.ContentTemplate>
                                                         </Button>
                                                         <TextBox x:Name="WordTextBox" Text="{Binding DraftWord, UpdateSourceTrigger=PropertyChanged}"
+                                                                 Loaded="SessionEditor_Loaded"
                                                                  FontSize="13" FontWeight="SemiBold" IsInactiveSelectionHighlightEnabled="True">
                                                             <TextBox.Style><Style TargetType="TextBox" BasedOn="{StaticResource DictionaryTextBox}">
                                                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -324,6 +325,7 @@
                                                                 </Style>
                                                             </Grid.Style>
                                                             <TextBox x:Name="DefinitionBox" PreviewMouseWheel="Definition_PreviewMouseWheel"
+                                                                     Loaded="SessionEditor_Loaded"
                                                                      PreviewKeyDown="DefinitionBox_PreviewKeyDown"
                                                                      IsInactiveSelectionHighlightEnabled="True"
                                                                      Text="{Binding DraftDefinition, UpdateSourceTrigger=PropertyChanged}"

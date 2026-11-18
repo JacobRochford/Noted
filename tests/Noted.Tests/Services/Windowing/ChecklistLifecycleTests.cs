@@ -45,7 +45,7 @@ public sealed class ChecklistLifecycleTests
     });
 
     [TestMethod]
-    public void ClosingAndReopeningSharesDataAndResetsOnlyPresentation() => WpfTestHost.Invoke(() =>
+    public void ClosingAndReopeningSharesDataAndRestoresExpansion() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
         var settings = new AppSettingsService(directory.Path);
@@ -86,7 +86,7 @@ public sealed class ChecklistLifecycleTests
             Assert.AreEqual(ChecklistSortMode.Manual, model.SortMode);
             Assert.IsFalse(model.IsSearchVisible);
             Assert.IsFalse(model.GhostModeEnabled);
-            Assert.IsFalse(item.IsExpanded);
+            Assert.IsTrue(item.IsExpanded);
             Assert.IsNotNull(item.ReminderAtUtc);
         }
         finally { reopened.Close(); }

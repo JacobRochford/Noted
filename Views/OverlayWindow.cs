@@ -161,6 +161,14 @@ public abstract class OverlayWindow : Window
         ShowWindowCore();
     }
 
+    internal void ShowWindowWithoutActivation()
+    {
+        var showActivated = ShowActivated;
+        ShowActivated = false;
+        try { WindowInterop.RestoreWindow(this, _restoreWindowState); }
+        finally { ShowActivated = showActivated; }
+    }
+
     internal void HideWindow()
     {
         IsHiddenTogether = false;

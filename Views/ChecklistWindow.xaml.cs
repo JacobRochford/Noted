@@ -30,7 +30,10 @@ public partial class ChecklistWindow : OverlayWindow
     private bool _preserveOpenStateOnClose;
     private readonly Dictionary<ChecklistItem, (ChecklistPriority Priority, string? TabId)> _creations = [];
     private readonly ItemEditorSelections<ChecklistItem> _editorSelections = new();
+    private readonly UtilityEditingSession<ChecklistItem> _editingSession;
     private ChecklistItem? _commandItem;
+    private UtilityEditorField _sessionEditor;
+    private UtilityItemSession? _pendingSessionFocus;
     private bool _completingItem;
     private FocusTarget? _lastEditorFocus;
     private FocusTarget? _refreshFocus;
@@ -82,6 +85,11 @@ public partial class ChecklistWindow : OverlayWindow
             action => Dispatcher.Invoke(action),
             state.GhostModeEnabled);
         _viewModel.ResetPresentation(state.GhostModeEnabled, state.SelectedTabId);
+        _editingSession = new(this, settingsService.AppDataDirectory, PersistencePaths.ChecklistSessionFile,
+            _viewModel.Items, CaptureEditingSession, () => TryFlushPendingContent(out _), EditorField,
+            nameof(ChecklistItem.IsExpanded), nameof(ChecklistItem.IsEditingTitle), nameof(ChecklistItem.Text),
+            nameof(ChecklistItem.Notes));
+        RestoreEditingSession();
         DataContext = _viewModel;
         InitializeOverlay(state.GhostModeEnabled, state.GhostModeOpacity, state.Opacity);
         _viewModel.ViewRefreshing += ViewModel_ViewRefreshing;
@@ -242,12 +250,14 @@ public partial class ChecklistWindow : OverlayWindow
         if (!_preserveOpenStateOnClose)
             _reopenOnStartup = false;
 
+        _editingSession.Checkpoint();
         base.OnClosing(e);
     }
 
     protected override void OnClosed(EventArgs e)
     {
         _isClosed = true;
+        _editingSession.Dispose();
         if (_reminderTaskMenu is not null) _reminderTaskMenu.IsOpen = false;
         _pendingReminderActivation = null;
         foreach (var item in _viewModel.Items.Where(_viewModel.IsItemEditing))
@@ -299,6 +309,7 @@ public partial class ChecklistWindow : OverlayWindow
 
     internal void PrepareForApplicationShutdown()
     {
+        _editingSession.Checkpoint();
         _reopenOnStartup = IsWindowVisible || IsHiddenTogether;
         SaveWindowState();
         _preserveOpenStateOnClose = true;
@@ -910,8 +921,10 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void StartEditing(ChecklistItem item)
     {
+        if (!ReferenceEquals(_commandItem, item)) _sessionEditor = UtilityEditorField.None;
         _commandItem = item;
         _viewModel.StartItemEdit(item);
+        _editingSession.Schedule();
     }
 
     private void EndEditing(ChecklistItem item)
@@ -921,6 +934,7 @@ public partial class ChecklistWindow : OverlayWindow
         if (ReferenceEquals(_lastEditorFocus?.Item, item)) _lastEditorFocus = null;
         _viewModel.EndItemEdit(item);
         item.IsEditingTitle = false;
+        _editingSession.Schedule();
     }
 
     private bool TryFinishItem(ChecklistItem item, bool keepEmpty, bool focusList, bool collapse = true)
@@ -948,7 +962,14 @@ public partial class ChecklistWindow : OverlayWindow
                 return true;
             }
 
-            var remove = !keepEmpty && IsEmptyCreation(item);
+            var emptyCreation = IsEmptyCreation(item);
+            if (keepEmpty && emptyCreation && !_editingSession.TryRetireChecklistCreation(item.Id, out var sessionError))
+            {
+                ShowPersistenceWarningOnce(sessionError);
+                RestoreEditorFocus(item);
+                return false;
+            }
+            var remove = !keepEmpty && emptyCreation;
             if (!_viewModel.TrySaveItems(remove ? item : null, out var error))
             {
                 ShowPersistenceWarningOnce(error);
@@ -1033,7 +1054,95 @@ public partial class ChecklistWindow : OverlayWindow
     }
 
     private static bool IsEditor(DependencyObject? element) =>
-        element is TextBox { Name: "ItemTitleTextBox" or "NotesTextBox" };
+        element is TextBox editor && EditorField(editor) != UtilityEditorField.None;
+
+    private const string TitleEditor = "ItemTitleTextBox";
+    private const string NotesEditor = "NotesTextBox";
+
+    private static UtilityEditorField EditorField(TextBox editor) => editor.Name switch
+    {
+        TitleEditor => UtilityEditorField.Primary,
+        NotesEditor => UtilityEditorField.Details,
+        _ => UtilityEditorField.None
+    };
+
+    private void SessionEditor_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox editor && editor.DataContext is ChecklistItem item)
+            _editorSelections.Restore(item, editor);
+    }
+
+    private IReadOnlyList<UtilityItemSession> CaptureEditingSession()
+    {
+        if (IsKeyboardFocusWithin && Keyboard.FocusedElement is TextBox editor && IsEditor(editor) &&
+            editor.DataContext is ChecklistItem focused)
+            _editorSelections.Remember(focused, editor);
+
+        var session = new List<UtilityItemSession>();
+        foreach (var item in _viewModel.Items)
+        {
+            var editing = _viewModel.IsItemEditing(item);
+            var active = ReferenceEquals(item, _commandItem) ||
+                _commandItem is null && _pendingSessionFocus?.ItemId == item.Id;
+            if (!editing && !active && !item.IsExpanded) continue;
+            var creating = _creations.TryGetValue(item, out var creation);
+            session.Add(new()
+            {
+                ItemId = item.Id,
+                IsExpanded = item.IsExpanded,
+                IsActive = active,
+                ActiveEditor = active && editing ? _pendingSessionFocus?.ActiveEditor ?? _sessionEditor : UtilityEditorField.None,
+                Primary = _editorSelections.Get(item, TitleEditor),
+                Details = _editorSelections.Get(item, NotesEditor),
+                ChecklistEdit = editing ? new(item.IsEditingTitle, _viewModel.GetEditOriginTabId(item),
+                    ItemEditorSelections<ChecklistItem>.CaptureText(item.Text, item.Notes),
+                    creating ? new(creation.Priority, creation.TabId) : null) : null
+            });
+        }
+        return session;
+    }
+
+    private void RestoreEditingSession()
+    {
+        var items = _viewModel.Items.ToDictionary(item => item.Id);
+        foreach (var saved in _editingSession.Loaded)
+        {
+            if (!items.TryGetValue(saved.ItemId, out var item)) continue;
+            item.IsExpanded = saved.IsExpanded;
+            if (saved.ChecklistEdit is { } edit)
+            {
+                _viewModel.RestoreItemEdit(item, edit.OriginTabId);
+                item.IsEditingTitle = edit.IsEditingTitle;
+                if (edit.Creation is { } creation &&
+                    edit.Text == ItemEditorSelections<ChecklistItem>.CaptureText(item.Text, item.Notes))
+                    _creations.Add(item, (creation.Priority, creation.TabId));
+                _editorSelections.Load(item, TitleEditor, saved.Primary);
+                _editorSelections.Load(item, NotesEditor, saved.Details);
+            }
+            if (saved.IsActive) _pendingSessionFocus = saved;
+        }
+        if (items.Count > 0 && _editingSession.Loaded.Count > 0)
+            _viewModel.RefreshFilteredItems(force: true);
+    }
+
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        if (_pendingSessionFocus is not { } saved) return;
+        _pendingSessionFocus = null;
+        var item = _viewModel.FilteredItems.FirstOrDefault(item => item.Id == saved.ItemId);
+        if (item is null) return;
+        ItemsList.ScrollIntoView(item);
+        ItemsList.UpdateLayout();
+        var editor = saved.ActiveEditor switch
+        {
+            UtilityEditorField.Primary => FindItemControl<TextBox>(item, TitleEditor),
+            UtilityEditorField.Details => FindItemControl<TextBox>(item, NotesEditor),
+            _ => null
+        };
+        if (editor is not { IsVisible: true } || !_editorSelections.Restore(item, editor) || !editor.Focus())
+            FocusRow(item);
+    }
 
     private void Item_PreviewLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
@@ -1119,6 +1228,8 @@ public partial class ChecklistWindow : OverlayWindow
         {
             ItemsList.SelectedItem = selected;
             _commandItem = selected;
+            _sessionEditor = element is TextBox box ? EditorField(box) : UtilityEditorField.None;
+            _editingSession.Schedule();
             if (!_completingItem && element is TextBox editor && IsEditor(editor))
             {
                 StartEditing(selected);

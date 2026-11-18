@@ -301,24 +301,30 @@ namespace Noted.Services
         public static void HideMiniPad() => MiniPad?.HideWindow();
         public static void HideEditor() => Editor?.HideWindow();
 
-        public static void ShowChecklist()
+        public static void ShowChecklist() => ShowChecklist(activate: true);
+
+        internal static void ShowChecklist(bool activate)
         {
             var window = Checklist ?? ChecklistProvider?.Invoke();
             if (window is null)
                 return;
 
             Checklist = window;
-            window.ShowWindow();
+            if (activate) window.ShowWindow();
+            else window.ShowWindowWithoutActivation();
         }
 
-        public static void ShowDictionary()
+        public static void ShowDictionary() => ShowDictionary(activate: true);
+
+        internal static void ShowDictionary(bool activate)
         {
             var window = Dictionary ?? DictionaryProvider?.Invoke();
             if (window is null)
                 return;
 
             Dictionary = window;
-            window.ShowWindow();
+            if (activate) window.ShowWindow();
+            else window.ShowWindowWithoutActivation();
         }
 
         public static void ShowJots()

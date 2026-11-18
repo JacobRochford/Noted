@@ -365,6 +365,11 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
     internal void StartItemEdit(ChecklistItem item) => _unfinishedEdits.TryAdd(item, SelectedTab);
 
+    internal void RestoreItemEdit(ChecklistItem item, string? originTabId) =>
+        _unfinishedEdits.TryAdd(item, originTabId is null ? null : FindTab(originTabId));
+
+    internal string? GetEditOriginTabId(ChecklistItem item) => _unfinishedEdits.GetValueOrDefault(item)?.Id;
+
     internal void EndItemEdit(ChecklistItem item) => _unfinishedEdits.Remove(item);
 
     internal void ClearItemEdits()

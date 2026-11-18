@@ -18,6 +18,8 @@ internal static class PersistencePaths
     internal const string ScratchpadFile = "scratchpad.rtf";
     internal const string SessionDirectory = "session";
     internal const string EditorSessionFile = "editor-workspace.json";
+    internal const string ChecklistSessionFile = "checklist-editing.json";
+    internal const string DictionarySessionFile = "dictionary-editing.json";
     internal const string RecoveryDirectory = "recovery";
     internal const string NoteDraftsDirectory = "Drafts";
     internal const string LegacyEditorDraftFile = "editor-draft.json";

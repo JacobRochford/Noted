@@ -25,7 +25,10 @@ public partial class DictionaryWindow : OverlayWindow
     private bool _isResettingSize;
     private FocusTarget? _lastEditorFocus;
     private readonly ItemEditorSelections<DictionaryItem> _editorSelections = new();
+    private readonly UtilityEditingSession<DictionaryItem> _editingSession;
     private DictionaryItem? _commandItem;
+    private UtilityEditorField _sessionEditor;
+    private UtilityItemSession? _pendingSessionFocus;
 
     private sealed record FocusTarget(
         FrameworkElement Element, DictionaryItem? Item, string Name, int Start, int Length);
@@ -53,6 +56,11 @@ public partial class DictionaryWindow : OverlayWindow
             action => Dispatcher.Invoke(action),
             windowState.GhostModeEnabled,
             new DictionaryDraftStore(settingsService.AppDataDirectory));
+        _editingSession = new(this, settingsService.AppDataDirectory, PersistencePaths.DictionarySessionFile,
+            _viewModel.Items, CaptureEditingSession, () => TryFlushPendingContent(out _), EditorField,
+            nameof(DictionaryItem.IsExpanded), nameof(DictionaryItem.IsEditing), nameof(DictionaryItem.DraftWord),
+            nameof(DictionaryItem.DraftDefinition));
+        RestoreEditingSession();
         DataContext = _viewModel;
         InitializeOverlay(windowState.GhostModeEnabled, windowState.GhostModeOpacity, windowState.Opacity);
 
@@ -234,12 +242,14 @@ public partial class DictionaryWindow : OverlayWindow
         if (!_preserveOpenStateOnClose)
             _reopenOnStartup = false;
 
+        _editingSession.Checkpoint();
         base.OnClosing(e);
     }
 
     protected override void OnClosed(EventArgs e)
     {
         _isClosed = true;
+        _editingSession.Dispose();
         IsVisibleChanged -= DictionaryWindow_IsVisibleChanged;
         _viewModel.Dispose();
         base.OnClosed(e);
@@ -440,7 +450,7 @@ public partial class DictionaryWindow : OverlayWindow
     private void DictionaryItem_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: DictionaryItem item }) return;
-        _commandItem = item;
+        SetSessionTarget(item, e.NewFocus is TextBox box ? EditorField(box) : UtilityEditorField.None);
         if (e.NewFocus is TextBox editor) _editorSelections.Restore(item, editor);
     }
 
@@ -448,7 +458,7 @@ public partial class DictionaryWindow : OverlayWindow
     {
         _editorSelections.Forget(item);
         if (ReferenceEquals(_lastEditorFocus?.Item, item)) _lastEditorFocus = null;
-        if (ReferenceEquals(_commandItem, item)) _commandItem = null;
+        if (ReferenceEquals(_commandItem, item)) SetSessionTarget(null);
     }
 
     private void RestoreEditorFocus(DictionaryItem item)
@@ -522,7 +532,7 @@ public partial class DictionaryWindow : OverlayWindow
         if (item.IsEditing)
             return;
 
-        _commandItem = item;
+        SetSessionTarget(item);
         item.IsExpanded = !item.IsExpanded;
         if (!item.IsExpanded)
             return;
@@ -542,7 +552,7 @@ public partial class DictionaryWindow : OverlayWindow
     private void ExpandedItemBackground_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: DictionaryItem { IsExpanded: true } item }) return;
-        _commandItem = item;
+        SetSessionTarget(item);
         if (item.IsEditing) FindEntryControl<Border>(item, "DictionaryItemRoot")?.Focus();
         else item.IsExpanded = false;
     }
@@ -571,7 +581,7 @@ public partial class DictionaryWindow : OverlayWindow
     private void BeginEntryEditing(DictionaryItem item)
     {
         item.BeginEdit();
-        _commandItem = item;
+        SetSessionTarget(item);
         Dispatcher.BeginInvoke(
             System.Windows.Threading.DispatcherPriority.Input,
             new Action(() =>
@@ -658,9 +668,106 @@ public partial class DictionaryWindow : OverlayWindow
 
     internal void PrepareForApplicationShutdown()
     {
+        _editingSession.Checkpoint();
         _reopenOnStartup = IsWindowVisible || IsHiddenTogether;
         SaveWindowState();
         _preserveOpenStateOnClose = true;
+    }
+
+    private const string WordEditor = "WordTextBox";
+    private const string DefinitionEditor = "DefinitionBox";
+
+    private static UtilityEditorField EditorField(TextBox editor) => editor.Name switch
+    {
+        WordEditor => UtilityEditorField.Primary,
+        DefinitionEditor => UtilityEditorField.Details,
+        _ => UtilityEditorField.None
+    };
+
+    private void SessionEditor_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox editor && editor.DataContext is DictionaryItem item)
+            _editorSelections.Restore(item, editor);
+    }
+
+    private void SetSessionTarget(DictionaryItem? item, UtilityEditorField editor = UtilityEditorField.None)
+    {
+        _commandItem = item;
+        _sessionEditor = editor;
+        _editingSession.Schedule();
+    }
+
+    private IReadOnlyList<UtilityItemSession> CaptureEditingSession()
+    {
+        if (IsKeyboardFocusWithin && Keyboard.FocusedElement is TextBox editor && EditorField(editor) != UtilityEditorField.None &&
+            editor.DataContext is DictionaryItem focused)
+            _editorSelections.Remember(focused, editor);
+
+        var session = new List<UtilityItemSession>();
+        foreach (var item in _viewModel.Items)
+        {
+            var active = ReferenceEquals(item, _commandItem) ||
+                _commandItem is null && _pendingSessionFocus?.ItemId == item.Id;
+            if (!item.IsEditing && !active && !item.IsExpanded) continue;
+            var revision = _viewModel.GetEditingSessionDraftRevision(item);
+            var canRestoreEdit = item.IsEditing && (!item.HasPendingEdit || revision is not null);
+            session.Add(new()
+            {
+                ItemId = item.Id,
+                IsExpanded = item.IsExpanded,
+                IsActive = active,
+                ActiveEditor = active && canRestoreEdit ? _pendingSessionFocus?.ActiveEditor ?? _sessionEditor : UtilityEditorField.None,
+                Primary = canRestoreEdit ? _editorSelections.Get(item, WordEditor) : null,
+                Details = canRestoreEdit ? _editorSelections.Get(item, DefinitionEditor) : null,
+                DictionaryDraftRevision = canRestoreEdit ? revision : null,
+                DictionaryEdit = canRestoreEdit
+                    ? ItemEditorSelections<DictionaryItem>.CaptureText(item.DraftWord, item.DraftDefinition) : null
+            });
+        }
+        return session;
+    }
+
+    private void RestoreEditingSession()
+    {
+        var items = _viewModel.Items.ToDictionary(item => item.Id);
+        foreach (var saved in _editingSession.Loaded)
+        {
+            if (!items.TryGetValue(saved.ItemId, out var item) ||
+                saved.DictionaryDraftRevision != _viewModel.GetEditingSessionDraftRevision(item) ||
+                (item.IsEditing && saved.DictionaryEdit is null)) continue;
+
+            if (saved.DictionaryEdit is { } edit)
+            {
+                var primary = item.IsEditing ? item.DraftWord : item.Word;
+                var details = item.IsEditing ? item.DraftDefinition : item.Definition;
+                if (edit != ItemEditorSelections<DictionaryItem>.CaptureText(primary, details)) continue;
+                item.BeginEdit();
+                _editorSelections.Load(item, WordEditor, saved.Primary);
+                _editorSelections.Load(item, DefinitionEditor, saved.Details);
+            }
+            item.IsExpanded = saved.IsExpanded;
+            if (saved.IsActive) _pendingSessionFocus = saved;
+        }
+    }
+
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        if (_pendingSessionFocus is not { } saved) return;
+        _pendingSessionFocus = null;
+        var item = _viewModel.Items.FirstOrDefault(item => item.Id == saved.ItemId);
+        if (item is null) return;
+        ItemsList.UpdateLayout();
+        (ItemsList.ItemContainerGenerator.ContainerFromItem(item) as FrameworkElement)?.BringIntoView();
+        var editor = saved.ActiveEditor switch
+        {
+            UtilityEditorField.Primary => FindEntryControl<TextBox>(item, WordEditor),
+            UtilityEditorField.Details => FindEntryControl<TextBox>(item, DefinitionEditor),
+            _ => null
+        };
+        if (editor is { IsVisible: true } && _editorSelections.Restore(item, editor) && editor.Focus()) return;
+        if (item.IsEditing) FindEntryControl<Border>(item, "DictionaryItemRoot")?.Focus();
+        else FocusEntry(item);
     }
 
 }

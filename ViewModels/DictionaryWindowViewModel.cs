@@ -237,6 +237,15 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
         return error is null;
     }
 
+    internal Guid? GetEditingSessionDraftRevision(DictionaryItem item)
+    {
+        if (!_draftIds.TryGetValue(item, out var id) ||
+            !_draftRecords.TryGetValue(id, out var draft) || draft.IsRetired ||
+            draft.EntryId != item.Id || draft.Word != item.DraftWord || draft.Definition != item.DraftDefinition)
+            return null;
+        return draft.RevisionId;
+    }
+
     internal bool TryCancelEntry(DictionaryItem item, out string? error)
     {
         if (_draftStore is not null)
