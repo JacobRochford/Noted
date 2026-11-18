@@ -84,6 +84,29 @@ public sealed class ChecklistPersistentNotificationTests
     }
 
     [TestMethod]
+    public void RepeatToastsUseOneWindowsIdentityAndKeepTheirSlotInActivation()
+    {
+        var id = Guid.NewGuid();
+        var first = Reminder(ChecklistNotificationStyle.Standard) with { RepeatDelivery = new(id, s_now) };
+        var next = first with { RepeatDelivery = new(id, s_now.AddMinutes(10)) };
+        var original = ChecklistNotificationContent.Create([first]).BuildNotification();
+        var replacement = ChecklistNotificationContent.Create([next]).BuildNotification();
+
+        Assert.AreEqual(original.Tag, replacement.Tag);
+        Assert.AreEqual(original.Group, replacement.Group);
+        Assert.IsFalse(replacement.SuppressDisplay);
+        var activation = ChecklistNotifications.ReadRepeatActivation(replacement);
+        Assert.AreEqual(new ChecklistReminderActivation(next.TaskId, null, next.RepeatDelivery), activation, replacement.Payload);
+        Assert.AreEqual(activation, ChecklistReminderActivation.Deserialize(activation!.Serialize()));
+        Assert.ThrowsExactly<ArgumentException>(() => ChecklistNotificationContent.Create([first, next]));
+        Assert.ThrowsExactly<ArgumentException>(() => ChecklistNotificationContent.Create([first with { Style = ChecklistNotificationStyle.Persistent }]));
+        Assert.IsFalse(ChecklistReminderActivation.TryParse(new Dictionary<string, string>
+        {
+            ["action"] = "checklistReminder", ["taskId"] = first.TaskId.ToString(), ["seriesId"] = id.ToString()
+        }, out _));
+    }
+
+    [TestMethod]
     public void PersistentPayloadHasReminderScenarioAndTaskSpecificOpenButton()
     {
         var reminder = Reminder(ChecklistNotificationStyle.Persistent);

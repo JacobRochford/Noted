@@ -667,6 +667,7 @@
                                                                     <Binding Path="DueAtLocal"/><Binding Path="DueTime"/>
                                                                     <Binding Path="ReminderAtUtc"/><Binding Path="ReminderAtDueTime"/>
                                                                     <Binding Path="NotificationStyle"/><Binding Path="ReminderHandledAtUtc"/>
+                                                                    <Binding Path="NextRepeatAtUtc"/>
                                                                 </MultiBinding>
                                                             </TextBlock.Text>
                                                         </TextBlock>

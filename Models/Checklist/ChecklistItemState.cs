@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Noted.Models;
 
 public sealed record ChecklistItemState
@@ -15,6 +17,8 @@ public sealed record ChecklistItemState
     public ChecklistNotificationOptions? NotificationOptions { get; init; }
     public ChecklistNotificationStyle NotificationStyle { get; init; }
     public ChecklistReminderOccurrence? ReminderOccurrence { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ChecklistReminderRepeat? ReminderRepeat { get; init; }
     public string? Notes { get; init; }
     public DateTime CreatedAt { get; init; } = DateTime.Now;
 }

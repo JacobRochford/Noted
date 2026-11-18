@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows.Threading;
+using Noted.Models;
 using Noted.Services;
 using Noted.ViewModels;
 
@@ -79,5 +80,36 @@ public sealed class ChecklistBackupCompatibilityTests
         Assert.AreEqual(item.Id, saved.Id);
         Assert.AreEqual(item.ReminderAtUtc, saved.ReminderAtUtc);
         Assert.IsTrue(model.RecoveryIssuesFoundThisRun);
+    });
+
+    [TestMethod]
+    public void BackupRestoreKeepsRepeatProgressAndTheLatestAlert() => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var app = directory.File("app");
+        var notes = directory.File("notes");
+        Directory.CreateDirectory(app);
+        Directory.CreateDirectory(notes);
+        const string content = """
+            [{"Id":"7832106e-e340-4b11-a8fa-f61d26605ce8","Text":"repeat","ReminderAtUtc":"2026-12-01T17:00:00Z",
+              "ReminderHandledAtUtc":"2026-12-01T17:00:01Z","ReminderRepeat":{"Id":"1ed25cba-0237-4105-bf2a-35a7d00d158f",
+              "Policy":{"IntervalMinutes":10,"AdditionalAlertLimit":3},"NextSlotUtc":"2026-12-01T17:20:00Z",
+              "LastSlotUtc":"2026-12-01T17:10:00Z","AdditionalAlertsSent":1}}]
+            """;
+        File.WriteAllText(directory.File("app", "checklist.json"), content);
+        File.WriteAllText(directory.File("app", "settings.json"), "{\"SchemaVersion\":1,\"Revision\":1}");
+        var backups = new FullBackupService(app, notes);
+        Assert.AreEqual(FullBackupStatus.Created, backups.CreateOrUpdateUserBackup().Status);
+        File.WriteAllText(directory.File("app", "checklist.json"), "[]");
+        Assert.AreEqual(FullBackupStatus.RestoreScheduled, backups.ScheduleUserBackupRestore().Status);
+        Assert.AreEqual(FullBackupStatus.Restored, backups.ApplyPendingUserBackupRestore().Status);
+        using var model = new ChecklistWindowViewModel(new ChecklistContentService(app), Dispatcher.CurrentDispatcher, action => action(), false);
+        var task = model.Items.Single();
+        var repeat = task.ReminderRepeat!;
+        Assert.AreEqual(Guid.Parse("1ed25cba-0237-4105-bf2a-35a7d00d158f"), repeat.Id);
+        Assert.AreEqual(new ChecklistReminderRepeatPolicy(10, 3), repeat.Policy);
+        Assert.AreEqual(new DateTimeOffset(2026, 12, 1, 17, 20, 0, TimeSpan.Zero), repeat.NextSlotUtc);
+        Assert.AreEqual(1L, repeat.AdditionalAlertsSent);
+        Assert.IsTrue(model.IsCurrentRepeatNotification(new(task.Id, null, new(repeat.Id, new DateTimeOffset(2026, 12, 1, 17, 10, 0, TimeSpan.Zero)))));
     });
 }

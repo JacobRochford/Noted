@@ -155,6 +155,11 @@ public partial class ChecklistWindow : OverlayWindow
         _pendingReminderActivation = null;
         if (activation.TaskId is { } id)
         {
+            if (activation.RepeatDelivery.HasValue && !_viewModel.IsCurrentRepeatNotification(activation))
+            {
+                AppDialog.Show("This reminder is no longer available.", "Task notification", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
             NavigateToReminder(id);
             return;
         }
@@ -226,7 +231,7 @@ public partial class ChecklistWindow : OverlayWindow
         var original = ReadSchedule(item);
         var completed = false;
         var dialog = new ChecklistReminderDialog(item.ReminderAtUtc, item.DueDate, item.NotificationStyle, item.NotificationOptions,
-            _settingsService.LoadChecklistNotificationOptions(), item.DueTime, item.ReminderAtDueTime)
+            _settingsService.LoadChecklistNotificationOptions(), item.DueTime, item.ReminderAtDueTime, item.ReminderRepeat?.Policy)
         {
             Commit = draft =>
             {
@@ -236,7 +241,7 @@ public partial class ChecklistWindow : OverlayWindow
                     return "This schedule changed while the editor was open. Close and reopen Schedule to edit the current schedule.";
 
                 return _viewModel.TrySetSchedule(item, draft.ScheduledDueDate, draft.ScheduledDueTime, draft.ReminderAtUtc,
-                    draft.ReminderAtDueTime, draft.NotificationStyle, draft.NotificationOptions, out var error)
+                    draft.ReminderAtDueTime, draft.NotificationStyle, draft.NotificationOptions, out var error, draft.RepeatPolicy)
                     ? null : error ?? "The schedule could not be saved.";
             }
         };
@@ -256,8 +261,10 @@ public partial class ChecklistWindow : OverlayWindow
     }
 
     private static (DateTime? DueDate, TimeSpan? DueTime, DateTimeOffset? ReminderAtUtc, bool AtDueTime,
-        ChecklistNotificationStyle Style, ChecklistNotificationOptions? Options) ReadSchedule(ChecklistItem item) =>
-        (item.DueDate, item.DueTime, item.ReminderAtUtc, item.ReminderAtDueTime, item.NotificationStyle, item.NotificationOptions);
+        ChecklistNotificationStyle Style, ChecklistNotificationOptions? Options,
+        Guid? RepeatId, ChecklistReminderRepeatPolicy? RepeatPolicy) ReadSchedule(ChecklistItem item) =>
+        (item.DueDate, item.DueTime, item.ReminderAtUtc, item.ReminderAtDueTime, item.NotificationStyle,
+            item.NotificationOptions, item.ReminderRepeat?.Id, item.ReminderRepeat?.Policy);
 
     protected override void OnClosing(CancelEventArgs e)
     {

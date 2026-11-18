@@ -306,6 +306,229 @@ public sealed class ChecklistReminderSchedulerTests
         Assert.IsTrue(saved.All(item => item.ReminderHandledAtUtc is not null));
     });
 
+    [TestMethod]
+    public void RepeatLimitCountsAdditionalAcceptedAlertsAndLeavesTheLastToastCurrent() => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        var saved = Repeating(clock, 10, 2);
+        var start = clock.GetUtcNow();
+        var store = new Store { Items = [saved] };
+        using var model = Model(store);
+        var receiver = new Receiver();
+        using var scheduler = Scheduler(model, receiver.Submit, clock);
+        var task = model.Items.Single();
+        var first = receiver.Requests.Single().Single();
+        Assert.AreEqual(0L, task.ReminderRepeat!.AdditionalAlertsSent);
+        Assert.AreEqual(start.AddMinutes(10), task.ReminderRepeat.NextSlotUtc);
+
+        clock.Advance(TimeSpan.FromMinutes(10));
+        receiver.Success = false;
+        scheduler.CheckNow();
+        Assert.AreEqual(0L, task.ReminderRepeat.AdditionalAlertsSent);
+        receiver.Success = true;
+        clock.Advance(TimeSpan.FromSeconds(31));
+        scheduler.CheckNow();
+        Assert.AreEqual(1L, task.ReminderRepeat.AdditionalAlertsSent);
+        Assert.AreEqual(start.AddMinutes(30), task.ReminderRepeat.NextSlotUtc);
+        Assert.IsFalse(model.IsCurrentRepeatNotification(new(task.Id, null, first.RepeatDelivery)));
+
+        clock.Advance(TimeSpan.FromMinutes(20));
+        scheduler.CheckNow();
+        var last = receiver.Requests.Last().Single();
+        Assert.AreEqual(2L, task.ReminderRepeat.AdditionalAlertsSent);
+        Assert.IsNull(task.ReminderRepeat.NextSlotUtc);
+        Assert.IsFalse(task.HasActiveReminder);
+        Assert.IsTrue(model.IsCurrentRepeatNotification(new(task.Id, null, last.RepeatDelivery)));
+        Assert.AreEqual(task.ReminderRepeat, store.Items.Single().ReminderRepeat);
+        clock.Advance(TimeSpan.FromHours(3));
+        scheduler.CheckNow();
+        Assert.HasCount(4, receiver.Requests);
+    });
+
+    [TestMethod]
+    public void RecoveryCoalescesMissedSlotsAndPacesDifferentTasks() => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        var first = Repeating(clock, 10, 3);
+        var second = Repeating(clock, 10, 3);
+        var store = new Store { Items = [first, second] };
+        using var model = Model(store);
+        var receiver = new Receiver();
+        var start = clock.GetUtcNow();
+        clock.Advance(TimeSpan.FromMinutes(37));
+        using var scheduler = Scheduler(model, receiver.Submit, clock);
+        scheduler.CheckNow();
+        Assert.HasCount(1, receiver.Requests);
+        Assert.AreEqual(start.AddMinutes(50), model.Items[0].ReminderRepeat!.NextSlotUtc);
+        Assert.AreEqual(0L, model.Items[0].ReminderRepeat!.AdditionalAlertsSent);
+        clock.Advance(TimeSpan.FromSeconds(5));
+        scheduler.CheckNow();
+        Assert.HasCount(2, receiver.Requests);
+        Assert.AreEqual(second.Id, receiver.Requests[1].Single().TaskId);
+
+        clock.Advance(TimeSpan.FromMinutes(13) - TimeSpan.FromSeconds(5));
+        scheduler.CheckNow();
+        Assert.AreEqual(start.AddMinutes(50), receiver.Requests[2].Single().RepeatDelivery!.Value.SlotUtc);
+        Assert.AreEqual(1L, model.Items[0].ReminderRepeat!.AdditionalAlertsSent);
+    });
+
+    [TestMethod]
+    public void ExistingWindowsToastRecoversAcceptanceAndCompletionRemovesTheSeries() => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        var first = Repeating(clock, 5, null);
+        var store = new Store { Items = [first] };
+        using var model = Model(store);
+        var receiver = new Receiver();
+        List<Guid> removed = [];
+        var delivery = new ChecklistRepeatDelivery(first.ReminderRepeat!.Id, first.ReminderAtUtc!.Value);
+        using var scheduler = new ChecklistReminderScheduler(model, Dispatcher.CurrentDispatcher, receiver.Submit, clock,
+            repeatHistory: [new(first.Id, null, delivery)], removeRepeat: removed.Add);
+        Assert.HasCount(0, receiver.Requests);
+        Assert.AreEqual(delivery.SlotUtc, store.Items.Single().ReminderRepeat!.LastSlotUtc);
+        clock.Advance(TimeSpan.FromMinutes(5));
+        scheduler.CheckNow();
+        Assert.HasCount(1, receiver.Requests);
+        var task = model.Items.Single();
+        task.IsChecked = true;
+        scheduler.CheckNow();
+        CollectionAssert.AreEqual(new[] { delivery.SeriesId }, removed);
+        Assert.IsNull(store.Items.Single().ReminderRepeat);
+        Assert.IsFalse(model.IsCurrentRepeatNotification(new(first.Id, null, delivery)));
+    });
+
+    [TestMethod]
+    public void RestartWithoutAToastContinuesTheSeriesAndPreservesUnrelatedEdits() => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        var start = clock.GetUtcNow();
+        var store = new Store { Items = [Repeating(clock, 10, null)] };
+        var receiver = new Receiver();
+        using (var model = Model(store))
+        using (var scheduler = Scheduler(model, receiver.Submit, clock))
+        {
+            var item = model.Items.Single();
+            item.Notes = "unrelated edit";
+            Assert.IsTrue(model.TryFlushPendingItems(out _));
+        }
+
+        // indefinitely repeating after a dismissed or expired toast needs no Windows history entry.
+        clock.Advance(TimeSpan.FromMinutes(10));
+        using var reopened = Model(store);
+        using var resumed = Scheduler(reopened, receiver.Submit, clock);
+        var task = reopened.Items.Single();
+        Assert.AreEqual(1L, task.ReminderRepeat!.AdditionalAlertsSent);
+        Assert.AreEqual(start.AddMinutes(20), task.ReminderRepeat.NextSlotUtc);
+        Assert.AreEqual("unrelated edit", task.Notes);
+        Assert.HasCount(2, receiver.Requests);
+    });
+
+    [TestMethod]
+    [DataRow("stop repeats")]
+    [DataRow("clear reminder")]
+    [DataRow("delete")]
+    [DataRow("reschedule")]
+    [DataRow("switch style")]
+    public void EditingOrDeletingADeliveredSeriesRemovesItsToast(string change) => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        var store = new Store { Items = [Repeating(clock, 5, null)] };
+        using var model = Model(store);
+        var receiver = new Receiver();
+        List<Guid> removed = [];
+        using var scheduler = new ChecklistReminderScheduler(model, Dispatcher.CurrentDispatcher, receiver.Submit, clock, removeRepeat: removed.Add);
+        var task = model.Items.Single();
+        var old = task.ReminderRepeat!;
+        var activation = new ChecklistReminderActivation(task.Id, null, receiver.Requests.Single().Single().RepeatDelivery);
+        var future = clock.GetUtcNow().AddHours(1);
+        switch (change)
+        {
+            case "stop repeats":
+                Assert.IsTrue(model.TrySetSchedule(task, null, null, task.ReminderAtUtc, false, task.NotificationStyle, null, out _));
+                Assert.IsNotNull(task.ReminderAtUtc);
+                break;
+            case "clear reminder":
+                Assert.IsTrue(model.TrySetSchedule(task, null, null, null, false, task.NotificationStyle, null, out _));
+                Assert.IsNull(task.ReminderAtUtc);
+                break;
+            case "delete":
+                model.RemoveItem(task);
+                break;
+            case "reschedule":
+                Assert.IsTrue(model.TrySetSchedule(task, null, null, future, false, task.NotificationStyle, null, out _, old.Policy));
+                Assert.AreNotEqual(old.Id, task.ReminderRepeat!.Id);
+                Assert.AreEqual(0L, task.ReminderRepeat.AdditionalAlertsSent);
+                Assert.AreEqual(future, task.ReminderRepeat.NextSlotUtc);
+                break;
+            case "switch style":
+                Assert.IsTrue(model.TrySetSchedule(task, null, null, future, false, ChecklistNotificationStyle.Persistent, null, out _));
+                Assert.IsNull(task.ReminderRepeat);
+                break;
+        }
+        scheduler.CheckNow();
+        CollectionAssert.AreEqual(new[] { old.Id }, removed);
+        Assert.IsFalse(model.IsCurrentRepeatNotification(activation));
+        clock.Advance(TimeSpan.FromMinutes(5));
+        scheduler.CheckNow();
+        Assert.HasCount(1, receiver.Requests);
+    });
+
+    [TestMethod]
+    [DataRow(3, 8, 9, 3)]
+    [DataRow(11, 1, 8, 1)]
+    public void RepeatUsesUtcCadenceAcrossDaylightSavingsAndClockRollback(int month, int day, int startHour, int expectedLocalHour) => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        var start = new DateTimeOffset(2026, month, day, startHour, 55, 0, TimeSpan.Zero);
+        clock.SetUtc(start);
+        using var model = Model(new Store { Items = [Repeating(clock, 10, null)] });
+        var receiver = new Receiver();
+        using var scheduler = Scheduler(model, receiver.Submit, clock);
+        clock.Advance(TimeSpan.FromMinutes(10));
+        scheduler.CheckNow();
+        var second = receiver.Requests.Last().Single().RepeatDelivery!.Value.SlotUtc;
+        Assert.AreEqual(start.AddMinutes(10), second);
+        var local = TimeZoneInfo.ConvertTime(second, TimeZoneInfo.FindSystemTimeZoneById("Pacific Standard Time"));
+        Assert.AreEqual(expectedLocalHour, local.Hour);
+        Assert.AreEqual(5, local.Minute);
+        clock.SetUtc(start);
+        scheduler.CheckNow();
+        clock.Advance(TimeSpan.FromMinutes(10));
+        scheduler.CheckNow();
+        Assert.HasCount(2, receiver.Requests);
+    });
+
+    [TestMethod]
+    public void RepeatAcceptanceSaveRetryDoesNotResubmitOrChangeLegacyBatchMembership() => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        var repeat = Repeating(clock, 5, null);
+        var store = new Store { Items = [Due(clock), Due(clock), repeat] };
+        using var model = Model(store);
+        var requests = new List<ChecklistReminder[]>();
+        using var scheduler = Scheduler(model, reminders =>
+        {
+            requests.Add(reminders.ToArray());
+            if (reminders[0].RepeatDelivery.HasValue) store.FailSave = true;
+            return true;
+        }, clock);
+        Assert.HasCount(2, requests);
+        Assert.HasCount(2, model.Items.Where(item => item.ReminderHandledAtUtc == requests[0][0].BatchUtc).ToArray());
+        Assert.IsNotNull(model.Items.Last().ReminderRepeat!.LastSlotUtc);
+        Assert.IsNull(store.Items.Last().ReminderRepeat!.LastSlotUtc);
+        store.FailSave = false;
+        clock.Advance(TimeSpan.FromSeconds(31));
+        scheduler.CheckNow();
+        Assert.HasCount(2, requests);
+        Assert.AreEqual(model.Items.Last().ReminderRepeat, store.Items.Last().ReminderRepeat);
+    });
+
+    private static ChecklistItemState Repeating(Clock clock, int minutes, int? additionalAlerts)
+    {
+        var first = clock.GetUtcNow();
+        return Due(clock) with { ReminderAtUtc = first, ReminderRepeat = ChecklistReminderRepeat.Start(new(minutes, additionalAlerts), first) };
+    }
+
     private static ChecklistItemState Due(Clock clock, string text = "task") =>
         new() { Id = Guid.NewGuid(), Text = text, ReminderAtUtc = clock.GetUtcNow().AddMinutes(-1) };
 

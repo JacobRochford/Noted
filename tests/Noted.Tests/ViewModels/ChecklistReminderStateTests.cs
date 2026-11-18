@@ -327,6 +327,21 @@ public sealed class ChecklistReminderStateTests
     });
 
     [TestMethod]
+    public void StartingRepeatsAfterAnAlertFiredRequiresANewTimeEvenAfterClockRollback() => WpfTestHost.Invoke(() =>
+    {
+        var first = DateTimeOffset.UtcNow.AddHours(1);
+        var initial = new ChecklistItemState { Id = Guid.NewGuid(), ReminderAtUtc = first, ReminderHandledAtUtc = first };
+        using var model = Create(new RecordingService { Items = [initial] });
+        var item = model.Items.Single();
+        var policy = new ChecklistReminderRepeatPolicy(1, null);
+        Assert.IsFalse(model.TrySetSchedule(item, null, null, first, false, item.NotificationStyle, null, out _, policy));
+        Assert.IsNull(item.ReminderRepeat);
+        Assert.IsTrue(model.TrySetSchedule(item, null, null, first.AddHours(1), false, item.NotificationStyle, null, out _, policy));
+        Assert.IsNull(item.ReminderHandledAtUtc);
+        Assert.AreEqual(policy, item.ReminderRepeat?.Policy);
+    });
+
+    [TestMethod]
     public void DueStatusRefreshDoesNotSaveOrChangeReminderState() => WpfTestHost.Invoke(() =>
     {
         var service = new RecordingService(); using var model = Create(service);

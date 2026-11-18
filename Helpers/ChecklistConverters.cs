@@ -15,7 +15,9 @@ public sealed class ChecklistScheduleTextConverter : IMultiValueConverter
             var due = values[1] is TimeSpan time ? date.Date.Add(time).ToString("g", culture) : date.ToString("d", culture);
             parts.Add($"Due {due}");
         }
-        if (values[2] is DateTimeOffset reminder)
+        if (values.Length > 6 && values[6] is DateTimeOffset next)
+            parts.Add($"Next reminder {next.ToLocalTime().ToString("g", culture)}");
+        else if (values[2] is DateTimeOffset reminder)
         {
             var when = values[3] is true ? "at due time" : reminder.ToLocalTime().ToString("g", culture);
             var style = values[4] is Noted.Models.ChecklistNotificationStyle.Urgent ? "Urgent reminder"

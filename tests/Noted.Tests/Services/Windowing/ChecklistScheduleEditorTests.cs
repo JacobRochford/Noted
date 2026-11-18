@@ -309,6 +309,83 @@ public sealed class ChecklistScheduleEditorTests
 
     private static void Apply(ChecklistReminderDialog dialog) => Click(dialog, "ApplyButton");
 
+    [TestMethod]
+    public void RepeatControlsAppearOnlyForStandardAndValidateCustomValues() => WpfTestHost.Invoke(() =>
+    {
+        var dialog = new ChecklistReminderDialog(DateTimeOffset.UtcNow.AddDays(2), null);
+        Show(dialog, () =>
+        {
+            var toggle = (CheckBox)dialog.FindName("EnableRepeat");
+            var repeat = (StackPanel)dialog.FindName("RepeatControls");
+            var fields = (StackPanel)dialog.FindName("RepeatFields");
+            var interval = (ComboBox)dialog.FindName("RepeatInterval");
+            var style = (ComboBox)dialog.FindName("StyleChoice");
+            Assert.IsFalse(toggle.IsChecked == true);
+            Assert.AreEqual(Visibility.Collapsed, fields.Visibility);
+            toggle.IsChecked = true;
+            CollectionAssert.AreEqual(new[] { "5 minutes", "10 minutes", "15 minutes", "30 minutes", "60 minutes", "Custom interval" },
+                interval.Items.Cast<string>().ToArray());
+            Assert.AreEqual("10 minutes", interval.SelectedItem);
+            style.SelectedValue = ChecklistNotificationStyle.Persistent;
+            Assert.AreEqual(Visibility.Collapsed, repeat.Visibility);
+            style.SelectedValue = ChecklistNotificationStyle.Urgent;
+            Assert.AreEqual(Visibility.Collapsed, repeat.Visibility);
+            style.SelectedValue = ChecklistNotificationStyle.Standard;
+            var remind = (CheckBox)dialog.FindName("EnableReminder");
+            remind.IsChecked = false;
+            Assert.AreEqual(Visibility.Collapsed, repeat.Visibility);
+            remind.IsChecked = true;
+            Assert.AreEqual(Visibility.Visible, repeat.Visibility);
+            Assert.AreEqual(Visibility.Visible, fields.Visibility);
+
+            interval.SelectedIndex = 5;
+            var minutes = (TextBox)dialog.FindName("CustomRepeatMinutes");
+            minutes.Text = "1441";
+            Apply(dialog);
+            Assert.IsTrue(dialog.IsVisible);
+            minutes.Text = "1440";
+            ((ComboBox)dialog.FindName("RepeatStop")).SelectedIndex = 1;
+            var count = (TextBox)dialog.FindName("RepeatLimit");
+            count.Text = "0";
+            Apply(dialog);
+            Assert.IsTrue(dialog.IsVisible);
+            count.Text = "3";
+            Apply(dialog);
+            Assert.AreEqual(new ChecklistReminderRepeatPolicy(1440, 3), dialog.RepeatPolicy);
+        });
+    });
+
+    [TestMethod]
+    public void ModelessRepeatEditorKeepsDeliveryProgressAndCancelDiscardsDraftChanges() => WithTasks((window, model) =>
+    {
+        var task = model.AddItem()!;
+        var start = DateTimeOffset.UtcNow.AddDays(2);
+        var policy = new ChecklistReminderRepeatPolicy(10, null);
+        Assert.IsTrue(model.TrySetSchedule(task, null, null, start, false, task.NotificationStyle, null, out _, policy));
+        var editor = Open(window, task);
+        var id = task.ReminderRepeat!.Id;
+        var request = new ChecklistReminder(task.Id, start, task.Text, RepeatDelivery: new(id, start));
+        Assert.IsTrue(model.TryMarkRemindersHandled([request], start, out _));
+        var delivered = task.ReminderRepeat;
+        task.Notes = "edited while scheduling";
+        Apply(editor);
+        Assert.IsFalse(editor.IsVisible);
+        Assert.AreEqual(delivered, task.ReminderRepeat);
+        Assert.AreEqual("edited while scheduling", task.Notes);
+
+        editor = Open(window, task);
+        ((CheckBox)editor.FindName("EnableRepeat")).IsChecked = false;
+        Click(editor, "CancelButton");
+        Assert.AreEqual(delivered, task.ReminderRepeat);
+
+        editor = Open(window, task);
+        Assert.IsTrue(model.TrySetSchedule(task, null, null, start.AddHours(1), false, task.NotificationStyle, null, out _, policy));
+        Apply(editor);
+        Assert.IsTrue(editor.IsVisible);
+        Assert.AreNotEqual(id, task.ReminderRepeat!.Id);
+        Assert.AreEqual(start.AddHours(1), task.ReminderAtUtc);
+    });
+
     private static void Click(Window window, string name) =>
         ((Button)window.FindName(name)).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 

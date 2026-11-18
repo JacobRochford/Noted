@@ -8,11 +8,13 @@ namespace Noted;
 
 public partial class ChecklistReminderDialog : ChecklistEditorWindow
 {
+    private static readonly int[] s_repeatIntervals = [5, 10, 15, 30, 60];
     internal Func<ChecklistReminderDialog, string?>? Commit { private get; set; }
     internal DateTimeOffset? ReminderAtUtc { get; private set; }
     internal DateTime? ScheduledDueDate { get; private set; }
     internal TimeSpan? ScheduledDueTime { get; private set; }
     internal bool ReminderAtDueTime { get; private set; }
+    internal ChecklistReminderRepeatPolicy? RepeatPolicy { get; private set; }
     private readonly DateTimeOffset? _originalReminder;
     private readonly bool _originalAtDueTime;
     private readonly DateTime? _originalDueDate;
@@ -26,7 +28,8 @@ public partial class ChecklistReminderDialog : ChecklistEditorWindow
 
     internal ChecklistReminderDialog(DateTimeOffset? reminder, DateTime? dueDate,
         ChecklistNotificationStyle style = ChecklistNotificationStyle.Standard, ChecklistNotificationOptions? options = null,
-        ChecklistNotificationOptions? defaults = null, TimeSpan? dueTime = null, bool reminderAtDueTime = false)
+        ChecklistNotificationOptions? defaults = null, TimeSpan? dueTime = null, bool reminderAtDueTime = false,
+        ChecklistReminderRepeatPolicy? repeatPolicy = null)
     {
         InitializeComponent();
         SourceInitialized += (_, _) => AppThemeManager.ApplyTitleBar(this);
@@ -36,6 +39,14 @@ public partial class ChecklistReminderDialog : ChecklistEditorWindow
         UpdateResetVisibility();
         UpdateQuickDates();
         Language = System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
+        RepeatInterval.ItemsSource = s_repeatIntervals.Select(minutes => $"{minutes} minutes").Append("Custom interval");
+        var minutes = repeatPolicy?.IntervalMinutes ?? 10;
+        var preset = Array.IndexOf(s_repeatIntervals, minutes);
+        RepeatInterval.SelectedIndex = preset >= 0 ? preset : s_repeatIntervals.Length;
+        CustomRepeatMinutes.Text = minutes.ToString(CultureInfo.CurrentCulture);
+        RepeatStop.SelectedIndex = repeatPolicy?.AdditionalAlertLimit is not null ? 1 : 0;
+        if (repeatPolicy?.AdditionalAlertLimit is { } limit) RepeatLimit.Text = limit.ToString(CultureInfo.CurrentCulture);
+        EnableRepeat.IsChecked = repeatPolicy is not null;
         var local = reminder?.ToLocalTime().DateTime ??
             ChecklistReminderTime.DefaultLocalTime(dueDate, DateTimeOffset.UtcNow, TimeZoneInfo.Local, dueTime);
         ReminderDate.SelectedDate = local.Date;
@@ -86,12 +97,42 @@ public partial class ChecklistReminderDialog : ChecklistEditorWindow
                 ReminderAtUtc = utc;
             }
         }
+        if (!TryReadRepeatPolicy()) return;
         if (Commit?.Invoke(this) is { } errorMessage)
         {
             ShowMessage(errorMessage);
             return;
         }
         Close();
+    }
+
+    private bool TryReadRepeatPolicy()
+    {
+        RepeatPolicy = null;
+        if (ReminderAtUtc is null || NotificationStyle != ChecklistNotificationStyle.Standard || EnableRepeat.IsChecked != true)
+            return true;
+
+        var index = RepeatInterval.SelectedIndex;
+        int minutes;
+        if (index >= 0 && index < s_repeatIntervals.Length) minutes = s_repeatIntervals[index];
+        else if (!int.TryParse(CustomRepeatMinutes.Text, out minutes) || minutes is < 1 or > 1440)
+        {
+            ShowMessage("Enter a repeat interval from 1 to 1,440 whole minutes.");
+            return false;
+        }
+
+        int? limit = null;
+        if (RepeatStop.SelectedIndex == 1)
+        {
+            if (!int.TryParse(RepeatLimit.Text, out var count) || count is < 1 or > 10)
+            {
+                ShowMessage("Enter 1 to 10 alerts after the first reminder.");
+                return false;
+            }
+            limit = count;
+        }
+        RepeatPolicy = new(minutes, limit);
+        return true;
     }
 
     private static bool TryReadDate(System.Windows.Controls.DatePicker picker, out DateTime? date)
@@ -187,6 +228,19 @@ public partial class ChecklistReminderDialog : ChecklistEditorWindow
         if (ReminderControls is null || ReminderFields is null) return;
         ReminderControls.Visibility = EnableReminder.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         ReminderFields.Visibility = ReminderMode.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateRepeatFields();
+    }
+
+    private void RepeatChoice_Changed(object sender, RoutedEventArgs e) => UpdateRepeatFields();
+
+    private void UpdateRepeatFields()
+    {
+        if (RepeatLimitFields is null) return;
+        RepeatControls.Visibility = EnableReminder.IsChecked == true && NotificationStyle == ChecklistNotificationStyle.Standard
+            ? Visibility.Visible : Visibility.Collapsed;
+        RepeatFields.Visibility = EnableRepeat.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        CustomRepeatFields.Visibility = RepeatInterval.SelectedIndex == s_repeatIntervals.Length ? Visibility.Visible : Visibility.Collapsed;
+        RepeatLimitFields.Visibility = RepeatStop.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void Customize_Click(object sender, RoutedEventArgs e)

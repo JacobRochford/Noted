@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Xml;
+using System.Xml.Linq;
 using Noted.Models;
 using Microsoft.Windows.AppLifecycle;
 using Microsoft.Windows.AppNotifications;
@@ -8,8 +10,11 @@ namespace Noted.Services;
 
 internal sealed record ChecklistNotificationContent(string Title, string Text, IReadOnlyDictionary<string, string> Arguments,
     ChecklistNotificationStyle Style = ChecklistNotificationStyle.Standard,
-    ChecklistWindowsNotificationSound Sound = ChecklistWindowsNotificationSound.Reminder)
+    ChecklistWindowsNotificationSound Sound = ChecklistWindowsNotificationSound.Reminder,
+    ChecklistRepeatDelivery? RepeatDelivery = null)
 {
+    internal const string RepeatGroup = "checklist-repeat";
+
     internal static ChecklistNotificationContent Create(IReadOnlyList<ChecklistReminder> reminders,
         ChecklistWindowsNotificationSound? sound = null)
     {
@@ -22,14 +27,23 @@ internal sealed record ChecklistNotificationContent(string Title, string Text, I
             throw new ArgumentException("Repeating Windows audio requires Persistent notifications.", nameof(sound));
         if (sound.HasValue && !Enum.IsDefined(sound.Value))
             throw new ArgumentOutOfRangeException(nameof(sound));
+        var repeat = reminders[0].RepeatDelivery;
+        if (reminders.Any(reminder => reminder.RepeatDelivery.HasValue) &&
+            (reminders.Count != 1 || style != ChecklistNotificationStyle.Standard))
+            throw new ArgumentException("A repeating reminder requires a single Standard notification.", nameof(reminders));
         var arguments = new Dictionary<string, string> { ["action"] = "checklistReminder" };
         if (reminders.Count == 1)
             arguments["taskId"] = reminders[0].TaskId.ToString("D");
         else
             arguments["batchUtc"] = reminders[0].BatchUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        if (repeat is { } delivery)
+        {
+            arguments["seriesId"] = RepeatTag(delivery.SeriesId);
+            arguments["slotUtc"] = delivery.SlotUtc.UtcTicks.ToString(CultureInfo.InvariantCulture);
+        }
         return new(reminders.Count == 1 ? "Task reminder" : $"{reminders.Count} task reminders",
             reminders.Count == 1 ? Trim(reminders[0].Text) : "Open Tasks to choose a reminded task.", arguments, style, sound ?? (style == ChecklistNotificationStyle.Standard
-                ? ChecklistWindowsNotificationSound.Default : ChecklistWindowsNotificationSound.Reminder));
+                ? ChecklistWindowsNotificationSound.Default : ChecklistWindowsNotificationSound.Reminder), repeat);
     }
 
     internal static ChecklistNotificationContent CreatePreview(ChecklistNotificationStyle style, ChecklistNotificationOptions options)
@@ -70,8 +84,16 @@ internal sealed record ChecklistNotificationContent(string Title, string Text, I
                     break;
             }
         }
-        return builder.BuildNotification();
+        var notification = builder.BuildNotification();
+        if (RepeatDelivery is { } repeat)
+        {
+            notification.Tag = RepeatTag(repeat.SeriesId);
+            notification.Group = RepeatGroup;
+        }
+        return notification;
     }
+
+    internal static string RepeatTag(Guid seriesId) => seriesId.ToString("N");
 
     private static string Trim(string text) => string.IsNullOrWhiteSpace(text) ? "Untitled task" :
         text.Length > 200 ? text[..200] + "…" : text;
@@ -162,6 +184,51 @@ internal sealed class ChecklistNotifications : IDisposable
         if (_manager is null || notificationId == 0) return;
         try { await _manager.RemoveByIdAsync(notificationId); }
         catch (Exception exception) { ExceptionDiagnostics.Record(exception, "Remove notification preview"); }
+    }
+
+    internal async Task<IReadOnlyList<ChecklistReminderActivation>> ReconcileRepeatHistoryAsync(
+        Func<ChecklistReminderActivation, bool> isCurrent)
+    {
+        if (_manager is not { } manager) return [];
+        var current = new List<ChecklistReminderActivation>();
+        try
+        {
+            foreach (var notification in await manager.GetAllAsync())
+            {
+                if (notification.Group != ChecklistNotificationContent.RepeatGroup) continue;
+                if (ReadRepeatActivation(notification) is { } activation && isCurrent(activation)) current.Add(activation);
+                else await manager.RemoveByIdAsync(notification.Id);
+            }
+        }
+        catch (Exception exception) { ExceptionDiagnostics.Record(exception, "Read repeat reminder notifications"); }
+        return current;
+    }
+
+    internal static ChecklistReminderActivation? ReadRepeatActivation(AppNotification notification)
+    {
+        if (notification.Group != ChecklistNotificationContent.RepeatGroup) return null;
+        try
+        {
+            var launch = (string?)XElement.Parse(notification.Payload).Attribute("launch");
+            if (launch is null) return null;
+            var arguments = new Dictionary<string, string>();
+            // the SDK builder writes semicolon-delimited launch arguments.
+            foreach (var field in launch.Split(';'))
+            {
+                var separator = field.IndexOf('=');
+                if (separator < 1 || !arguments.TryAdd(field[..separator], field[(separator + 1)..])) return null;
+            }
+            return ChecklistReminderActivation.TryParse(arguments, out var activation) && activation!.RepeatDelivery is { } delivery &&
+                notification.Tag == ChecklistNotificationContent.RepeatTag(delivery.SeriesId) ? activation : null;
+        }
+        catch (XmlException) { return null; }
+    }
+
+    internal async Task RemoveRepeatAsync(Guid seriesId)
+    {
+        if (_manager is not { } manager) return;
+        try { await manager.RemoveByTagAndGroupAsync(ChecklistNotificationContent.RepeatTag(seriesId), ChecklistNotificationContent.RepeatGroup); }
+        catch (Exception exception) { ExceptionDiagnostics.Record(exception, "Remove repeat reminder notification"); }
     }
 
     private void NotificationInvoked(AppNotificationManager sender, AppNotificationActivatedEventArgs activation) => Activate(activation);

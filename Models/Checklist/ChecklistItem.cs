@@ -22,6 +22,7 @@ public sealed class ChecklistItem : ObservableObject
     private ChecklistNotificationStyle _notificationStyle;
     private ChecklistNotificationOptions? _notificationOptions;
     private ChecklistReminderOccurrence? _reminderOccurrence;
+    private ChecklistReminderRepeat? _reminderRepeat;
     private string _notes = "";
     private bool _isExpanded;
     private bool _isEditingTitle;
@@ -92,6 +93,7 @@ public sealed class ChecklistItem : ObservableObject
             var reminder = _isChecked ? null : value?.ToUniversalTime();
             if (_reminderAtUtc == reminder) return;
             _reminderAtUtc = reminder;
+            ReminderRepeat = null;
             ReminderAtDueTime = false;
             ReminderHandledAtUtc = null;
             ReminderOccurrence = reminder.HasValue && NotificationStyle == ChecklistNotificationStyle.Urgent
@@ -131,6 +133,7 @@ public sealed class ChecklistItem : ObservableObject
         {
             if (!Enum.IsDefined(value)) value = ChecklistNotificationStyle.Standard;
             if (!SetProperty(ref _notificationStyle, value)) return;
+            if (value != ChecklistNotificationStyle.Standard) ReminderRepeat = null;
             if (_reminderAtUtc.HasValue && value == ChecklistNotificationStyle.Urgent && _reminderOccurrence is null)
                 ReminderOccurrence = ChecklistReminderOccurrence.Create(_reminderAtUtc.Value);
             OnPropertyChanged(nameof(HasActiveReminder));
@@ -148,9 +151,22 @@ public sealed class ChecklistItem : ObservableObject
         }
     }
 
+    internal ChecklistReminderRepeat? ReminderRepeat
+    {
+        get => _reminderRepeat;
+        set
+        {
+            if (!SetProperty(ref _reminderRepeat, value)) return;
+            OnPropertyChanged(nameof(HasActiveReminder));
+            OnPropertyChanged(nameof(NextRepeatAtUtc));
+        }
+    }
+
+    public DateTimeOffset? NextRepeatAtUtc => ReminderRepeat?.LastSlotUtc is not null ? ReminderRepeat.NextSlotUtc : null;
+
     public bool HasActiveReminder => !_isChecked && _reminderAtUtc.HasValue &&
         (NotificationStyle == ChecklistNotificationStyle.Urgent
-            ? ReminderOccurrence is { AcknowledgedAtUtc: null } : _reminderHandledAtUtc is null);
+            ? ReminderOccurrence is { AcknowledgedAtUtc: null } : _reminderHandledAtUtc is null || ReminderRepeat?.NextSlotUtc is not null);
 
     internal void CancelReminder() => ReminderAtUtc = null;
 

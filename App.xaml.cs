@@ -34,6 +34,7 @@ public partial class App : Application
     private IDisposable? _checklistBackupRegistration;
     private ChecklistWindowViewModel? _checklistViewModel;
     private ChecklistReminderScheduler? _checklistReminderScheduler;
+    private bool _startingChecklistReminders;
     private ChecklistUrgentReminderPresenter? _urgentReminderPresenter;
     private IDisposable? _dictionaryBackupRegistration;
     private IDisposable? _jotsBackupRegistration;
@@ -444,18 +445,32 @@ public partial class App : Application
         if (_checklistNotifications is not null) ObserveBackgroundTask(_checklistNotifications.StopPreviewAsync(notificationId));
     }
 
-    private void StartChecklistReminders()
+    private void StartChecklistReminders() => ObserveBackgroundTask(StartChecklistRemindersAsync());
+
+    private async Task StartChecklistRemindersAsync()
     {
-        if (_isShuttingDown || _checklistReminderScheduler is not null) return;
-        var owner = GetOrCreateChecklistViewModel();
-        _urgentReminderPresenter ??= new ChecklistUrgentReminderPresenter(owner, Dispatcher,
-            taskId => QueueReminderActivation(new(taskId, null)));
-        _checklistReminderScheduler = new ChecklistReminderScheduler(
-            owner, Dispatcher, reminders => _checklistNotifications?.TrySubmit(reminders,
-                reminders[0].Style == ChecklistNotificationStyle.Standard
-                    ? reminders[0].Options?.StandardSound : reminders[0].Options?.PersistentSound) == true,
-            submitUrgent: _urgentReminderPresenter.TrySubmit,
-            notificationDefaults: () => _settingsService!.LoadChecklistNotificationOptions());
+        if (_isShuttingDown || _startingChecklistReminders || _checklistReminderScheduler is not null) return;
+        _startingChecklistReminders = true;
+        try
+        {
+            var owner = GetOrCreateChecklistViewModel();
+            var notifications = _checklistNotifications;
+            var history = notifications is null ? [] : await notifications.ReconcileRepeatHistoryAsync(owner.IsCurrentRepeatNotification);
+            if (_isShuttingDown) return;
+            _urgentReminderPresenter ??= new ChecklistUrgentReminderPresenter(owner, Dispatcher,
+                taskId => QueueReminderActivation(new(taskId, null)));
+            _checklistReminderScheduler = new ChecklistReminderScheduler(
+                owner, Dispatcher, reminders => notifications?.TrySubmit(reminders,
+                    reminders[0].Style == ChecklistNotificationStyle.Standard
+                        ? reminders[0].Options?.StandardSound : reminders[0].Options?.PersistentSound) == true,
+                submitUrgent: _urgentReminderPresenter.TrySubmit,
+                notificationDefaults: () => _settingsService!.LoadChecklistNotificationOptions(), repeatHistory: history,
+                removeRepeat: seriesId =>
+                {
+                    if (notifications is not null) ObserveBackgroundTask(notifications.RemoveRepeatAsync(seriesId));
+                });
+        }
+        finally { _startingChecklistReminders = false; }
     }
 
     private void QueueReminderActivation(ChecklistReminderActivation request)

@@ -64,7 +64,8 @@
                     </StackPanel>
                     <TextBlock Text="Style" Margin="0,10,0,4"/>
                     <WrapPanel>
-                        <ComboBox x:Name="StyleChoice" SelectedIndex="0" SelectedValuePath="Tag" AutomationProperties.Name="Notification style">
+                        <ComboBox x:Name="StyleChoice" SelectedIndex="0" SelectedValuePath="Tag" AutomationProperties.Name="Notification style"
+                                  SelectionChanged="RepeatChoice_Changed">
                             <ComboBoxItem Content="Standard Windows" Tag="{x:Static m:ChecklistNotificationStyle.Standard}"/>
                             <ComboBoxItem Content="Persistent Windows" Tag="{x:Static m:ChecklistNotificationStyle.Persistent}"/>
                             <ComboBoxItem Content="Urgent Noted" Tag="{x:Static m:ChecklistNotificationStyle.Urgent}"/>
@@ -74,6 +75,29 @@
                         <Button x:Name="ResetOptions" Content="Reset" AutomationProperties.Name="Reset notification options"
                                 Click="ResetOptions_Click" Margin="8,0,0,0"/>
                     </WrapPanel>
+                    <StackPanel x:Name="RepeatControls" Margin="0,10,0,0" Visibility="Collapsed">
+                        <CheckBox x:Name="EnableRepeat" Content="Remind again" Checked="RepeatChoice_Changed" Unchecked="RepeatChoice_Changed"/>
+                        <StackPanel x:Name="RepeatFields" Margin="0,8,0,0" Visibility="Collapsed">
+                            <TextBlock Text="Repeat interval" Margin="0,0,0,4"/>
+                            <ComboBox x:Name="RepeatInterval" AutomationProperties.Name="Repeat interval" SelectionChanged="RepeatChoice_Changed"/>
+                            <StackPanel x:Name="CustomRepeatFields" Margin="0,6,0,0">
+                                <TextBlock Text="Custom interval in minutes (1 to 1,440)" Margin="0,0,0,4"/>
+                                <TextBox x:Name="CustomRepeatMinutes" Width="90" HorizontalAlignment="Left"
+                                         AutomationProperties.Name="Custom repeat interval in minutes"/>
+                            </StackPanel>
+                            <TextBlock Text="Stop repeating" Margin="0,8,0,4"/>
+                            <ComboBox x:Name="RepeatStop" SelectedIndex="0" AutomationProperties.Name="Stop repeating"
+                                      SelectionChanged="RepeatChoice_Changed">
+                                <ComboBoxItem Content="Until completed or turned off"/>
+                                <ComboBoxItem Content="After a set number of additional alerts"/>
+                            </ComboBox>
+                            <StackPanel x:Name="RepeatLimitFields" Margin="0,6,0,0">
+                                <TextBlock Text="Alerts after the first reminder (1 to 10)" Margin="0,0,0,4"/>
+                                <TextBox x:Name="RepeatLimit" Text="1" Width="90" HorizontalAlignment="Left"
+                                         AutomationProperties.Name="Number of additional alerts"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
