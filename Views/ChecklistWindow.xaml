@@ -446,8 +446,7 @@
                                 <DataTemplate>
                                     <Grid x:Name="ChecklistItemRoot" Background="Transparent"
                                           KeyboardNavigation.TabNavigation="Local"
-                                          GotKeyboardFocus="Item_GotKeyboardFocus" LostKeyboardFocus="Item_LostKeyboardFocus"
-                                          PreviewGotKeyboardFocus="Item_PreviewGotKeyboardFocus"
+                                          LostKeyboardFocus="Item_LostKeyboardFocus"
                                           PreviewLostKeyboardFocus="Item_PreviewLostKeyboardFocus"
                                           PreviewMouseRightButtonDown="ChecklistItem_PreviewMouseRightButtonDown">
                                         <Grid.RowDefinitions>
@@ -566,7 +565,7 @@
                                                      FontSize="13" TextWrapping="NoWrap" VerticalAlignment="Center"
                                                      VerticalContentAlignment="Center" KeyDown="ItemTextBox_KeyDown"
                                                      TextChanged="ItemTextBox_TextChanged"
-                                                     LostFocus="ItemTextBox_LostFocus">
+                                                     IsInactiveSelectionHighlightEnabled="True">
                                                 <TextBox.Style>
                                                     <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                                         <Setter Property="Foreground" Value="{DynamicResource NotedTextBrush}"/>
@@ -622,6 +621,10 @@
                                             </Grid>
                                         </Grid>
 
+                                        <Button x:Name="ExpandedItemBackground" Grid.Row="1"
+                                                Style="{StaticResource NotedExpandedItemBackground}"
+                                                Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}"
+                                                Click="ExpandedItemBackground_Click"/>
                                         <Border Grid.Row="1" Margin="59,0,5,6" Padding="12,10"
                                                 Background="{DynamicResource NotedSubtleSurfaceBrush}"
                                                 BorderBrush="{DynamicResource NotedBorderBrush}"
@@ -640,6 +643,7 @@
                                                 <TextBlock Text="NOTES" Margin="1,0,0,5"
                                                            Foreground="{DynamicResource NotedSecondaryTextBrush}" FontSize="10" FontWeight="SemiBold"/>
                                                 <TextBox x:Name="NotesTextBox" Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}"
+                                                         IsInactiveSelectionHighlightEnabled="True"
                                                          KeyboardNavigation.TabIndex="3" AutomationProperties.Name="Item notes"
                                                          PreviewKeyDown="NotesTextBox_PreviewKeyDown"
                                                          MinHeight="52" MaxHeight="120" Padding="8,6"

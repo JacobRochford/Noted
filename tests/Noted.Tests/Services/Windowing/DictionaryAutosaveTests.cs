@@ -29,9 +29,6 @@ public sealed class DictionaryAutosaveTests
             item.DraftWord = "new word";
             item.DraftDefinition = "new definition";
             var blank = model.AddItem(beginEdit: true, autoSave: true);
-            var editor = new TextBox { DataContext = item, Text = item.DraftWord };
-            editor.Select(2, 3);
-            Invoke(window, "WordTextBox_LostFocus", editor, new RoutedEventArgs());
             Invoke(window, "OnDeactivated", EventArgs.Empty);
 
             Assert.AreEqual(1, service.SaveCount);
@@ -42,8 +39,6 @@ public sealed class DictionaryAutosaveTests
             Assert.IsTrue(blank.IsEditing && model.Items.Contains(blank));
             Assert.IsTrue(existing.IsEditing && existing.HasPendingEdit);
             Assert.AreEqual("unsaved existing edit", existing.DraftDefinition);
-            Assert.AreEqual(2, editor.SelectionStart);
-            Assert.AreEqual(3, editor.SelectionLength);
             Invoke(window, "OnDeactivated", EventArgs.Empty);
             Assert.AreEqual(1, service.SaveCount, "A second flush must not duplicate a successful write.");
         }

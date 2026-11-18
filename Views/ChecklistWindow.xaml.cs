@@ -28,14 +28,9 @@ public partial class ChecklistWindow : OverlayWindow
     private string? _lastPersistenceWarning;
     private bool _reopenOnStartup;
     private bool _preserveOpenStateOnClose;
-    private ChecklistItem? _creatingItem;
-    private ChecklistPriority _creationPriority;
-    private string? _creationTabId;
-    private ChecklistItem? _editingItem;
-    private ChecklistItem? _titleSelectionItem;
-    private int _titleSelectionStart;
-    private int _titleSelectionLength;
-    private bool _navigatingItem;
+    private readonly Dictionary<ChecklistItem, (ChecklistPriority Priority, string? TabId)> _creations = [];
+    private readonly ItemEditorSelections<ChecklistItem> _editorSelections = new();
+    private ChecklistItem? _commandItem;
     private bool _completingItem;
     private FocusTarget? _lastEditorFocus;
     private FocusTarget? _refreshFocus;
@@ -89,7 +84,6 @@ public partial class ChecklistWindow : OverlayWindow
         _viewModel.ResetPresentation(state.GhostModeEnabled, state.SelectedTabId);
         DataContext = _viewModel;
         InitializeOverlay(state.GhostModeEnabled, state.GhostModeOpacity, state.Opacity);
-        _viewModel.ViewChanging += ViewModel_ViewChanging;
         _viewModel.ViewRefreshing += ViewModel_ViewRefreshing;
         _viewModel.ViewRefreshed += ViewModel_ViewRefreshed;
         _viewModel.Items.CollectionChanged += Items_CollectionChanged;
@@ -149,8 +143,6 @@ public partial class ChecklistWindow : OverlayWindow
     private void TryOpenPendingReminder()
     {
         if (_isClosed || _scheduleDialog is not null || _pendingReminderActivation is not { } activation || _completingItem) return;
-        var active = _creatingItem ?? _editingItem;
-        if (active is not null && !TryFinishItem(active, keepEmpty: false, focusList: false)) return;
         _pendingReminderActivation = null;
         if (activation.TaskId is { } id)
         {
@@ -195,12 +187,6 @@ public partial class ChecklistWindow : OverlayWindow
             _pendingReminderActivation = new(id, null);
             return false;
         }
-        var active = _creatingItem ?? _editingItem;
-        if (active is not null && !TryFinishItem(active, keepEmpty: false, focusList: false))
-        {
-            _pendingReminderActivation = new(id, null);
-            return false;
-        }
         _interactionVersion++;
         if (!_viewModel.RevealItem(id, out var item))
         {
@@ -228,8 +214,6 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void EditReminder(ChecklistItem item)
     {
-        var active = _creatingItem ?? _editingItem;
-        if (active is not null && !TryFinishItem(active, keepEmpty: true, focusList: false, collapse: false)) return;
         var dialog = new ChecklistReminderDialog(item.ReminderAtUtc, item.DueDate, item.NotificationStyle, item.NotificationOptions,
             _settingsService.LoadChecklistNotificationOptions(), item.DueTime, item.ReminderAtDueTime) { Owner = this };
         _scheduleDialog = dialog;
@@ -266,16 +250,16 @@ public partial class ChecklistWindow : OverlayWindow
         _isClosed = true;
         if (_reminderTaskMenu is not null) _reminderTaskMenu.IsOpen = false;
         _pendingReminderActivation = null;
-        if (_editingItem is not null) _editingItem.IsEditingTitle = false;
-        _creatingItem = null;
-        _editingItem = null;
-        IsVisibleChanged -= ChecklistWindow_IsVisibleChanged;
+        foreach (var item in _viewModel.Items.Where(_viewModel.IsItemEditing))
+            item.IsEditingTitle = false;
+        _viewModel.ClearItemEdits();
+        _creations.Clear();
+        _commandItem = null;
         _dueStatusTimer.Stop();
         _dueStatusTimer.Tick -= RefreshDueIndicators;
         Microsoft.Win32.SystemEvents.TimeChanged -= DueClockChanged;
         Microsoft.Win32.SystemEvents.PowerModeChanged -= DueClockChanged;
         Activated -= RefreshDueIndicators;
-        _viewModel.ViewChanging -= ViewModel_ViewChanging;
         _viewModel.ViewRefreshing -= ViewModel_ViewRefreshing;
         _viewModel.ViewRefreshed -= ViewModel_ViewRefreshed;
         _viewModel.Items.CollectionChanged -= Items_CollectionChanged;
@@ -289,24 +273,6 @@ public partial class ChecklistWindow : OverlayWindow
     {
         _headerClickItem = null;
         _interactionVersion++;
-        var target = e.OriginalSource as DependencyObject;
-        var current = _creatingItem ?? _editingItem;
-        if (e.ChangedButton == MouseButton.Left &&
-            !IsWithin(target, TitleBar) && !IsWithin(target, AddItemButton) &&
-            current is not null && !IsItemPopupOpen(current) &&
-            !ReferenceEquals(GetItem(target), current))
-        {
-            var creation = _creatingItem;
-            var editing = _editingItem;
-            // let the click reach its original control before refreshing or removing rows.
-            Dispatcher.BeginInvoke(() =>
-            {
-                if (!IsVisible || !_viewModel.Items.Contains(current) ||
-                    !ReferenceEquals(_creatingItem, creation) || !ReferenceEquals(_editingItem, editing)) return;
-                FinishNavigation(current);
-            }, System.Windows.Threading.DispatcherPriority.Input);
-        }
-
         base.OnPreviewMouseDown(e);
     }
 
@@ -349,7 +315,7 @@ public partial class ChecklistWindow : OverlayWindow
 
     internal bool TryHide()
     {
-        var item = _creatingItem ?? _editingItem;
+        var item = _commandItem is { } target && _viewModel.IsItemEditing(target) ? target : null;
         if (item is not null)
         {
             if (!TryFinishItem(item, keepEmpty: false, focusList: true)) return false;
@@ -445,7 +411,7 @@ public partial class ChecklistWindow : OverlayWindow
         _interactionVersion++;
         var modifiers = e.KeyboardDevice.Modifiers;
         var item = GetItem(e.OriginalSource as DependencyObject);
-        var popupItem = item ?? _creatingItem ?? _editingItem;
+        var popupItem = item ?? _commandItem;
         if (!e.Handled && e.Key == Key.Escape && e.IsRepeat)
             e.Handled = true;
         if (!e.Handled && !TabNamePopup.IsOpen && (popupItem is null || !IsItemPopupOpen(popupItem)))
@@ -460,10 +426,9 @@ public partial class ChecklistWindow : OverlayWindow
                 if (!e.IsRepeat) BeginNewItem();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Enter && modifiers == ModifierKeys.Control && item is not null &&
-                     (ReferenceEquals(item, _creatingItem) || ReferenceEquals(item, _editingItem)))
+            else if (e.Key == Key.Enter && modifiers == ModifierKeys.Control && (item ?? _commandItem) is { } edit && _viewModel.IsItemEditing(edit))
             {
-                TryFinishItem(item, keepEmpty: true, focusList: true);
+                TryFinishItem(edit, keepEmpty: true, focusList: true);
                 e.Handled = true;
             }
             else if (e.Key == Key.Tab && item is not null &&
@@ -480,9 +445,14 @@ public partial class ChecklistWindow : OverlayWindow
                 if (!e.IsRepeat) OpenTabNamePopup(tab, tabButton);
                 e.Handled = true;
             }
-            else if (e.Key == Key.F2 && modifiers == ModifierKeys.None && item is not null)
+            else if (e.Key == Key.F2 && modifiers == ModifierKeys.None && item is not null &&
+                     !IsEditor(e.OriginalSource as DependencyObject))
             {
-                if (!e.IsRepeat && !item.IsEditingTitle) BeginTitleEditing(item);
+                if (!e.IsRepeat)
+                {
+                    if (item.IsEditingTitle) FocusTitle(item, selectAll: false);
+                    else BeginTitleEditing(item);
+                }
                 e.Handled = true;
             }
             else if (e.OriginalSource is ListBox or ListBoxItem)
@@ -534,11 +504,11 @@ public partial class ChecklistWindow : OverlayWindow
             !TabNamePopup.IsOpen)
         {
             var item = GetItem(e.OriginalSource as DependencyObject);
-            var popupItem = item ?? _creatingItem ?? _editingItem;
+            var popupItem = item ?? _commandItem;
             if (popupItem is null || !IsItemPopupOpen(popupItem))
             {
-                var active = _creatingItem ?? _editingItem;
-                if (active is not null)
+                var active = item ?? _commandItem;
+                if (active is not null && _viewModel.IsItemEditing(active))
                     TryFinishItem(active, keepEmpty: false, focusList: true);
                 else
                     RequestHide();
@@ -770,9 +740,16 @@ public partial class ChecklistWindow : OverlayWindow
         if (item != null) ToggleDetails(item);
     }
 
+    private void ExpandedItemBackground_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetItemFromSender(sender) is not { IsExpanded: true } item) return;
+        if (_viewModel.IsItemEditing(item)) FocusRow(item);
+        else item.IsExpanded = false;
+    }
+
     private void ToggleDetails(ChecklistItem item)
     {
-        if (item.IsExpanded && (ReferenceEquals(item, _creatingItem) || ReferenceEquals(item, _editingItem)))
+        if (item.IsExpanded && _viewModel.IsItemEditing(item))
         {
             TryFinishItem(item, keepEmpty: false, focusList: true);
             return;
@@ -911,30 +888,40 @@ public partial class ChecklistWindow : OverlayWindow
     private void BeginNewItem(ChecklistItem? anchor = null)
     {
         if (!_viewModel.CanAddItem) return;
-        var current = _creatingItem ?? _editingItem;
-        if (current is not null && !TryFinishItem(current, keepEmpty: true, focusList: false))
-            return;
-
         var item = _viewModel.AddItem(anchor);
         if (item is null) return;
-        _creatingItem = item;
-        _creationPriority = item.Priority;
-        _creationTabId = item.TabId;
+        _creations.Add(item, (item.Priority, item.TabId));
         item.IsEditingTitle = true;
-        _editingItem = item;
-        _viewModel.DeferContentRefresh(true);
+        StartEditing(item);
+        var version = ++_interactionVersion;
+        if (!_viewModel.FilteredItems.Contains(item)) _viewModel.RefreshFilteredItems(force: true);
         Dispatcher.BeginInvoke(() =>
         {
-            if (ReferenceEquals(_creatingItem, item) && _viewModel.Items.Contains(item))
+            if (version == _interactionVersion && _creations.ContainsKey(item) && _viewModel.FilteredItems.Contains(item))
                 FocusTitle(item, selectAll: false);
         }, System.Windows.Threading.DispatcherPriority.Input);
     }
 
     private bool IsEmptyCreation(ChecklistItem item) =>
-        ReferenceEquals(item, _creatingItem) &&
+        _creations.TryGetValue(item, out var creation) &&
         string.IsNullOrWhiteSpace(item.Text) && string.IsNullOrWhiteSpace(item.Notes) &&
         item.DueDate is null && item.ReminderAtUtc is null && !item.IsChecked &&
-        item.Priority == _creationPriority && item.TabId == _creationTabId;
+        item.Priority == creation.Priority && item.TabId == creation.TabId;
+
+    private void StartEditing(ChecklistItem item)
+    {
+        _commandItem = item;
+        _viewModel.StartItemEdit(item);
+    }
+
+    private void EndEditing(ChecklistItem item)
+    {
+        _creations.Remove(item);
+        _editorSelections.Forget(item);
+        if (ReferenceEquals(_lastEditorFocus?.Item, item)) _lastEditorFocus = null;
+        _viewModel.EndItemEdit(item);
+        item.IsEditingTitle = false;
+    }
 
     private bool TryFinishItem(ChecklistItem item, bool keepEmpty, bool focusList, bool collapse = true)
     {
@@ -955,9 +942,7 @@ public partial class ChecklistWindow : OverlayWindow
                     ShowPersistenceWarningOnce(pendingError);
                     return false;
                 }
-                if (ReferenceEquals(_creatingItem, item)) _creatingItem = null;
-                if (ReferenceEquals(_editingItem, item)) _editingItem = null;
-                item.IsEditingTitle = false;
+                EndEditing(item);
                 _viewModel.DeferContentRefresh(false);
                 finished = true;
                 return true;
@@ -982,25 +967,17 @@ public partial class ChecklistWindow : OverlayWindow
                 remove = false;
             }
 
-            if (ReferenceEquals(_creatingItem, item)) _creatingItem = null;
-            if (ReferenceEquals(_editingItem, item)) _editingItem = null;
-            item.IsEditingTitle = false;
+            EndEditing(item);
             if (collapse) item.IsExpanded = false;
             if (remove) _viewModel.RemoveItem(item);
-            _viewModel.DeferContentRefresh(false);
+            _viewModel.DeferContentRefresh(false, refresh: false);
+            _viewModel.RefreshFilteredItems();
             if (focusList)
             {
                 FocusRow(item, index);
             }
             else if (destination is not null && !ReferenceEquals(destination.Item, item)) RestoreFocus(destination);
             else if (destination?.Item is not null) FocusRow(item, index);
-            if (Keyboard.FocusedElement is DependencyObject focused && IsEditor(focused) &&
-                GetItem(focused) is ChecklistItem next && !ReferenceEquals(next, item))
-            {
-                _editingItem = next;
-                _viewModel.DeferContentRefresh(true);
-                _lastEditorFocus = CaptureFocus();
-            }
             finished = true;
             return true;
         }
@@ -1015,42 +992,21 @@ public partial class ChecklistWindow : OverlayWindow
     private void NavigateItem(ChecklistItem item, UIElement? source, bool backward)
     {
         if (source is null) return;
-        _navigatingItem = true;
-        try
+        if (!backward && source is TextBox { Name: "ItemTitleTextBox" })
         {
-            if (!backward && source is TextBox { Name: "ItemTitleTextBox" })
-            {
-                item.IsExpanded = true;
-                ItemsList.UpdateLayout();
-                FindItemControl<TextBox>(item, "NotesTextBox")?.Focus();
-            }
-            else if (backward && source is TextBox { Name: "NotesTextBox" } && item.IsEditingTitle)
-            {
-                var title = FindItemControl<TextBox>(item, "ItemTitleTextBox");
-                if (title is not null && title.Focus())
-                {
-                    if (ReferenceEquals(_titleSelectionItem, item))
-                        RestoreSelection(title, _titleSelectionStart, _titleSelectionLength);
-                    else
-                        title.CaretIndex = title.Text.Length;
-                }
-            }
-            else
-            {
-                var controls = GetTabControls(item);
-                var index = controls.FindIndex(control => ReferenceEquals(control, source));
-                if (index < 0)
-                    index = controls.FindIndex(control => control is not ListBoxItem && IsWithin(source, control));
-                var next = index + (backward ? -1 : 1);
-                if (next >= 0 && next < controls.Count) controls[next].Focus();
-                else MoveOutsideList(backward);
-            }
+            item.IsExpanded = true;
+            ItemsList.UpdateLayout();
+            FindItemControl<TextBox>(item, "NotesTextBox")?.Focus();
+            return;
         }
-        finally { _navigatingItem = false; }
 
-        var destination = Keyboard.FocusedElement as FrameworkElement;
-        if (destination is null || ReferenceEquals(GetItem(destination), item)) return;
-        FinishNavigation(item);
+        var controls = GetTabControls(item);
+        var index = controls.FindIndex(control => ReferenceEquals(control, source));
+        if (index < 0)
+            index = controls.FindIndex(control => control is not ListBoxItem && IsWithin(source, control));
+        var next = index + (backward ? -1 : 1);
+        if (next >= 0 && next < controls.Count) controls[next].Focus();
+        else MoveOutsideList(backward);
     }
 
     private List<UIElement> GetTabControls(ChecklistItem item)
@@ -1076,77 +1032,35 @@ public partial class ChecklistWindow : OverlayWindow
         finally { KeyboardNavigation.SetTabNavigation(ItemsList, navigation); }
     }
 
-    private void FinishNavigation(ChecklistItem item)
-    {
-        // keep the clicked title in place until mouse-up resolves the editing handoff.
-        if (_headerClickItem is not null && _headerClickEditsTitle) return;
-        if (!ReferenceEquals(item, _creatingItem) && !ReferenceEquals(item, _editingItem)) return;
-        TryFinishItem(item, keepEmpty: false, focusList: false);
-    }
-
-    private void Item_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
-    {
-        if (GetItem(e.NewFocus as DependencyObject) is not ChecklistItem item) return;
-        ItemsList.SelectedItem = item;
-        if (_completingItem || !IsEditor(e.NewFocus as DependencyObject)) return;
-        _editingItem = item;
-        _viewModel.DeferContentRefresh(true);
-        _lastEditorFocus = CaptureFocus();
-    }
-
     private static bool IsEditor(DependencyObject? element) =>
         element is TextBox { Name: "ItemTitleTextBox" or "NotesTextBox" };
 
-    private void Item_PreviewGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
-    {
-        if (_completingItem || !IsEditor(e.NewFocus as DependencyObject) ||
-            GetItem(e.NewFocus as DependencyObject) is not ChecklistItem item) return;
-        var previous = _creatingItem ?? _editingItem;
-        if (previous is null || ReferenceEquals(previous, item)) return;
-        var destination = CaptureFocus(e.NewFocus as FrameworkElement);
-        if (!TryFinishItem(previous, keepEmpty: false, focusList: false))
-        {
-            e.Handled = true;
-            return;
-        }
-        if (!ReferenceEquals(GetItem(e.NewFocus as DependencyObject), item))
-        {
-            e.Handled = true;
-            Dispatcher.BeginInvoke(() =>
-            {
-                if (destination is not null && _viewModel.Items.Contains(item)) RestoreFocus(destination);
-            }, System.Windows.Threading.DispatcherPriority.Input);
-        }
-    }
-
     private void Item_PreviewLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if (_completingItem || GetItem(e.OldFocus as DependencyObject) is not ChecklistItem item) return;
-        if (IsEditor(e.OldFocus as DependencyObject)) _lastEditorFocus = CaptureFocus(e.OldFocus as FrameworkElement);
+        if (!_completingItem && e.OldFocus is TextBox editor && IsEditor(editor) &&
+            editor.DataContext is ChecklistItem item && _viewModel.IsItemEditing(item))
+        {
+            _editorSelections.Remember(item, editor);
+            _lastEditorFocus = CaptureFocus(editor);
+        }
     }
 
     private void Item_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if (_navigatingItem || _completingItem || sender is not FrameworkElement { DataContext: ChecklistItem item })
-            return;
-        if (ReferenceEquals(GetItem(e.NewFocus as DependencyObject), item) || IsItemPopupOpen(item)) return;
+        if (_completingItem || !IsEditor(e.OldFocus as DependencyObject)) return;
         Dispatcher.BeginInvoke(() =>
         {
-            if (_isClosed || !ReferenceEquals(_editingItem, item) || _navigatingItem || _completingItem || IsItemPopupOpen(item) ||
-                ReferenceEquals(GetItem(Keyboard.FocusedElement as DependencyObject), item)) return;
-            FinishNavigation(item);
-        }, System.Windows.Threading.DispatcherPriority.Input);
+            if (_isClosed) return;
+            if (!(IsKeyboardFocusWithin && IsEditor(Keyboard.FocusedElement as DependencyObject)))
+                _viewModel.DeferContentRefresh(false);
+        }, System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void BeginTitleEditing(ChecklistItem item, Point? clickPosition = null)
     {
-        var previous = _creatingItem ?? _editingItem;
-        if (previous is not null && !ReferenceEquals(previous, item) &&
-            !TryFinishItem(previous, keepEmpty: false, focusList: false)) return;
         if (!_viewModel.FilteredItems.Contains(item)) return;
-        _editingItem = item;
+        StartEditing(item);
         item.IsEditingTitle = true;
-        _viewModel.DeferContentRefresh(true);
         FocusTitle(item, selectAll: clickPosition is null, clickPosition);
     }
 
@@ -1166,7 +1080,7 @@ public partial class ChecklistWindow : OverlayWindow
                 new Point(point.X + editor.Padding.Left, editor.ActualHeight / 2), snapToText: true);
             editor.CaretIndex = index >= 0 ? index : editor.Text.Length;
         }
-        else editor.CaretIndex = editor.Text.Length;
+        else if (!_editorSelections.Restore(item, editor)) editor.CaretIndex = editor.Text.Length;
     }
 
     private void RestoreEditorFocus(ChecklistItem item)
@@ -1201,8 +1115,17 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void ItemsList_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if (e.NewFocus is ListBoxItem row && row.DataContext is ChecklistItem selected)
+        if (e.NewFocus is FrameworkElement element && GetItem(element) is ChecklistItem selected)
+        {
             ItemsList.SelectedItem = selected;
+            _commandItem = selected;
+            if (!_completingItem && element is TextBox editor && IsEditor(editor))
+            {
+                StartEditing(selected);
+                _editorSelections.Restore(selected, editor);
+                _viewModel.DeferContentRefresh(true);
+            }
+        }
         if (ReferenceEquals(e.NewFocus, ItemsList) && ItemsList.SelectedItem is ChecklistItem item)
             Dispatcher.BeginInvoke(() =>
             {
@@ -1243,23 +1166,11 @@ public partial class ChecklistWindow : OverlayWindow
         var control = target.Element is ListBoxItem ?
             ItemsList.ItemContainerGenerator.ContainerFromItem(target.Item) as FrameworkElement :
             FindItemControl<FrameworkElement>(target.Item, target.Name);
-        if (control?.IsVisible == true && control.Focus())
+        if (control?.IsVisible == true && (control.IsKeyboardFocused || control.Focus()))
         {
-            if (control is TextBox editor) RestoreSelection(editor, target.Start, target.Length);
+            if (control is TextBox editor) ItemEditorSelections<ChecklistItem>.Apply(editor, target.Start, target.Length);
         }
         else FocusRow(target.Item);
-    }
-
-    private void ViewModel_ViewChanging(object? sender, CancelEventArgs e)
-    {
-        var item = _creatingItem ?? _editingItem;
-        if (_completingItem || item is null) return;
-        if (!TryFinishItem(item, keepEmpty: false, focusList: false))
-        {
-            e.Cancel = true;
-            Dispatcher.BeginInvoke(() => SearchBox.GetBindingExpression(TextBox.TextProperty)?.UpdateTarget(),
-                System.Windows.Threading.DispatcherPriority.Input);
-        }
     }
 
     private void ViewModel_ViewRefreshing(object? sender, EventArgs e)
@@ -1276,20 +1187,20 @@ public partial class ChecklistWindow : OverlayWindow
         Dispatcher.BeginInvoke(() =>
         {
             var focused = Keyboard.FocusedElement as DependencyObject;
-            if (IsVisible && version == _interactionVersion &&
-                (focused is null || ReferenceEquals(focused, target.Element) || ReferenceEquals(focused, ItemsList)))
+            if (IsVisible && IsActive && version == _interactionVersion &&
+                (focused is null || ReferenceEquals(focused, target.Element) || ReferenceEquals(focused, ItemsList) ||
+                 focused is ListBoxItem row && ReferenceEquals(row.DataContext, target.Item)))
                 RestoreFocus(target);
         }, System.Windows.Threading.DispatcherPriority.Input);
     }
 
     private void Items_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        var active = _creatingItem ?? _editingItem;
-        if (active is null || _viewModel.Items.Contains(active)) return;
-        active.IsEditingTitle = false;
-        _creatingItem = null;
-        _editingItem = null;
-        _viewModel.DeferContentRefresh(false);
+        if (e.Action == NotifyCollectionChangedAction.Move) return;
+        foreach (var item in e.OldItems?.OfType<ChecklistItem>() ?? [])
+            EndEditing(item);
+        if (_commandItem is not null && !_viewModel.Items.Contains(_commandItem))
+            _commandItem = null;
     }
 
     private void OpenItemContextMenu(ChecklistItem item)
@@ -1303,12 +1214,6 @@ public partial class ChecklistWindow : OverlayWindow
     private T? FindItemControl<T>(ChecklistItem item, string name) where T : DependencyObject
     {
         return VisualTreeHelpers.FindDescendant<T>(ItemsList.ItemContainerGenerator.ContainerFromItem(item), name);
-    }
-
-    private static void RestoreSelection(TextBox editor, int start, int length)
-    {
-        start = Math.Min(start, editor.Text.Length);
-        editor.Select(start, Math.Min(length, editor.Text.Length - start));
     }
 
     private bool IsItemPopupOpen(ChecklistItem item) =>
@@ -1340,7 +1245,7 @@ public partial class ChecklistWindow : OverlayWindow
 
         if (e.Key == Key.Enter && e.KeyboardDevice.Modifiers == ModifierKeys.None)
         {
-            if (ReferenceEquals(item, _creatingItem))
+            if (_creations.ContainsKey(item))
             {
                 if (TryFinishItem(item, keepEmpty: true, focusList: false)) BeginNewItem(item);
             }
@@ -1358,23 +1263,6 @@ public partial class ChecklistWindow : OverlayWindow
     {
         if (!e.Handled && sender is TextBox editor)
             e.Handled = EditorTextWrapping.HandleKey(editor, e.Key, e.KeyboardDevice.Modifiers);
-    }
-
-    private void ItemTextBox_LostFocus(object sender, RoutedEventArgs e)
-    {
-        if (sender is TextBox textBox)
-        {
-            var item = textBox.DataContext;
-            _titleSelectionItem = textBox.DataContext as ChecklistItem;
-            _titleSelectionStart = textBox.SelectionStart;
-            _titleSelectionLength = textBox.SelectionLength;
-            Dispatcher.BeginInvoke(() =>
-            {
-                if (textBox.IsKeyboardFocused || !textBox.IsVisible || !ReferenceEquals(textBox.DataContext, item)) return;
-                textBox.Select(0, 0);
-                textBox.ScrollToHorizontalOffset(0);
-            }, System.Windows.Threading.DispatcherPriority.Input);
-        }
     }
 
     // Drag-drop reordering

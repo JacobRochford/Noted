@@ -170,7 +170,9 @@
                                           FocusVisualStyle="{StaticResource NotedKeyboardFocusVisual}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border x:Name="DictionaryItemRoot" Margin="0,1" Padding="5,0,4,0" CornerRadius="6"
+                                        <Border x:Name="DictionaryItemRoot" Margin="0,1" CornerRadius="6"
+                                                Focusable="True" KeyboardNavigation.IsTabStop="False"
+                                                GotKeyboardFocus="DictionaryItem_GotKeyboardFocus"
                                                 PreviewLostKeyboardFocus="DictionaryItem_PreviewLostKeyboardFocus"
                                                 PreviewMouseRightButtonDown="DictionaryItem_PreviewMouseRightButtonDown">
                                             <Border.Style>
@@ -196,7 +198,7 @@
                                                     <RowDefinition Height="Auto"/>
                                                     <RowDefinition Height="Auto"/>
                                                 </Grid.RowDefinitions>
-                                                <Grid Grid.Row="0" MinHeight="43">
+                                                <Grid Grid.Row="0" MinHeight="43" Margin="5,0,4,0">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="Auto"/>
@@ -221,7 +223,7 @@
                                                             <Button.ContentTemplate><DataTemplate><TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"/></DataTemplate></Button.ContentTemplate>
                                                         </Button>
                                                         <TextBox x:Name="WordTextBox" Text="{Binding DraftWord, UpdateSourceTrigger=PropertyChanged}"
-                                                                 FontSize="13" FontWeight="SemiBold" LostFocus="WordTextBox_LostFocus">
+                                                                 FontSize="13" FontWeight="SemiBold" IsInactiveSelectionHighlightEnabled="True">
                                                             <TextBox.Style><Style TargetType="TextBox" BasedOn="{StaticResource DictionaryTextBox}">
                                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                                                 <Style.Triggers><DataTrigger Binding="{Binding IsEditing}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers>
@@ -286,7 +288,11 @@
                                                     </Button>
                                                 </Grid>
 
-                                                <Border Grid.Row="1" Margin="5,0,5,7" Padding="10,8"
+                                                <Button x:Name="ExpandedItemBackground" Grid.Row="1"
+                                                        Style="{StaticResource NotedExpandedItemBackground}"
+                                                        Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVisibility}}"
+                                                        Click="ExpandedItemBackground_Click"/>
+                                                <Border Grid.Row="1" Margin="10,0,9,7" Padding="10,8"
                                                         Background="{DynamicResource NotedSubtleSurfaceBrush}"
                                                         BorderBrush="{DynamicResource NotedBorderBrush}"
                                                         BorderThickness="1" CornerRadius="6"
@@ -319,6 +325,7 @@
                                                             </Grid.Style>
                                                             <TextBox x:Name="DefinitionBox" PreviewMouseWheel="Definition_PreviewMouseWheel"
                                                                      PreviewKeyDown="DefinitionBox_PreviewKeyDown"
+                                                                     IsInactiveSelectionHighlightEnabled="True"
                                                                      Text="{Binding DraftDefinition, UpdateSourceTrigger=PropertyChanged}"
                                                                      MinHeight="48"
                                                                      Padding="7,5"

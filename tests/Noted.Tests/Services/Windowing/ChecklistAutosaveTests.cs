@@ -72,7 +72,7 @@ public sealed class ChecklistAutosaveTests
         window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
 
         if (search)
-            Assert.HasCount(0, model.FilteredItems);
+            Assert.AreSame(item, model.FilteredItems.Single());
         else
             Assert.AreEqual("bravo", model.FilteredItems[0].Text);
     });

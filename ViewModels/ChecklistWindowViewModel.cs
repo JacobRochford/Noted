@@ -28,6 +28,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
     private bool _isBulkUpdating;
     private bool _isUpdatingItemText;
     private bool _deferContentRefresh;
+    private readonly Dictionary<ChecklistItem, ChecklistTab?> _unfinishedEdits = [];
     private string? _persistenceError;
     private string? _itemSaveError;
     private string? _tabSaveError;
@@ -35,7 +36,6 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
     private string? _tabSaveWarning;
     private string? _loadNotice;
 
-    internal event EventHandler<CancelEventArgs>? ViewChanging;
     internal event EventHandler? ViewRefreshing;
     internal event EventHandler? ViewRefreshed;
     internal event EventHandler? ReminderStateChanged;
@@ -64,14 +64,9 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         set
         {
             if (_searchQuery == value) return;
-            if (!CanChangeView())
-            {
-                OnPropertyChanged();
-                return;
-            }
             _searchQuery = value;
             OnPropertyChanged();
-            RefreshFilteredItems();
+            RefreshFilteredItems(force: true);
         }
     }
 
@@ -96,15 +91,10 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         set
         {
             if (_sortMode == value) return;
-            if (!CanChangeView())
-            {
-                OnPropertyChanged();
-                return;
-            }
             _sortMode = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanManuallyReorder));
-            RefreshFilteredItems();
+            RefreshFilteredItems(force: true);
         }
     }
 
@@ -234,7 +224,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
     internal void ResetPresentation(bool ghostModeEnabled, string? selectedTabId)
     {
-        _deferContentRefresh = false;
+        ClearItemEdits();
         foreach (var item in Items)
         {
             item.IsExpanded = false;
@@ -251,18 +241,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
     // Tabs
 
-    public void SelectTab(ChecklistTab? tab)
-    {
-        if (ReferenceEquals(SelectedTab, tab) || CanChangeView())
-            _checklistTabs.Select(tab);
-    }
-
-    private bool CanChangeView()
-    {
-        var args = new CancelEventArgs();
-        ViewChanging?.Invoke(this, args);
-        return !args.Cancel;
-    }
+    public void SelectTab(ChecklistTab? tab) => _checklistTabs.Select(tab);
 
     public ChecklistTab? FindTab(string id) =>
         _checklistTabs.Find(id);
@@ -270,7 +249,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
     internal bool RevealItem(Guid id, out ChecklistItem? item)
     {
         item = Items.FirstOrDefault(candidate => candidate.Id == id && !candidate.IsChecked);
-        if (item is null || !CanChangeView()) return false;
+        if (item is null) return false;
         var tab = item.TabId is { } tabId ? FindTab(tabId) : FindTab(ChecklistTab.AllId);
         if (tab is null) return false;
         if (!tab.IsVisible && !SetDefaultTabVisibility(tab.Id, true)) return false;
@@ -281,7 +260,6 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
     public bool SetDefaultTabVisibility(string id, bool isVisible)
     {
-        if (!CanChangeView()) return false;
         var saved = _checklistTabs.SetDefaultVisibility(id, isVisible);
         if (saved)
             OnPropertyChanged(nameof(CanAddItem));
@@ -291,7 +269,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
     public bool TryCreateTab(string name, out ChecklistTab? createdTab)
     {
         createdTab = null;
-        return CanChangeView() && _checklistTabs.TryCreate(name, out createdTab);
+        return _checklistTabs.TryCreate(name, out createdTab);
     }
 
     public bool TryRenameTab(ChecklistTab tab, string name) =>
@@ -299,7 +277,6 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
     public bool TryDeleteTab(ChecklistTab tab)
     {
-        if (!CanChangeView()) return false;
         if (!_checklistTabs.TryDelete(tab))
             return false;
 
@@ -330,7 +307,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(SelectedTab));
         OnPropertyChanged(nameof(HasSelectedTab));
         OnPropertyChanged(nameof(CanAddItem));
-        RefreshFilteredItems();
+        RefreshFilteredItems(force: true);
     }
 
     // Collection / item change handlers
@@ -346,9 +323,13 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             {
                 item.PropertyChanged -= Item_PropertyChanged;
                 if (e.Action != NotifyCollectionChangedAction.Move)
+                {
+                    _unfinishedEdits.Remove(item);
                     item.CancelReminder();
+                }
             }
 
+        if (e.Action == NotifyCollectionChangedAction.Reset) _unfinishedEdits.Clear();
         if (_isBulkUpdating) return;
 
         NotifyProgress();
@@ -373,18 +354,30 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             ReminderStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    internal void DeferContentRefresh(bool defer)
+    internal void DeferContentRefresh(bool defer, bool refresh = true)
     {
         if (_deferContentRefresh == defer) return;
         _deferContentRefresh = defer;
-        if (!defer) RefreshFilteredItems();
+        if (!defer && refresh) RefreshFilteredItems();
+    }
+
+    internal bool IsItemEditing(ChecklistItem item) => _unfinishedEdits.ContainsKey(item);
+
+    internal void StartItemEdit(ChecklistItem item) => _unfinishedEdits.TryAdd(item, SelectedTab);
+
+    internal void EndItemEdit(ChecklistItem item) => _unfinishedEdits.Remove(item);
+
+    internal void ClearItemEdits()
+    {
+        _unfinishedEdits.Clear();
+        _deferContentRefresh = false;
     }
 
     internal void UpdateItemText(ChecklistItem item, string text)
     {
         if (item.Text == text) return;
 
-        // schedule typing without moving or filtering out the row before editing ends.
+        // schedule typing without moving the row under the caret.
         _isUpdatingItemText = true;
         try
         {
@@ -409,9 +402,9 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
     // Filtering / sorting
 
-    public void RefreshFilteredItems()
+    public void RefreshFilteredItems(bool force = false)
     {
-        if (_deferContentRefresh) return;
+        if (_deferContentRefresh && !force) return;
         ViewRefreshing?.Invoke(this, EventArgs.Empty);
          _isRefreshing = true;
         try {
@@ -419,17 +412,17 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
             if (!string.IsNullOrWhiteSpace(SearchQuery))
                 source = source.Where(i =>
-                    i.Text.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                    IsItemEditing(i) || i.Text.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) ||
                     i.Notes.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase));
 
             source = SelectedTab?.Kind switch
             {
                 ChecklistTabKind.All => source,
                 ChecklistTabKind.Urgent => source.Where(
-                    item => item.Priority == ChecklistPriority.High),
-                ChecklistTabKind.Done => source.Where(item => item.IsChecked),
+                    item => item.Priority == ChecklistPriority.High || IsEditingInSelectedTab(item)),
+                ChecklistTabKind.Done => source.Where(item => item.IsChecked || IsEditingInSelectedTab(item)),
                 ChecklistTabKind.Custom => source.Where(
-                    item => item.TabId == SelectedTab.Id),
+                    item => item.TabId == SelectedTab.Id || IsEditingInSelectedTab(item)),
                 _ => Enumerable.Empty<ChecklistItem>()
             };
 
@@ -444,24 +437,24 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
             var result = source.ToList();
 
-            // In-place sync to minimize ListBox re-renders
+            // keep existing row containers when sorting an unfinished edit.
+            var visible = result.ToHashSet();
+            for (int i = FilteredItems.Count - 1; i >= 0; i--)
+                if (!visible.Contains(FilteredItems[i])) FilteredItems.RemoveAt(i);
+
             for (int i = 0; i < result.Count; i++)
             {
-                if (i < FilteredItems.Count)
-                {
-                    if (!ReferenceEquals(FilteredItems[i], result[i]))
-                        FilteredItems[i] = result[i];
-                }
-                else
-                {
-                    FilteredItems.Add(result[i]);
-                }
+                if (i < FilteredItems.Count && ReferenceEquals(FilteredItems[i], result[i])) continue;
+                var oldIndex = FilteredItems.IndexOf(result[i]);
+                if (oldIndex < 0) FilteredItems.Insert(i, result[i]);
+                else FilteredItems.Move(oldIndex, i);
             }
-            while (FilteredItems.Count > result.Count)
-                FilteredItems.RemoveAt(FilteredItems.Count - 1);
         } finally { _isRefreshing = false; }
         ViewRefreshed?.Invoke(this, EventArgs.Empty);
     }
+
+    private bool IsEditingInSelectedTab(ChecklistItem item) =>
+        _unfinishedEdits.TryGetValue(item, out var origin) && ReferenceEquals(SelectedTab, origin);
 
     // CRUD
 
@@ -528,7 +521,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         }
 
         if (refreshNeeded)
-            RefreshFilteredItems();
+            RefreshFilteredItems(force: true);
     }
 
     public void RemoveItem(ChecklistItem item) => _uiThreadInvoke(() => Items.Remove(item));

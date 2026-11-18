@@ -24,9 +24,8 @@ public partial class DictionaryWindow : OverlayWindow
     private bool _isClosed;
     private bool _isResettingSize;
     private FocusTarget? _lastEditorFocus;
-    private DictionaryItem? _wordSelectionItem;
-    private int _wordSelectionStart;
-    private int _wordSelectionLength;
+    private readonly ItemEditorSelections<DictionaryItem> _editorSelections = new();
+    private DictionaryItem? _commandItem;
 
     private sealed record FocusTarget(
         FrameworkElement Element, DictionaryItem? Item, string Name, int Start, int Length);
@@ -93,7 +92,7 @@ public partial class DictionaryWindow : OverlayWindow
         }
         if (e.Key == Key.S && modifiers == ModifierKeys.Control)
         {
-            if (!e.IsRepeat) SaveCurrentEntry(item);
+            if (!e.IsRepeat) SaveCurrentEntry(item ?? _commandItem);
             e.Handled = true;
         }
         else if (e.Key == Key.F2 && modifiers == ModifierKeys.None && item is not null)
@@ -106,9 +105,10 @@ public partial class DictionaryWindow : OverlayWindow
             if (!e.IsRepeat) AddEntry();
             e.Handled = true;
         }
-        else if (e.Key == Key.Enter && modifiers == ModifierKeys.Control && item?.IsEditing == true)
+        else if (e.Key == Key.Enter && modifiers == ModifierKeys.Control &&
+                 (item ?? _commandItem) is { IsEditing: true } edit)
         {
-            TrySaveEntry(item, collapse: true);
+            TrySaveEntry(edit, collapse: true);
             e.Handled = true;
         }
         else if (e.Key == Key.Tab && item?.IsEditing == true &&
@@ -123,12 +123,7 @@ public partial class DictionaryWindow : OverlayWindow
             }
             else
             {
-                var word = FindEntryControl<TextBox>(item, "WordTextBox");
-                if (word?.Focus() == true)
-                {
-                    if (ReferenceEquals(_wordSelectionItem, item)) RestoreSelection(word, _wordSelectionStart, _wordSelectionLength);
-                    else word.CaretIndex = word.Text.Length;
-                }
+                FindEntryControl<TextBox>(item, "WordTextBox")?.Focus();
             }
             e.Handled = true;
         }
@@ -154,8 +149,8 @@ public partial class DictionaryWindow : OverlayWindow
         if (!e.Handled && e.Key == Key.Escape && e.KeyboardDevice.Modifiers == ModifierKeys.None &&
             !_viewModel.Items.Any(IsEntryPopupOpen) && !_completingEntry)
         {
-            var item = GetItem(e.OriginalSource as DependencyObject);
-            if (item?.IsEditing == true)
+            var item = GetItem(e.OriginalSource as DependencyObject) ?? _commandItem;
+            if (item?.IsEditing == true && _viewModel.Items.Contains(item))
             {
                 if (CancelEntry(item)) FocusEntry(item);
             }
@@ -365,6 +360,7 @@ public partial class DictionaryWindow : OverlayWindow
         {
             if (item.IsEditing && !CancelEntry(item)) return;
             _definitionHeights.Remove(item);
+            ForgetEditor(item);
             _viewModel.RemoveItem(item);
         }
     }
@@ -392,6 +388,7 @@ public partial class DictionaryWindow : OverlayWindow
                 return false;
             }
             if (collapse) item.IsExpanded = false;
+            ForgetEditor(item);
             FocusEntry(item);
             return true;
         }
@@ -415,9 +412,10 @@ public partial class DictionaryWindow : OverlayWindow
     private bool IsEntryPopupOpen(DictionaryItem item) =>
         FindEntryControl<Border>(item, "DictionaryItemRoot")?.ContextMenu?.IsOpen == true;
 
-    private FocusTarget? CaptureFocus()
+    private FocusTarget? CaptureFocus(FrameworkElement? element = null)
     {
-        if (Keyboard.FocusedElement is not FrameworkElement element) return null;
+        element ??= Keyboard.FocusedElement as FrameworkElement;
+        if (element is null) return null;
         return new FocusTarget(element, GetItem(element), element.Name,
             (element as TextBox)?.SelectionStart ?? 0, (element as TextBox)?.SelectionLength ?? 0);
     }
@@ -431,7 +429,26 @@ public partial class DictionaryWindow : OverlayWindow
 
     private void DictionaryItem_PreviewLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        if (!_completingEntry) RememberEditorFocus();
+        if (!_completingEntry && e.OldFocus is TextBox editor &&
+            editor.DataContext is DictionaryItem { IsEditing: true } item)
+        {
+            _editorSelections.Remember(item, editor);
+            _lastEditorFocus = CaptureFocus(editor);
+        }
+    }
+
+    private void DictionaryItem_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: DictionaryItem item }) return;
+        _commandItem = item;
+        if (e.NewFocus is TextBox editor) _editorSelections.Restore(item, editor);
+    }
+
+    private void ForgetEditor(DictionaryItem item)
+    {
+        _editorSelections.Forget(item);
+        if (ReferenceEquals(_lastEditorFocus?.Item, item)) _lastEditorFocus = null;
+        if (ReferenceEquals(_commandItem, item)) _commandItem = null;
     }
 
     private void RestoreEditorFocus(DictionaryItem item)
@@ -458,13 +475,8 @@ public partial class DictionaryWindow : OverlayWindow
             FocusEntry(target.Item);
             return;
         }
-        if (control is TextBox editor) RestoreSelection(editor, target.Start, target.Length);
-    }
-
-    private static void RestoreSelection(TextBox editor, int start, int length)
-    {
-        start = Math.Min(start, editor.Text.Length);
-        editor.Select(start, Math.Min(length, editor.Text.Length - start));
+        if (control is TextBox editor)
+            ItemEditorSelections<DictionaryItem>.Apply(editor, target.Start, target.Length);
     }
 
     private void FocusEntry(DictionaryItem? item)
@@ -510,6 +522,7 @@ public partial class DictionaryWindow : OverlayWindow
         if (item.IsEditing)
             return;
 
+        _commandItem = item;
         item.IsExpanded = !item.IsExpanded;
         if (!item.IsExpanded)
             return;
@@ -524,6 +537,14 @@ public partial class DictionaryWindow : OverlayWindow
                 ItemsList.UpdateLayout();
                 (ItemsList.ItemContainerGenerator.ContainerFromItem(item) as FrameworkElement)?.BringIntoView();
             }));
+    }
+
+    private void ExpandedItemBackground_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: DictionaryItem { IsExpanded: true } item }) return;
+        _commandItem = item;
+        if (item.IsEditing) FindEntryControl<Border>(item, "DictionaryItemRoot")?.Focus();
+        else item.IsExpanded = false;
     }
 
     private void WordHeader_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -550,6 +571,7 @@ public partial class DictionaryWindow : OverlayWindow
     private void BeginEntryEditing(DictionaryItem item)
     {
         item.BeginEdit();
+        _commandItem = item;
         Dispatcher.BeginInvoke(
             System.Windows.Threading.DispatcherPriority.Input,
             new Action(() =>
@@ -582,15 +604,12 @@ public partial class DictionaryWindow : OverlayWindow
         TrySaveEntry(item, collapse: false);
     }
 
-    private void SaveMenuItem_Click(object sender, RoutedEventArgs e) => SaveCurrentEntry();
+    private void SaveMenuItem_Click(object sender, RoutedEventArgs e) => SaveCurrentEntry(_commandItem);
 
-    private void SaveCurrentEntry(DictionaryItem? item = null)
+    private void SaveCurrentEntry(DictionaryItem? item)
     {
         if (_completingEntry) return;
-        if (item?.IsEditing != true)
-            item = _viewModel.Items.FirstOrDefault(entry => entry.IsEditing);
-
-        if (item is not null)
+        if (item?.IsEditing == true && _viewModel.Items.Contains(item))
             SaveEntry(item);
         else if (!TryFlushPendingContent(out var error))
             ShowPersistenceWarningOnce(error);
@@ -611,22 +630,8 @@ public partial class DictionaryWindow : OverlayWindow
             return false;
         }
         if (item.IsNew) _definitionHeights.Remove(item);
+        ForgetEditor(item);
         return true;
-    }
-
-    private void WordTextBox_LostFocus(object sender, RoutedEventArgs e)
-    {
-        if (sender is TextBox textBox)
-        {
-            _wordSelectionItem = textBox.DataContext as DictionaryItem;
-            _wordSelectionStart = textBox.SelectionStart;
-            _wordSelectionLength = textBox.SelectionLength;
-            if (textBox.DataContext is DictionaryItem { IsAutoSaving: true })
-                return;
-
-            textBox.Select(0, 0);
-            textBox.ScrollToHorizontalOffset(0);
-        }
     }
 
     protected override void SaveWindowState()

@@ -15,6 +15,50 @@ namespace Noted.Tests.Services;
 public sealed class DictionaryKeyboardTests
 {
     [TestMethod]
+    [DataRow(Key.S)]
+    [DataRow(Key.Enter)]
+    public void BackgroundHitKeepsDraftAndSelectionAndCommandsTargetThatEntry(Key saveKey) => WithWindow((window, model, service) =>
+    {
+        var existing = model.Items[0];
+        existing.IsExpanded = true;
+        var background = Control<Button>(window, existing, "ExpandedItemBackground");
+        var outside = background.TranslatePoint(new Point(2, background.ActualHeight / 2), window);
+        Assert.AreSame(background, VisualTreeHelpers.FindAncestor<Button>(window.InputHitTest(outside) as DependencyObject));
+        var definition = VisualTreeHelpers.FindDescendant<MarkdownView>(Control<Border>(window, existing, "DictionaryItemRoot"))!;
+        var inside = definition.TranslatePoint(new Point(2, definition.ActualHeight / 2), window);
+        Assert.AreSame(definition, VisualTreeHelpers.FindAncestor<MarkdownView>(window.InputHitTest(inside) as DependencyObject));
+        Click(background);
+        Assert.IsFalse(existing.IsExpanded);
+
+        Edit(window, existing);
+        Control<TextBox>(window, existing, "WordTextBox").Text = "existing draft";
+        var draft = Create(window, model);
+        var word = Control<TextBox>(window, draft, "WordTextBox");
+        word.Text = "new draft";
+        word.Select(1, 3);
+        Click(Control<Button>(window, draft, "ExpandedItemBackground"));
+        var row = Control<Border>(window, draft, "DictionaryItemRoot");
+        Assert.IsTrue(row.IsKeyboardFocused);
+        Assert.IsTrue(draft.IsEditing && draft.IsExpanded && existing.IsEditing);
+        Assert.IsTrue(word.IsInactiveSelectionHighlightEnabled);
+        Assert.AreEqual(1, word.SelectionStart);
+        Assert.AreEqual(3, word.SelectionLength);
+        word.Focus();
+        Assert.AreEqual(1, word.SelectionStart);
+        Assert.AreEqual(3, word.SelectionLength);
+        Click(Control<Button>(window, draft, "ExpandedItemBackground"));
+        Press(row, saveKey, ModifierKeys.Control);
+        Assert.AreEqual("new draft", service.Load().Last().Word);
+        Assert.AreEqual(saveKey == Key.S, draft.IsExpanded);
+        Assert.IsTrue(existing.IsEditing);
+        Assert.AreEqual("original", service.Load().First().Word);
+        Click(Control<Button>(window, existing, "ExpandedItemBackground"));
+        Press(Control<Border>(window, existing, "DictionaryItemRoot"), Key.Escape);
+        Assert.IsFalse(existing.IsEditing);
+        Assert.AreEqual("original", existing.Word);
+    });
+
+    [TestMethod]
     public void CtrlNCreatesAndFocusesWordAndFieldNavigationKeepsSelectionAndMultilineInput() => WithWindow((window, model, service) =>
     {
         var item = Create(window, model);

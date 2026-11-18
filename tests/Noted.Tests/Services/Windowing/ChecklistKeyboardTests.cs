@@ -204,7 +204,7 @@ public sealed class ChecklistKeyboardTests
     });
 
     [TestMethod]
-    public void TabbingOutOfTheListFinishesOnlyTheOriginatingCreation() => WithWindow((window, model, service) =>
+    public void TabbingOutOfTheListPreservesTheOriginatingCreation() => WithWindow((window, model, service) =>
     {
         model.SortMode = ChecklistSortMode.Alphabetical;
         var item = Create(window, model);
@@ -212,17 +212,19 @@ public sealed class ChecklistKeyboardTests
         var schedule = Control<Button>(window, item, "ItemReminderButton");
         schedule.Focus();
         Press(schedule, Key.Tab);
-        Assert.IsFalse(model.Items.Contains(item));
+        Assert.IsTrue(model.Items.Contains(item));
+        Assert.IsTrue(item.IsEditingTitle);
         Assert.IsFalse(((ListBox)window.FindName("ItemsList")).IsKeyboardFocusWithin);
         Press((UIElement)Keyboard.FocusedElement, Key.Enter, ModifierKeys.Control);
-        Assert.HasCount(2, model.Items);
+        Assert.HasCount(3, model.Items);
+        Assert.IsFalse(item.IsEditingTitle);
         Assert.AreEqual("alpha", service.Load()[0].Text);
     });
 
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public void OutsideClickCompletesCreationButClickingWithinTheRowDoesNot(bool populated) => WithWindow((window, model, service) =>
+    public void OutsideClickPreservesPopulatedAndBlankCreations(bool populated) => WithWindow((window, model, service) =>
     {
         var item = Create(window, model);
         if (populated) item.Notes = "keep";
@@ -233,9 +235,11 @@ public sealed class ChecklistKeyboardTests
         Assert.IsTrue(model.Items.Contains(item));
         PreviewClick((ListBox)window.FindName("ItemsList"));
         Pump();
-        Assert.AreEqual(populated, model.Items.Contains(item));
-        Assert.IsFalse(item.IsExpanded);
-        Assert.HasCount(populated ? 3 : 2, service.Load());
+        Assert.IsTrue(model.Items.Contains(item));
+        Assert.IsTrue(item.IsExpanded);
+        Assert.IsTrue(item.IsEditingTitle);
+        Assert.IsTrue(window.TryFlushPendingContent(out var error), error);
+        Assert.HasCount(3, service.Load());
     });
 
     [TestMethod]

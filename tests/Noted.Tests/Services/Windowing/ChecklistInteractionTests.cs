@@ -16,6 +16,69 @@ namespace Noted.Tests.Services;
 public sealed class ChecklistInteractionTests
 {
     [TestMethod]
+    public void ExpandedBackgroundCollapsesViewingAndKeepsTitleSelectionWhileEditing() => WithWindow((window, model, _) =>
+    {
+        var item = model.Items[0];
+        item.IsExpanded = true;
+        var background = Control<Button>(window, item, "ExpandedItemBackground");
+        var position = background.TranslatePoint(new Point(2, background.ActualHeight / 2), window);
+        Assert.AreSame(background, VisualTreeHelpers.FindAncestor<Button>(window.InputHitTest(position) as DependencyObject));
+        var notes = Control<TextBox>(window, item, "NotesTextBox");
+        var notesPoint = notes.TranslatePoint(new Point(notes.ActualWidth / 2, notes.ActualHeight / 2), window);
+        Assert.AreSame(notes, VisualTreeHelpers.FindAncestor<TextBox>(window.InputHitTest(notesPoint) as DependencyObject));
+        Click(background);
+        Assert.IsFalse(item.IsExpanded);
+
+        item.IsExpanded = true;
+        var title = EditTitle(window, item);
+        title.Select(1, 2);
+        Click(background);
+        Pump();
+        Assert.AreSame(Row(window, item), Keyboard.FocusedElement);
+        Assert.IsTrue(item.IsEditingTitle && item.IsExpanded);
+        Assert.IsTrue(title.IsInactiveSelectionHighlightEnabled);
+        Assert.AreEqual(1, title.SelectionStart);
+        Assert.AreEqual(2, title.SelectionLength);
+        title.Focus();
+        Assert.AreEqual(1, title.SelectionStart);
+        Assert.AreEqual(2, title.SelectionLength);
+    });
+
+    [TestMethod]
+    public void SwitchingWindowsPreservesBothDraftsAndTheirSelections() => WithWindow((window, model, _) =>
+    {
+        var first = model.Items[0];
+        var second = model.Items[1];
+        var title = EditTitle(window, first);
+        title.Select(1, 2);
+        var notes = EditNotes(window, second);
+        notes.Text = "second draft";
+        notes.Select(2, 4);
+        var other = new Window { Width = 160, Height = 90, Owner = window };
+        var switched = false;
+        try
+        {
+            other.Dispatcher.BeginInvoke(() =>
+            {
+                switched = !window.IsKeyboardFocusWithin;
+                other.Close();
+            }, DispatcherPriority.ApplicationIdle);
+            other.ShowDialog();
+            Assert.IsTrue(switched);
+            Assert.IsTrue(first.IsEditingTitle && model.IsItemEditing(second));
+            Assert.IsTrue(second.IsExpanded);
+            window.Activate();
+            title.Focus();
+            Assert.AreEqual(1, title.SelectionStart);
+            Assert.AreEqual(2, title.SelectionLength);
+            notes.Focus();
+            Assert.AreEqual(2, notes.SelectionStart);
+            Assert.AreEqual(4, notes.SelectionLength);
+        }
+        finally { other.Close(); }
+    });
+
+    [TestMethod]
     public void TimePickerConvertsAmPmSelectionsCorrectly() => WpfTestHost.Invoke(() =>
     {
         var time = new ChecklistTimePicker { SelectedTime = TimeSpan.Zero };
@@ -160,7 +223,7 @@ public sealed class ChecklistInteractionTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public void StartingAnotherEditorCompletesTheOriginAndPreservesTheDestinationAfterSorting(bool notesDestination) => WithWindow((window, model, service) =>
+    public void StartingAnotherEditorRetainsTheOriginAndPreservesTheDestination(bool notesDestination) => WithWindow((window, model, service) =>
     {
         model.SortMode = ChecklistSortMode.Alphabetical;
         var first = model.Items[0];
@@ -171,8 +234,8 @@ public sealed class ChecklistInteractionTests
         if (notesDestination) Control<TextBox>(window, second, "NotesTextBox").Focus();
         else EditTitle(window, second);
         Pump();
-        Assert.IsFalse(first.IsEditingTitle);
-        Assert.IsFalse(first.IsExpanded);
+        Assert.IsTrue(first.IsEditingTitle);
+        Assert.AreEqual("zulu", first.Text);
         var destination = Control<TextBox>(window, second, notesDestination ? "NotesTextBox" : "ItemTitleTextBox");
         Assert.AreSame(destination, Keyboard.FocusedElement);
         Assert.AreEqual(!notesDestination, second.IsEditingTitle);
@@ -190,7 +253,7 @@ public sealed class ChecklistInteractionTests
     [DataRow("notes")]
     [DataRow("hide")]
     [DataRow("create tab")]
-    public void FailedNotesCompletionKeepsItsEditorAndBlocksViewOrSessionChanges(string action) => WithWindow((window, model, service) =>
+    public void NavigationStillWorksWhenTasksCannotSave(string action) => WithWindow((window, model, service) =>
     {
         var item = model.Items[0];
         var notes = EditNotes(window, item);
@@ -209,23 +272,28 @@ public sealed class ChecklistInteractionTests
                 case "notes": EditNotes(window, model.Items[1]); break;
                 case "hide": Assert.IsFalse(window.TryHide()); break;
                 case "create tab":
-                    Assert.IsFalse(model.TryCreateTab("Work", out var created));
-                    Assert.IsNull(created);
+                    Assert.IsTrue(model.TryCreateTab("Work", out var created));
+                    Assert.IsNotNull(created);
                     break;
             }
         });
         Pump();
-        Assert.AreSame(tab, model.SelectedTab);
-        Assert.AreEqual("", model.SearchQuery);
-        Assert.AreEqual(ChecklistSortMode.Manual, model.SortMode);
-        Assert.IsTrue(model.FilteredItems.Contains(item));
+        if (action == "create tab")
+            Assert.AreEqual("Work", model.SelectedTab!.Name);
+        else
+            Assert.AreEqual(action == "tab" ? "done" : tab!.Id, model.SelectedTab!.Id);
+        Assert.AreEqual(action == "search" ? "no match" : "", model.SearchQuery);
+        Assert.AreEqual(action == "sort" ? ChecklistSortMode.Alphabetical : ChecklistSortMode.Manual, model.SortMode);
+        Assert.IsTrue(model.IsItemEditing(item));
         Assert.IsTrue(item.IsExpanded);
-        Assert.IsFalse(item.IsEditingTitle);
-        Assert.IsFalse(model.Items[1].IsEditingTitle);
-        Assert.AreSame(notes, Keyboard.FocusedElement);
+        Assert.AreEqual("pending notes", item.Notes);
+        service.FailSave = false;
+        model.SelectTab(tab);
+        model.SearchQuery = "";
+        notes = Control<TextBox>(window, item, "NotesTextBox");
+        notes.Focus();
         Assert.AreEqual(2, notes.SelectionStart);
         Assert.AreEqual(3, notes.SelectionLength);
-        service.FailSave = false;
         notes.SelectedText = "latest";
         Press(notes, Key.Enter, ModifierKeys.Control);
         Assert.AreEqual(item.Notes, service.Load()[0].Notes);
@@ -440,7 +508,7 @@ public sealed class ChecklistInteractionTests
     });
 
     [TestMethod]
-    public void ClickingAnotherRowsControlPreservesThatDestinationAfterCompletionAndSorting() => WithWindow((window, model, service) =>
+    public void ClickingAnotherRowsControlPreservesItsFocusAndTheOriginEdit() => WithWindow((window, model, service) =>
     {
         model.SortMode = ChecklistSortMode.Alphabetical;
         var origin = model.Items[0];
@@ -454,7 +522,7 @@ public sealed class ChecklistInteractionTests
         button.Focus();
         Click(button);
         Pump();
-        Assert.IsFalse(origin.IsEditingTitle);
+        Assert.IsTrue(origin.IsEditingTitle);
         Assert.IsFalse(origin.IsExpanded);
         Assert.IsTrue(destination.IsExpanded);
         Assert.IsFalse(destination.IsEditingTitle);
@@ -462,13 +530,17 @@ public sealed class ChecklistInteractionTests
     });
 
     [TestMethod]
-    public void SearchExclusionCompletesNotesAndFocusesTheSurvivingRow() => WithWindow((window, model, service) =>
+    public void SearchKeepsDraftAccessibleUntilExplicitCompletion() => WithWindow((window, model, service) =>
     {
         var item = model.Items[0];
-        EditNotes(window, item).Text = "saved before filtering";
+        var notes = EditNotes(window, item);
+        notes.Text = "saved before filtering";
         model.SearchQuery = "bravo";
         Pump();
-        Assert.IsFalse(item.IsExpanded);
+        Assert.IsTrue(item.IsExpanded);
+        Assert.IsTrue(model.FilteredItems.Contains(item));
+        Press(notes, Key.Enter, ModifierKeys.Control);
+        Assert.IsFalse(model.FilteredItems.Contains(item));
         Assert.IsFalse(item.IsEditingTitle);
         Assert.AreEqual("saved before filtering", service.Load()[0].Notes);
         Assert.AreSame(Row(window, model.Items[1]), Keyboard.FocusedElement);
@@ -484,7 +556,8 @@ public sealed class ChecklistInteractionTests
         EditNotes(window, first).Text = "first edit";
         EditNotes(window, model.Items[1]);
         Pump();
-        Assert.IsFalse(first.IsExpanded);
+        Assert.IsTrue(first.IsExpanded);
+        Assert.IsTrue(model.IsItemEditing(first));
         Assert.IsTrue(reading.IsExpanded);
         Assert.IsFalse(reading.IsEditingTitle);
     });
@@ -524,7 +597,7 @@ public sealed class ChecklistInteractionTests
     });
 
     [TestMethod]
-    public void BoundSearchFailureRestoresTheQueryAndEditorAndSuccessfulRetryKeepsSearchFocus() => WithWindow((window, model, service) =>
+    public void BoundSearchKeepsFocusAndAnUnfinishedNotesEdit() => WithWindow((window, model, service) =>
     {
         var item = model.Items[0];
         var notes = EditNotes(window, item);
@@ -539,9 +612,9 @@ public sealed class ChecklistInteractionTests
             search.Text = "missing";
         });
         Pump();
-        Assert.AreEqual("", model.SearchQuery);
-        Assert.AreEqual("", search.Text);
-        Assert.AreSame(notes, Keyboard.FocusedElement);
+        Assert.AreEqual("missing", model.SearchQuery);
+        Assert.AreEqual("missing", search.Text);
+        Assert.AreSame(search, Keyboard.FocusedElement);
         Assert.IsTrue(item.IsExpanded);
         service.FailSave = false;
         search.Focus();
@@ -552,7 +625,8 @@ public sealed class ChecklistInteractionTests
         Assert.AreEqual(1, search.SelectionStart);
         Assert.AreEqual(2, search.SelectionLength);
         Assert.AreEqual("bravo", model.SearchQuery);
-        Assert.IsFalse(model.FilteredItems.Contains(item));
+        Assert.IsTrue(model.FilteredItems.Contains(item));
+        Assert.IsTrue(window.TryFlushPendingContent(out var error), error);
         Assert.AreEqual("saved notes", service.Load()[0].Notes);
     });
 
@@ -731,7 +805,7 @@ public sealed class ChecklistInteractionTests
     });
 
     [TestMethod]
-    public void TitleClickFailedPreviousNotesSaveKeepsItsEditorAndSuccessfulRetryEditsTheDestination() => WithWindow((window, model, service) =>
+    public void TitleClickReachesTheDestinationEvenWhenTheOriginCannotSave() => WithWindow((window, model, service) =>
     {
         model.SortMode = ChecklistSortMode.Alphabetical;
         var origin = model.Items[0];
@@ -743,13 +817,13 @@ public sealed class ChecklistInteractionTests
         service.FailSave = true;
         WithWarningDismissed(window, () => MouseClick(Control<TextBlock>(window, destination, "ItemTitleText")));
         Pump();
-        Assert.AreSame(notes, Keyboard.FocusedElement);
+        Assert.AreSame(Control<TextBox>(window, destination, "ItemTitleTextBox"), Keyboard.FocusedElement);
         Assert.IsTrue(origin.IsExpanded);
-        Assert.IsFalse(destination.IsEditingTitle);
+        Assert.IsTrue(destination.IsEditingTitle);
         service.FailSave = false;
-        MouseClick(Control<TextBlock>(window, destination, "ItemTitleText"), pumpBeforeRelease: true);
+        Assert.IsTrue(window.TryFlushPendingContent(out var error), error);
         Pump();
-        Assert.IsFalse(origin.IsExpanded);
+        Assert.IsTrue(origin.IsExpanded);
         Assert.IsTrue(destination.IsExpanded);
         Assert.IsTrue(destination.IsEditingTitle);
         Assert.AreSame(Control<TextBox>(window, destination, "ItemTitleTextBox"), Keyboard.FocusedElement);
@@ -778,7 +852,7 @@ public sealed class ChecklistInteractionTests
         for (var index = 0; index < 8 && ((ListBox)window.FindName("ItemsList")).IsKeyboardFocusWithin; index++)
             Press((UIElement)Keyboard.FocusedElement, Key.Tab);
         Assert.IsFalse(((ListBox)window.FindName("ItemsList")).IsKeyboardFocusWithin);
-        Assert.IsFalse(item.IsEditingTitle);
+        Assert.IsTrue(item.IsEditingTitle);
         Assert.IsNotNull(item.DueDate);
         Assert.IsNull(VisualTreeHelpers.FindDescendant<Button>(Row(window, item), "ItemEditTitleButton"));
     });
