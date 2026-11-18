@@ -15,6 +15,67 @@ namespace Noted.Tests.ViewModels;
 public sealed class DictionaryWindowViewModelTests
 {
     [TestMethod]
+    public void RestoredHistoricalEntriesKeepTheirContentAndReceiveStableIds() => RunSta(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var app = directory.File("app");
+        var notes = directory.File("notes");
+        Directory.CreateDirectory(app);
+        Directory.CreateDirectory(notes);
+        var path = Path.Combine(app, "dictionary.json");
+        const string historical = """
+            [
+              {"Word":"same","Description":"first *definition*"},
+              {"Word":"same","Description":"second definition","Id":"e0d6d80b-a497-4b21-b243-d7024737f58c"},
+              {"Word":"same","Description":"third definition","Id":"e0d6d80b-a497-4b21-b243-d7024737f58c"},
+              {"Word":"other","Description":"","Id":"00000000-0000-0000-0000-000000000000"}
+            ]
+            """;
+        File.WriteAllText(path, historical);
+        var backups = new FullBackupService(app, notes);
+        var created = backups.CreateOrUpdateUserBackup();
+        Assert.AreEqual(FullBackupStatus.Created, created.Status, created.Message);
+        File.WriteAllText(path, "[]");
+        var scheduled = backups.ScheduleUserBackupRestore();
+        Assert.AreEqual(FullBackupStatus.RestoreScheduled, scheduled.Status, scheduled.Message);
+        var restored = backups.ApplyPendingUserBackupRestore();
+        Assert.AreEqual(FullBackupStatus.Restored, restored.Status, restored.Message);
+        Assert.AreEqual(historical, File.ReadAllText(path));
+
+        var service = new DictionaryContentService(app);
+        using var model = CreateViewModel(service);
+        var ids = model.Items.Select(item => item.Id).ToArray();
+        Assert.AreEqual(Guid.Parse("e0d6d80b-a497-4b21-b243-d7024737f58c"), ids[1]);
+        Assert.DoesNotContain(Guid.Empty, ids);
+        Assert.HasCount(4, ids.Distinct().ToArray());
+        Assert.IsTrue(model.TryFlushPendingItems(out var error), error);
+
+        using var reloaded = CreateViewModel(service);
+        CollectionAssert.AreEqual(ids, reloaded.Items.Select(item => item.Id).ToArray());
+        CollectionAssert.AreEqual(new[] { "same", "same", "same", "other" },
+            reloaded.Items.Select(item => item.Word).ToArray());
+        CollectionAssert.AreEqual(new[] { "first *definition*", "second definition", "third definition", "" },
+            reloaded.Items.Select(item => item.Definition).ToArray());
+    });
+
+    [TestMethod]
+    public void FailedIdentityRepairLeavesDiskUnchangedAndRetriesWithTheSameIds() => RunSta(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        var service = new ControlledContentService(directory.Path) { FailuresRemaining = 1 };
+        using var model = CreateViewModel(service);
+        var ids = model.Items.Select(item => item.Id).ToArray();
+
+        Assert.IsFalse(model.TryFlushPendingItems(out var error));
+        Assert.IsFalse(string.IsNullOrWhiteSpace(error));
+        Assert.IsTrue(service.Persisted.All(item => item.Id == Guid.Empty));
+        CollectionAssert.AreEqual(ids, model.Items.Select(item => item.Id).ToArray());
+
+        Assert.IsTrue(model.TryFlushPendingItems(out error), error);
+        CollectionAssert.AreEqual(ids, service.Persisted.Select(item => item.Id).ToArray());
+    });
+
+    [TestMethod]
     public void NewEntryAutoSavesContentWithoutPersistingEmptyPlaceholders() => RunSta(() =>
     {
         using var directory = new TemporaryTestDirectory();
@@ -28,6 +89,7 @@ public sealed class DictionaryWindowViewModelTests
         item.DraftDefinition = "raw *Markdown*";
         Assert.IsTrue(viewModel.TryFlushPendingItems(out error), error);
         var saved = service.LoadItems().Items.Single();
+        Assert.AreEqual(item.Id, saved.Id);
         Assert.AreEqual("word", saved.Word);
         Assert.AreEqual("raw *Markdown*", saved.Description);
 
@@ -79,9 +141,9 @@ public sealed class DictionaryWindowViewModelTests
         Assert.IsTrue(viewModel.TryFlushPendingItems(out var error), error);
         Assert.AreEqual(0, service.LoadItems().Items.Count);
 
-        draft.SaveEdit();
-        Assert.IsTrue(viewModel.TryFlushPendingItems(out error), error);
+        Assert.IsTrue(viewModel.TrySaveEntry(draft, out error), error);
         var saved = service.LoadItems().Items.Single();
+        Assert.AreEqual(draft.Id, saved.Id);
         Assert.AreEqual("word", saved.Word);
         Assert.AreEqual("raw *Markdown*", saved.Description);
 

@@ -9,6 +9,8 @@ public sealed class DictionaryItem : ObservableObject
     private string _draftWord = "";
     private string _draftDefinition = "";
 
+    public Guid Id { get; init; } = Guid.NewGuid();
+
     public string Word
     {
         get => _word;

@@ -95,10 +95,25 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
         var loadResult = _contentService.LoadItems();
         RecoveryIssuesFoundThisRun = loadResult.Issues.Count > 0;
         SetLoadIssues(loadResult.Issues);
+        var reservedIds = loadResult.Items.Select(item => item.Id).Where(id => id != Guid.Empty).ToHashSet();
+        var seenIds = new HashSet<Guid>();
+        var repairedIds = false;
         foreach (var item in loadResult.Items)
         {
+            var id = item.Id;
+            if (id == Guid.Empty || !seenIds.Add(id))
+            {
+                do
+                {
+                    id = Guid.NewGuid();
+                }
+                while (!reservedIds.Add(id));
+                repairedIds = true;
+            }
+
             Items.Add(new DictionaryItem
             {
+                Id = id,
                 Word = item.Word ?? "",
                 Definition = item.Description ?? ""
             });
@@ -111,6 +126,8 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
         {
             item.PropertyChanged += Item_PropertyChanged;
         }
+
+        if (repairedIds) SaveItems();
     }
 
     private void Item_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -207,6 +224,7 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
 
         _saveScheduler.Schedule(new SaveRequest(item, new DictionaryItemState
         {
+            Id = item.Id,
             Word = item.DraftWord,
             Description = item.DraftDefinition
         }));
@@ -238,6 +256,7 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
             ? request.Edit!
             : new DictionaryItemState
             {
+                Id = item.Id,
                 Word = item.Word,
                 Description = item.Definition
             })
