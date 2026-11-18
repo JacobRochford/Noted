@@ -1,6 +1,7 @@
 using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 using Noted.Models;
 using Noted.Services;
@@ -13,7 +14,157 @@ namespace Noted.Tests.Services;
 public sealed class GroupVisibilityTests
 {
     [TestMethod]
-    public void PartialHideLeavesDictionaryDraftVisibleAndTheNextToggleRestoresHiddenWindows() => WithWindows(context =>
+    [DataRow(false)]
+    [DataRow(true)]
+    public void IndividualToggleActivatesAnInactiveEditorAndHidesOnlyWhenActive(bool dictionary) => WithWindows(context =>
+    {
+        OverlayWindow target = dictionary ? context.Dictionary : context.Checklist;
+        OverlayWindow other = dictionary ? context.Checklist : context.Dictionary;
+        Action toggle = dictionary ? WindowManager.ToggleDictionary : WindowManager.ToggleChecklist;
+        target.ShowWindow();
+        Pump();
+        var list = (ItemsControl)target.FindName("ItemsList");
+        KeyboardTestInput.Press(list, Key.N, ModifierKeys.Control);
+        Pump();
+        var editor = Keyboard.FocusedElement as TextBox;
+        Assert.IsNotNull(editor);
+        editor!.Text = "typing";
+        editor.CaretIndex = 2;
+
+        other.ShowWindow();
+        Pump();
+        Assert.IsFalse(target.IsActive);
+        toggle();
+        Assert.IsTrue(target.IsActive && target.IsWindowVisible);
+        Assert.AreSame(editor, Keyboard.FocusedElement);
+        Assert.AreEqual(2, editor.CaretIndex);
+        editor.RaiseEvent(new TextCompositionEventArgs(Keyboard.PrimaryDevice,
+            new TextComposition(InputManager.Current, editor, "X")) { RoutedEvent = TextCompositionManager.TextInputEvent });
+        Assert.AreEqual("tyXping", editor.Text);
+
+        toggle();
+        Assert.IsFalse(target.IsWindowVisible);
+        toggle();
+        Assert.IsTrue(target.IsActive && target.IsWindowVisible);
+        if (dictionary)
+        {
+            Assert.AreSame(editor, Keyboard.FocusedElement);
+            Assert.AreEqual(3, editor.CaretIndex);
+            Assert.IsTrue(context.DictionaryModel.Items.Last().HasPendingEdit);
+            Assert.HasCount(1, context.DictionaryService.Load());
+        }
+        else
+        {
+            var task = ((ChecklistWindowViewModel)target.DataContext).Items.Last();
+            Assert.IsFalse(task.IsEditingTitle);
+            Assert.AreEqual("tyXping", context.ChecklistService.LoadItems().Items.Last().Text);
+        }
+
+        target.WindowState = WindowState.Minimized;
+        Pump();
+        Assert.IsFalse(target.IsWindowVisible);
+        toggle();
+        Assert.AreEqual(WindowState.Normal, target.WindowState);
+        Assert.IsTrue(target.IsActive && target.IsWindowVisible);
+    });
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void AnOwnedDialogTakesPrecedenceOverBothHideRoutes(bool dictionary) => WithWindows(context =>
+    {
+        OverlayWindow owner = dictionary ? context.Dictionary : context.Checklist;
+        owner.ShowWindow();
+        var stayedVisible = false;
+        var active = false;
+        var dialog = new Window { Owner = owner, Width = 180, Height = 100, Content = new TextBox() };
+        dialog.Dispatcher.BeginInvoke(() =>
+        {
+            try
+            {
+                if (dictionary) WindowManager.ToggleDictionary();
+                else WindowManager.ToggleChecklist();
+                WindowManager.HideAll();
+                stayedVisible = owner.IsWindowVisible && !owner.IsHiddenTogether && dialog.IsVisible;
+                active = dialog.IsActive;
+            }
+            finally
+            {
+                dialog.Close();
+            }
+        }, DispatcherPriority.ApplicationIdle);
+        dialog.ShowDialog();
+        Assert.IsTrue(stayedVisible && active);
+    });
+
+    [TestMethod]
+    public void TasksHideFinishesAllEditsIncludingFilteredOnesOnlyAfterTheSaveSucceeds() => WithWindows(context =>
+    {
+        var window = context.Checklist;
+        window.ShowWindow();
+        var model = (ChecklistWindowViewModel)window.DataContext;
+        var list = (ListBox)window.FindName("ItemsList");
+        var established = model.Items.Single();
+        var row = (ListBoxItem)list.ItemContainerGenerator.ContainerFromItem(established);
+        KeyboardTestInput.Press(row, Key.F2, ModifierKeys.None);
+        established.Text = "edited existing";
+        established.IsExpanded = true;
+        KeyboardTestInput.Press(list, Key.N, ModifierKeys.Control);
+        Pump();
+        var populated = model.Items.Last();
+        populated.Notes = "edited new task";
+        populated.IsExpanded = true;
+        KeyboardTestInput.Press(list, Key.N, ModifierKeys.Control);
+        Pump();
+        var empty = model.Items.Last();
+        Assert.IsTrue(model.TryCreateTab("Reference", out _));
+        Pump();
+        Assert.IsEmpty(model.FilteredItems);
+
+        context.ChecklistService.FailSave = true;
+        WithWarningsDismissed(() => Assert.IsFalse(window.TryHide()));
+        Assert.IsTrue(window.IsWindowVisible);
+        Assert.IsTrue(established.IsEditingTitle && established.IsExpanded);
+        Assert.IsTrue(populated.IsEditingTitle && populated.IsExpanded);
+        Assert.IsTrue(empty.IsEditingTitle && model.Items.Contains(empty));
+
+        context.ChecklistService.FailSave = false;
+        Assert.IsTrue(window.TryFlushPendingContent(out var error), error);
+        Assert.IsTrue(context.ChecklistService.LoadItems().Items.Any(item => item.Id == empty.Id));
+        Assert.IsTrue(window.TryHide());
+        Assert.IsFalse(window.IsWindowVisible);
+        Assert.IsFalse(established.IsEditingTitle || established.IsExpanded || populated.IsEditingTitle || populated.IsExpanded);
+        Assert.IsFalse(model.Items.Contains(empty));
+        var saved = context.ChecklistService.LoadItems().Items;
+        Assert.HasCount(2, saved);
+        Assert.AreEqual("edited existing", saved.Single(item => item.Id == established.Id).Text);
+        Assert.AreEqual("edited new task", saved.Single(item => item.Id == populated.Id).Notes);
+    });
+
+    [TestMethod]
+    public void TasksHideKeepsAPlaceholderThatReceivesContentDuringTheBatchWrite() => WithWindows(context =>
+    {
+        var window = context.Checklist;
+        window.ShowWindow();
+        var model = (ChecklistWindowViewModel)window.DataContext;
+        var list = (ListBox)window.FindName("ItemsList");
+        KeyboardTestInput.Press(list, Key.N, ModifierKeys.Control);
+        Pump();
+        var populatedDuringSave = model.Items.Last();
+        KeyboardTestInput.Press(list, Key.N, ModifierKeys.Control);
+        Pump();
+        var empty = model.Items.Last();
+        context.ChecklistService.BeforeSave = () => populatedDuringSave.Notes = "entered during save";
+
+        Assert.IsTrue(window.TryHide());
+        Assert.IsFalse(model.Items.Contains(empty) || populatedDuringSave.IsEditingTitle);
+        var saved = context.ChecklistService.LoadItems().Items;
+        Assert.HasCount(2, saved);
+        Assert.AreEqual("entered during save", saved.Single(item => item.Id == populatedDuringSave.Id).Notes);
+    });
+
+    [TestMethod]
+    public void GroupHidePreservesDictionaryDraftAndRestoresTheSameWindows() => WithWindows(context =>
     {
         var draft = context.DictionaryModel.Items[0];
         draft.BeginEdit();
@@ -21,8 +172,8 @@ public sealed class GroupVisibilityTests
         var pad = context.AddPad();
         var checklistState = context.Settings.LoadChecklistWindowState();
         WithWarningsDismissed(WindowManager.HideAll);
-        Assert.IsTrue(context.Dictionary.IsWindowVisible);
-        Assert.IsFalse(context.Dictionary.IsHiddenTogether);
+        Assert.IsFalse(context.Dictionary.IsWindowVisible);
+        Assert.IsTrue(context.Dictionary.IsHiddenTogether);
         Assert.IsTrue(draft.HasPendingEdit);
         Assert.IsFalse(context.Checklist.IsWindowVisible);
         Assert.IsTrue(context.Checklist.IsHiddenTogether);
@@ -33,7 +184,7 @@ public sealed class GroupVisibilityTests
         Assert.IsTrue(context.Dictionary.IsWindowVisible);
         Assert.IsTrue(pad.IsWindowVisible);
         Assert.IsTrue(draft.HasPendingEdit);
-        Assert.IsFalse(context.Checklist.IsHiddenTogether || pad.IsHiddenTogether);
+        Assert.IsFalse(context.Checklist.IsHiddenTogether || context.Dictionary.IsHiddenTogether || pad.IsHiddenTogether);
     });
 
     [TestMethod]
@@ -69,10 +220,13 @@ public sealed class GroupVisibilityTests
         var draft = context.DictionaryModel.Items[0];
         draft.BeginEdit();
         draft.DraftDefinition = "draft";
-        WithWarningsDismissed(WindowManager.HideAll);
-        WithWarningsDismissed(WindowManager.HideAll);
-        Assert.IsTrue(context.Checklist.IsHiddenTogether);
-        draft.CancelEdit();
+        using (LockSavedDraft(context))
+        {
+            WithWarningsDismissed(WindowManager.HideAll);
+            WithWarningsDismissed(WindowManager.HideAll);
+            Assert.IsTrue(context.Checklist.IsHiddenTogether);
+            Assert.IsTrue(context.Dictionary.IsWindowVisible);
+        }
         WindowManager.HideAll();
         WindowManager.HideAll();
         Assert.IsFalse(WindowManager.AnyWindowVisible());
@@ -114,11 +268,11 @@ public sealed class GroupVisibilityTests
     });
 
     [TestMethod]
-    public void NewDictionaryDraftBlocksGroupHideUntilExplicitSave() => WithWindows(context =>
+    public void NewDictionaryDraftBlocksGroupHideUntilItsRecoveryWriteSucceeds() => WithWindows(context =>
     {
         var entry = context.DictionaryModel.AddItem(beginEdit: true);
         entry.DraftDefinition = "pending";
-        WithWarningsDismissed(WindowManager.HideAll);
+        using (LockSavedDraft(context)) WithWarningsDismissed(WindowManager.HideAll);
         Assert.IsTrue(context.Dictionary.IsWindowVisible);
         Assert.IsFalse(context.Dictionary.IsHiddenTogether);
         Assert.IsTrue(entry.IsNew && entry.IsEditing && entry.IsExpanded);
@@ -126,12 +280,13 @@ public sealed class GroupVisibilityTests
         WindowManager.ToggleNotedWindows();
         Assert.IsTrue(context.Checklist.IsWindowVisible);
         Assert.IsTrue(context.Dictionary.IsWindowVisible);
-        Assert.IsTrue(context.DictionaryModel.TrySaveEntry(entry, out var error), error);
+
         WindowManager.HideAll();
         Assert.IsFalse(context.Dictionary.IsWindowVisible);
         WindowManager.ToggleNotedWindows();
         Assert.IsTrue(context.Dictionary.IsWindowVisible);
-        Assert.IsFalse(entry.IsEditing);
+        Assert.IsTrue(entry.IsEditing && entry.IsNew);
+        Assert.HasCount(1, context.DictionaryService.Load());
     });
 
     [TestMethod]
@@ -278,7 +433,7 @@ public sealed class GroupVisibilityTests
         var grouped = context.AddPad();
         var editor = context.AddEditor();
         editor.Show();
-        WithWarningAction(() =>
+        using (LockSavedDraft(context)) WithWarningAction(() =>
         {
             if (change == "close") changed.Close();
             else if (change == "minimize") changed.WindowState = WindowState.Minimized;
@@ -328,7 +483,7 @@ public sealed class GroupVisibilityTests
         var draft = context.DictionaryModel.Items[0];
         draft.BeginEdit();
         draft.DraftDefinition = "blocking draft";
-        WithWarningAction(() =>
+        using (LockSavedDraft(context)) WithWarningAction(() =>
         {
             main.ShowNotesPanel();
             main.HideNotesPanel();
@@ -370,6 +525,12 @@ public sealed class GroupVisibilityTests
         Assert.IsTrue(ran, "The visibility change must run while the warning is open.");
     }
 
+    private static FileStream LockSavedDraft(Context context)
+    {
+        Assert.IsTrue(context.Dictionary.TryFlushPendingContent(out var error), error);
+        return File.Open(context.Directory.File("dictionary-drafts.json"), FileMode.Open, FileAccess.Read, FileShare.Read);
+    }
+
     private static void Pump() => Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
 
     private static void WithWarningsDismissed(Action action)
@@ -396,6 +557,7 @@ public sealed class GroupVisibilityTests
             context.DictionaryService.FailSave = false;
             context.DictionaryService.BeforeSave = null;
             context.ChecklistService.FailSave = false;
+            context.ChecklistService.BeforeSave = null;
             foreach (var item in context.DictionaryModel.Items.Where(item => item.HasPendingEdit).ToArray()) item.CancelEdit();
             foreach (var window in Application.Current.Windows.Cast<Window>().Where(window => !original.Contains(window)).ToArray())
             {
@@ -484,6 +646,7 @@ public sealed class GroupVisibilityTests
     {
         private readonly ChecklistContentService _store;
         internal bool FailSave { get; set; }
+        internal Action? BeforeSave { get; set; }
         internal ChecklistService(string path)
         {
             _store = new ChecklistContentService(path);
@@ -493,6 +656,9 @@ public sealed class GroupVisibilityTests
         public ChecklistContentSaveResult SaveTabs(IReadOnlyList<ChecklistTabState> tabs) => _store.SaveTabs(tabs);
         public ChecklistContentSaveResult SaveItems(IReadOnlyList<ChecklistItemState> items)
         {
+            var before = BeforeSave;
+            BeforeSave = null;
+            before?.Invoke();
             if (FailSave) throw new IOException("Simulated checklist save failure.");
             return _store.SaveItems(items);
         }

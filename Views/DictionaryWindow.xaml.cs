@@ -307,29 +307,23 @@ public partial class DictionaryWindow : OverlayWindow
 
     internal bool TryHide()
     {
-        if (_completingEntry || !CheckHideDrafts()) return false;
-        if (!TryFlushPendingContent(out var error))
+        if (_completingEntry || HasVisibleOwnedWindow) return false;
+        _completingEntry = true;
+        try
         {
-            ShowPersistenceWarningOnce(error);
-            return false;
+            RememberEditorFocus();
+            if (!_viewModel.TryFlushBeforeHide(out var error) || !_editingSession.TryCheckpoint(out error))
+            {
+                ShowPersistenceWarningOnce(error);
+                if (_lastEditorFocus is { Item.IsEditing: true } target && _viewModel.Items.Contains(target.Item))
+                    RestoreFocus(target);
+                return false;
+            }
+            _pendingSessionFocus = _editingSession.Loaded.FirstOrDefault(item => item.IsActive);
+            HideWindow();
+            return true;
         }
-        if (!CheckHideDrafts()) return false;
-        ItemsList.Focus();
-        ShowPersistenceWarningOnce(_viewModel.PersistenceError);
-        HideWindow();
-        return true;
-    }
-
-    private bool CheckHideDrafts()
-    {
-        var pending = _viewModel.Items.FirstOrDefault(item => item.HasPendingEdit);
-        if (pending is not null)
-        {
-            ShowPersistenceWarningOnce("Save or cancel the dictionary entry being edited first.");
-            RestoreEditorFocus(pending);
-            return false;
-        }
-        return true;
+        finally { _completingEntry = false; }
     }
 
     private void DictionaryWindow_IsVisibleChanged(
@@ -342,7 +336,7 @@ public partial class DictionaryWindow : OverlayWindow
             SaveWindowState();
         }
 
-        if (!IsVisible)
+        if (!IsVisible && !_completingEntry)
         {
             if (!TryFlushPendingContent(out var error))
                 ShowPersistenceWarningOnce(error);
@@ -357,7 +351,7 @@ public partial class DictionaryWindow : OverlayWindow
             return;
 
         _lastPersistenceWarning = error;
-        AppDialog.Show(
+        AppDialog.Show(this,
             error,
             "Dictionary Save Warning",
             MessageBoxButton.OK,

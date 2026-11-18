@@ -791,14 +791,19 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         return _saveScheduler.TryFlush(out error);
     }
 
-    internal bool TrySaveItems(ChecklistItem? excludedItem, out string? error)
+    internal bool TrySaveItems(IReadOnlySet<ChecklistItem>? excludedItems, out string? error)
     {
-        var snapshot = CreateItemsSnapshot(excludedItem);
+        var snapshot = CreateItemsSnapshot(excludedItems);
         _saveScheduler.Schedule(snapshot);
-        if (!_saveScheduler.TryFlush(out error)) return false;
+        if (!_saveScheduler.TryFlush(out error))
+        {
+            // a retry outside the explicit completion must keep the still-open creations.
+            if (excludedItems is { Count: > 0 }) SaveItems();
+            return false;
+        }
 
         // a notification during the write may have queued newer content.
-        if (!snapshot.SequenceEqual(CreateItemsSnapshot(excludedItem)))
+        if (!snapshot.SequenceEqual(CreateItemsSnapshot(excludedItems)))
         {
             error = "Task content changed while saving. Finish the item again to save the latest changes.";
             return false;
@@ -820,9 +825,9 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         _saveScheduler.Schedule(CreateItemsSnapshot());
     }
 
-    private IReadOnlyList<ChecklistItemState> CreateItemsSnapshot(ChecklistItem? excludedItem = null)
+    private IReadOnlyList<ChecklistItemState> CreateItemsSnapshot(IReadOnlySet<ChecklistItem>? excludedItems = null)
     {
-        return Items.Where(item => !ReferenceEquals(item, excludedItem)).Select(i => new ChecklistItemState
+        return Items.Where(item => excludedItems?.Contains(item) != true).Select(i => new ChecklistItemState
         {
             Id        = i.Id,
             Text      = i.Text,

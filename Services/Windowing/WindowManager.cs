@@ -417,20 +417,17 @@ namespace Noted.Services
             finally { s_changingGroupVisibility = false; }
         }
 
-        public static void ToggleChecklist()
-        {
-            if (Checklist?.IsWindowVisible == true)
-                HideChecklist();
-            else
-                ShowChecklist();
-        }
+        public static void ToggleChecklist() => ToggleGuardedUtility(Checklist, ShowChecklist, HideChecklist);
 
-        public static void ToggleDictionary()
+        public static void ToggleDictionary() => ToggleGuardedUtility(Dictionary, ShowDictionary, HideDictionary);
+
+        private static void ToggleGuardedUtility(OverlayWindow? window, Action show, Action hide)
         {
-            if (Dictionary?.IsWindowVisible == true)
-                HideDictionary();
+            if (window?.TryActivateOwnedWindow() == true) return;
+            if (window is { IsWindowVisible: true, IsActive: true })
+                hide();
             else
-                ShowDictionary();
+                show();
         }
 
         public static void ToggleJots()

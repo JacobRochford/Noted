@@ -252,7 +252,7 @@ public sealed class DictionaryKeyboardTests
     [TestMethod]
     [DataRow("x")]
     [DataRow("shortcut")]
-    public void UnsavedEstablishedDraftBlocksHideWithoutFinishingAnotherCreation(string route) => WithWindow((window, model, service) =>
+    public void HidePreservesBothDraftsAndReopenRestoresTheActiveEditor(string route) => WithWindow((window, model, service) =>
     {
         var established = model.Items[0];
         Edit(window, established);
@@ -273,11 +273,11 @@ public sealed class DictionaryKeyboardTests
                 WindowManager.HideDictionary();
             }
         });
-        Assert.IsTrue(window.IsVisible);
+        Assert.IsFalse(window.IsVisible);
         Assert.IsTrue(established.HasPendingEdit);
         Assert.IsTrue(creation.IsNew && creation.IsEditing && creation.IsExpanded);
-        Assert.IsTrue(model.TryCancelEntry(established, out _));
-        WithWarningDismissed(window, () => Assert.IsFalse(window.TryHide()));
+        window.ShowWindow();
+        Assert.IsTrue(Control<TextBox>(window, creation, "WordTextBox").IsKeyboardFocused);
         Assert.IsTrue(creation.IsEditing && creation.IsExpanded);
         Assert.AreEqual("saved definition", service.Load().Single().Description);
     });

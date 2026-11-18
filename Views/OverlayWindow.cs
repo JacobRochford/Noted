@@ -152,6 +152,7 @@ public abstract class OverlayWindow : Window
     }
 
     internal bool IsWindowVisible => IsVisible && WindowState != WindowState.Minimized;
+    protected bool HasVisibleOwnedWindow => FindVisibleOwnedWindow(this) is not null;
     internal bool IsHiddenTogether { get; private set; }
     protected bool IsChangingGroupVisibility => _isChangingGroupVisibility;
 
@@ -224,6 +225,25 @@ public abstract class OverlayWindow : Window
         var hwnd = new WindowInteropHelper(this).Handle;
         WindowInterop.StripNoActivate(hwnd);
         WindowInterop.SetForegroundWindow(hwnd);
+    }
+
+    internal bool TryActivateOwnedWindow()
+    {
+        var dialog = FindVisibleOwnedWindow(this);
+        if (dialog is null) return false;
+        if (WindowState == WindowState.Minimized) WindowInterop.RestoreWindow(this, _restoreWindowState);
+        if (dialog.WindowState == WindowState.Minimized) WindowInterop.RestoreWindow(dialog, WindowState.Normal);
+        var handle = new WindowInteropHelper(dialog).Handle;
+        WindowInterop.StripNoActivate(handle);
+        WindowInterop.SetForegroundWindow(handle);
+        return true;
+    }
+
+    private static Window? FindVisibleOwnedWindow(Window owner)
+    {
+        var owned = owner.OwnedWindows.Cast<Window>().Where(window => window.IsVisible).ToArray();
+        var child = owned.FirstOrDefault(window => window.IsActive) ?? owned.LastOrDefault();
+        return child is null ? null : FindVisibleOwnedWindow(child) ?? child;
     }
 
     internal void ToggleWindow()

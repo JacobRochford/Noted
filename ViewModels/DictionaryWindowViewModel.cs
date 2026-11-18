@@ -230,6 +230,22 @@ public sealed class DictionaryWindowViewModel : ObservableObject, IDisposable
         return contentSaved && draftsSaved;
     }
 
+    internal bool TryFlushBeforeHide(out string? error)
+    {
+        // reverify the recovery file even if typing has already autosaved the pending drafts.
+        if (Items.Any(NeedsRecovery)) ScheduleDrafts();
+        if (!TryFlushPendingItems(out error)) return false;
+        if (Items.Any(item => NeedsRecovery(item) && GetEditingSessionDraftRevision(item) is null))
+        {
+            error = "A Dictionary draft changed before it could be verified. Try hiding again.";
+            return false;
+        }
+        return true;
+
+        bool NeedsRecovery(DictionaryItem item) =>
+            item.IsEditing && (item.HasPendingEdit || _draftIds.ContainsKey(item));
+    }
+
     internal bool TryFlushDrafts(out string? error)
     {
         if (_draftScheduler is not null && !_draftScheduler.TryFlush(out error)) return false;

@@ -326,10 +326,12 @@ public partial class ChecklistWindow : OverlayWindow
 
     internal bool TryHide()
     {
-        var item = _commandItem is { } target && _viewModel.IsItemEditing(target) ? target : null;
-        if (item is not null)
+        if (_completingItem || HasVisibleOwnedWindow) return false;
+        var edits = _viewModel.Items.Where(_viewModel.IsItemEditing).ToArray();
+        if (edits.Length > 0)
         {
-            if (!TryFinishItem(item, keepEmpty: false, focusList: true)) return false;
+            if (!TryFinishItems(edits, keepEmpty: false, focusItem: _commandItem)) return false;
+            if (_viewModel.Items.Any(_viewModel.IsItemEditing)) return false;
         }
         else if (!TryFlushPendingContent(out var error))
         {
@@ -338,6 +340,7 @@ public partial class ChecklistWindow : OverlayWindow
         }
 
         ShowPersistenceWarningOnce(_viewModel.PersistenceError);
+        _editingSession.Checkpoint();
         HideWindow();
         return true;
     }
@@ -388,7 +391,7 @@ public partial class ChecklistWindow : OverlayWindow
             return;
 
         _lastPersistenceWarning = error;
-        AppDialog.Show(
+        AppDialog.Show(this,
             error,
             "Task save warning",
             MessageBoxButton.OK,
@@ -937,7 +940,10 @@ public partial class ChecklistWindow : OverlayWindow
         _editingSession.Schedule();
     }
 
-    private bool TryFinishItem(ChecklistItem item, bool keepEmpty, bool focusList, bool collapse = true)
+    private bool TryFinishItem(ChecklistItem item, bool keepEmpty, bool focusList, bool collapse = true) =>
+        TryFinishItems([item], keepEmpty, focusList ? item : null, collapse);
+
+    private bool TryFinishItems(IReadOnlyList<ChecklistItem> items, bool keepEmpty, ChecklistItem? focusItem, bool collapse = true)
     {
         if (_completingItem) return false;
         // warning dialogs can dispatch focus changes before this completion has returned.
@@ -946,61 +952,49 @@ public partial class ChecklistWindow : OverlayWindow
         try
         {
             var destination = CaptureFocus();
-            if (destination is not null && ReferenceEquals(destination.Item, item) && IsEditor(destination.Element))
+            if (destination?.Item is { } active && items.Contains(active) && IsEditor(destination.Element))
                 _lastEditorFocus = destination;
-            var index = _viewModel.FilteredItems.IndexOf(item);
-            if (!_viewModel.Items.Contains(item))
+            var index = focusItem is null ? -1 : _viewModel.FilteredItems.IndexOf(focusItem);
+            var emptyCreations = items.Where(IsEmptyCreation).ToHashSet();
+            if (keepEmpty)
             {
-                if (!TryFlushPendingContent(out var pendingError))
-                {
-                    ShowPersistenceWarningOnce(pendingError);
-                    return false;
-                }
+                foreach (var item in emptyCreations)
+                    if (!_editingSession.TryRetireChecklistCreation(item.Id, out var sessionError))
+                        return SaveFailed(sessionError);
+                emptyCreations.Clear();
+            }
+            if (!_viewModel.TrySaveItems(emptyCreations, out var error)) return SaveFailed(error);
+            // a save callback can populate a placeholder excluded from the first snapshot.
+            if (emptyCreations.RemoveWhere(item => !IsEmptyCreation(item)) > 0)
+            {
+                if (!_viewModel.TrySaveItems(emptyCreations, out error)) return SaveFailed(error);
+                if (emptyCreations.Any(item => !IsEmptyCreation(item)))
+                    return SaveFailed("Task content changed while saving. Try again to save the latest changes.");
+            }
+
+            _viewModel.DeferContentRefresh(true);
+            foreach (var item in items)
+            {
                 EndEditing(item);
-                _viewModel.DeferContentRefresh(false);
-                finished = true;
-                return true;
+                if (collapse) item.IsExpanded = false;
+                if (emptyCreations.Contains(item)) _viewModel.RemoveItem(item);
             }
-
-            var emptyCreation = IsEmptyCreation(item);
-            if (keepEmpty && emptyCreation && !_editingSession.TryRetireChecklistCreation(item.Id, out var sessionError))
-            {
-                ShowPersistenceWarningOnce(sessionError);
-                RestoreEditorFocus(item);
-                return false;
-            }
-            var remove = !keepEmpty && emptyCreation;
-            if (!_viewModel.TrySaveItems(remove ? item : null, out var error))
-            {
-                ShowPersistenceWarningOnce(error);
-                RestoreEditorFocus(item);
-                return false;
-            }
-            // content entered during a save notification must not be removed as an empty creation.
-            if (remove && !IsEmptyCreation(item))
-            {
-                if (!_viewModel.TrySaveItems(null, out error))
-                {
-                    ShowPersistenceWarningOnce(error);
-                    RestoreEditorFocus(item);
-                    return false;
-                }
-                remove = false;
-            }
-
-            EndEditing(item);
-            if (collapse) item.IsExpanded = false;
-            if (remove) _viewModel.RemoveItem(item);
             _viewModel.DeferContentRefresh(false, refresh: false);
             _viewModel.RefreshFilteredItems();
-            if (focusList)
-            {
-                FocusRow(item, index);
-            }
-            else if (destination is not null && !ReferenceEquals(destination.Item, item)) RestoreFocus(destination);
-            else if (destination?.Item is not null) FocusRow(item, index);
+            if (focusItem is not null) FocusRow(focusItem, index);
+            else if (destination?.Item is { } target && items.Contains(target)) FocusRow(target);
+            else if (destination is not null) RestoreFocus(destination);
             finished = true;
             return true;
+
+            bool SaveFailed(string? error)
+            {
+                ShowPersistenceWarningOnce(error);
+                if (destination?.Item is { } failed && items.Contains(failed)) RestoreEditorFocus(failed);
+                else if (_lastEditorFocus?.Item is { } last && items.Contains(last)) RestoreEditorFocus(last);
+                else if (destination is not null) RestoreFocus(destination);
+                return false;
+            }
         }
         finally
         {

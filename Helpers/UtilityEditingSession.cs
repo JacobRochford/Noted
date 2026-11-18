@@ -63,10 +63,12 @@ internal sealed class UtilityEditingSession<TItem> : IDisposable where TItem : c
 
     internal void Schedule() => _scheduler.Schedule(s_saveRequest);
 
-    internal void Checkpoint()
+    internal void Checkpoint() => TryCheckpoint(out _);
+
+    internal bool TryCheckpoint(out string? error)
     {
         Schedule();
-        _scheduler.TryFlush(out _);
+        return _scheduler.TryFlush(out error);
     }
 
     internal bool TryRetireChecklistCreation(Guid itemId, out string? error)
