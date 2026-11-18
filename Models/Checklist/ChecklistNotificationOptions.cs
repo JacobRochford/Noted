@@ -4,7 +4,7 @@ namespace Noted.Models;
 public enum ChecklistAlertSize { FullScreen = 0, Large = 1, Percentage = 2 }
 public enum ChecklistAlertMonitor { Foreground = 0, Primary = 1, Selected = 2, All = 3 }
 public enum ChecklistAcknowledgment { Code = 0, Button = 1, Hold = 2 }
-public enum ChecklistUrgentSound { Alarm = 0, Silent = 1, Custom = 2, Chime = 3, Digital = 4, Bell = 5 }
+public enum ChecklistUrgentSound { Silent = 1, Chime = 3 }
 public enum ChecklistWindowsNotificationSound { Default = 0, Silent = 1, Reminder = 2, RepeatingAlarm = 3 }
 
 public sealed record ChecklistNotificationOptions
@@ -15,10 +15,7 @@ public sealed record ChecklistNotificationOptions
     public string? MonitorDeviceName { get; init; }
     public bool PulseAccent { get; init; } = true;
     public int TextSize { get; init; } = 28;
-    public ChecklistUrgentSound UrgentSound { get; init; } = ChecklistUrgentSound.Alarm;
-    public string? CustomSoundPath { get; init; }
-    public bool RepeatSound { get; init; } = true;
-    public int RepeatSeconds { get; init; } = 10;
+    public ChecklistUrgentSound UrgentSound { get; init; } = ChecklistUrgentSound.Chime;
     public ChecklistAcknowledgment Acknowledgment { get; init; } = ChecklistAcknowledgment.Code;
     public int HoldSeconds { get; init; } = 2;
     public ChecklistWindowsNotificationSound StandardSound { get; init; } = ChecklistWindowsNotificationSound.Default;
@@ -29,9 +26,9 @@ public sealed record ChecklistNotificationOptions
         Size = Enum.IsDefined(Size) ? Size : ChecklistAlertSize.FullScreen,
         Monitor = Enum.IsDefined(Monitor) ? Monitor : ChecklistAlertMonitor.Primary,
         Acknowledgment = Enum.IsDefined(Acknowledgment) ? Acknowledgment : ChecklistAcknowledgment.Code,
-        UrgentSound = Enum.IsDefined(UrgentSound) ? UrgentSound : ChecklistUrgentSound.Alarm,
+        UrgentSound = UrgentSound == ChecklistUrgentSound.Silent ? ChecklistUrgentSound.Silent : ChecklistUrgentSound.Chime,
         ScreenPercent = Math.Clamp(ScreenPercent, 30, 100), TextSize = Math.Clamp(TextSize, 18, 64),
-        RepeatSeconds = Math.Clamp(RepeatSeconds, 2, 3600), HoldSeconds = Math.Clamp(HoldSeconds, 1, 10),
+        HoldSeconds = Math.Clamp(HoldSeconds, 1, 10),
         StandardSound = Enum.IsDefined(StandardSound) && StandardSound != ChecklistWindowsNotificationSound.RepeatingAlarm
             ? StandardSound : ChecklistWindowsNotificationSound.Default,
         PersistentSound = Enum.IsDefined(PersistentSound) ? PersistentSound : ChecklistWindowsNotificationSound.Reminder

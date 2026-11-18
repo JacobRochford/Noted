@@ -36,11 +36,9 @@ public partial class ChecklistNotificationOptionsDialog : ChecklistEditorWindow
             FixedStyle.Text = ((KeyValuePair<ChecklistNotificationStyle, string>)PreviewStyle.SelectedItem).Value;
             FixedStyle.Visibility = Visibility.Visible;
         }
-        RepeatInterval.ItemsSource = new[] { 2, 5, 10, 15, 30, 60, Options.RepeatSeconds }.Distinct().Order().ToArray();
-        RepeatInterval.SelectedItem = Options.RepeatSeconds;
-        Repeat.IsChecked = Options.RepeatSound;
+        PlayAlarmSound.IsChecked = Options.UrgentSound == ChecklistUrgentSound.Chime;
         AllMonitors.IsChecked = Options.Monitor == ChecklistAlertMonitor.All;
-        ShowSoundChoices();
+        ShowStyleOptions();
         _ready = true;
         WindowAppearance.ApplyNotificationContrast(this, SystemParameters.HighContrast);
         SystemParameters.StaticPropertyChanged += PreferencesChanged;
@@ -63,20 +61,17 @@ public partial class ChecklistNotificationOptionsDialog : ChecklistEditorWindow
 
     private void SaveChoices()
     {
-        if (_style == ChecklistNotificationStyle.Urgent && SoundChoice.SelectedValue is ChecklistUrgentSound urgent)
+        if (_style == ChecklistNotificationStyle.Urgent)
         {
             var monitor = Options.Monitor == ChecklistAlertMonitor.All ? ChecklistAlertMonitor.Primary : Options.Monitor;
             if (AllMonitors.IsChecked == true) monitor = ChecklistAlertMonitor.All;
             _draft = _draft with
             {
-                UrgentSound = urgent,
-                CustomSoundPath = urgent == ChecklistUrgentSound.Custom ? Options.CustomSoundPath : null,
+                UrgentSound = PlayAlarmSound.IsChecked == true ? ChecklistUrgentSound.Chime : ChecklistUrgentSound.Silent,
                 Size = (ChecklistAlertSize)AlertSize.SelectedValue,
                 Monitor = monitor,
                 MonitorDeviceName = monitor == Options.Monitor ? Options.MonitorDeviceName : null,
-                Acknowledgment = (ChecklistAcknowledgment)Acknowledgment.SelectedValue,
-                RepeatSound = Repeat.IsChecked == true,
-                RepeatSeconds = (int)RepeatInterval.SelectedItem
+                Acknowledgment = (ChecklistAcknowledgment)Acknowledgment.SelectedValue
             };
         }
         else if (SoundChoice.SelectedValue is ChecklistWindowsNotificationSound sound)
@@ -89,29 +84,21 @@ public partial class ChecklistNotificationOptionsDialog : ChecklistEditorWindow
         SaveChoices();
         StopPreview();
         _style = (ChecklistNotificationStyle)PreviewStyle.SelectedValue;
-        ShowSoundChoices();
+        ShowStyleOptions();
     }
 
-    private void ShowSoundChoices()
+    private void ShowStyleOptions()
     {
         var urgent = _style == ChecklistNotificationStyle.Urgent;
         UrgentOptions.Visibility = urgent ? Visibility.Visible : Visibility.Collapsed;
         PlaySound.Visibility = urgent ? Visibility.Visible : Visibility.Collapsed;
-        WindowsHint.Visibility = urgent ? Visibility.Collapsed : Visibility.Visible;
-        if (urgent)
-        {
-            (string, ChecklistUrgentSound)[] choices = [("Alarm clock", ChecklistUrgentSound.Alarm), ("Chime", ChecklistUrgentSound.Chime),
-                ("Digital beep", ChecklistUrgentSound.Digital), ("Bell", ChecklistUrgentSound.Bell), ("Silent", ChecklistUrgentSound.Silent)];
-            if (Options.UrgentSound == ChecklistUrgentSound.Custom) choices = [.. choices, ("Custom WAV (saved)", ChecklistUrgentSound.Custom)];
-            Choices(SoundChoice, choices, _draft.UrgentSound);
-        }
-        else
-        {
-            (string, ChecklistWindowsNotificationSound)[] choices = [("Windows default", ChecklistWindowsNotificationSound.Default),
-                ("Reminder", ChecklistWindowsNotificationSound.Reminder), ("Silent", ChecklistWindowsNotificationSound.Silent)];
-            if (_style == ChecklistNotificationStyle.Persistent) choices = [.. choices, ("Repeating alarm", ChecklistWindowsNotificationSound.RepeatingAlarm)];
-            Choices(SoundChoice, choices, _style == ChecklistNotificationStyle.Standard ? _draft.StandardSound : _draft.PersistentSound);
-        }
+        WindowsSoundOptions.Visibility = urgent ? Visibility.Collapsed : Visibility.Visible;
+        if (urgent) return;
+
+        (string, ChecklistWindowsNotificationSound)[] choices = [("Windows default", ChecklistWindowsNotificationSound.Default),
+            ("Reminder", ChecklistWindowsNotificationSound.Reminder), ("Silent", ChecklistWindowsNotificationSound.Silent)];
+        if (_style == ChecklistNotificationStyle.Persistent) choices = [.. choices, ("Repeating alarm", ChecklistWindowsNotificationSound.RepeatingAlarm)];
+        Choices(SoundChoice, choices, _style == ChecklistNotificationStyle.Standard ? _draft.StandardSound : _draft.PersistentSound);
     }
 
     private ChecklistNotificationOptions ReadOptions()

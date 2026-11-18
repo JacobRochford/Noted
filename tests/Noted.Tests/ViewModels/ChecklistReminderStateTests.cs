@@ -251,7 +251,7 @@ public sealed class ChecklistReminderStateTests
         item.ReminderOccurrence = item.ReminderOccurrence! with { Options = new(), SilencedAtUtc = handled, AcknowledgedAtUtc = handled };
         var occurrence = item.ReminderOccurrence;
         Assert.IsTrue(model.TrySetSchedule(item, DateTime.Today.AddDays(2), null, item.ReminderAtUtc, false,
-            item.NotificationStyle, new() { UrgentSound = ChecklistUrgentSound.Bell }, out var error), error);
+            item.NotificationStyle, new() { UrgentSound = ChecklistUrgentSound.Silent }, out var error), error);
         Assert.AreEqual(occurrence, item.ReminderOccurrence);
         Assert.AreEqual(handled, item.ReminderHandledAtUtc);
         Assert.IsFalse(model.TrySetSchedule(item, item.DueDate, null, item.ReminderAtUtc, false,

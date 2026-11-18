@@ -38,9 +38,28 @@ public partial class ChecklistUrgentReminderWindow : Window
         SystemParameters.StaticPropertyChanged += SystemPreferenceChanged;
         InitializeComponent();
         DataContext = viewModel;
-        Resources["UrgentReminderTitleSize"] = 32d;
-        SizeChanged += (_, _) => Resources["UrgentReminderTitleSize"] = Math.Clamp(ActualWidth / 28, 28, 56);
+        UpdateLayoutMetrics(Width, Height);
+        SizeChanged += (_, args) =>
+        {
+            if (!_compact) UpdateLayoutMetrics(args.NewSize.Width, args.NewSize.Height);
+        };
         UpdateEffects();
+    }
+
+    private void UpdateLayoutMetrics(double width, double height)
+    {
+        var fullScreen = _options.Size == ChecklistAlertSize.FullScreen;
+        var scale = fullScreen ? Math.Clamp(Math.Min(width / 1200, height / 720), 0.85, 1.6)
+            : Math.Clamp(Math.Min(width / 900, height / 600), 0.8, 1);
+        DetailsPanel.MaxWidth = fullScreen ? Math.Clamp(width * 0.78, 820, 1600) : 1040;
+        DetailsPanel.MaxHeight = fullScreen ? Math.Clamp(height * 0.88, 440, 1160) : 900;
+        Resources["UrgentReminderTitleSize"] = (fullScreen ? 40 : 30) * scale;
+        Resources["UrgentReminderHeadingSize"] = (fullScreen ? 26 : 23) * scale;
+        Resources["UrgentReminderDetailsSize"] = (fullScreen ? 18 : 16) * scale;
+        Resources["UrgentReminderCardPadding"] = new Thickness(20 * scale);
+        Resources["UrgentReminderActionPadding"] = new Thickness(14 * scale, 8 * scale, 14 * scale, 8 * scale);
+        Resources["UrgentReminderActionHeight"] = 38 * scale;
+        Resources["UrgentReminderNotesHeight"] = 160 * scale;
     }
     internal IntPtr TargetMonitor => _monitor;
     internal void ShowAlert()

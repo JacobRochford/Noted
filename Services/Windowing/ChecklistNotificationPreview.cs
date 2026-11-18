@@ -41,11 +41,11 @@ internal sealed class ChecklistNotificationPreview : IDisposable
         _owner.Items.Add(task);
         if (soundOnly)
         {
-            task.ReminderOccurrence = task.ReminderOccurrence! with { Options = options with { RepeatSound = false } };
             _soundModel = new(_owner, Dispatcher.CurrentDispatcher, isPreview: true);
             _soundModel.TryAccept([new(task.Id, task.ReminderAtUtc!.Value, task.Text, Style: ChecklistNotificationStyle.Urgent,
                 Occurrence: task.ReminderOccurrence, Options: task.ReminderOccurrence.Options)]);
-            _audio = new(_soundModel, Dispatcher.CurrentDispatcher, () => _ownerWindow.IsVisible && ChecklistUrgentReminderPresenter.IsInteractiveDesktopAvailable());
+            _audio = new(_soundModel, Dispatcher.CurrentDispatcher,
+                () => _ownerWindow.IsVisible && ChecklistUrgentReminderPresenter.IsInteractiveDesktopAvailable(), soundOnly: true);
             _audio.Refresh();
             error = _soundModel.StatusMessage;
             return error is null;

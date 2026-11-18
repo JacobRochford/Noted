@@ -162,6 +162,43 @@ public sealed class ChecklistUrgentPresentationTests
     });
 
     [TestMethod]
+    public void FullScreenScalesDetailsAndActionsWhileCenteredStaysCompact() => WpfTestHost.Invoke(() =>
+    {
+        using var owner = Owner(new Store());
+        var item = TaskItem();
+        item.Text = "Read this reminder";
+        item.Notes = "Reminder details";
+        owner.Items.Add(item);
+        using var presentation = Presentation(owner);
+        presentation.TryAccept([Request(item)]);
+
+        var small = MeasureAlert(ChecklistAlertSize.FullScreen, 840, 600);
+        var large = MeasureAlert(ChecklistAlertSize.FullScreen, 1600, 950);
+        var centered = MeasureAlert(ChecklistAlertSize.Large, 1100, 800);
+        Assert.IsTrue(large.Width > centered.Width && large.Width > small.Width);
+        Assert.IsTrue(large.Title > centered.Title && large.Title > small.Title);
+        Assert.IsTrue(large.Details > centered.Details && large.Details > small.Details);
+        Assert.IsTrue(large.ActionHeight > centered.ActionHeight && large.ActionHeight > small.ActionHeight);
+
+        (double Width, double Title, double Details, double ActionHeight) MeasureAlert(ChecklistAlertSize size, double width, double height)
+        {
+            var window = new ChecklistUrgentReminderWindow(presentation, options: new() { Size = size }) { Width = width, Height = height };
+            try
+            {
+                window.Show();
+                window.UpdateLayout();
+                var panel = (FrameworkElement)window.FindName("DetailsPanel");
+                var text = Descendants(panel).OfType<TextBlock>().ToArray();
+                var title = text.Single(block => block.Text == item.Text);
+                var details = text.Single(block => block.Text == item.Notes);
+                var action = Descendants(panel).OfType<Button>().Single(button => Equals(button.Content, "Acknowledge"));
+                return (panel.ActualWidth, title.FontSize, details.FontSize, action.ActualHeight);
+            }
+            finally { window.CloseForShutdown(); }
+        }
+    });
+
+    [TestMethod]
     public void DeliveredUrgentRemainsActionableAfterClockMovesBeforeScheduledTime() => WpfTestHost.Invoke(() =>
     {
         var store = new Store(); using var owner = Owner(store); var item = TaskItem();

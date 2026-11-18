@@ -9,46 +9,56 @@
         <BooleanToVisibilityConverter x:Key="BoolVisibility"/>
         <Style TargetType="TextBox" BasedOn="{StaticResource NotedTextInput}"/>
         <Style TargetType="ScrollBar" BasedOn="{StaticResource NotedScrollBar}"/>
+        <Style x:Key="UrgentSecondaryButton" TargetType="Button" BasedOn="{StaticResource NotedSecondaryButton}">
+            <Setter Property="FontSize" Value="{DynamicResource UrgentReminderDetailsSize}"/>
+            <Setter Property="MinHeight" Value="{DynamicResource UrgentReminderActionHeight}"/>
+            <Setter Property="Padding" Value="{DynamicResource UrgentReminderActionPadding}"/>
+        </Style>
+        <Style x:Key="UrgentPrimaryButton" TargetType="Button" BasedOn="{StaticResource NotedPrimaryButton}">
+            <Setter Property="FontSize" Value="{DynamicResource UrgentReminderDetailsSize}"/>
+            <Setter Property="MinHeight" Value="{DynamicResource UrgentReminderActionHeight}"/>
+            <Setter Property="Padding" Value="{DynamicResource UrgentReminderActionPadding}"/>
+        </Style>
     </Window.Resources>
     <Border BorderBrush="{DynamicResource NotedAccentBrush}" BorderThickness="4" Padding="24">
         <Grid>
             <Border x:Name="PulseAccent" BorderBrush="{DynamicResource NotedAccentBrush}" BorderThickness="4"
                     Margin="-24" Panel.ZIndex="10" IsHitTestVisible="False"/>
-            <Grid x:Name="DetailsPanel" MaxWidth="1040" MaxHeight="900" VerticalAlignment="Center">
+            <Grid x:Name="DetailsPanel" VerticalAlignment="Center" TextElement.FontSize="{DynamicResource UrgentReminderDetailsSize}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <DockPanel Margin="0,0,0,20">
-                    <Button DockPanel.Dock="Right" Content="Stop preview" Padding="14,7" Margin="16,0,0,0"
-                            Visibility="{Binding IsPreview, Converter={StaticResource BoolVisibility}}"
-                            Style="{StaticResource NotedSecondaryButton}" Click="StopPreview_Click"/>
-                    <Button DockPanel.Dock="Right" Content="Show smaller" Padding="14,7" Margin="16,0,0,0"
-                            Style="{StaticResource NotedSecondaryButton}" Click="ShowSmaller_Click"/>
-                    <TextBlock x:Name="Heading" Text="{Binding Summary}" FontSize="30" FontWeight="SemiBold"
+                <WrapPanel Margin="0,0,0,12">
+                    <TextBlock x:Name="Heading" Text="{Binding Summary}" FontSize="{DynamicResource UrgentReminderHeadingSize}"
+                               FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,8"
                                Focusable="True" AutomationProperties.LiveSetting="Assertive" TextWrapping="Wrap"/>
-                </DockPanel>
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <Button Content="Show smaller" Margin="0,0,8,8" Style="{StaticResource UrgentSecondaryButton}" Click="ShowSmaller_Click"/>
+                    <Button Content="Stop preview" Margin="0,0,8,8" Style="{StaticResource UrgentSecondaryButton}"
+                            Visibility="{Binding IsPreview, Converter={StaticResource BoolVisibility}}" Click="StopPreview_Click"/>
+                </WrapPanel>
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <ItemsControl ItemsSource="{Binding Entries}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
 
-    <Border BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="1" Padding="20" Margin="0,0,0,16">
+                                <Border BorderBrush="{DynamicResource NotedBorderBrush}" BorderThickness="1"
+                                        Padding="{DynamicResource UrgentReminderCardPadding}" Margin="0,0,0,16">
                                     <StackPanel>
                                         <TextBlock Text="{Binding Title}" FontSize="{DynamicResource UrgentReminderTitleSize}" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                                        <TextBlock Text="{Binding Tab.Name}" Margin="0,8,0,0"/>
-                                        <TextBlock Text="{Binding ScheduledText}" Margin="0,4,0,0"/>
-                                        <TextBlock Text="{Binding OverdueText}" FontWeight="SemiBold" Margin="0,4,0,8"/>
-                                        <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
-                                            <TextBlock Text="{Binding Item.Notes}" FontSize="17" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Tab.Name}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding ScheduledText}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding OverdueText}" FontWeight="SemiBold" Margin="0,4,0,8" TextWrapping="Wrap"/>
+                                        <ScrollViewer MaxHeight="{DynamicResource UrgentReminderNotesHeight}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                            <TextBlock Text="{Binding Item.Notes}" TextWrapping="Wrap"/>
                                         </ScrollViewer>
                                         <WrapPanel Margin="0,20,0,0">
-                                            <Button Content="Open task" Padding="14,8" VerticalAlignment="Top" Margin="0,0,10,8"
-                                                    Style="{StaticResource NotedSecondaryButton}" Click="OpenTask_Click"/>
-                                            <Button Content="{Binding SilenceText}" Padding="14,8" VerticalAlignment="Top" Margin="0,0,10,8" Click="Silence_Click">
+                                            <Button Content="Open task" VerticalAlignment="Top" Margin="0,0,12,8"
+                                                    Style="{StaticResource UrgentSecondaryButton}" Click="OpenTask_Click"/>
+                                            <Button Content="{Binding SilenceText}" VerticalAlignment="Top" Margin="0,0,12,8" Click="Silence_Click">
                                                 <Button.Style>
-                                                    <Style TargetType="Button" BasedOn="{StaticResource NotedSecondaryButton}">
+                                                    <Style TargetType="Button" BasedOn="{StaticResource UrgentSecondaryButton}">
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding IsSilenced}" Value="True">
                                                                 <Setter Property="IsEnabled" Value="False"/>
@@ -57,24 +67,27 @@
                                                     </Style>
                                                 </Button.Style>
                                             </Button>
-                                            <StackPanel Width="260" Visibility="{Binding UsesCode, Converter={StaticResource BoolVisibility}}" Margin="0,0,10,8">
-                                                <TextBlock Text="{Binding ConfirmationPrompt}" TextWrapping="Wrap" Margin="0,0,0,5"/>
-                                                <TextBox Text="{Binding ConfirmationInput, UpdateSourceTrigger=PropertyChanged}" MaxLength="4" KeyDown="Confirmation_KeyDown"
-                                                         MinWidth="120" Padding="8" AutomationProperties.Name="{Binding ConfirmationPrompt}"/>
-                                                <Button Content="Confirm code" Padding="14,8" Margin="0,5,0,0"
-                                                        Style="{StaticResource NotedPrimaryButton}" Click="Acknowledge_Click"/>
-                                            </StackPanel>
-                                            <StackPanel Visibility="{Binding UsesHold, Converter={StaticResource BoolVisibility}}" Margin="0,0,10,8">
-                                                <Button Content="{Binding HoldText}" Padding="14,8" Style="{StaticResource NotedPrimaryButton}"
+                                            <StackPanel Visibility="{Binding UsesHold, Converter={StaticResource BoolVisibility}}" Margin="0,0,12,8">
+                                                <Button Style="{StaticResource UrgentPrimaryButton}"
                                                         PreviewMouseLeftButtonDown="HoldMouseDown" PreviewMouseLeftButtonUp="HoldMouseUp"
-                                                        PreviewKeyDown="HoldKeyDown" PreviewKeyUp="HoldKeyUp" LostMouseCapture="HoldCaptureLost" LostKeyboardFocus="HoldFocusLost"/>
+                                                        PreviewKeyDown="HoldKeyDown" PreviewKeyUp="HoldKeyUp" LostMouseCapture="HoldCaptureLost" LostKeyboardFocus="HoldFocusLost"
+                                                        Content="{Binding HoldText}"/>
                                                 <ProgressBar Maximum="1" Value="{Binding HoldProgress, Mode=OneWay}" Height="5" Margin="0,6,0,0"
                                                              AutomationProperties.Name="Acknowledgment hold progress"/>
                                             </StackPanel>
-                                            <Button Content="Acknowledge" Visibility="{Binding UsesButton, Converter={StaticResource BoolVisibility}}" Padding="14,8" Margin="0,0,0,8"
-                                                    Style="{StaticResource NotedPrimaryButton}" Click="Acknowledge_Click"
+                                            <Button Content="Acknowledge" Visibility="{Binding UsesButton, Converter={StaticResource BoolVisibility}}" Margin="0,0,0,8"
+                                                    Style="{StaticResource UrgentPrimaryButton}" Click="Acknowledge_Click"
                                                     AutomationProperties.HelpText="Acknowledges this reminder without completing the task."/>
                                         </WrapPanel>
+                                        <StackPanel Visibility="{Binding UsesCode, Converter={StaticResource BoolVisibility}}" Margin="0,4,0,0">
+                                            <TextBlock Text="{Binding ConfirmationPrompt}" TextWrapping="Wrap" Margin="0,0,0,5"/>
+                                            <WrapPanel>
+                                                <TextBox Text="{Binding ConfirmationInput, UpdateSourceTrigger=PropertyChanged}" MaxLength="4" KeyDown="Confirmation_KeyDown"
+                                                         FontSize="{DynamicResource UrgentReminderDetailsSize}" MinHeight="{DynamicResource UrgentReminderActionHeight}"
+                                                         Width="120" Padding="8" Margin="0,0,12,8" AutomationProperties.Name="{Binding ConfirmationPrompt}"/>
+                                                <Button Content="Confirm code" Style="{StaticResource UrgentPrimaryButton}" Margin="0,0,0,8" Click="Acknowledge_Click"/>
+                                            </WrapPanel>
+                                        </StackPanel>
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>

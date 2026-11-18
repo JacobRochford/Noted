@@ -39,7 +39,7 @@ public sealed class ChecklistReminderPreferenceTests
         task.ReminderOccurrence = task.ReminderOccurrence! with { Options = new(), SilencedAtUtc = handled, AcknowledgedAtUtc = handled };
         var original = task.ReminderOccurrence;
         Assert.IsTrue(model.TrySetReminder(task, task.ReminderAtUtc, task.NotificationStyle,
-            new() { RepeatSound = false }, out var error), error);
+            new() { UrgentSound = ChecklistUrgentSound.Silent }, out var error), error);
         Assert.AreEqual(original, task.ReminderOccurrence);
         Assert.AreEqual(handled, task.ReminderHandledAtUtc);
         Assert.IsFalse(model.TrySetReminder(task, task.ReminderAtUtc, ChecklistNotificationStyle.Standard, null, out _));
@@ -71,7 +71,7 @@ public sealed class ChecklistReminderPreferenceTests
         model.Items.Add(task);
         var original = task.ReminderOccurrence;
         store.FailSave = true;
-        Assert.IsFalse(model.TrySetReminder(task, task.ReminderAtUtc, task.NotificationStyle, new() { RepeatSound = false }, out _));
+        Assert.IsFalse(model.TrySetReminder(task, task.ReminderAtUtc, task.NotificationStyle, new() { UrgentSound = ChecklistUrgentSound.Silent }, out _));
         Assert.AreEqual(original, task.ReminderOccurrence);
         store.FailSave = false;
         Assert.IsTrue(model.TrySetReminder(task, task.ReminderAtUtc, out var error), error);

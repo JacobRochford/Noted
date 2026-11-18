@@ -20,22 +20,22 @@ public sealed class ChecklistNotificationCustomizationTests
         Assert.AreEqual(ChecklistAlertSize.FullScreen, options.Size);
         Assert.AreEqual(ChecklistAlertMonitor.Primary, options.Monitor);
         Assert.AreEqual(ChecklistAlertMonitor.Primary, (options with { Monitor = (ChecklistAlertMonitor)999 }).Normalize().Monitor);
-        Assert.IsTrue(options.PulseAccent); Assert.IsTrue(options.RepeatSound);
-        Assert.AreEqual(10, options.RepeatSeconds); Assert.AreEqual(ChecklistAcknowledgment.Code, options.Acknowledgment);
-        Assert.AreEqual(ChecklistUrgentSound.Alarm, options.UrgentSound);
-        var normalized = (options with { HoldSeconds = -1, RepeatSeconds = 0, Acknowledgment = (ChecklistAcknowledgment)99 }).Normalize();
-        Assert.AreEqual(1, normalized.HoldSeconds); Assert.AreEqual(2, normalized.RepeatSeconds);
+        Assert.IsTrue(options.PulseAccent);
+        Assert.AreEqual(ChecklistAcknowledgment.Code, options.Acknowledgment);
+        Assert.AreEqual(ChecklistUrgentSound.Chime, options.UrgentSound);
+        var normalized = (options with { HoldSeconds = -1, Acknowledgment = (ChecklistAcknowledgment)99 }).Normalize();
+        Assert.AreEqual(1, normalized.HoldSeconds);
         Assert.AreEqual(ChecklistAcknowledgment.Code, normalized.Acknowledgment);
     }
     [TestMethod]
-    public void GlobalOptionsRoundTripAndBackupRetainsExternalSoundReference()
+    public void GlobalOptionsRoundTripThroughBackupRestore()
     {
         using var directory = new TemporaryTestDirectory();
         var app = directory.File("app"); var notes = directory.File("notes"); Directory.CreateDirectory(notes);
         var settings = new AppSettingsService(app);
         Assert.AreEqual(new ChecklistNotificationOptions(), settings.LoadChecklistNotificationOptions());
         var options = new ChecklistNotificationOptions { Size = ChecklistAlertSize.Percentage, ScreenPercent = 70,
-            CustomSoundPath = directory.File("external.wav"), UrgentSound = ChecklistUrgentSound.Custom };
+            UrgentSound = ChecklistUrgentSound.Silent, PersistentSound = ChecklistWindowsNotificationSound.RepeatingAlarm };
         settings.SaveChecklistNotificationOptions(options);
         Assert.AreEqual(options, new AppSettingsService(app).LoadChecklistNotificationOptions());
         var backup = new FullBackupService(app, notes);
@@ -44,7 +44,26 @@ public sealed class ChecklistNotificationCustomizationTests
         Assert.AreEqual(FullBackupStatus.RestoreScheduled, backup.ScheduleUserBackupRestore().Status);
         Assert.AreEqual(FullBackupStatus.Restored, backup.ApplyPendingUserBackupRestore().Status);
         Assert.AreEqual(options, new AppSettingsService(app).LoadChecklistNotificationOptions());
-        Assert.IsFalse(File.Exists(options.CustomSoundPath));
+    }
+
+    [TestMethod]
+    [DataRow(0, ChecklistUrgentSound.Chime)]
+    [DataRow(1, ChecklistUrgentSound.Silent)]
+    [DataRow(2, ChecklistUrgentSound.Chime)]
+    [DataRow(3, ChecklistUrgentSound.Chime)]
+    [DataRow(4, ChecklistUrgentSound.Chime)]
+    [DataRow(5, ChecklistUrgentSound.Chime)]
+    [DataRow(999, ChecklistUrgentSound.Chime)]
+    public void HistoricalSoundSettingsLoadSafely(int value, ChecklistUrgentSound expected)
+    {
+        var json = $$"""
+            {"UrgentSound":{{value}},"RepeatSound":false,"RepeatSeconds":60,"CustomSoundPath":"old.wav","Monitor":3,"Acknowledgment":2,"PersistentSound":3}
+            """;
+        var options = JsonSerializer.Deserialize<ChecklistNotificationOptions>(json)!.Normalize();
+        Assert.AreEqual(expected, options.UrgentSound);
+        Assert.AreEqual(ChecklistAlertMonitor.All, options.Monitor);
+        Assert.AreEqual(ChecklistAcknowledgment.Hold, options.Acknowledgment);
+        Assert.AreEqual(ChecklistWindowsNotificationSound.RepeatingAlarm, options.PersistentSound);
     }
     [TestMethod]
     public void OccurrenceSnapshotSurvivesFailedSaveAndCannotBeWeakenedByDefaults() => WpfTestHost.Invoke(() =>
@@ -87,33 +106,65 @@ public sealed class ChecklistNotificationCustomizationTests
     {
         using var owner = Owner(new Store()); var first = Item(); var second = Item(); owner.Items.Add(first); owner.Items.Add(second);
         using var model = Model(owner); model.TryAccept([Request(first), Request(second)]); var clock = new Clock(); int played = 0;
-        using var audio = new ChecklistUrgentReminderAudio(model, Dispatcher.CurrentDispatcher, () => true, clock, _ => played++);
-        audio.CheckNow(); Assert.AreEqual(1, played); clock.Advance(1); audio.CheckNow(); Assert.AreEqual(1, played);
-        clock.Advance(9); audio.CheckNow(); Assert.AreEqual(2, played);
+        using var audio = new ChecklistUrgentReminderAudio(model, Dispatcher.CurrentDispatcher, () => true, clock, () => played++);
+        audio.CheckNow(); Assert.AreEqual(1, played);
+        clock.Advance(1.3); audio.CheckNow(); Assert.AreEqual(1, played);
+        clock.Advance(0.2); audio.CheckNow(); Assert.AreEqual(2, played);
         foreach (var row in model.Entries.ToArray()) Assert.IsTrue(model.TrySilence(row));
         clock.Advance(30); audio.CheckNow(); Assert.AreEqual(2, played);
         Assert.AreEqual(2, model.Entries.Count); Assert.IsNull(first.ReminderOccurrence!.AcknowledgedAtUtc);
         var third = Item(); owner.Items.Add(third); model.TryAccept([Request(third)]); audio.CheckNow(); Assert.AreEqual(3, played);
     });
     [TestMethod]
-    public void AudioDefersOnUnavailableDesktopAndHonorsOneShotMode() => WpfTestHost.Invoke(() =>
+    public void SoundOnlyPreviewPlaysOnceWhenDesktopIsAvailable() => WpfTestHost.Invoke(() =>
     {
-        using var owner = Owner(new Store()); var item = Item();
-        item.ReminderOccurrence = item.ReminderOccurrence! with { Options = new() { RepeatSound = false } }; owner.Items.Add(item);
-        using var model = Model(owner); model.TryAccept([Request(item)]); var clock = new Clock(); bool allowed = false; int count = 0;
-        using var audio = new ChecklistUrgentReminderAudio(model, Dispatcher.CurrentDispatcher, () => allowed, clock, _ => count++);
+        using var owner = Owner(new Store()); var item = Item(); owner.Items.Add(item);
+        var clock = new Clock(); bool allowed = false; int count = 0;
+        using var model = new ChecklistUrgentRemindersViewModel(owner, Dispatcher.CurrentDispatcher, clock, isPreview: true);
+        model.TryAccept([Request(item)]);
+        using var audio = new ChecklistUrgentReminderAudio(model, Dispatcher.CurrentDispatcher, () => allowed, clock, () => count++, soundOnly: true);
         audio.CheckNow(); Assert.AreEqual(0, count); allowed = true; audio.CheckNow(); Assert.AreEqual(1, count);
         clock.Advance(100); audio.CheckNow(); Assert.AreEqual(1, count);
         audio.Dispose(); audio.CheckNow(); Assert.AreEqual(1, count);
     });
+
     [TestMethod]
-    public void BuiltInWavIsAvailableAndCustomValidationRejectsInvalidData() => WpfTestHost.Invoke(() =>
+    public void AcknowledgingTheAudibleReminderStopsTheChimeAndLeavesSilentAlertsVisible() => WpfTestHost.Invoke(() =>
     {
-        using var directory = new TemporaryTestDirectory();
-        using var resource = Application.GetResourceStream(new Uri("/Noted;component/Resources/ReminderAlarm.wav", UriKind.Relative))!.Stream;
-        var path = directory.File("sound.wav"); using (var output = File.Create(path)) resource.CopyTo(output);
-        Assert.AreEqual(1d, ChecklistUrgentReminderAudio.ValidateWav(path));
-        File.WriteAllText(path, "invalid WAV"); Assert.ThrowsExactly<IOException>(() => ChecklistUrgentReminderAudio.ValidateWav(path));
+        using var owner = Owner(new Store());
+        var audible = Item();
+        audible.ReminderOccurrence = audible.ReminderOccurrence! with { Options = new() { Acknowledgment = ChecklistAcknowledgment.Button } };
+        var silent = Item();
+        silent.ReminderOccurrence = silent.ReminderOccurrence! with { Options = new() { UrgentSound = ChecklistUrgentSound.Silent } };
+        owner.Items.Add(silent);
+        owner.Items.Add(audible);
+        using var model = Model(owner);
+        model.TryAccept([Request(silent), Request(audible)]);
+        var clock = new Clock();
+        int plays = 0, stops = 0;
+        using var audio = new ChecklistUrgentReminderAudio(model, Dispatcher.CurrentDispatcher, () => true, clock, () => plays++, () => stops++);
+
+        audio.CheckNow();
+        Assert.AreEqual(1, plays);
+        Assert.IsTrue(model.TryAcknowledge(model.Entries.Single(row => row.Item == audible)));
+        audio.CheckNow();
+        Assert.AreEqual(1, stops);
+        clock.Advance(10);
+        audio.CheckNow();
+        Assert.AreEqual(1, plays);
+        Assert.AreSame(silent, model.Entries.Single().Item);
+        Assert.IsFalse(audible.IsChecked);
+    });
+    [TestMethod]
+    public void BundledChimeMatchesThePlaybackDuration() => WpfTestHost.Invoke(() =>
+    {
+        using var resource = Application.GetResourceStream(new Uri("/Noted;component/Resources/ReminderChime.wav", UriKind.Relative))!.Stream;
+        using var reader = new BinaryReader(resource);
+        resource.Position = 28;
+        var bytesPerSecond = reader.ReadUInt32();
+        resource.Position = 36;
+        Assert.AreEqual("data", new string(reader.ReadChars(4)));
+        Assert.AreEqual(ChecklistUrgentReminderAudio.ChimeDuration, TimeSpan.FromSeconds((double)reader.ReadUInt32() / bytesPerSecond));
     });
     [TestMethod]
     public void ReminderDialogUsesStandardStyleAndOptionalOverrides() => WpfTestHost.Invoke(() =>
@@ -205,23 +256,17 @@ public sealed class ChecklistNotificationCustomizationTests
     {
         using var owner = Owner(new Store()); var first = Item(); var second = Item(); owner.Items.Add(first); owner.Items.Add(second);
         using var model = Model(owner); model.TryAccept([Request(first), Request(second)]);
+        var clock = new Clock();
         int stops = 0, plays = 0;
         using var audio = new ChecklistUrgentReminderAudio(model, Dispatcher.CurrentDispatcher, () => true,
-            new Clock(), _ => plays++, () => stops++);
+            clock, () => plays++, () => stops++);
         audio.CheckNow(); var before = stops;
         Assert.IsTrue(model.TrySilence(model.Entries[0]));
         audio.CheckNow(); Assert.IsTrue(stops > before); Assert.AreEqual(1, plays);
         Assert.AreEqual(2, model.Entries.Count); Assert.IsFalse(model.Entries[1].IsSilenced);
-    });
-
-    [TestMethod]
-    public void InconsistentWavTimingCannotBypassDurationValidation() => WpfTestHost.Invoke(() =>
-    {
-        using var directory = new TemporaryTestDirectory();
-        using var resource = Application.GetResourceStream(new Uri("/Noted;component/Resources/ReminderAlarm.wav", UriKind.Relative))!.Stream;
-        var path = directory.File("bad-timing.wav"); using (var output = File.Create(path)) resource.CopyTo(output);
-        using (var output = File.OpenWrite(path)) { output.Position = 28; output.Write(BitConverter.GetBytes(1u)); }
-        Assert.ThrowsExactly<IOException>(() => ChecklistUrgentReminderAudio.ValidateWav(path));
+        clock.Advance(1.5);
+        audio.CheckNow();
+        Assert.AreEqual(2, plays);
     });
 
     [TestMethod]
@@ -233,8 +278,8 @@ public sealed class ChecklistNotificationCustomizationTests
         using var previewModel = new ChecklistUrgentRemindersViewModel(previewOwner, Dispatcher.CurrentDispatcher, new Clock(), isPreview: true);
         previewModel.TryAccept([Request(previewItem)]);
         int realStops = 0, previewStops = 0;
-        using var real = new ChecklistUrgentReminderAudio(realModel, Dispatcher.CurrentDispatcher, () => true, new Clock(), _ => { }, () => realStops++);
-        using var preview = new ChecklistUrgentReminderAudio(previewModel, Dispatcher.CurrentDispatcher, () => true, new Clock(), _ => { }, () => previewStops++);
+        using var real = new ChecklistUrgentReminderAudio(realModel, Dispatcher.CurrentDispatcher, () => true, new Clock(), () => { }, () => realStops++);
+        using var preview = new ChecklistUrgentReminderAudio(previewModel, Dispatcher.CurrentDispatcher, () => true, new Clock(), () => { }, () => previewStops++);
         preview.CheckNow(); real.CheckNow();
         Assert.AreEqual(1, previewStops);
         preview.Dispose(); Assert.AreEqual(0, realStops);
@@ -250,8 +295,8 @@ public sealed class ChecklistNotificationCustomizationTests
         using var previewModel = new ChecklistUrgentRemindersViewModel(previewOwner, Dispatcher.CurrentDispatcher, new Clock(), isPreview: true);
         previewModel.TryAccept([Request(sample)]);
         int realStops = 0, previewPlays = 0;
-        using var real = new ChecklistUrgentReminderAudio(realModel, Dispatcher.CurrentDispatcher, () => true, new Clock(), _ => { }, () => realStops++);
-        using var preview = new ChecklistUrgentReminderAudio(previewModel, Dispatcher.CurrentDispatcher, () => true, new Clock(), _ => previewPlays++);
+        using var real = new ChecklistUrgentReminderAudio(realModel, Dispatcher.CurrentDispatcher, () => true, new Clock(), () => { }, () => realStops++);
+        using var preview = new ChecklistUrgentReminderAudio(previewModel, Dispatcher.CurrentDispatcher, () => true, new Clock(), () => previewPlays++);
         real.CheckNow(); preview.CheckNow();
         Assert.AreEqual(0, previewPlays); Assert.AreEqual(0, realStops); Assert.IsNotNull(previewModel.StatusMessage);
     });
@@ -267,7 +312,7 @@ public sealed class ChecklistNotificationCustomizationTests
         public override DateTimeOffset GetUtcNow() => s_now.AddTicks(_ticks);
         public override long GetTimestamp() => _ticks;
         public override long TimestampFrequency => TimeSpan.TicksPerSecond;
-        internal void Advance(int seconds) => _ticks += TimeSpan.FromSeconds(seconds).Ticks;
+        internal void Advance(double seconds) => _ticks += TimeSpan.FromSeconds(seconds).Ticks;
     }
     private sealed class Store : IChecklistContentService
     {

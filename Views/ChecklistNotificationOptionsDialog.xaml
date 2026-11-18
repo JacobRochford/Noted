@@ -26,26 +26,24 @@
                     <TextBlock Text="Notification style" Margin="0,0,0,4"/>
                     <ComboBox x:Name="PreviewStyle" AutomationProperties.Name="Notification style" SelectionChanged="Style_Changed"/>
                 </StackPanel>
-                <TextBlock Text="Sound" Margin="0,0,0,4"/>
-                <ComboBox x:Name="SoundChoice" AutomationProperties.Name="Notification sound"/>
-                <TextBlock x:Name="WindowsHint" Text="Windows controls sound playback and notification visibility."
-                           TextWrapping="Wrap" Margin="0,8,0,0"/>
+                <StackPanel x:Name="WindowsSoundOptions">
+                    <TextBlock Text="Sound" Margin="0,0,0,4"/>
+                    <ComboBox x:Name="SoundChoice" AutomationProperties.Name="Notification sound"/>
+                    <TextBlock Text="Windows controls sound playback and notification visibility."
+                               TextWrapping="Wrap" Margin="0,8,0,0"/>
+                </StackPanel>
                 <StackPanel x:Name="UrgentOptions">
-                    <CheckBox x:Name="Repeat" Content="Repeat sound until silenced or acknowledged" Margin="0,8,0,4"/>
-                    <WrapPanel>
-                        <TextBlock Text="Repeat every (seconds)" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                        <ComboBox x:Name="RepeatInterval" MinWidth="72" AutomationProperties.Name="Sound repeat interval"
-                                  IsEnabled="{Binding IsChecked, ElementName=Repeat}"/>
-                    </WrapPanel>
-                    <TextBlock Text="Window" Margin="0,8,0,4"/>
+                    <TextBlock Text="Window" Margin="0,0,0,4"/>
                     <ComboBox x:Name="AlertSize" AutomationProperties.Name="Urgent window size"/>
                     <CheckBox x:Name="AllMonitors" Content="Show on all monitors" Margin="0,8,0,0"
                               AutomationProperties.HelpText="By default, alerts appear on the primary monitor."/>
                     <TextBlock Text="Acknowledgment" Margin="0,8,0,4"/>
                     <ComboBox x:Name="Acknowledgment" AutomationProperties.Name="Acknowledgment method"/>
+                    <CheckBox x:Name="PlayAlarmSound" Content="Play alarm sound" Margin="0,8,0,0"/>
                 </StackPanel>
                 <WrapPanel Margin="0,12,0,0">
-                    <Button x:Name="PlaySound" Content="Play sound" Click="PlaySound_Click" Padding="12,7" Margin="0,0,8,4"/>
+                    <Button x:Name="PlaySound" Content="Play sound" Click="PlaySound_Click" Padding="12,7" Margin="0,0,8,4"
+                            IsEnabled="{Binding IsChecked, ElementName=PlayAlarmSound}"/>
                     <Button Content="Preview" Click="Preview_Click" Padding="12,7" Margin="0,0,8,4"/>
                     <Button Content="Stop preview" Click="StopPreview_Click" Padding="12,7" Margin="0,0,0,4"/>
                 </WrapPanel>
