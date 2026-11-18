@@ -523,6 +523,32 @@ public sealed class ChecklistReminderSchedulerTests
         Assert.AreEqual(model.Items.Last().ReminderRepeat, store.Items.Last().ReminderRepeat);
     });
 
+    [TestMethod]
+    public void TurningRepeatsOffDuringFirstSubmissionDoesNotSendTheOriginalTwice() => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        var original = Repeating(clock, 5, null);
+        var store = new Store { Items = [original] };
+        using var model = Model(store);
+        var item = model.Items.Single();
+        var requests = new List<ChecklistReminder>();
+        var removed = new List<Guid>();
+        using var scheduler = new ChecklistReminderScheduler(model, Dispatcher.CurrentDispatcher, reminders =>
+        {
+            var reminder = reminders.Single();
+            requests.Add(reminder);
+            if (reminder.RepeatDelivery is not null)
+                Assert.IsTrue(model.TrySetSchedule(item, null, null, item.ReminderAtUtc, false, item.NotificationStyle, null, out _));
+            return true;
+        }, clock, removeRepeat: removed.Add);
+
+        scheduler.CheckNow();
+        Assert.HasCount(1, requests);
+        Assert.IsNull(item.ReminderRepeat);
+        Assert.IsNotNull(store.Items.Single().ReminderHandledAtUtc);
+        CollectionAssert.AreEqual(new[] { original.ReminderRepeat!.Id }, removed);
+    });
+
     private static ChecklistItemState Repeating(Clock clock, int minutes, int? additionalAlerts)
     {
         var first = clock.GetUtcNow();

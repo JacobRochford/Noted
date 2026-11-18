@@ -730,8 +730,13 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
                 if (reminder.RepeatDelivery is { } delivery)
                 {
-                    if (item.ReminderRepeat is not { } repeat || repeat.Id != delivery.SeriesId || repeat.NextSlotUtc != delivery.SlotUtc) continue;
-                    item.ReminderRepeat = repeat.Accept(reminder.ReminderAtUtc, delivery.SlotUtc, acceptedAt ?? handledAt);
+                    if (item.ReminderRepeat is { } repeat)
+                    {
+                        if (repeat.Id != delivery.SeriesId || repeat.NextSlotUtc != delivery.SlotUtc) continue;
+                        item.ReminderRepeat = repeat.Accept(reminder.ReminderAtUtc, delivery.SlotUtc, acceptedAt ?? handledAt);
+                    }
+                    // turning off repeats during submission leaves the original reminder in place.
+                    else if (delivery.SlotUtc != reminder.ReminderAtUtc) continue;
                 }
                 else if (item.ReminderRepeat is not null) continue;
 
