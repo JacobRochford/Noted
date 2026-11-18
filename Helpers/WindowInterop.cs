@@ -33,6 +33,7 @@ internal static class WindowInterop {
     internal static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     internal const uint SWP_NOSIZE      = 0x0001;
     internal const uint SWP_NOMOVE      = 0x0002;
+    internal const uint SWP_NOZORDER    = 0x0004;
     internal const uint SWP_NOACTIVATE  = 0x0010;
     internal const uint SWP_NOOWNERZORDER = 0x0200;
 
@@ -86,6 +87,14 @@ internal static class WindowInterop {
             : Rect.Empty;
     }
 
+    internal static Rect GetMonitorWorkArea(IntPtr monitor)
+    {
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        return GetMonitorInfo(monitor, ref info)
+            ? new Rect(info.Work.Left, info.Work.Top, info.Work.Right - info.Work.Left, info.Work.Bottom - info.Work.Top)
+            : Rect.Empty;
+    }
+
     internal static void CenterOnForegroundMonitor(Window window, IntPtr foreground)
     {
         var monitor = MonitorFromWindow(foreground, 2);
@@ -99,7 +108,7 @@ internal static class WindowInterop {
         var height = bounds.Bottom - bounds.Top;
         var left = info.Work.Left + Math.Max(0, (info.Work.Right - info.Work.Left - width) / 2);
         var top = info.Work.Top + Math.Max(0, (info.Work.Bottom - info.Work.Top - height) / 2);
-        SetWindowPos(handle, IntPtr.Zero, left, top, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | 0x0004);
+        SetWindowPos(handle, IntPtr.Zero, left, top, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER);
     }
 
     [DllImport("user32.dll")]
@@ -130,6 +139,9 @@ internal static class WindowInterop {
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForSystem();
+
+    [DllImport("user32.dll")]
+    internal static extern uint GetDpiForWindow(IntPtr window);
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(

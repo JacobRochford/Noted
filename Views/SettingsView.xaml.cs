@@ -13,6 +13,7 @@ namespace Noted;
 public partial class SettingsView : UserControl
 {
     private SettingsViewModel? ViewModel => DataContext as SettingsViewModel;
+    private ChecklistNotificationOptionsDialog? _notificationOptions;
 
     public SettingsView()
     {
@@ -99,13 +100,25 @@ public partial class SettingsView : UserControl
 
     private void NotificationDefaults_Click(object sender, RoutedEventArgs e)
     {
+        if (_notificationOptions is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
         if (ViewModel is not { } model) return;
         var settings = model.NotificationSettings;
-        var dialog = new ChecklistNotificationOptionsDialog(settings.LoadChecklistNotificationOptions()) { Owner = Window.GetWindow(this) };
-        if (dialog.ShowDialog() != true) return;
-        try { settings.SaveChecklistNotificationOptions(dialog.Options); }
-        catch (SettingsPersistenceException exception)
-        { AppDialog.Show(exception.Message, "Notification settings", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        var dialog = new ChecklistNotificationOptionsDialog(settings.LoadChecklistNotificationOptions())
+        {
+            Commit = options =>
+            {
+                try { settings.SaveChecklistNotificationOptions(options); }
+                catch (SettingsPersistenceException exception) { return exception.Message; }
+                return null;
+            }
+        };
+        _notificationOptions = dialog;
+        dialog.Closed += (_, _) => _notificationOptions = null;
+        dialog.ShowFor(Window.GetWindow(this));
     }
 
     private void EditHotkeyButton_Click(object sender, RoutedEventArgs e)

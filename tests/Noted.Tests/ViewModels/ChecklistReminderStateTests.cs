@@ -297,6 +297,36 @@ public sealed class ChecklistReminderStateTests
     });
 
     [TestMethod]
+    public void FailedScheduleApplyRestoresTheOccurrenceAndKeepsOtherPendingEdits() => WpfTestHost.Invoke(() =>
+    {
+        var service = new RecordingService();
+        using var model = Create(service);
+        var item = model.AddItem()!;
+        item.NotificationStyle = ChecklistNotificationStyle.Urgent;
+        item.ReminderAtUtc = DateTimeOffset.UtcNow.AddMinutes(-10);
+        item.ReminderHandledAtUtc = DateTimeOffset.UtcNow;
+        item.ReminderOccurrence = item.ReminderOccurrence! with { Options = new(), SilencedAtUtc = DateTimeOffset.UtcNow };
+        var original = item.ReminderOccurrence;
+        var handled = item.ReminderHandledAtUtc;
+        Assert.IsTrue(model.TryFlushPendingItems(out _));
+
+        item.Notes = "new notes";
+        service.FailSave = true;
+        Assert.IsFalse(model.TrySetSchedule(item, DateTime.Today.AddDays(1), null, DateTimeOffset.UtcNow.AddDays(1),
+            false, ChecklistNotificationStyle.Standard, null, out _));
+        Assert.IsNull(item.DueDate);
+        Assert.AreEqual(ChecklistNotificationStyle.Urgent, item.NotificationStyle);
+        Assert.AreEqual(original.ScheduledAtUtc, item.ReminderAtUtc);
+        Assert.AreEqual(original, item.ReminderOccurrence);
+        Assert.AreEqual(handled, item.ReminderHandledAtUtc);
+
+        service.FailSave = false;
+        Assert.IsTrue(model.TryFlushPendingItems(out _));
+        Assert.AreEqual("new notes", service.Items.Single().Notes);
+        Assert.AreEqual(original, service.Items.Single().ReminderOccurrence);
+    });
+
+    [TestMethod]
     public void DueStatusRefreshDoesNotSaveOrChangeReminderState() => WpfTestHost.Invoke(() =>
     {
         var service = new RecordingService(); using var model = Create(service);

@@ -241,7 +241,8 @@ public abstract class OverlayWindow : Window
 
     private static Window? FindVisibleOwnedWindow(Window owner)
     {
-        var owned = owner.OwnedWindows.Cast<Window>().Where(window => window.IsVisible).ToArray();
+        var owned = owner.OwnedWindows.Cast<Window>()
+            .Where(window => window.IsVisible && window is not ChecklistEditorWindow).ToArray();
         var child = owned.FirstOrDefault(window => window.IsActive) ?? owned.LastOrDefault();
         return child is null ? null : FindVisibleOwnedWindow(child) ?? child;
     }

@@ -607,6 +607,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
                 TimeZoneInfo.Local, out reminder, out error)) return false;
         }
         if (!TryValidateReminderChange(item, reminder, style, out error)) return false;
+        var previous = ReadSchedule();
         RunBulkUpdate(() =>
         {
             item.DueDate = dueDate;
@@ -614,7 +615,29 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             ApplyReminderPreferences(item, reminder, style, options);
             item.ReminderAtDueTime = atDueTime;
         });
-        return TryFlushPendingItems(out error);
+        var applied = ReadSchedule();
+        if (TryFlushPendingItems(out error)) return true;
+
+        // leave a failed Apply in the editor's draft and keep any unrelated pending edits.
+        if (Items.Contains(item) && !item.IsChecked && ReadSchedule() == applied)
+        {
+            RunBulkUpdate(() =>
+            {
+                item.DueDate = previous.DueDate;
+                item.DueTime = previous.DueTime;
+                ApplyReminderPreferences(item, previous.ReminderAtUtc, previous.NotificationStyle, previous.NotificationOptions);
+                item.ReminderAtDueTime = previous.ReminderAtDueTime;
+                item.ReminderHandledAtUtc = previous.ReminderHandledAtUtc;
+                item.ReminderOccurrence = previous.ReminderOccurrence;
+            });
+        }
+        return false;
+
+        (DateTime? DueDate, TimeSpan? DueTime, DateTimeOffset? ReminderAtUtc, bool ReminderAtDueTime,
+            ChecklistNotificationStyle NotificationStyle, ChecklistNotificationOptions? NotificationOptions,
+            DateTimeOffset? ReminderHandledAtUtc, ChecklistReminderOccurrence? ReminderOccurrence) ReadSchedule() =>
+            (item.DueDate, item.DueTime, item.ReminderAtUtc, item.ReminderAtDueTime, item.NotificationStyle,
+                item.NotificationOptions, item.ReminderHandledAtUtc, item.ReminderOccurrence);
     }
 
     internal bool TryCaptureUrgentOptions(IReadOnlyList<ChecklistReminder> reminders, out string? error)

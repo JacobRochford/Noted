@@ -45,6 +45,7 @@ public partial class ChecklistWindow : OverlayWindow
     { Interval = TimeSpan.FromMinutes(1) };
     private ChecklistReminderActivation? _pendingReminderActivation;
     private ContextMenu? _reminderTaskMenu;
+    private readonly Dictionary<ChecklistItem, ChecklistReminderDialog> _scheduleDialogs = [];
     private int _interactionVersion;
 
     private sealed record FocusTarget(
@@ -150,7 +151,7 @@ public partial class ChecklistWindow : OverlayWindow
 
     private void TryOpenPendingReminder()
     {
-        if (_isClosed || _scheduleDialog is not null || _pendingReminderActivation is not { } activation || _completingItem) return;
+        if (_isClosed || _pendingReminderActivation is not { } activation || _completingItem) return;
         _pendingReminderActivation = null;
         if (activation.TaskId is { } id)
         {
@@ -190,11 +191,6 @@ public partial class ChecklistWindow : OverlayWindow
 
     internal bool NavigateToReminder(Guid id)
     {
-        if (_scheduleDialog is not null)
-        {
-            _pendingReminderActivation = new(id, null);
-            return false;
-        }
         _interactionVersion++;
         if (!_viewModel.RevealItem(id, out var item))
         {
@@ -218,25 +214,50 @@ public partial class ChecklistWindow : OverlayWindow
             EditReminder(item);
     }
 
-    private ChecklistReminderDialog? _scheduleDialog;
-
-    private void EditReminder(ChecklistItem item)
+    internal void EditReminder(ChecklistItem item)
     {
-        var dialog = new ChecklistReminderDialog(item.ReminderAtUtc, item.DueDate, item.NotificationStyle, item.NotificationOptions,
-            _settingsService.LoadChecklistNotificationOptions(), item.DueTime, item.ReminderAtDueTime) { Owner = this };
-        _scheduleDialog = dialog;
-        bool? accepted;
-        try { accepted = dialog.ShowDialog(); }
-        finally
+        if (_scheduleDialogs.TryGetValue(item, out var existing))
         {
-            _scheduleDialog = null;
-            if (_pendingReminderActivation is not null) Dispatcher.BeginInvoke(TryOpenPendingReminder);
+            existing.ActivateEditor();
+            return;
         }
-        if (accepted != true) return;
-        if (!_viewModel.TrySetSchedule(item, dialog.ScheduledDueDate, dialog.ScheduledDueTime, dialog.ReminderAtUtc,
-            dialog.ReminderAtDueTime, dialog.NotificationStyle, dialog.NotificationOptions, out var error))
-            ShowPersistenceWarningOnce(error);
+        if (_isClosed || item.IsChecked || !_viewModel.Items.Contains(item)) return;
+
+        var original = ReadSchedule(item);
+        var completed = false;
+        var dialog = new ChecklistReminderDialog(item.ReminderAtUtc, item.DueDate, item.NotificationStyle, item.NotificationOptions,
+            _settingsService.LoadChecklistNotificationOptions(), item.DueTime, item.ReminderAtDueTime)
+        {
+            Commit = draft =>
+            {
+                if (completed || !_viewModel.Items.Contains(item))
+                    return "This task was completed or removed. Close this editor to discard the draft.";
+                if (ReadSchedule(item) != original)
+                    return "This schedule changed while the editor was open. Close and reopen Schedule to edit the current schedule.";
+
+                return _viewModel.TrySetSchedule(item, draft.ScheduledDueDate, draft.ScheduledDueTime, draft.ReminderAtUtc,
+                    draft.ReminderAtDueTime, draft.NotificationStyle, draft.NotificationOptions, out var error)
+                    ? null : error ?? "The schedule could not be saved.";
+            }
+        };
+        void ItemChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ChecklistItem.IsChecked) && item.IsChecked) completed = true;
+        }
+
+        item.PropertyChanged += ItemChanged;
+        _scheduleDialogs.Add(item, dialog);
+        dialog.Closed += (_, _) =>
+        {
+            item.PropertyChanged -= ItemChanged;
+            _scheduleDialogs.Remove(item);
+        };
+        dialog.ShowFor(this);
     }
+
+    private static (DateTime? DueDate, TimeSpan? DueTime, DateTimeOffset? ReminderAtUtc, bool AtDueTime,
+        ChecklistNotificationStyle Style, ChecklistNotificationOptions? Options) ReadSchedule(ChecklistItem item) =>
+        (item.DueDate, item.DueTime, item.ReminderAtUtc, item.ReminderAtDueTime, item.NotificationStyle, item.NotificationOptions);
 
     protected override void OnClosing(CancelEventArgs e)
     {

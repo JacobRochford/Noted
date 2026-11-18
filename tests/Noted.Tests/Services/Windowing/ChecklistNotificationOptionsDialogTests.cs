@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using Noted.Models;
 
 namespace Noted.Tests.Services;
@@ -53,6 +54,37 @@ public sealed class ChecklistNotificationOptionsDialogTests
     });
 
     [TestMethod]
+    public void GlobalUrgentOptionsAndPreviewControlsFitTheDefaultLayout() => WpfTestHost.Invoke(() =>
+    {
+        var dialog = new ChecklistNotificationOptionsDialog(new());
+        Show(dialog, () =>
+        {
+            Assert.IsTrue(((ComboBox)dialog.FindName("PreviewStyle")).IsVisible);
+            Assert.IsTrue(((ComboBox)dialog.FindName("RepeatInterval")).IsVisible);
+            Assert.IsTrue(((Button)dialog.FindName("PlaySound")).IsVisible);
+            Assert.AreEqual(Visibility.Collapsed, ((ScrollViewer)dialog.FindName("OptionsFields")).ComputedVerticalScrollBarVisibility);
+            ((Button)dialog.FindName("ApplyButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        });
+    });
+
+    [TestMethod]
+    public void ChangingUrgentSoundKeepsSavedPresentationSettings() => WpfTestHost.Invoke(() =>
+    {
+        var original = new ChecklistNotificationOptions
+        {
+            Size = ChecklistAlertSize.Percentage, Monitor = ChecklistAlertMonitor.Selected, MonitorDeviceName = "saved display",
+            TextSize = 42, PulseAccent = false, Acknowledgment = ChecklistAcknowledgment.Hold
+        };
+        var dialog = new ChecklistNotificationOptionsDialog(original);
+        Show(dialog, () =>
+        {
+            ((ComboBox)dialog.FindName("SoundChoice")).SelectedValue = ChecklistUrgentSound.Chime;
+            ((Button)dialog.FindName("ApplyButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        });
+        Assert.AreEqual(original with { UrgentSound = ChecklistUrgentSound.Chime }, dialog.Options);
+    });
+
+    [TestMethod]
     public void BundledSoundChoicesAreValidShortPcmClips() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
@@ -69,15 +101,13 @@ public sealed class ChecklistNotificationOptionsDialogTests
 
     private static void Show(Window dialog, Action action)
     {
-        Exception? failure = null;
-        dialog.Loaded += (_, _) =>
+        dialog.Show();
+        try
         {
-            try { action(); }
-            catch (Exception exception) { failure = exception; }
-            finally { if (dialog.IsVisible) dialog.Close(); }
-        };
-        var accepted = dialog.ShowDialog();
-        if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
-        Assert.AreEqual(true, accepted);
+            dialog.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            action();
+            Assert.IsFalse(dialog.IsVisible);
+        }
+        finally { if (dialog.IsVisible) dialog.Close(); }
     }
 }

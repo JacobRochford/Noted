@@ -1,6 +1,11 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
+using System.Windows.Threading;
+using Noted.Helpers;
 using Noted.Models;
+using Noted.Services;
+using Noted.ViewModels;
 
 namespace Noted.Tests.Services;
 
@@ -25,9 +30,11 @@ public sealed class ChecklistScheduleEditorTests
             due.SelectedDate = DateTime.Today.AddDays(2);
             due.IsDropDownOpen = false;
             var hour = (ComboBox)time.FindName("HourChoice");
+            var minute = (ComboBox)time.FindName("MinuteChoice");
             var period = (ComboBox)time.FindName("PeriodChoice");
             Assert.IsTrue(hour.Focus());
             hour.SelectedIndex = 1;
+            minute.SelectedIndex = 0;
             Assert.IsTrue(period.Focus());
             period.SelectedIndex = 1;
             Assert.IsTrue(hour.Focus());
@@ -104,19 +111,231 @@ public sealed class ChecklistScheduleEditorTests
         Assert.IsNull(dialog.ReminderAtUtc);
     });
 
-    private static void Apply(ChecklistReminderDialog dialog) => ((Button)dialog.FindName("ApplyButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+    [TestMethod]
+    public void OwnedEditorsReuseTheSameDraftAndLeaveOtherWindowsEnabled() => WithTasks((window, model) =>
+    {
+        var item = model.AddItem()!;
+        var another = model.AddItem()!;
+        var otherWindow = new Window();
+        otherWindow.Show();
+        try
+        {
+            var editor = Open(window, item);
+            ((DatePicker)editor.FindName("DueDate")).SelectedDate = DateTime.Today.AddDays(2);
+            window.EditReminder(item);
+            Assert.AreSame(editor, window.OwnedWindows.OfType<ChecklistReminderDialog>().Single());
+            Assert.AreSame(window, editor.Owner);
+            Assert.IsFalse(editor.Topmost);
+            Assert.IsFalse(window.Topmost);
+            var editorHandle = new WindowInteropHelper(editor).Handle;
+            Assert.AreEqual(0, WindowInterop.GetWindowLong(editorHandle, WindowInterop.GWL_EXSTYLE) & WindowInterop.WS_EX_TOPMOST);
+            Assert.IsTrue(WindowInterop.IsWindowEnabled(new WindowInteropHelper(window).Handle));
+            Assert.IsTrue(WindowInterop.IsWindowEnabled(new WindowInteropHelper(otherWindow).Handle));
+            Assert.IsFalse(window.TryActivateOwnedWindow());
+            var second = Open(window, another);
+            Click(editor, "CancelButton");
+            Assert.IsNull(item.DueDate);
+            Assert.IsTrue(second.IsVisible);
+            Assert.IsFalse(window.Topmost);
+            second.Close();
+            Assert.IsTrue(window.Topmost);
+            Assert.AreNotSame(editor, Open(window, item));
+        }
+        finally { otherWindow.Close(); }
+    });
+
+    [TestMethod]
+    public void InitialPlacementUsesTheAvailableSideOrCentersAndClamps()
+    {
+        var work = new Rect(-1440, 40, 1440, 860);
+        var dialog = new Size(600, 420);
+
+        Assert.AreEqual(new Point(-1022, 80), ChecklistEditorWindow.CalculateInitialPosition(
+            new Rect(-1400, 80, 360, 500), dialog, work, 144));
+        Assert.AreEqual(new Point(-1038, 480), ChecklistEditorWindow.CalculateInitialPosition(
+            new Rect(-420, 700, 370, 350), dialog, work, 144));
+        Assert.AreEqual(new Point(-1020, 40), ChecklistEditorWindow.CalculateInitialPosition(
+            new Rect(-1120, 0, 800, 500), dialog, work, 144));
+    }
+
+    [TestMethod]
+    public void BothEditorsOpenNearTheirLaunchingWindowAndReuseKeepsTheirPosition() => WithTasks((window, model) =>
+    {
+        var ownerHandle = new WindowInteropHelper(window).Handle;
+        var work = WindowInterop.GetMonitorWorkArea(WindowInterop.MonitorFromWindow(ownerHandle, 2));
+        var item = model.AddItem()!;
+        MoveWindow(window, work.Left + 80, work.Top + 60);
+
+        var schedule = Open(window, item);
+        VerifyInitialPlacement(schedule, window);
+        ((CheckBox)schedule.FindName("EnableReminder")).IsChecked = true;
+        MoveWindow(schedule, work.Left + 130, work.Top + 100);
+        var movedSchedule = WindowInterop.GetWindowBounds(new WindowInteropHelper(schedule).Handle);
+        window.EditReminder(item);
+        WaitForLayout(window);
+        Assert.AreEqual(movedSchedule, WindowInterop.GetWindowBounds(new WindowInteropHelper(schedule).Handle));
+
+        Click(schedule, "OptionsButton");
+        var options = schedule.OwnedWindows.OfType<ChecklistNotificationOptionsDialog>().Single();
+        VerifyInitialPlacement(options, schedule);
+        options.SizeToContent = SizeToContent.Manual;
+        options.Width = Math.Max(options.MinWidth, options.ActualWidth - 24);
+        MoveWindow(options, work.Left + 60, work.Top + 120);
+        var adjustedOptions = WindowInterop.GetWindowBounds(new WindowInteropHelper(options).Handle);
+        window.EditReminder(item);
+        WaitForLayout(window);
+        Assert.AreEqual(adjustedOptions, WindowInterop.GetWindowBounds(new WindowInteropHelper(options).Handle));
+    });
+
+    private static void VerifyInitialPlacement(Window dialog, Window owner)
+    {
+        WaitForLayout(dialog);
+        var ownerHandle = new WindowInteropHelper(owner).Handle;
+        var work = WindowInterop.GetMonitorWorkArea(WindowInterop.MonitorFromWindow(ownerHandle, 2));
+        var bounds = WindowInterop.GetWindowBounds(new WindowInteropHelper(dialog).Handle);
+        var expected = ChecklistEditorWindow.CalculateInitialPosition(WindowInterop.GetWindowBounds(ownerHandle),
+            bounds.Size, work, WindowInterop.GetDpiForWindow(ownerHandle));
+        Assert.AreEqual(new Point((int)expected.X, (int)expected.Y), bounds.Location);
+        Assert.IsTrue(work.Contains(bounds));
+    }
+
+    private static void MoveWindow(Window window, double left, double top)
+    {
+        Assert.IsTrue(WindowInterop.SetWindowPos(new WindowInteropHelper(window).Handle, IntPtr.Zero,
+            (int)left, (int)top, 0, 0, WindowInterop.SWP_NOZORDER | WindowInterop.SWP_NOACTIVATE | WindowInterop.SWP_NOSIZE));
+        WaitForLayout(window);
+    }
+
+    private static void WaitForLayout(Window window) => window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+
+    [TestMethod]
+    public void PerTaskOptionsApplyToTheDraftAndOwnerCloseDiscardsIt() => WithTasks((window, model) =>
+    {
+        var item = model.AddItem()!;
+        var editor = Open(window, item);
+        ((CheckBox)editor.FindName("EnableReminder")).IsChecked = true;
+        Click(editor, "OptionsButton");
+        var options = editor.OwnedWindows.OfType<ChecklistNotificationOptionsDialog>().Single();
+        Assert.AreSame(editor, options.Owner);
+        Assert.AreEqual(Visibility.Collapsed, ((StackPanel)options.FindName("StylePicker")).Visibility);
+        Assert.IsFalse(((Button)editor.FindName("ApplyButton")).IsEnabled);
+        Assert.IsFalse(((ComboBox)editor.FindName("StyleChoice")).IsEnabled);
+        window.EditReminder(item);
+        Assert.AreSame(options, editor.OwnedWindows.OfType<ChecklistNotificationOptionsDialog>().Single());
+        ((ComboBox)options.FindName("SoundChoice")).SelectedValue = ChecklistWindowsNotificationSound.Silent;
+        Click(options, "CancelButton");
+        Assert.IsNull(editor.NotificationOptions);
+        Assert.IsTrue(((Button)editor.FindName("ApplyButton")).IsEnabled);
+
+        Click(editor, "OptionsButton");
+        options = editor.OwnedWindows.OfType<ChecklistNotificationOptionsDialog>().Single();
+        ((ComboBox)options.FindName("SoundChoice")).SelectedValue = ChecklistWindowsNotificationSound.Silent;
+        Click(options, "ApplyButton");
+        Assert.AreEqual(ChecklistWindowsNotificationSound.Silent, editor.NotificationOptions?.StandardSound);
+        Assert.IsNull(item.NotificationOptions);
+        Click(editor, "OptionsButton");
+        options = editor.OwnedWindows.OfType<ChecklistNotificationOptionsDialog>().Single();
+        window.Close();
+        Assert.IsFalse(editor.IsVisible);
+        Assert.IsFalse(options.IsVisible);
+        Assert.IsNull(item.NotificationOptions);
+    });
+
+    [TestMethod]
+    public void ApplyingSchedulePreservesOtherTaskEdits() => WithTasks((window, model) =>
+    {
+        var item = model.AddItem()!;
+        var editor = Open(window, item);
+        var due = DateTime.Today.AddDays(2);
+        ((DatePicker)editor.FindName("DueDate")).SelectedDate = due;
+        item.Text = "new title";
+        item.Notes = "new notes";
+        item.IsExpanded = true;
+        Apply(editor);
+        Assert.IsFalse(editor.IsVisible);
+        Assert.AreEqual(due, item.DueDate);
+        Assert.AreEqual("new title", item.Text);
+        Assert.AreEqual("new notes", item.Notes);
+        Assert.IsTrue(item.IsExpanded);
+    });
+
+    [TestMethod]
+    [DataRow("rescheduled")]
+    [DataRow("completed")]
+    [DataRow("deleted")]
+    public void StaleDraftLeavesTheCurrentTaskStateUntouched(string change) => WithTasks((window, model) =>
+    {
+        var item = model.AddItem()!;
+        var editor = Open(window, item);
+        ((DatePicker)editor.FindName("DueDate")).SelectedDate = DateTime.Today.AddDays(2);
+        var newerDate = DateTime.Today.AddDays(3);
+        if (change == "rescheduled") item.DueDate = newerDate;
+        else if (change == "completed") item.IsChecked = true;
+        else model.RemoveItem(item);
+
+        Apply(editor);
+        Assert.IsTrue(editor.IsVisible);
+        Assert.AreEqual(Visibility.Visible, ((TextBlock)editor.FindName("ErrorText")).Visibility);
+        Assert.AreEqual(change != "deleted", model.Items.Contains(item));
+        Assert.AreEqual(change == "completed", item.IsChecked);
+        Assert.AreEqual(change == "rescheduled" ? newerDate : (DateTime?)null, item.DueDate);
+    });
+
+    [TestMethod]
+    public void CommonControlsFitAndTheFooterStaysOutsideTheScrollArea() => WpfTestHost.Invoke(() =>
+    {
+        var due = DateTime.Today.AddDays(2);
+        var dialog = new ChecklistReminderDialog(null, due);
+        Show(dialog, () =>
+        {
+            var collapsedHeight = dialog.ActualHeight;
+            var time = (ChecklistTimePicker)dialog.FindName("DueTime");
+            ((CheckBox)time.FindName("UseTime")).IsChecked = true;
+            ((CheckBox)dialog.FindName("EnableReminder")).IsChecked = true;
+            dialog.UpdateLayout();
+            Assert.IsTrue(dialog.ActualHeight > collapsedHeight);
+            var scroll = (ScrollViewer)dialog.FindName("ScheduleFields");
+            Assert.AreEqual(Visibility.Collapsed, scroll.ComputedVerticalScrollBarVisibility);
+            dialog.SizeToContent = SizeToContent.Manual;
+            dialog.Height = dialog.MinHeight;
+            ((ComboBox)dialog.FindName("ReminderMode")).SelectedIndex = 1;
+            dialog.UpdateLayout();
+            Assert.AreEqual(Visibility.Visible, scroll.ComputedVerticalScrollBarVisibility);
+            Assert.IsTrue(((Button)dialog.FindName("ApplyButton")).IsVisible);
+            Assert.IsTrue(((Button)dialog.FindName("CancelButton")).IsVisible);
+            Apply(dialog);
+        });
+    });
+
+    private static void Apply(ChecklistReminderDialog dialog) => Click(dialog, "ApplyButton");
+
+    private static void Click(Window window, string name) =>
+        ((Button)window.FindName(name)).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+    private static ChecklistReminderDialog Open(ChecklistWindow window, ChecklistItem item)
+    {
+        window.EditReminder(item);
+        return window.OwnedWindows.OfType<ChecklistReminderDialog>().Last();
+    }
+
+    private static void WithTasks(Action<ChecklistWindow, ChecklistWindowViewModel> test) => WpfTestHost.Invoke(() =>
+    {
+        using var directory = new TemporaryTestDirectory();
+        using var model = new ChecklistWindowViewModel(new ChecklistContentService(directory.Path), Dispatcher.CurrentDispatcher, action => action(), false);
+        var window = new ChecklistWindow(new AppSettingsService(directory.Path), model);
+        try { window.Show(); test(window, model); }
+        finally { if (window.IsVisible) window.Close(); }
+    });
 
     private static void Show(Window dialog, Action action)
     {
-        Exception? failure = null;
-        dialog.Loaded += (_, _) =>
+        dialog.Show();
+        try
         {
-            try { action(); }
-            catch (Exception exception) { failure = exception; }
-            finally { if (dialog.IsVisible) dialog.Close(); }
-        };
-        var accepted = dialog.ShowDialog();
-        if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
-        Assert.AreEqual(true, accepted);
+            dialog.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            action();
+            Assert.IsFalse(dialog.IsVisible);
+        }
+        finally { if (dialog.IsVisible) dialog.Close(); }
     }
 }

@@ -6,8 +6,9 @@ using Noted.Services;
 
 namespace Noted;
 
-public partial class ChecklistReminderDialog : Window
+public partial class ChecklistReminderDialog : ChecklistEditorWindow
 {
+    internal Func<ChecklistReminderDialog, string?>? Commit { private get; set; }
     internal DateTimeOffset? ReminderAtUtc { get; private set; }
     internal DateTime? ScheduledDueDate { get; private set; }
     internal TimeSpan? ScheduledDueTime { get; private set; }
@@ -19,6 +20,7 @@ public partial class ChecklistReminderDialog : Window
 
     private readonly ChecklistNotificationOptions _defaults;
     private ChecklistNotificationOptions? _custom;
+    private ChecklistNotificationOptionsDialog? _optionsDialog;
     internal ChecklistNotificationStyle NotificationStyle => StyleChoice.SelectedValue is ChecklistNotificationStyle style ? style : ChecklistNotificationStyle.Standard;
     internal ChecklistNotificationOptions? NotificationOptions => _custom;
 
@@ -28,9 +30,10 @@ public partial class ChecklistReminderDialog : Window
     {
         InitializeComponent();
         SourceInitialized += (_, _) => AppThemeManager.ApplyTitleBar(this);
-        _defaults = (defaults ?? new()).Normalize(); _custom = options?.Normalize();
+        _defaults = (defaults ?? new()).Normalize();
+        _custom = options;
         StyleChoice.SelectedValue = style;
-        UpdateOptionsSummary();
+        UpdateResetVisibility();
         UpdateQuickDates();
         Language = System.Windows.Markup.XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
         var local = reminder?.ToLocalTime().DateTime ??
@@ -47,11 +50,11 @@ public partial class ChecklistReminderDialog : Window
         EnableReminder.IsChecked = reminder.HasValue;
         ReminderMode.SelectedIndex = reminder.HasValue && !reminderAtDueTime ? 1 : 0;
         UpdateReminderFields();
-        MaxHeight = Math.Max(300, SystemParameters.WorkArea.Height - 32);
     }
 
     private void Apply_Click(object sender, RoutedEventArgs e)
     {
+        if (_optionsDialog is not null) return;
         if (!TryReadDate(DueDate, out var dueDate)) { ShowMessage("Enter a valid due date or clear it."); return; }
         if (DueTime.SelectedTime.HasValue && dueDate is null)
         { ShowMessage("Choose a due date, or turn off its time."); return; }
@@ -83,7 +86,12 @@ public partial class ChecklistReminderDialog : Window
                 ReminderAtUtc = utc;
             }
         }
-        DialogResult = true;
+        if (Commit?.Invoke(this) is { } errorMessage)
+        {
+            ShowMessage(errorMessage);
+            return;
+        }
+        Close();
     }
 
     private static bool TryReadDate(System.Windows.Controls.DatePicker picker, out DateTime? date)
@@ -183,18 +191,28 @@ public partial class ChecklistReminderDialog : Window
 
     private void Customize_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new ChecklistNotificationOptionsDialog(_custom ?? _defaults, NotificationStyle) { Owner = this };
-        if (dialog.ShowDialog() == true)
+        if (_optionsDialog is not null) return;
+        var dialog = new ChecklistNotificationOptionsDialog(_custom ?? _defaults, NotificationStyle, allowStyleSelection: false)
         {
-            _custom = dialog.Options;
-            StyleChoice.SelectedValue = dialog.NotificationStyle;
-            UpdateOptionsSummary();
-        }
+            Commit = options =>
+            {
+                _custom = options;
+                UpdateResetVisibility();
+                return null;
+            }
+        };
+        _optionsDialog = dialog;
+        ScheduleFields.IsEnabled = ApplyButton.IsEnabled = false;
+        dialog.Closed += (_, _) =>
+        {
+            _optionsDialog = null;
+            ScheduleFields.IsEnabled = ApplyButton.IsEnabled = true;
+        };
+        dialog.ShowFor(this);
     }
-    private void ResetOptions_Click(object sender, RoutedEventArgs e) { _custom = null; UpdateOptionsSummary(); }
-    private void UpdateOptionsSummary()
-    {
-        OptionsSummary.Text = _custom is null ? "Using defaults" : "Customized";
-        ResetOptions.Visibility = _custom is null ? Visibility.Collapsed : Visibility.Visible;
-    }
+
+    internal void ActivateEditor() => (_optionsDialog as Window ?? this).Activate();
+
+    private void ResetOptions_Click(object sender, RoutedEventArgs e) { _custom = null; UpdateResetVisibility(); }
+    private void UpdateResetVisibility() => ResetOptions.Visibility = _custom is null ? Visibility.Collapsed : Visibility.Visible;
 }

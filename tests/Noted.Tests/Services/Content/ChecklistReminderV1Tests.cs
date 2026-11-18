@@ -215,36 +215,35 @@ public sealed class ChecklistReminderV1Tests
     [TestMethod]
     public void ReminderDialogValidatesThenAppliesAndAllowsRemoval() => WpfTestHost.Invoke(() =>
     {
-        Exception? failure = null;
         var dialog = new ChecklistReminderDialog(null, DateTime.Today.AddDays(2));
-        dialog.Loaded += (_, _) =>
+        dialog.Show();
+        try
         {
-            try
-            {
-                var date = (DatePicker)dialog.FindName("ReminderDate");
-                var time = (ChecklistTimePicker)dialog.FindName("ReminderTime");
-                var apply = (Button)dialog.FindName("ApplyButton");
-                ((CheckBox)dialog.FindName("EnableReminder")).IsChecked = true;
-                ((ComboBox)dialog.FindName("ReminderMode")).SelectedIndex = 1;
-                date.SelectedDate = DateTime.Today.AddDays(-1);
-                apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Assert.AreEqual(Visibility.Visible, ((TextBlock)dialog.FindName("ErrorText")).Visibility);
-                date.SelectedDate = DateTime.Today.AddDays(2);
-                time.SelectedTime = new TimeSpan(14, 30, 0);
-                apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            }
-            catch (Exception exception) { failure = exception; dialog.Close(); }
-        };
-        Assert.AreEqual(true, dialog.ShowDialog());
-        if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+            var date = (DatePicker)dialog.FindName("ReminderDate");
+            var time = (ChecklistTimePicker)dialog.FindName("ReminderTime");
+            var apply = (Button)dialog.FindName("ApplyButton");
+            ((CheckBox)dialog.FindName("EnableReminder")).IsChecked = true;
+            ((ComboBox)dialog.FindName("ReminderMode")).SelectedIndex = 1;
+            date.SelectedDate = DateTime.Today.AddDays(-1);
+            apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.AreEqual(Visibility.Visible, ((TextBlock)dialog.FindName("ErrorText")).Visibility);
+            date.SelectedDate = DateTime.Today.AddDays(1);
+            time.SelectedTime = new TimeSpan(14, 30, 0);
+            apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.IsFalse(dialog.IsVisible);
+        }
+        finally { if (dialog.IsVisible) dialog.Close(); }
         Assert.IsNotNull(dialog.ReminderAtUtc);
+        Assert.IsTrue(dialog.ReminderAtUtc.Value.LocalDateTime < dialog.ScheduledDueDate);
         var remove = new ChecklistReminderDialog(dialog.ReminderAtUtc, null);
-        remove.Loaded += (_, _) =>
+        remove.Show();
+        try
         {
             ((CheckBox)remove.FindName("EnableReminder")).IsChecked = false;
             ((Button)remove.FindName("ApplyButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        };
-        Assert.AreEqual(true, remove.ShowDialog());
+            Assert.IsFalse(remove.IsVisible);
+        }
+        finally { if (remove.IsVisible) remove.Close(); }
         Assert.IsNull(remove.ReminderAtUtc);
     });
 
@@ -278,7 +277,7 @@ public sealed class ChecklistReminderV1Tests
     });
 
     [TestMethod]
-    public void ActivationWaitsForTheScheduleEditorToClose() => WpfTestHost.Invoke(() =>
+    public void ActivationNavigatesWhileTheScheduleEditorIsOpen() => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
         using var model = Model(new ChecklistContentService(directory.Path));
@@ -287,26 +286,13 @@ public sealed class ChecklistReminderV1Tests
         var target = model.AddItem()!;
         target.Text = "target";
         var window = new ChecklistWindow(new AppSettingsService(directory.Path), model);
-        Exception? failure = null;
         try
         {
             window.Show();
-            window.Dispatcher.BeginInvoke(() =>
-            {
-                var dialog = window.OwnedWindows.OfType<ChecklistReminderDialog>().Single();
-                try
-                {
-                    window.OpenReminder(new(target.Id, null));
-                    Assert.AreNotSame(target, ((ListBox)window.FindName("ItemsList")).SelectedItem);
-                }
-                catch (Exception exception) { failure = exception; }
-                finally { dialog.Close(); }
-            }, DispatcherPriority.ApplicationIdle);
-            typeof(ChecklistWindow).GetMethod("EditReminder", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-                .Invoke(window, [editing]);
-            window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-            if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+            window.EditReminder(editing);
+            window.OpenReminder(new(target.Id, null));
             Assert.AreSame(target, ((ListBox)window.FindName("ItemsList")).SelectedItem);
+            Assert.IsTrue(window.OwnedWindows.OfType<ChecklistReminderDialog>().Single().IsVisible);
         }
         finally { window.Close(); }
     });
