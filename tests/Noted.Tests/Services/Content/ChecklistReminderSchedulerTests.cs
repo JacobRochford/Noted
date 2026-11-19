@@ -730,27 +730,56 @@ public sealed class ChecklistReminderSchedulerTests
     });
 
     [TestMethod]
-    public void PersistentRepeatThatIsCanceledDuringWindowsHistoryLookupIsNotSubmitted() => WpfTestHost.Invoke(() =>
+    [DataRow(ChecklistWindowsNotificationSound.RepeatingAlarm)]
+    [DataRow(ChecklistWindowsNotificationSound.Reminder)]
+    public async Task PersistentRepeatsWaitForRemovalAndKeepTheirConfiguredSound(ChecklistWindowsNotificationSound repeatSound)
+    {
+        var seriesId = Guid.NewGuid();
+        var start = new Clock().GetUtcNow();
+        var first = new ChecklistReminder(Guid.NewGuid(), start, "task", Style: ChecklistNotificationStyle.Persistent,
+            Options: new() { PersistentSound = ChecklistWindowsNotificationSound.RepeatingAlarm }, RepeatDelivery: new(seriesId, start));
+        var removal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        List<Guid> removed = [];
+        List<ChecklistNotificationContent> submitted = [];
+        using var notifications = new ChecklistNotifications(_ => { }, content => { submitted.Add(content); return true; },
+            id => { removed.Add(id); return removal.Task; });
+        Assert.IsTrue(await notifications.TrySubmitPersistentRepeatAsync([first], () => true), "The initial alarm should be submitted.");
+        Assert.IsEmpty(removed);
+        for (var index = 1; index <= 2; index++)
+        {
+            var repeat = first with { RepeatDelivery = new(seriesId, start.AddMinutes(index)), Options = new() { PersistentSound = repeatSound } };
+            var delivery = notifications.TrySubmitPersistentRepeatAsync([repeat], () => true);
+            Assert.HasCount(index, submitted, $"Repeat {index} was submitted before removal completed.");
+            Assert.HasCount(index, removed);
+            Assert.AreEqual(seriesId, removed[^1]);
+            removal.SetResult();
+            Assert.IsTrue(await delivery, $"Repeat {index} should be submitted after removal.");
+            Assert.AreEqual(repeatSound, submitted[^1].Sound);
+            Assert.AreEqual(repeat.RepeatDelivery, submitted[^1].RepeatDelivery);
+            removal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+    }
+
+    [TestMethod]
+    public void PersistentRepeatCanceledDuringPreviousToastRemovalIsNotSubmitted() => WpfTestHost.Invoke(() =>
     {
         var clock = new Clock();
-        using var model = Model(new Store { Items = [Repeating(clock, 5, null) with { NotificationStyle = ChecklistNotificationStyle.Persistent }] });
-        var historyLookup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        List<ChecklistReminder> submitted = [];
-        var lookupFinished = false;
+        var saved = Repeating(clock, 5, null) with { NotificationStyle = ChecklistNotificationStyle.Persistent };
+        using var model = Model(new Store { Items = [saved] });
+        var removal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        List<ChecklistNotificationContent> submitted = [];
+        var replacement = Task.FromResult(false);
+        using var notifications = new ChecklistNotifications(_ => { }, content => { submitted.Add(content); return true; }, _ => removal.Task);
         using var scheduler = new ChecklistReminderScheduler(model, Dispatcher.CurrentDispatcher, _ => false, clock,
-            submitPersistentRepeat: async (reminders, canSubmit) =>
-            {
-                await historyLookup.Task;
-                lookupFinished = true;
-                if (!canSubmit()) return false;
-                submitted.Add(reminders.Single());
-                return true;
-            });
+            submitPersistentRepeat: (reminders, canSubmit) => replacement = notifications.TrySubmitPersistentRepeatAsync(reminders, canSubmit));
         var task = model.Items.Single();
+        clock.Advance(TimeSpan.FromMinutes(5));
+        scheduler.CheckNow();
+        Assert.IsFalse(replacement.IsCompleted, "The repeat should wait for the previous notification to be removed.");
         Assert.IsTrue(model.TrySetSchedule(task, null, null, null, false, task.NotificationStyle, null, out var error), error);
-        historyLookup.SetResult();
-        PumpUntil(() => lookupFinished);
-        Assert.IsEmpty(submitted);
+        removal.SetResult();
+        PumpUntil(() => replacement.IsCompleted);
+        Assert.HasCount(1, submitted, "Only the original notification should be submitted.");
         Assert.IsNull(task.ReminderHandledAtUtc);
         Assert.IsNull(scheduler.LastError);
     });

@@ -108,24 +108,6 @@ public sealed class ChecklistPersistentNotificationTests
     }
 
     [TestMethod]
-    public void PersistentReplacementPreservesTheScenarioAndActionWithoutRestartingAnOutstandingAlarm()
-    {
-        var reminder = Reminder(ChecklistNotificationStyle.Persistent) with { RepeatDelivery = new(Guid.NewGuid(), s_now) };
-        var content = ChecklistNotificationContent.Create([reminder], ChecklistWindowsNotificationSound.RepeatingAlarm);
-        var ringing = ChecklistNotifications.SuppressReplacementAlarm(content, hasOutstanding: false).BuildNotification();
-        var replacement = ChecklistNotifications.SuppressReplacementAlarm(content, hasOutstanding: true).BuildNotification();
-        var original = XElement.Parse(ringing.Payload);
-        var toast = XElement.Parse(replacement.Payload);
-        Assert.AreEqual("true", (string?)original.Element("audio")?.Attribute("loop"));
-        Assert.AreEqual("true", (string?)toast.Element("audio")?.Attribute("silent"));
-        Assert.AreEqual("reminder", (string?)toast.Attribute("scenario"));
-        Assert.AreEqual(original.Element("actions")?.ToString(), toast.Element("actions")?.ToString());
-        Assert.AreEqual(ringing.Tag, replacement.Tag);
-        Assert.AreEqual(ringing.Group, replacement.Group);
-        Assert.AreEqual(ChecklistNotifications.ReadRepeatActivation(ringing), ChecklistNotifications.ReadRepeatActivation(replacement));
-    }
-
-    [TestMethod]
     public void PersistentPayloadHasReminderScenarioAndTaskSpecificOpenButton()
     {
         var reminder = Reminder(ChecklistNotificationStyle.Persistent);

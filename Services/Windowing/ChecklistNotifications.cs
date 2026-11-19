@@ -103,13 +103,15 @@ internal sealed class ChecklistNotifications : IDisposable
     private const string PreviewGroup = "checklist-preview";
     private readonly Action<ChecklistReminderActivation> _activate;
     private readonly Func<ChecklistNotificationContent, bool>? _testSubmit;
+    private readonly Func<Guid, Task>? _testRemoveRepeat;
     private AppNotificationManager? _manager;
 
     internal ChecklistNotifications(Action<ChecklistReminderActivation> activate,
-        Func<ChecklistNotificationContent, bool>? testSubmit = null)
+        Func<ChecklistNotificationContent, bool>? testSubmit = null, Func<Guid, Task>? testRemoveRepeat = null)
     {
         _activate = activate;
         _testSubmit = testSubmit;
+        _testRemoveRepeat = testRemoveRepeat;
     }
 
     internal bool TryRegister()
@@ -147,15 +149,13 @@ internal sealed class ChecklistNotifications : IDisposable
     {
         try
         {
+            if (!canSubmit()) return false;
             var content = ChecklistNotificationContent.Create(reminders, reminders[0].Options?.PersistentSound);
-            if (_testSubmit is null && content.Sound == ChecklistWindowsNotificationSound.RepeatingAlarm && content.RepeatDelivery is { } repeat)
+            if (content.RepeatDelivery is { } repeat && repeat.SlotUtc != reminders[0].ReminderAtUtc)
             {
-                if (!TryRegister() || _manager!.Setting != AppNotificationSetting.Enabled) return false;
-                var history = await _manager.GetAllAsync();
-                // Windows history does not distinguish a visible reminder from one kept in Notification Center.
-                content = SuppressReplacementAlarm(content, history.Any(notification =>
-                    notification.Tag == ChecklistNotificationContent.RepeatTag(repeat.SeriesId) &&
-                    notification.Group == ChecklistNotificationContent.RepeatGroup));
+                if (_testSubmit is null && (!TryRegister() || _manager!.Setting != AppNotificationSetting.Enabled)) return false;
+                // the old toast may still be playing a loop, even if this repeat uses a different sound.
+                await RemoveRepeatNotificationAsync(repeat.SeriesId);
             }
             return canSubmit() && TryShow(() => content);
         }
@@ -165,11 +165,6 @@ internal sealed class ChecklistNotifications : IDisposable
             return false;
         }
     }
-
-    internal static ChecklistNotificationContent SuppressReplacementAlarm(ChecklistNotificationContent content, bool hasOutstanding) =>
-        hasOutstanding && content.Sound == ChecklistWindowsNotificationSound.RepeatingAlarm
-            ? content with { Sound = ChecklistWindowsNotificationSound.Silent }
-            : content;
 
     private bool TryShow(Func<ChecklistNotificationContent> createContent)
     {
@@ -256,9 +251,15 @@ internal sealed class ChecklistNotifications : IDisposable
 
     internal async Task RemoveRepeatAsync(Guid seriesId)
     {
-        if (_manager is not { } manager) return;
-        try { await manager.RemoveByTagAndGroupAsync(ChecklistNotificationContent.RepeatTag(seriesId), ChecklistNotificationContent.RepeatGroup); }
+        try { await RemoveRepeatNotificationAsync(seriesId); }
         catch (Exception exception) { ExceptionDiagnostics.Record(exception, "Remove repeat reminder notification"); }
+    }
+
+    private async Task RemoveRepeatNotificationAsync(Guid seriesId)
+    {
+        if (_testRemoveRepeat is not null) await _testRemoveRepeat(seriesId);
+        else if (_manager is { } manager)
+            await manager.RemoveByTagAndGroupAsync(ChecklistNotificationContent.RepeatTag(seriesId), ChecklistNotificationContent.RepeatGroup);
     }
 
     private void NotificationInvoked(AppNotificationManager sender, AppNotificationActivatedEventArgs activation) => Activate(activation);
