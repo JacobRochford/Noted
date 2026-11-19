@@ -9,8 +9,6 @@ namespace Noted;
 public abstract class ChecklistEditorWindow : Window
 {
     private const uint MoveWithoutActivation = WindowInterop.SWP_NOSIZE | WindowInterop.SWP_NOACTIVATE | WindowInterop.SWP_NOZORDER;
-    private static readonly Dictionary<Window, int> s_unpinnedOwners = [];
-    private Window? _unpinnedOwner;
     private Size _minimum;
     private DispatcherOperation? _updateWorkArea;
     private bool _placedInitially;
@@ -19,16 +17,7 @@ public abstract class ChecklistEditorWindow : Window
     internal void ShowFor(Window? owner)
     {
         if (owner is not null)
-        {
-            // native ownership inherits topmost; unpin until the last editor closes.
-            if (owner.Topmost || s_unpinnedOwners.ContainsKey(owner))
-            {
-                s_unpinnedOwners[owner] = s_unpinnedOwners.GetValueOrDefault(owner) + 1;
-                _unpinnedOwner = owner;
-                owner.SetCurrentValue(TopmostProperty, false);
-            }
             Owner = owner;
-        }
         Show();
     }
 
@@ -143,17 +132,6 @@ public abstract class ChecklistEditorWindow : Window
     {
         _closed = true;
         _updateWorkArea?.Abort();
-        if (_unpinnedOwner is { } owner)
-        {
-            var remaining = s_unpinnedOwners[owner] - 1;
-            if (remaining > 0) s_unpinnedOwners[owner] = remaining;
-            else
-            {
-                s_unpinnedOwners.Remove(owner);
-                if (new WindowInteropHelper(owner).Handle != IntPtr.Zero)
-                    owner.SetCurrentValue(TopmostProperty, true);
-            }
-        }
         base.OnClosed(e);
     }
 }

@@ -112,8 +112,11 @@ public sealed class ChecklistScheduleEditorTests
     });
 
     [TestMethod]
-    public void OwnedEditorsReuseTheSameDraftAndLeaveOtherWindowsEnabled() => WithTasks((window, model) =>
+    [DataRow(false)]
+    [DataRow(true)]
+    public void OwnedEditorsKeepOwnerPinStateAndLeaveOtherWindowsEnabled(bool pinned) => WithTasks((window, model) =>
     {
+        window.Topmost = pinned;
         var item = model.AddItem()!;
         var another = model.AddItem()!;
         var otherWindow = new Window();
@@ -125,10 +128,16 @@ public sealed class ChecklistScheduleEditorTests
             window.EditReminder(item);
             Assert.AreSame(editor, window.OwnedWindows.OfType<ChecklistReminderDialog>().Single());
             Assert.AreSame(window, editor.Owner);
-            Assert.IsFalse(editor.Topmost);
-            Assert.IsFalse(window.Topmost);
-            var editorHandle = new WindowInteropHelper(editor).Handle;
-            Assert.AreEqual(0, WindowInterop.GetWindowLong(editorHandle, WindowInterop.GWL_EXSTYLE) & WindowInterop.WS_EX_TOPMOST);
+            Assert.AreEqual(pinned, window.Topmost);
+            Assert.AreEqual(pinned, IsNativeTopmost(window));
+            Assert.AreEqual(pinned, IsNativeTopmost(editor));
+            ((CheckBox)editor.FindName("EnableReminder")).IsChecked = true;
+            Click(editor, "OptionsButton");
+            var options = editor.OwnedWindows.OfType<ChecklistNotificationOptionsDialog>().Single();
+            Assert.AreSame(editor, options.Owner);
+            Assert.AreEqual(pinned, IsNativeTopmost(options));
+            Assert.AreEqual(pinned, IsNativeTopmost(window));
+            Assert.IsFalse(IsNativeTopmost(otherWindow));
             Assert.IsTrue(WindowInterop.IsWindowEnabled(new WindowInteropHelper(window).Handle));
             Assert.IsTrue(WindowInterop.IsWindowEnabled(new WindowInteropHelper(otherWindow).Handle));
             Assert.IsFalse(window.TryActivateOwnedWindow());
@@ -136,13 +145,17 @@ public sealed class ChecklistScheduleEditorTests
             Click(editor, "CancelButton");
             Assert.IsNull(item.DueDate);
             Assert.IsTrue(second.IsVisible);
-            Assert.IsFalse(window.Topmost);
+            Assert.AreEqual(pinned, IsNativeTopmost(window));
             second.Close();
-            Assert.IsTrue(window.Topmost);
+            Assert.AreEqual(pinned, IsNativeTopmost(window));
             Assert.AreNotSame(editor, Open(window, item));
         }
         finally { otherWindow.Close(); }
     });
+
+    private static bool IsNativeTopmost(Window window) =>
+        (WindowInterop.GetWindowLong(new WindowInteropHelper(window).Handle, WindowInterop.GWL_EXSTYLE) &
+         WindowInterop.WS_EX_TOPMOST) != 0;
 
     [TestMethod]
     public void InitialPlacementUsesTheAvailableSideOrCentersAndClamps()
