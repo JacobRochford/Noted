@@ -175,12 +175,16 @@ public sealed class ChecklistUrgentPresentationTests
         var small = MeasureAlert(ChecklistAlertSize.FullScreen, 840, 600);
         var large = MeasureAlert(ChecklistAlertSize.FullScreen, 1600, 950);
         var centered = MeasureAlert(ChecklistAlertSize.Large, 1100, 800);
-        Assert.IsTrue(large.Width > centered.Width && large.Width > small.Width);
-        Assert.IsTrue(large.Title > centered.Title && large.Title > small.Title);
-        Assert.IsTrue(large.Details > centered.Details && large.Details > small.Details);
-        Assert.IsTrue(large.ActionHeight > centered.ActionHeight && large.ActionHeight > small.ActionHeight);
+        var measurements = $"Small full-screen: {small.Summary}{Environment.NewLine}" +
+                           $"Large full-screen: {large.Summary}{Environment.NewLine}" +
+                           $"Centered: {centered.Summary}";
+        Assert.IsTrue(large.Width > centered.Width && large.Width > small.Width, $"Expected the large full-screen details panel to be widest.{Environment.NewLine}{measurements}");
+        Assert.IsTrue(large.Title > centered.Title && large.Title > small.Title, $"Expected the large full-screen title font to be largest.{Environment.NewLine}{measurements}");
+        Assert.IsTrue(large.Details > centered.Details && large.Details > small.Details, $"Expected the large full-screen detail font to be largest.{Environment.NewLine}{measurements}");
+        Assert.IsTrue(large.ActionHeight > centered.ActionHeight && large.ActionHeight > small.ActionHeight, $"Expected the large full-screen action button to be tallest.{Environment.NewLine}{measurements}");
 
-        (double Width, double Title, double Details, double ActionHeight) MeasureAlert(ChecklistAlertSize size, double width, double height)
+        (double Width, double Title, double Details, double ActionHeight, string Summary)
+            MeasureAlert(ChecklistAlertSize size, double width, double height)
         {
             var window = new ChecklistUrgentReminderWindow(presentation, options: new() { Size = size }) { Width = width, Height = height };
             try
@@ -192,7 +196,11 @@ public sealed class ChecklistUrgentPresentationTests
                 var title = text.Single(block => block.Text == item.Text);
                 var details = text.Single(block => block.Text == item.Notes);
                 var action = Descendants(panel).OfType<Button>().Single(button => Equals(button.Content, "Acknowledge"));
-                return (panel.ActualWidth, title.FontSize, details.FontSize, action.ActualHeight);
+                var dpi = VisualTreeHelper.GetDpi(window);
+                var summary = $"requested window {width}x{height}, actual window {window.ActualWidth}x{window.ActualHeight}, " +
+                              $"DPI scale {dpi.DpiScaleX}x{dpi.DpiScaleY}, panel width {panel.ActualWidth} (max {panel.MaxWidth}), " +
+                              $"title font {title.FontSize}, detail font {details.FontSize}, action button height {action.ActualHeight}";
+                return (panel.ActualWidth, title.FontSize, details.FontSize, action.ActualHeight, summary);
             }
             finally { window.CloseForShutdown(); }
         }
