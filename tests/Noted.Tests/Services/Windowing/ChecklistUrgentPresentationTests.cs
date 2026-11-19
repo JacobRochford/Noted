@@ -186,19 +186,22 @@ public sealed class ChecklistUrgentPresentationTests
         (double Width, double Title, double Details, double ActionHeight, string Summary)
             MeasureAlert(ChecklistAlertSize size, double width, double height)
         {
-            var window = new ChecklistUrgentReminderWindow(presentation, options: new() { Size = size }) { Width = width, Height = height };
+            var window = new ChecklistUrgentReminderWindow(presentation, options: new() { Size = size });
             try
             {
-                window.Show();
-                window.UpdateLayout();
+                // measure the content directly so native window size limits do not affect the comparison.
+                window.UpdateLayoutMetrics(width, height);
+                var content = (FrameworkElement)window.Content;
+                content.Measure(new Size(width, height));
+                content.Arrange(new Rect(0, 0, width, height));
+                content.UpdateLayout();
                 var panel = (FrameworkElement)window.FindName("DetailsPanel");
                 var text = Descendants(panel).OfType<TextBlock>().ToArray();
                 var title = text.Single(block => block.Text == item.Text);
                 var details = text.Single(block => block.Text == item.Notes);
                 var action = Descendants(panel).OfType<Button>().Single(button => Equals(button.Content, "Acknowledge"));
-                var dpi = VisualTreeHelper.GetDpi(window);
-                var summary = $"requested window {width}x{height}, actual window {window.ActualWidth}x{window.ActualHeight}, " +
-                              $"DPI scale {dpi.DpiScaleX}x{dpi.DpiScaleY}, panel width {panel.ActualWidth} (max {panel.MaxWidth}), " +
+                var summary = $"layout size {width}x{height}, actual content {content.ActualWidth}x{content.ActualHeight}, " +
+                              $"panel width {panel.ActualWidth} (max {panel.MaxWidth}), " +
                               $"title font {title.FontSize}, detail font {details.FontSize}, action button height {action.ActualHeight}";
                 return (panel.ActualWidth, title.FontSize, details.FontSize, action.ActualHeight, summary);
             }

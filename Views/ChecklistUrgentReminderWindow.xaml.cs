@@ -46,7 +46,7 @@ public partial class ChecklistUrgentReminderWindow : Window
         UpdateEffects();
     }
 
-    private void UpdateLayoutMetrics(double width, double height)
+    internal void UpdateLayoutMetrics(double width, double height)
     {
         var fullScreen = _options.Size == ChecklistAlertSize.FullScreen;
         var scale = fullScreen ? Math.Clamp(Math.Min(width / 1200, height / 720), 0.85, 1.6)
