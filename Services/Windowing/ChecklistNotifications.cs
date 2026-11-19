@@ -28,9 +28,8 @@ internal sealed record ChecklistNotificationContent(string Title, string Text, I
         if (sound.HasValue && !Enum.IsDefined(sound.Value))
             throw new ArgumentOutOfRangeException(nameof(sound));
         var repeat = reminders[0].RepeatDelivery;
-        if (reminders.Any(reminder => reminder.RepeatDelivery.HasValue) &&
-            (reminders.Count != 1 || style != ChecklistNotificationStyle.Standard))
-            throw new ArgumentException("A repeating reminder requires a single Standard notification.", nameof(reminders));
+        if (reminders.Count != 1 && reminders.Any(reminder => reminder.RepeatDelivery.HasValue))
+            throw new ArgumentException("A repeating reminder requires a single Windows notification.", nameof(reminders));
         var arguments = new Dictionary<string, string> { ["action"] = "checklistReminder" };
         if (reminders.Count == 1)
             arguments["taskId"] = reminders[0].TaskId.ToString("D");
@@ -142,10 +141,41 @@ internal sealed class ChecklistNotifications : IDisposable
 
     internal bool TrySubmit(IReadOnlyList<ChecklistReminder> reminders,
         ChecklistWindowsNotificationSound? sound = null)
+        => TryShow(() => ChecklistNotificationContent.Create(reminders, sound));
+
+    internal async Task<bool> TrySubmitPersistentRepeatAsync(IReadOnlyList<ChecklistReminder> reminders, Func<bool> canSubmit)
     {
         try
         {
-            var content = ChecklistNotificationContent.Create(reminders, sound);
+            var content = ChecklistNotificationContent.Create(reminders, reminders[0].Options?.PersistentSound);
+            if (_testSubmit is null && content.Sound == ChecklistWindowsNotificationSound.RepeatingAlarm && content.RepeatDelivery is { } repeat)
+            {
+                if (!TryRegister() || _manager!.Setting != AppNotificationSetting.Enabled) return false;
+                var history = await _manager.GetAllAsync();
+                // Windows history does not distinguish a visible reminder from one kept in Notification Center.
+                content = SuppressReplacementAlarm(content, history.Any(notification =>
+                    notification.Tag == ChecklistNotificationContent.RepeatTag(repeat.SeriesId) &&
+                    notification.Group == ChecklistNotificationContent.RepeatGroup));
+            }
+            return canSubmit() && TryShow(() => content);
+        }
+        catch (Exception exception)
+        {
+            ExceptionDiagnostics.Record(exception, "Submit repeating Persistent Checklist notification");
+            return false;
+        }
+    }
+
+    internal static ChecklistNotificationContent SuppressReplacementAlarm(ChecklistNotificationContent content, bool hasOutstanding) =>
+        hasOutstanding && content.Sound == ChecklistWindowsNotificationSound.RepeatingAlarm
+            ? content with { Sound = ChecklistWindowsNotificationSound.Silent }
+            : content;
+
+    private bool TryShow(Func<ChecklistNotificationContent> createContent)
+    {
+        try
+        {
+            var content = createContent();
             if (_testSubmit is not null) return _testSubmit(content);
             if (!TryRegister() || _manager!.Setting != AppNotificationSetting.Enabled) return false;
             var notification = content.BuildNotification();

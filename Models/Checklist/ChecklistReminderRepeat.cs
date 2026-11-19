@@ -22,16 +22,16 @@ public sealed record ChecklistReminderRepeat(
             (next - firstSlot).Ticks % TimeSpan.FromMinutes(Policy.IntervalMinutes).Ticks == 0;
     }
 
-    internal ChecklistReminderRepeat Accept(DateTimeOffset firstSlot, DateTimeOffset slot, DateTimeOffset acceptedAt)
+    internal ChecklistReminderRepeat Accept(DateTimeOffset firstSlot, DateTimeOffset slot, DateTimeOffset acceptedAt, bool fullInterval = true)
     {
         var sent = AdditionalAlertsSent + (LastSlotUtc.HasValue ? 1 : 0);
         // tolerate ordinary timer latency while keeping a full interval after a late catch-up.
-        var boundary = Math.Max(slot.UtcTicks, acceptedAt.UtcTicks - TimeSpan.FromSeconds(5).Ticks);
+        var boundary = Math.Max(slot.UtcTicks, acceptedAt.UtcTicks - (fullInterval ? TimeSpan.FromSeconds(5).Ticks : 0));
         return this with
         {
             LastSlotUtc = slot,
             AdditionalAlertsSent = sent,
-            NextSlotUtc = HasRemaining(Policy, sent) ? NextOnCadence(firstSlot, Policy, boundary, fullInterval: true) : null
+            NextSlotUtc = HasRemaining(Policy, sent) ? NextOnCadence(firstSlot, Policy, boundary, fullInterval) : null
         };
     }
 
@@ -46,6 +46,11 @@ public sealed record ChecklistReminderRepeat(
             next = NextOnCadence(firstSlot, policy, Math.Max(last.UtcTicks, now.UtcTicks), fullInterval: false);
         return this with { Policy = policy, NextSlotUtc = next };
     }
+
+    internal ChecklistReminderRepeat SkipThrough(DateTimeOffset firstSlot, DateTimeOffset boundary) =>
+        NextSlotUtc is { } next && next <= boundary
+            ? this with { NextSlotUtc = NextOnCadence(firstSlot, Policy, boundary.UtcTicks, fullInterval: false) }
+            : this;
 
     private static bool HasRemaining(ChecklistReminderRepeatPolicy policy, long sent) =>
         policy.AdditionalAlertLimit is not { } limit || sent < limit;

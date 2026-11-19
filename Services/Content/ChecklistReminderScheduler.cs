@@ -24,10 +24,11 @@ internal sealed class ChecklistReminderScheduler : IDisposable
     private readonly TimeProvider _clock;
     private readonly Func<ChecklistNotificationOptions>? _notificationDefaults;
     private readonly Func<IReadOnlyList<ChecklistReminder>, bool>? _submitUrgent;
-    private readonly HashSet<(Guid TaskId, Guid OccurrenceId)> _presentedUrgent = [];
+    private readonly Dictionary<Guid, Guid> _presentedUrgent = [];
     private readonly Dictionary<Guid, ChecklistReminderActivation> _recoveredRepeatToasts;
     private readonly HashSet<Guid> _publishedRepeatSeries;
     private readonly Action<Guid>? _removeRepeat;
+    private readonly Func<IReadOnlyList<ChecklistReminder>, Func<bool>, Task<bool>>? _submitPersistentRepeat;
     private long? _lastRepeatSubmission;
     private long? _failureTimestamp;
     private bool _needsHandledFlush;
@@ -42,7 +43,8 @@ internal sealed class ChecklistReminderScheduler : IDisposable
         TimeProvider? clock = null,
         Func<IReadOnlyList<ChecklistReminder>, bool>? submitUrgent = null,
         Func<ChecklistNotificationOptions>? notificationDefaults = null,
-        IEnumerable<ChecklistReminderActivation>? repeatHistory = null, Action<Guid>? removeRepeat = null)
+        IEnumerable<ChecklistReminderActivation>? repeatHistory = null, Action<Guid>? removeRepeat = null,
+        Func<IReadOnlyList<ChecklistReminder>, Func<bool>, Task<bool>>? submitPersistentRepeat = null)
     {
         _model = model;
         _dispatcher = dispatcher;
@@ -51,6 +53,7 @@ internal sealed class ChecklistReminderScheduler : IDisposable
         _submitUrgent = submitUrgent;
         _notificationDefaults = notificationDefaults;
         _removeRepeat = removeRepeat;
+        _submitPersistentRepeat = submitPersistentRepeat;
         _recoveredRepeatToasts = (repeatHistory ?? []).Where(activation => activation.RepeatDelivery.HasValue)
             .GroupBy(activation => activation.RepeatDelivery!.Value.SeriesId).ToDictionary(group => group.Key, group => group.First());
         _publishedRepeatSeries = _recoveredRepeatToasts.Keys.ToHashSet();
@@ -64,7 +67,9 @@ internal sealed class ChecklistReminderScheduler : IDisposable
 
     internal string? LastError { get; private set; }
 
-    internal void CheckNow()
+    internal void CheckNow() => _ = CheckNowAsync();
+
+    private async Task CheckNowAsync()
     {
         _dispatcher.VerifyAccess();
         if (_disposed || _suspended || _checking) return;
@@ -84,6 +89,13 @@ internal sealed class ChecklistReminderScheduler : IDisposable
             }
 
             var now = _clock.GetUtcNow();
+            foreach (var taskId in _presentedUrgent.Keys.Except(_model.Items
+                .Where(item => item.NotificationStyle == ChecklistNotificationStyle.Urgent &&
+                    item.ReminderOccurrence is { AcknowledgedAtUtc: null } occurrence &&
+                    _presentedUrgent.GetValueOrDefault(item.Id) == occurrence.Id)
+                .Select(item => item.Id)).ToArray())
+                _presentedUrgent.Remove(taskId);
+
             var canceled = FindCanceledRepeatToasts();
             if (canceled.Length == 0 && !_model.Items.Any(item => IsDue(item, now)))
             {
@@ -118,7 +130,8 @@ internal sealed class ChecklistReminderScheduler : IDisposable
             if (reminders.Length == 0) return;
 
             var failed = false;
-            foreach (var group in reminders.GroupBy(reminder => (reminder.Style, RepeatTask: reminder.RepeatDelivery.HasValue ? reminder.TaskId : (Guid?)null)))
+            foreach (var group in reminders.GroupBy(reminder => (reminder.Style,
+                RepeatTask: reminder.Style != ChecklistNotificationStyle.Urgent && reminder.RepeatDelivery.HasValue ? reminder.TaskId : (Guid?)null)))
             {
                 if (_disposed || _suspended) return;
                 // grouped activation must identify only this style's accepted delivery.
@@ -126,10 +139,7 @@ internal sealed class ChecklistReminderScheduler : IDisposable
                     batchUtc = batchUtc.AddTicks(1);
                 // an earlier delivery callback may cancel or replace another style's occurrence.
                 var currentItems = _model.Items.ToDictionary(item => item.Id);
-                var request = group.Where(reminder => currentItems.TryGetValue(reminder.TaskId, out var item) &&
-                    IsDue(item, _clock.GetUtcNow()) && item.ReminderAtUtc == reminder.ReminderAtUtc &&
-                    item.NotificationStyle == reminder.Style && item.ReminderOccurrence?.Id == reminder.Occurrence?.Id &&
-                    GetRepeatDelivery(item) == reminder.RepeatDelivery)
+                var request = group.Where(reminder => currentItems.TryGetValue(reminder.TaskId, out var item) && IsCurrentRequest(item, reminder))
                     .Select(reminder => reminder with
                     {
                         BatchUtc = batchUtc,
@@ -141,13 +151,47 @@ internal sealed class ChecklistReminderScheduler : IDisposable
                 bool submitted;
                 try
                 {
-                    if (request[0].RepeatDelivery is { } delivery)
+                    if (group.Key.Style == ChecklistNotificationStyle.Urgent)
+                    {
+                        var created = false;
+                        for (var index = 0; index < request.Length; index++)
+                        {
+                            var reminder = request[index];
+                            var item = currentItems[reminder.TaskId];
+                            if (reminder.RepeatDelivery is { } repeat && item.ReminderOccurrence?.ScheduledAtUtc != repeat.SlotUtc)
+                            {
+                                var occurrence = ChecklistReminderOccurrence.Create(repeat.SlotUtc, item.ReminderOccurrence?.ConfirmationCode);
+                                item.ReminderOccurrence = occurrence;
+                                created = true;
+                                request[index] = reminder with
+                                {
+                                    Occurrence = occurrence,
+                                    Options = (item.NotificationOptions ?? defaults).Normalize()
+                                };
+                            }
+                        }
+                        if (created && !_model.TrySaveItems(null, out error))
+                        {
+                            Fail(error);
+                            failed = true;
+                            continue;
+                        }
+                        submitted = _submitUrgent?.Invoke(request) == true;
+                    }
+                    else if (request[0].RepeatDelivery is { } delivery)
                     {
                         if (IsRecovered(request[0].TaskId, delivery)) submitted = true;
                         else
                         {
                             _lastRepeatSubmission = _clock.GetTimestamp();
-                            submitted = _submit(request);
+                            if (group.Key.Style == ChecklistNotificationStyle.Persistent && _submitPersistentRepeat is not null)
+                            {
+                                bool CanSubmit() => !_disposed && !_suspended && _model.Items.Any(item =>
+                                    item.Id == request[0].TaskId && MatchesRequest(item, request[0]) && delivery.SlotUtc <= _clock.GetUtcNow());
+                                submitted = await _submitPersistentRepeat(request, CanSubmit);
+                                if (!submitted && !CanSubmit()) continue;
+                            }
+                            else submitted = _submit(request);
                         }
                         if (submitted)
                         {
@@ -155,8 +199,7 @@ internal sealed class ChecklistReminderScheduler : IDisposable
                             _recoveredRepeatToasts.Remove(delivery.SeriesId);
                         }
                     }
-                    else submitted = group.Key.Style == ChecklistNotificationStyle.Urgent
-                        ? _submitUrgent?.Invoke(request) == true : _submit(request);
+                    else submitted = _submit(request);
                 }
                 catch (Exception exception)
                 {
@@ -172,7 +215,8 @@ internal sealed class ChecklistReminderScheduler : IDisposable
                 }
                 // suspension stops subsequent delivery, but acceptance must still be persisted.
                 foreach (var reminder in request)
-                    if (reminder.Occurrence is { } occurrence) _presentedUrgent.Add((reminder.TaskId, occurrence.Id));
+                    if (reminder.Style == ChecklistNotificationStyle.Urgent && reminder.Occurrence is { } occurrence)
+                        _presentedUrgent[reminder.TaskId] = occurrence.Id;
                 if (!_model.TryMarkRemindersHandled(request, batchUtc, out error, acceptedAt: _clock.GetUtcNow()))
                 {
                     _needsHandledFlush = true;
@@ -185,6 +229,11 @@ internal sealed class ChecklistReminderScheduler : IDisposable
                 _failureTimestamp = null;
                 LastError = null;
             }
+        }
+        catch (Exception exception)
+        {
+            ExceptionDiagnostics.Record(exception, "Check Checklist reminders");
+            Fail("Checklist reminders could not be checked.");
         }
         finally
         {
@@ -206,23 +255,42 @@ internal sealed class ChecklistReminderScheduler : IDisposable
     private DateTimeOffset? PendingAtUtc(ChecklistItem item, DateTimeOffset now)
     {
         if (item.IsChecked || item.ReminderAtUtc is not { } scheduled) return null;
-        if (item.NotificationStyle == ChecklistNotificationStyle.Standard && item.ReminderRepeat is not null)
+        if (item.NotificationStyle == ChecklistNotificationStyle.Urgent)
+        {
+            if (item.ReminderOccurrence is { AcknowledgedAtUtc: null } occurrence &&
+                (item.ReminderRepeat is null || item.ReminderRepeat.LastSlotUtc == occurrence.ScheduledAtUtc))
+            {
+                if (_presentedUrgent.GetValueOrDefault(item.Id) == occurrence.Id) return null;
+                // restore unresolved alerts even if the clock moved behind their original schedule.
+                return item.ReminderHandledAtUtc is not null ? now : scheduled;
+            }
+            return GetRepeatDelivery(item)?.SlotUtc;
+        }
+        if (item.ReminderRepeat is not null)
         {
             if (GetRepeatDelivery(item) is not { } delivery) return null;
             if (IsRecovered(item.Id, delivery)) return now;
             var remaining = _lastRepeatSubmission is { } last ? s_repeatPace - _clock.GetElapsedTime(last) : TimeSpan.Zero;
             return remaining > TimeSpan.Zero && delivery.SlotUtc - now < remaining ? now + remaining : delivery.SlotUtc;
         }
-        if (item.NotificationStyle != ChecklistNotificationStyle.Urgent)
-            return item.ReminderHandledAtUtc is null ? scheduled : null;
-        if (item.ReminderOccurrence is not { AcknowledgedAtUtc: null } occurrence ||
-            _presentedUrgent.Contains((item.Id, occurrence.Id))) return null;
-        // a clock rollback must not turn an already delivered urgent alert into a future reminder.
-        return item.ReminderHandledAtUtc is not null ? now : scheduled;
+        return item.ReminderHandledAtUtc is null ? scheduled : null;
     }
 
-    private static ChecklistRepeatDelivery? GetRepeatDelivery(ChecklistItem item) =>
-        item.ReminderRepeat is { NextSlotUtc: { } slot } repeat ? new(repeat.Id, slot) : null;
+    private bool IsCurrentRequest(ChecklistItem item, ChecklistReminder reminder) =>
+        MatchesRequest(item, reminder) && IsDue(item, _clock.GetUtcNow());
+
+    private static bool MatchesRequest(ChecklistItem item, ChecklistReminder reminder) =>
+        !item.IsChecked && item.ReminderAtUtc == reminder.ReminderAtUtc && item.NotificationStyle == reminder.Style &&
+        item.ReminderOccurrence?.Id == reminder.Occurrence?.Id && GetRepeatDelivery(item) == reminder.RepeatDelivery;
+
+    private static ChecklistRepeatDelivery? GetRepeatDelivery(ChecklistItem item)
+    {
+        if (item.ReminderRepeat is not { NextSlotUtc: { } slot } repeat) return null;
+        if (item.NotificationStyle == ChecklistNotificationStyle.Urgent &&
+            item.ReminderOccurrence is { AcknowledgedAtUtc: null } occurrence &&
+            occurrence.ScheduledAtUtc == repeat.LastSlotUtc) return null;
+        return new(repeat.Id, slot);
+    }
 
     private bool IsRecovered(Guid taskId, ChecklistRepeatDelivery delivery) =>
         _recoveredRepeatToasts.TryGetValue(delivery.SeriesId, out var toast) &&
@@ -231,7 +299,7 @@ internal sealed class ChecklistReminderScheduler : IDisposable
     private Guid[] FindCanceledRepeatToasts()
     {
         if (_publishedRepeatSeries.Count == 0) return [];
-        var current = _model.Items.Where(item => item.ReminderRepeat is not null)
+        var current = _model.Items.Where(item => item.NotificationStyle != ChecklistNotificationStyle.Urgent && item.ReminderRepeat is not null)
             .Select(item => item.ReminderRepeat!.Id).ToHashSet();
         return _publishedRepeatSeries.Where(id => !current.Contains(id)).ToArray();
     }

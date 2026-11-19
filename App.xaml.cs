@@ -468,7 +468,8 @@ public partial class App : Application
                 removeRepeat: seriesId =>
                 {
                     if (notifications is not null) ObserveBackgroundTask(notifications.RemoveRepeatAsync(seriesId));
-                });
+                },
+                submitPersistentRepeat: notifications is null ? null : notifications.TrySubmitPersistentRepeatAsync);
         }
         finally { _startingChecklistReminders = false; }
     }

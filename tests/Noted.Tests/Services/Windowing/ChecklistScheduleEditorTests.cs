@@ -323,7 +323,7 @@ public sealed class ChecklistScheduleEditorTests
     private static void Apply(ChecklistReminderDialog dialog) => Click(dialog, "ApplyButton");
 
     [TestMethod]
-    public void RepeatControlsAppearOnlyForStandardAndValidateCustomValues() => WpfTestHost.Invoke(() =>
+    public void RepeatControlsAppearForEveryStyleAndValidateCustomValues() => WpfTestHost.Invoke(() =>
     {
         var dialog = new ChecklistReminderDialog(DateTimeOffset.UtcNow.AddDays(2), null);
         Show(dialog, () =>
@@ -339,11 +339,11 @@ public sealed class ChecklistScheduleEditorTests
             CollectionAssert.AreEqual(new[] { "5 minutes", "10 minutes", "15 minutes", "30 minutes", "60 minutes", "Custom interval" },
                 interval.Items.Cast<string>().ToArray());
             Assert.AreEqual("10 minutes", interval.SelectedItem);
-            style.SelectedValue = ChecklistNotificationStyle.Persistent;
-            Assert.AreEqual(Visibility.Collapsed, repeat.Visibility);
-            style.SelectedValue = ChecklistNotificationStyle.Urgent;
-            Assert.AreEqual(Visibility.Collapsed, repeat.Visibility);
-            style.SelectedValue = ChecklistNotificationStyle.Standard;
+            foreach (var notificationStyle in Enum.GetValues<ChecklistNotificationStyle>())
+            {
+                style.SelectedValue = notificationStyle;
+                Assert.AreEqual(Visibility.Visible, repeat.Visibility, $"Repeat should be available for {notificationStyle}.");
+            }
             var remind = (CheckBox)dialog.FindName("EnableReminder");
             remind.IsChecked = false;
             Assert.AreEqual(Visibility.Collapsed, repeat.Visibility);

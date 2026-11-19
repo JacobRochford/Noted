@@ -133,7 +133,6 @@ public sealed class ChecklistItem : ObservableObject
         {
             if (!Enum.IsDefined(value)) value = ChecklistNotificationStyle.Standard;
             if (!SetProperty(ref _notificationStyle, value)) return;
-            if (value != ChecklistNotificationStyle.Standard) ReminderRepeat = null;
             if (_reminderAtUtc.HasValue && value == ChecklistNotificationStyle.Urgent && _reminderOccurrence is null)
                 ReminderOccurrence = ChecklistReminderOccurrence.Create(_reminderAtUtc.Value);
             OnPropertyChanged(nameof(HasActiveReminder));
@@ -166,7 +165,8 @@ public sealed class ChecklistItem : ObservableObject
 
     public bool HasActiveReminder => !_isChecked && _reminderAtUtc.HasValue &&
         (NotificationStyle == ChecklistNotificationStyle.Urgent
-            ? ReminderOccurrence is { AcknowledgedAtUtc: null } : _reminderHandledAtUtc is null || ReminderRepeat?.NextSlotUtc is not null);
+            ? ReminderOccurrence is { AcknowledgedAtUtc: null } || ReminderRepeat?.NextSlotUtc is not null
+            : _reminderHandledAtUtc is null || ReminderRepeat?.NextSlotUtc is not null);
 
     internal void CancelReminder() => ReminderAtUtc = null;
 

@@ -199,21 +199,30 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
                 Notes     = d.Notes ?? "",
                 CreatedAt = d.CreatedAt == default ? DateTime.Now : d.CreatedAt
             };
-            if (!duplicate && item.ReminderAtUtc.HasValue)
+            if (item.ReminderAtUtc is { } firstSlot)
             {
-                if (d.ReminderOccurrence is { IsValid: true } occurrence && occurrence.ScheduledAtUtc == item.ReminderAtUtc)
+                if (d.ReminderRepeat is { } repeat && repeat.IsValid(firstSlot, item.ReminderHandledAtUtc.HasValue) && seenRepeatIds.Add(repeat.Id))
+                    item.ReminderRepeat = repeat;
+                if (d.ReminderOccurrence is { IsValid: true } occurrence &&
+                    (occurrence.ScheduledAtUtc == firstSlot ||
+                        item.NotificationStyle == ChecklistNotificationStyle.Urgent && occurrence.ScheduledAtUtc > firstSlot &&
+                        (occurrence.ScheduledAtUtc == item.ReminderRepeat?.LastSlotUtc ||
+                         occurrence.ScheduledAtUtc == item.ReminderRepeat?.NextSlotUtc ||
+                         item.ReminderRepeat is null && item.ReminderHandledAtUtc.HasValue)))
                     item.ReminderOccurrence = occurrence with
                     {
                         Options = occurrence.Options?.Normalize(), ScheduledAtUtc = occurrence.ScheduledAtUtc.ToUniversalTime(),
                         AcknowledgedAtUtc = occurrence.AcknowledgedAtUtc?.ToUniversalTime(),
                         SilencedAtUtc = occurrence.SilencedAtUtc?.ToUniversalTime()
                     };
-                else if (item.NotificationStyle == ChecklistNotificationStyle.Urgent)
-                    item.ReminderOccurrence = ChecklistReminderOccurrence.Create(item.ReminderAtUtc.Value);
+                else if (item.NotificationStyle == ChecklistNotificationStyle.Urgent && item.ReminderHandledAtUtc.HasValue)
+                {
+                    // a series switched from Windows can have delivery progress before its first urgent alert.
+                    if (d.ReminderOccurrence is null) item.ReminderOccurrence = null;
+                    else if (item.ReminderRepeat?.LastSlotUtc is { } last && last != firstSlot)
+                        item.ReminderOccurrence = ChecklistReminderOccurrence.Create(last);
+                }
             }
-            if (item.NotificationStyle == ChecklistNotificationStyle.Standard && item.ReminderAtUtc is { } firstSlot &&
-                d.ReminderRepeat is { } repeat && repeat.IsValid(firstSlot, item.ReminderHandledAtUtc.HasValue) && seenRepeatIds.Add(repeat.Id))
-                item.ReminderRepeat = repeat;
             repairedItems |= item.NotificationStyle != d.NotificationStyle || item.ReminderOccurrence != d.ReminderOccurrence;
             repairedItems |= item.ReminderAtUtc != d.ReminderAtUtc ||
                              item.ReminderHandledAtUtc != d.ReminderHandledAtUtc || item.ReminderRepeat != d.ReminderRepeat;
@@ -564,7 +573,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         {
             ApplyReminderPreferences(item, reminder, style, options);
             if (previousRepeat is not null && item.ReminderRepeat is null &&
-                item.ReminderAtUtc is { } firstSlot && style == ChecklistNotificationStyle.Standard)
+                item.ReminderAtUtc is { } firstSlot)
                 item.ReminderRepeat = ChecklistReminderRepeat.Start(previousRepeat.Policy, firstSlot);
         });
         return TryFlushPendingItems(out error);
@@ -584,7 +593,7 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             error = "Choose a notification time in the future, or turn the notification off.";
             return false;
         }
-        if (!rescheduled && reminder.HasValue && style != item.NotificationStyle &&
+        if (!rescheduled && reminder.HasValue && style != item.NotificationStyle && item.ReminderRepeat is null &&
             (item.ReminderHandledAtUtc.HasValue || item.ReminderOccurrence?.Options is not null))
         {
             error = "Notification delivery has started. Reschedule it or turn it off before changing its style.";
@@ -596,9 +605,16 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
     private static void ApplyReminderPreferences(ChecklistItem item, DateTimeOffset? reminder, ChecklistNotificationStyle style,
         ChecklistNotificationOptions? options)
     {
+        var switchedSeries = item.NotificationStyle != style && item.ReminderRepeat is not null && reminder == item.ReminderAtUtc;
         item.NotificationStyle = style;
         item.NotificationOptions = options;
         item.ReminderAtUtc = reminder;
+        if (switchedSeries)
+        {
+            item.ReminderRepeat = item.ReminderRepeat! with { Id = Guid.NewGuid() };
+            item.ReminderOccurrence = style == ChecklistNotificationStyle.Urgent && item.ReminderHandledAtUtc is null
+                ? ChecklistReminderOccurrence.Create(reminder!.Value, item.ReminderOccurrence?.ConfirmationCode) : null;
+        }
     }
 
     internal bool TrySetSchedule(ChecklistItem item, DateTime? dueDate, TimeSpan? dueTime, DateTimeOffset? reminder,
@@ -624,9 +640,9 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         ChecklistReminderRepeat? repeat = null;
         if (repeatPolicy is not null)
         {
-            if (!repeatPolicy.IsValid || style != ChecklistNotificationStyle.Standard || reminder is not { } firstSlot)
+            if (!repeatPolicy.IsValid || reminder is not { } firstSlot)
             {
-                error = "Choose a valid repeat interval and limit for a Standard Windows reminder.";
+                error = "Choose a valid repeat interval and limit for the reminder.";
                 return false;
             }
             if (reminder == item.ReminderAtUtc && item.ReminderRepeat is { } existing)
@@ -646,6 +662,12 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
             item.DueTime = dueTime;
             ApplyReminderPreferences(item, reminder, style, options);
             item.ReminderAtDueTime = atDueTime;
+            if (repeat is not null && reminder == previous.ReminderAtUtc && style != previous.NotificationStyle &&
+                item.ReminderRepeat is { } switched)
+                repeat = repeat with { Id = switched.Id };
+            if (repeat is null && item.ReminderRepeat is { NextSlotUtc: { } pendingSlot } &&
+                pendingSlot != item.ReminderAtUtc && item.ReminderOccurrence?.ScheduledAtUtc == pendingSlot)
+                item.ReminderOccurrence = null;
             item.ReminderRepeat = repeat;
         });
         var applied = ReadSchedule();
@@ -688,7 +710,8 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
 
     internal bool IsCurrentRepeatNotification(ChecklistReminderActivation activation) =>
         activation.RepeatDelivery is { } delivery && Items.Any(item => item.Id == activation.TaskId &&
-            !item.IsChecked && item.ReminderRepeat is { } repeat && repeat.Id == delivery.SeriesId &&
+            !item.IsChecked && item.NotificationStyle != ChecklistNotificationStyle.Urgent &&
+            item.ReminderRepeat is { } repeat && repeat.Id == delivery.SeriesId &&
             (repeat.LastSlotUtc == delivery.SlotUtc || repeat.NextSlotUtc == delivery.SlotUtc));
 
     internal bool TryAcknowledgeUrgentReminder(Guid taskId, Guid occurrenceId, DateTimeOffset now, out string? error) =>
@@ -709,10 +732,31 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
         }
         var updated = acknowledge ? occurrence with { Options = occurrence.Options?.Normalize(), ScheduledAtUtc = occurrence.ScheduledAtUtc.ToUniversalTime(), AcknowledgedAtUtc = occurrence.AcknowledgedAtUtc ?? now.ToUniversalTime() }
             : occurrence with { SilencedAtUtc = occurrence.SilencedAtUtc ?? now.ToUniversalTime() };
-        item.ReminderOccurrence = updated;
+        var previousHandledAt = item.ReminderHandledAtUtc;
+        var previousRepeat = item.ReminderRepeat;
+        RunBulkUpdate(() =>
+        {
+            item.ReminderOccurrence = updated;
+            if (previousRepeat is not { } progress) return;
+            // an action can arrive after the presenter restores a window before the scheduler retries it.
+            if (progress.NextSlotUtc == occurrence.ScheduledAtUtc)
+            {
+                progress = progress.Accept(due, occurrence.ScheduledAtUtc, now, fullInterval: false);
+                item.ReminderHandledAtUtc ??= now;
+            }
+            if (acknowledge && progress.LastSlotUtc == occurrence.ScheduledAtUtc)
+                progress = progress.SkipThrough(due, updated.AcknowledgedAtUtc!.Value);
+            item.ReminderRepeat = progress;
+        });
         if (TrySaveItems(null, out error)) return true;
         // a failed acknowledgment must remain visible; do not overwrite a replacement occurrence.
-        if (item.ReminderOccurrence == updated) item.ReminderOccurrence = occurrence;
+        if (item.ReminderOccurrence == updated)
+            RunBulkUpdate(() =>
+            {
+                item.ReminderOccurrence = occurrence;
+                item.ReminderHandledAtUtc = previousHandledAt;
+                item.ReminderRepeat = previousRepeat;
+            });
         return false;
     }
 
@@ -733,7 +777,11 @@ public sealed class ChecklistWindowViewModel : ObservableObject, IDisposable
                     if (item.ReminderRepeat is { } repeat)
                     {
                         if (repeat.Id != delivery.SeriesId || repeat.NextSlotUtc != delivery.SlotUtc) continue;
-                        item.ReminderRepeat = repeat.Accept(reminder.ReminderAtUtc, delivery.SlotUtc, acceptedAt ?? handledAt);
+                        var progress = repeat.Accept(reminder.ReminderAtUtc, delivery.SlotUtc, acceptedAt ?? handledAt,
+                            fullInterval: reminder.Style != ChecklistNotificationStyle.Urgent);
+                        if (item.ReminderOccurrence?.AcknowledgedAtUtc is { } acknowledgedAt && reminder.Style == ChecklistNotificationStyle.Urgent)
+                            progress = progress.SkipThrough(reminder.ReminderAtUtc, acknowledgedAt);
+                        item.ReminderRepeat = progress;
                     }
                     // turning off repeats during submission leaves the original reminder in place.
                     else if (delivery.SlotUtc != reminder.ReminderAtUtc) continue;

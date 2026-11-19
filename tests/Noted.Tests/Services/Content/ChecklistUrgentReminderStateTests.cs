@@ -146,17 +146,30 @@ public sealed class ChecklistUrgentReminderStateTests
     });
 
     [TestMethod]
-    public void UrgentStateSurvivesBackupRestoreAndRollingRecovery() => WpfTestHost.Invoke(() =>
+    [DataRow(false)]
+    [DataRow(true)]
+    public void UrgentStateSurvivesBackupRestoreAndRollingRecovery(bool repeating) => WpfTestHost.Invoke(() =>
     {
         using var directory = new TemporaryTestDirectory();
         var app = directory.File("app"); var notes = directory.File("notes");
         Directory.CreateDirectory(app); Directory.CreateDirectory(notes);
         File.WriteAllText(Path.Combine(app, "settings.json"), "{\"SchemaVersion\":1}");
         ChecklistReminderOccurrence original;
+        ChecklistReminderRepeat? progress = null;
         using (var model = Model(new ChecklistContentService(app)))
         {
             var item = Urgent(); model.Items.Add(item);
-            Assert.IsTrue(model.TrySilenceUrgentReminder(item.Id, item.ReminderOccurrence!.Id, s_now, out _));
+            if (repeating)
+            {
+                var first = s_now.AddMinutes(-6);
+                item.ReminderAtUtc = first;
+                item.ReminderHandledAtUtc = first;
+                progress = ChecklistReminderRepeat.Start(new(5, 2), first).Accept(first, first, first)
+                    .Accept(first, s_now.AddMinutes(-1), s_now.AddMinutes(-1));
+                item.ReminderRepeat = progress;
+                item.ReminderOccurrence = ChecklistReminderOccurrence.Create(progress.LastSlotUtc!.Value);
+            }
+            Assert.IsTrue(model.TrySilenceUrgentReminder(item.Id, item.ReminderOccurrence!.Id, s_now, out var error), error);
             original = item.ReminderOccurrence!;
         }
         var backup = new FullBackupService(app, notes);
@@ -170,9 +183,11 @@ public sealed class ChecklistUrgentReminderStateTests
         using var recovered = Model(new ChecklistContentService(app));
         Assert.IsTrue(recovered.RecoveryIssuesFoundThisRun);
         Assert.AreEqual(original, recovered.Items.Single().ReminderOccurrence);
+        Assert.AreEqual(progress, recovered.Items.Single().ReminderRepeat);
         int received = 0;
         using var scheduler = Scheduler(recovered, _ => false, _ => { received++; return true; });
         Assert.AreEqual(1, received);
+        Assert.AreEqual(progress, recovered.Items.Single().ReminderRepeat);
     });
 
     [TestMethod]

@@ -424,15 +424,21 @@ public sealed class ChecklistReminderSchedulerTests
     });
 
     [TestMethod]
-    [DataRow("stop repeats")]
-    [DataRow("clear reminder")]
-    [DataRow("delete")]
-    [DataRow("reschedule")]
-    [DataRow("switch style")]
-    public void EditingOrDeletingADeliveredSeriesRemovesItsToast(string change) => WpfTestHost.Invoke(() =>
+    [DataRow("stop repeats", ChecklistNotificationStyle.Standard)]
+    [DataRow("clear reminder", ChecklistNotificationStyle.Standard)]
+    [DataRow("delete", ChecklistNotificationStyle.Standard)]
+    [DataRow("reschedule", ChecklistNotificationStyle.Standard)]
+    [DataRow("switch style", ChecklistNotificationStyle.Standard)]
+    [DataRow("stop repeats", ChecklistNotificationStyle.Persistent)]
+    [DataRow("clear reminder", ChecklistNotificationStyle.Persistent)]
+    [DataRow("delete", ChecklistNotificationStyle.Persistent)]
+    [DataRow("complete", ChecklistNotificationStyle.Persistent)]
+    [DataRow("reschedule", ChecklistNotificationStyle.Persistent)]
+    [DataRow("switch style", ChecklistNotificationStyle.Persistent)]
+    public void EditingOrDeletingADeliveredSeriesRemovesItsToast(string change, ChecklistNotificationStyle style) => WpfTestHost.Invoke(() =>
     {
         var clock = new Clock();
-        var store = new Store { Items = [Repeating(clock, 5, null)] };
+        var store = new Store { Items = [Repeating(clock, 5, null) with { NotificationStyle = style }] };
         using var model = Model(store);
         var receiver = new Receiver();
         List<Guid> removed = [];
@@ -454,6 +460,9 @@ public sealed class ChecklistReminderSchedulerTests
             case "delete":
                 model.RemoveItem(task);
                 break;
+            case "complete":
+                task.IsChecked = true;
+                break;
             case "reschedule":
                 Assert.IsTrue(model.TrySetSchedule(task, null, null, future, false, task.NotificationStyle, null, out _, old.Policy));
                 Assert.AreNotEqual(old.Id, task.ReminderRepeat!.Id);
@@ -461,7 +470,10 @@ public sealed class ChecklistReminderSchedulerTests
                 Assert.AreEqual(future, task.ReminderRepeat.NextSlotUtc);
                 break;
             case "switch style":
-                Assert.IsTrue(model.TrySetSchedule(task, null, null, future, false, ChecklistNotificationStyle.Persistent, null, out _));
+                var otherStyle = style == ChecklistNotificationStyle.Standard
+                    ? ChecklistNotificationStyle.Persistent : ChecklistNotificationStyle.Standard;
+                Assert.IsTrue(model.TrySetSchedule(task, null, null, future, false, otherStyle, null, out _),
+                    $"Expected rescheduling to {otherStyle} to succeed.");
                 Assert.IsNull(task.ReminderRepeat);
                 break;
         }
@@ -547,6 +559,247 @@ public sealed class ChecklistReminderSchedulerTests
         Assert.IsNull(item.ReminderRepeat);
         Assert.IsNotNull(store.Items.Single().ReminderHandledAtUtc);
         CollectionAssert.AreEqual(new[] { original.ReminderRepeat!.Id }, removed);
+    });
+
+    [TestMethod]
+    [DataRow(2)]
+    [DataRow(null)]
+    public void UrgentAcknowledgmentSkipsUnresolvedSlotsWithoutSpendingTheAllowance(int? limit) => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        var start = clock.GetUtcNow();
+        var options = new ChecklistNotificationOptions { Acknowledgment = ChecklistAcknowledgment.Code, UrgentSound = ChecklistUrgentSound.Chime };
+        using var model = Model(new Store
+        {
+            Items = [Repeating(clock, 5, limit) with { NotificationStyle = ChecklistNotificationStyle.Urgent, NotificationOptions = options }]
+        });
+        using var alerts = new ChecklistUrgentRemindersViewModel(model, Dispatcher.CurrentDispatcher, clock);
+        var plays = 0;
+        using var audio = new ChecklistUrgentReminderAudio(alerts, Dispatcher.CurrentDispatcher, () => true, clock, testPlay: () => plays++);
+        alerts.Changed += (_, _) => audio.Refresh();
+        var requests = new Receiver();
+        using var scheduler = new ChecklistReminderScheduler(model, Dispatcher.CurrentDispatcher, _ => false, clock,
+            reminders => requests.Submit(reminders) && model.TryCaptureUrgentOptions(reminders, out _) && alerts.TryAccept(reminders));
+        var task = model.Items.Single();
+        var first = alerts.Entries.Single();
+        Assert.AreEqual(1, plays);
+        Assert.IsTrue(alerts.TrySilence(first), $"Expected to silence occurrence {first.OccurrenceId}.");
+        clock.Advance(TimeSpan.FromMinutes(16));
+        scheduler.CheckNow();
+        audio.CheckNow();
+        Assert.AreSame(first, alerts.Entries.Single());
+        Assert.AreEqual(1, plays);
+        Assert.HasCount(1, requests.Requests);
+        Assert.IsNull(task.ReminderOccurrence!.AcknowledgedAtUtc);
+        Assert.AreEqual(0L, task.ReminderRepeat!.AdditionalAlertsSent);
+        Acknowledge(first);
+        Assert.AreEqual(start.AddMinutes(20), task.ReminderRepeat.NextSlotUtc);
+        scheduler.CheckNow();
+        Assert.IsEmpty(alerts.Entries);
+        Assert.IsFalse(task.IsChecked, $"Acknowledging occurrence {first.OccurrenceId} completed the task.");
+
+        clock.Advance(TimeSpan.FromMinutes(4));
+        scheduler.CheckNow();
+        var second = alerts.Entries.Single();
+        Assert.AreNotEqual(first.OccurrenceId, second.OccurrenceId);
+        Assert.AreEqual(start.AddMinutes(20), second.ScheduledAtUtc);
+        Assert.AreEqual(ChecklistAcknowledgment.Code, second.Options.Acknowledgment);
+        Assert.IsNull(task.ReminderOccurrence.SilencedAtUtc);
+        Assert.AreEqual(2, plays);
+        Assert.AreEqual(1L, task.ReminderRepeat.AdditionalAlertsSent);
+        Assert.IsFalse(model.TryAcknowledgeUrgentReminder(task.Id, first.OccurrenceId, clock.GetUtcNow(), out _),
+            $"Stale occurrence {first.OccurrenceId} should be rejected while {second.OccurrenceId} is active.");
+        Acknowledge(second);
+        clock.Advance(TimeSpan.FromMinutes(5));
+        scheduler.CheckNow();
+        Acknowledge(alerts.Entries.Single());
+        Assert.AreEqual(2L, task.ReminderRepeat.AdditionalAlertsSent);
+        clock.Advance(TimeSpan.FromMinutes(5));
+        scheduler.CheckNow();
+        Assert.HasCount(limit.HasValue ? 0 : 1, alerts.Entries);
+        Assert.AreEqual(limit.HasValue ? 2L : 3L, task.ReminderRepeat.AdditionalAlertsSent);
+
+        void Acknowledge(ChecklistUrgentReminderEntry entry)
+        {
+            entry.ConfirmationInput = entry.Item.ReminderOccurrence!.ConfirmationCode;
+            Assert.IsTrue(alerts.TryAcknowledge(entry), $"Acknowledgment failed for {entry.OccurrenceId}: {alerts.StatusMessage}");
+        }
+    });
+
+    [TestMethod]
+    [DataRow("complete")]
+    [DataRow("delete")]
+    [DataRow("disable reminder")]
+    [DataRow("disable repeats")]
+    public void UrgentCancellationStopsFutureAlerts(string change) => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        using var model = Model(new Store { Items = [Repeating(clock, 5, null) with { NotificationStyle = ChecklistNotificationStyle.Urgent }] });
+        using var alerts = new ChecklistUrgentRemindersViewModel(model, Dispatcher.CurrentDispatcher, clock);
+        using var scheduler = new ChecklistReminderScheduler(model, Dispatcher.CurrentDispatcher, _ => false, clock, alerts.TryAccept);
+        var task = model.Items.Single();
+        var original = alerts.Entries.Single();
+        if (change == "complete") task.IsChecked = true;
+        else if (change == "delete") model.RemoveItem(task);
+        else
+            Assert.IsTrue(model.TrySetSchedule(task, null, null, change == "disable repeats" ? task.ReminderAtUtc : null,
+                false, task.NotificationStyle, null, out var error), error);
+        alerts.Refresh();
+        if (change == "disable repeats")
+        {
+            Assert.AreSame(original, alerts.Entries.Single());
+            original.ConfirmationInput = original.Item.ReminderOccurrence!.ConfirmationCode;
+            Assert.IsTrue(alerts.TryAcknowledge(original), $"Expected occurrence {original.OccurrenceId} to remain actionable.");
+        }
+        Assert.IsEmpty(alerts.Entries);
+        clock.Advance(TimeSpan.FromMinutes(30));
+        scheduler.CheckNow();
+        Assert.IsEmpty(alerts.Entries);
+        Assert.IsNull(task.ReminderRepeat);
+    });
+
+    [TestMethod]
+    public void UrgentRestartGroupsRecoveredAlertsAndCountsOnlyNewlyPresentedSlots() => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        var start = clock.GetUtcNow();
+        var store = new Store
+        {
+            Items = [Repeating(clock, 5, null) with { NotificationStyle = ChecklistNotificationStyle.Urgent },
+                Repeating(clock, 5, 1) with { NotificationStyle = ChecklistNotificationStyle.Urgent }]
+        };
+        ChecklistReminderOccurrence original;
+        using (var model = Model(store))
+        {
+            var requests = new Receiver();
+            using var scheduler = new ChecklistReminderScheduler(model, Dispatcher.CurrentDispatcher, _ => false, clock, requests.Submit);
+            Assert.HasCount(2, requests.Requests.Single());
+            foreach (var task in model.Items)
+                Assert.IsTrue(model.TryAcknowledgeUrgentReminder(task.Id, task.ReminderOccurrence!.Id, start, out var initialError), initialError);
+            clock.Advance(TimeSpan.FromMinutes(5));
+            scheduler.CheckNow();
+            Assert.HasCount(2, requests.Requests.Last());
+            var first = model.Items[0];
+            Assert.IsTrue(model.TrySilenceUrgentReminder(first.Id, first.ReminderOccurrence!.Id, clock.GetUtcNow(), out var silenceError), silenceError);
+            original = first.ReminderOccurrence;
+            var second = model.Items[1];
+            Assert.IsTrue(model.TryAcknowledgeUrgentReminder(second.Id, second.ReminderOccurrence!.Id, clock.GetUtcNow(), out var ackError), ackError);
+        }
+
+        clock.Advance(TimeSpan.FromMinutes(32));
+        using var recovered = Model(store);
+        var deliveries = new Receiver();
+        using var restarted = new ChecklistReminderScheduler(recovered, Dispatcher.CurrentDispatcher, _ => false, clock, deliveries.Submit);
+        var active = recovered.Items[0];
+        Assert.AreEqual(original, deliveries.Requests.Single().Single().Occurrence);
+        Assert.IsNull(deliveries.Requests[0][0].RepeatDelivery);
+        Assert.AreEqual(1L, active.ReminderRepeat!.AdditionalAlertsSent);
+        Assert.IsTrue(recovered.TryAcknowledgeUrgentReminder(active.Id, original.Id, clock.GetUtcNow(), out var error), error);
+        restarted.CheckNow();
+        Assert.HasCount(1, deliveries.Requests);
+        Assert.AreEqual(start.AddMinutes(40), active.ReminderRepeat.NextSlotUtc);
+        clock.Advance(TimeSpan.FromMinutes(3));
+        restarted.CheckNow();
+        Assert.HasCount(2, deliveries.Requests);
+        Assert.AreEqual(2L, active.ReminderRepeat.AdditionalAlertsSent);
+    });
+
+    [TestMethod]
+    public void UrgentActionOnARestoredWindowBeforeTheDeliveryRetryCountsThatOccurrenceOnce() => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        var start = clock.GetUtcNow();
+        var store = new Store { Items = [Repeating(clock, 5, 1) with { NotificationStyle = ChecklistNotificationStyle.Urgent }] };
+        using var model = Model(store);
+        var requests = new Receiver();
+        using var scheduler = new ChecklistReminderScheduler(model, Dispatcher.CurrentDispatcher, _ => false, clock, requests.Submit);
+        var task = model.Items.Single();
+        Assert.IsTrue(model.TryAcknowledgeUrgentReminder(task.Id, task.ReminderOccurrence!.Id, start, out var firstError), firstError);
+        requests.Success = false;
+        clock.Advance(TimeSpan.FromMinutes(5));
+        scheduler.CheckNow();
+        var pending = requests.Requests.Last().Single().Occurrence!;
+        Assert.AreEqual(pending.Id, store.Items.Single().ReminderOccurrence?.Id);
+        Assert.AreEqual(0L, task.ReminderRepeat!.AdditionalAlertsSent);
+        Assert.IsTrue(model.TryAcknowledgeUrgentReminder(task.Id, pending.Id, clock.GetUtcNow(), out var secondError), secondError);
+        Assert.AreEqual(1L, task.ReminderRepeat.AdditionalAlertsSent);
+        Assert.IsNull(task.ReminderRepeat.NextSlotUtc);
+        clock.Advance(TimeSpan.FromMinutes(10));
+        scheduler.CheckNow();
+        Assert.HasCount(2, requests.Requests);
+    });
+
+    [TestMethod]
+    public void PersistentRepeatThatIsCanceledDuringWindowsHistoryLookupIsNotSubmitted() => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        using var model = Model(new Store { Items = [Repeating(clock, 5, null) with { NotificationStyle = ChecklistNotificationStyle.Persistent }] });
+        var historyLookup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        List<ChecklistReminder> submitted = [];
+        var lookupFinished = false;
+        using var scheduler = new ChecklistReminderScheduler(model, Dispatcher.CurrentDispatcher, _ => false, clock,
+            submitPersistentRepeat: async (reminders, canSubmit) =>
+            {
+                await historyLookup.Task;
+                lookupFinished = true;
+                if (!canSubmit()) return false;
+                submitted.Add(reminders.Single());
+                return true;
+            });
+        var task = model.Items.Single();
+        Assert.IsTrue(model.TrySetSchedule(task, null, null, null, false, task.NotificationStyle, null, out var error), error);
+        historyLookup.SetResult();
+        PumpUntil(() => lookupFinished);
+        Assert.IsEmpty(submitted);
+        Assert.IsNull(task.ReminderHandledAtUtc);
+        Assert.IsNull(scheduler.LastError);
+    });
+
+    [TestMethod]
+    public void SwitchingStylesRetainsProgressAndRevokesOldActions() => WpfTestHost.Invoke(() =>
+    {
+        var clock = new Clock();
+        var start = clock.GetUtcNow();
+        var store = new Store { Items = [Repeating(clock, 5, 3) with { NotificationStyle = ChecklistNotificationStyle.Persistent, Notes = "keep" }] };
+        using var model = Model(store);
+        var windows = new Receiver();
+        var urgent = new Receiver();
+        List<Guid> removed = [];
+        using var scheduler = new ChecklistReminderScheduler(model, Dispatcher.CurrentDispatcher, windows.Submit, clock, urgent.Submit,
+            removeRepeat: removed.Add);
+        var task = model.Items.Single();
+        clock.Advance(TimeSpan.FromMinutes(5));
+        scheduler.CheckNow();
+        var activation = new ChecklistReminderActivation(task.Id, null, windows.Requests.Last().Single().RepeatDelivery);
+        var old = task.ReminderRepeat!;
+        Switch(ChecklistNotificationStyle.Urgent);
+        scheduler.CheckNow();
+        CollectionAssert.AreEqual(new[] { old.Id }, removed);
+        Assert.IsFalse(model.IsCurrentRepeatNotification(activation), $"Notification from series {old.Id} remained actionable.");
+        Assert.AreNotEqual(old.Id, task.ReminderRepeat!.Id);
+        Assert.AreEqual(old.NextSlotUtc, task.ReminderRepeat.NextSlotUtc);
+        Assert.AreEqual(1L, task.ReminderRepeat.AdditionalAlertsSent);
+        Assert.IsEmpty(urgent.Requests);
+        using (var recovered = Model(store))
+            Assert.IsNull(recovered.Items.Single().ReminderOccurrence);
+
+        clock.Advance(TimeSpan.FromMinutes(5));
+        scheduler.CheckNow();
+        var occurrence = urgent.Requests.Single().Single().Occurrence!;
+        Switch(ChecklistNotificationStyle.Standard);
+        Assert.IsFalse(model.TrySilenceUrgentReminder(task.Id, occurrence.Id, clock.GetUtcNow(), out _),
+            $"Old Urgent occurrence {occurrence.Id} remained actionable.");
+        Assert.AreEqual(2L, task.ReminderRepeat!.AdditionalAlertsSent);
+        Assert.AreEqual(start, task.ReminderAtUtc);
+        Assert.AreEqual("keep", task.Notes);
+        clock.Advance(TimeSpan.FromMinutes(5));
+        scheduler.CheckNow();
+        Assert.AreEqual(ChecklistNotificationStyle.Standard, windows.Requests.Last().Single().Style);
+        Assert.IsNull(task.ReminderRepeat.NextSlotUtc);
+
+        void Switch(ChecklistNotificationStyle style) =>
+            Assert.IsTrue(model.TrySetSchedule(task, task.DueDate, task.DueTime, task.ReminderAtUtc, false, style,
+                task.NotificationOptions, out var error, task.ReminderRepeat!.Policy), error);
     });
 
     private static ChecklistItemState Repeating(Clock clock, int minutes, int? additionalAlerts)

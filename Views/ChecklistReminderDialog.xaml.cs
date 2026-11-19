@@ -109,7 +109,7 @@ public partial class ChecklistReminderDialog : ChecklistEditorWindow
     private bool TryReadRepeatPolicy()
     {
         RepeatPolicy = null;
-        if (ReminderAtUtc is null || NotificationStyle != ChecklistNotificationStyle.Standard || EnableRepeat.IsChecked != true)
+        if (ReminderAtUtc is null || EnableRepeat.IsChecked != true)
             return true;
 
         var index = RepeatInterval.SelectedIndex;
@@ -236,7 +236,7 @@ public partial class ChecklistReminderDialog : ChecklistEditorWindow
     private void UpdateRepeatFields()
     {
         if (RepeatLimitFields is null) return;
-        RepeatControls.Visibility = EnableReminder.IsChecked == true && NotificationStyle == ChecklistNotificationStyle.Standard
+        RepeatControls.Visibility = EnableReminder.IsChecked == true
             ? Visibility.Visible : Visibility.Collapsed;
         RepeatFields.Visibility = EnableRepeat.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         CustomRepeatFields.Visibility = RepeatInterval.SelectedIndex == s_repeatIntervals.Length ? Visibility.Visible : Visibility.Collapsed;
